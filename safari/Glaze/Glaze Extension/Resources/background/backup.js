@@ -14,13 +14,14 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     GZ_SHARING: () => (typeof GZ_SHARING !== 'undefined' ? GZ_SHARING : require('../sharing/sharing.js')), GZ_RELAY: () => (typeof GZ_RELAY !== 'undefined' ? GZ_RELAY : require('../sharing/relay.js')),
     GZ_HISTORY: () => (typeof GZ_HISTORY !== 'undefined' ? GZ_HISTORY : require('../looks/history.js')), GZ_PET: () => (typeof GZ_PET !== 'undefined' ? GZ_PET : require('../pet/pet.js')),
     GZ_XPARTS: () => (typeof GZ_XPARTS !== 'undefined' ? GZ_XPARTS : require('../looks/lookparts.js')),
+    GZ_MEMORY: () => (typeof GZ_MEMORY !== 'undefined' ? GZ_MEMORY : require('../ai/memory.js')),
   };
   const lib = (name) => LIBS[name]();
-  const FORMAT = 'glaze-backup', VERSION = 2, MANIFEST = 'glaze-backup.json', KEYS = 'share-keys.json';
+  const FORMAT = 'glaze-backup', VERSION = 3, MANIFEST = 'glaze-backup.json', KEYS = 'share-keys.json';
   // Refused by size before being read: a settings file, and a backup (two Notes accounts at their cap, and the rest).
   const LIMIT = { json: 16 << 20, member: 64 << 20, command: 32 << 20, zip: 512 << 20, entries: 40000, records: 1000 };
   // In the order the restore list shows them: two columns, row by row.
-  const CATS = ['settings', 'notes', 'tasks', 'dashNotes', 'classes', 'gpa', 'widgets', 'shareKeys', 'papers', 'writerWords', 'sources'];
+  const CATS = ['settings', 'notes', 'tasks', 'dashNotes', 'classes', 'gpa', 'widgets', 'shareKeys', 'papers', 'writerWords', 'sources', 'memories'];
   // The stores' own keys (core/widgets.js NOTES_KEY, planner/classes.js STORE_KEY, planner/gpa.js KEY, planner/notes.js KEY; test/backup.test.js
   // keeps them equal): the editor doesn't load those libraries.
   const STORES = {
@@ -220,6 +221,16 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     }
     return raw;
   };
+  // User-authored Markdown memories, including retained content-free deletion records. Never course read caches.
+  const memoriesOf = (raw) => {
+    if (!obj(raw)) throw fail('bad');
+    const M = lib('GZ_MEMORY'), out = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (M.parseKey(key)?.kind !== 'memory' || !(out[key] = M.clean(value, key))) throw fail('bad');
+    }
+    if (!M.fits(Object.values(out), 'memory')) throw fail('bad');
+    return out;
+  };
   const tasksOf = (raw) => {
     if (!obj(raw) || (raw.tasks !== undefined && !obj(raw.tasks)) || (raw.pets !== undefined && !obj(raw.pets))) throw fail('bad');
     if (raw.pets !== undefined && !lib('GZ_PET').backup(raw.pets)) throw fail('bad');
@@ -299,6 +310,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
       if (m.settings !== undefined) cats.settings = settingsOf(m.settings);
       if (m.tasks !== undefined) { const r = tasksOf(m.tasks); if (filled(r.tasks) || filled(r.pets)) cats.tasks = r; }
       for (const c of ['dashNotes', 'classes', 'gpa']) if (m[c] !== undefined) { const r = whole(c, records(m[c], STORES[c])); if (Object.keys(r).length) cats[c] = r; }
+      if (m.memories !== undefined) { const r = memoriesOf(m.memories); if (Object.keys(r).length) cats.memories = r; }
       if (m.papers !== undefined || m.filePapers !== undefined) {
         const rows = [...(m.papers ?? []), ...(m.filePapers ?? [])];
         if (![m.papers ?? [], m.filePapers ?? []].every(Array.isArray) || rows.length > 6000) throw fail('bad');
@@ -385,13 +397,14 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     const blobs = hashes.map((hash, i) => ({ hash, size: files.get(hash).length, file: `papers/${papers.length + i + 1}.bin` }));
     const words = Array.isArray(local.writerWords) ? local.writerWords.filter((w) => typeof w === 'string' && w.trim() === w && w && w.length <= WORDS.length).slice(-WORDS.max) : [];
     const sources = pick(sourceKey);
+    const memories = memoriesOf(Object.fromEntries(Object.entries(local).filter(([key]) => key.startsWith('rimeMemory:'))));
     // Earlier readers ignore filePapers. Mark those backups as a newer format so they ask for an update instead of
     // reporting a successful restore with the student's PDFs and decks silently left out. Plain backups stay compatible.
-    const m = { format: FORMAT, version: filed.length ? VERSION : 1, made: date.toISOString(), glaze: version, settings, tasks,
+    const m = { format: FORMAT, version: Object.keys(memories).length ? VERSION : filed.length ? 2 : 1, made: date.toISOString(), glaze: version, settings, tasks,
       dashNotes: pick(STORES.dashNotes), classes: pick(STORES.classes), gpa: pick(STORES.gpa),
       ...(obj(local.widgetLayout) && { widgets: local.widgetLayout }), notes: dirs, ...(plain.length && { papers: plain.map(({ key, file }) => ({ key, file })) }),
       ...(filed.length && { filePapers: filed.map(({ key, file }) => ({ key, file })) }), ...(blobs.length && { blobs }),
-      ...(words.length && { writerWords: words }), ...(Object.keys(sources).length && { sources }) };
+      ...(words.length && { writerWords: words }), ...(Object.keys(sources).length && { sources }), ...(Object.keys(memories).length && { memories }) };
     const entries = [
       { name: MANIFEST, data: enc.encode(JSON.stringify(m, null, 1)), date },
       ...(keys.length ? [{ name: KEYS, data: enc.encode(JSON.stringify(keys, null, 2)), date }] : []),
@@ -430,10 +443,10 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
   // dashNotes, classes, gpa, widgets, favorites, tasks (when the settings, which bring their own, aren't restored), notes
   // (accounts a Notes import then fills), papers, writerWords, sources }, each optional. Everything is checked first; a part that can't be taken whole
   // writes nothing. → { ok } or { ok: false, error }.
-  const apply = async (r, { local, files }) => {
+  const applyRaw = async (r, { local, files }) => {
     const W = lib('GZ_WIDGETS'), C = lib('GZ_CLASSES'), G = lib('GZ_GPA');
     const H = lib('GZ_HISTORY'), N = lib('GZ_NOTES');
-    let parts, papers;
+    let parts, papers, memories;
     try {
       parts = {
         dashNotes: r?.dashNotes === undefined ? {} : records(r.dashNotes, STORES.dashNotes),
@@ -441,7 +454,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
         gpa: r?.gpa === undefined ? {} : whole('gpa', records(r.gpa, STORES.gpa)),
         tasks: r?.tasks === undefined ? null : tasksOf(r.tasks),
       };
-      if (!obj(r) || Object.keys(r).some((k) => !['dashNotes', 'classes', 'gpa', 'widgets', 'favorites', 'tasks', 'notes', 'papers', 'writerWords', 'sources'].includes(k))
+      if (!obj(r) || Object.keys(r).some((k) => !['dashNotes', 'classes', 'gpa', 'widgets', 'favorites', 'tasks', 'notes', 'papers', 'writerWords', 'sources', 'memories'].includes(k))
         || (r.widgets !== undefined && !obj(r.widgets)) || (r.favorites !== undefined && !Array.isArray(r.favorites))
         || (r.notes !== undefined && (!Array.isArray(r.notes) || r.notes.length > 100 || r.notes.some((k) => typeof k !== 'string' || !ACCOUNT.test(k))))) throw fail('bad');
     } catch { return { ok: false, error: 'bad' }; }
@@ -449,15 +462,28 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
       if (r.papers !== undefined) papers = await paperRecords(r.papers);
       if (r.writerWords !== undefined) wordsOf(r.writerWords);
       if (r.sources !== undefined) await sourcesOf(r.sources);
+      if (r.memories !== undefined) memories = memoriesOf(r.memories);
     } catch { return { ok: false, error: 'bad' }; }
     const tasks = parts.tasks ? Object.fromEntries(Object.entries(parts.tasks.tasks).map(([k, v]) => [k, lib('GZ_TODO').clean(v)])) : {};
     const pets = parts.tasks?.pets === undefined ? {} : lib('GZ_PET').backup(parts.tasks.pets);
     if (!pets) return { ok: false, error: 'bad' };
     const petKeys = [...new Set([...Object.keys(pets), ...Object.keys(tasks).map((k) => `pet:${k.slice(5)}`)])];
     const keys = [...Object.keys(parts.dashNotes), ...Object.keys(parts.classes), ...Object.keys(parts.gpa), ...Object.keys(tasks), ...petKeys, ...(r.notes || []),
-      ...(r.favorites ? ['lookFavorites'] : []), ...(r.writerWords ? ['writerWords'] : []), ...Object.keys(r.sources || {})];
+      ...(r.favorites ? ['lookFavorites'] : []), ...(r.writerWords ? ['writerWords'] : []), ...Object.keys(r.sources || {}), ...Object.keys(memories || {})];
     const here = keys.length ? await local.get(keys) : {};
     const patch = {};
+
+    // Restore joins complete records by the same deterministic rule as Drive. A saved tombstone never revives.
+    if (memories) {
+      const M = lib('GZ_MEMORY'), all = await local.get(null);
+      for (const [key, value] of Object.entries(memories)) {
+        const next = M.merge(all[key], value, key);
+        if (!next) return { ok: false, error: 'bad' };
+        if (JSON.stringify(next) !== JSON.stringify(all[key])) patch[key] = next;
+      }
+      const combined = Object.entries({ ...all, ...patch }).filter(([key]) => key.startsWith('rimeMemory:'));
+      if (!M.fits(combined.map(([key, value]) => M.clean(value, key)), 'memory')) return { ok: false, error: 'memories' };
+    }
     // Dashboard notes: the newer typing stays (core/widgets.js saveNote).
     for (const [k, v] of Object.entries(parts.dashNotes)) {
       const note = W.cleanNote(v);
@@ -535,6 +561,12 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     }
     return !Object.keys(patch).length || await local.set(patch) ? { ok: true } : { ok: false, error: 'write' };
   };
+  // Invalidate inside the held queue: a pre-restore turn must not recreate a restored deletion under a new ID.
+  const apply = (r, io) => r?.memories !== undefined ? lib('GZ_MEMORY').queued({}, async () => {
+    const out = await applyRaw(r, io);
+    if (out.ok) lib('GZ_MEMORY').invalidateHeld(io);
+    return out;
+  }) : applyRaw(r, io);
   // One Notes account from the zip into account `key`, through the worker's Notes import (sharing/sessions.js): its files, then
   // its notes five at a time, each kept only where it is newer than what is here. → { done, skipped }.
   const notesIn = async (zip, dir, key, send, step = () => {}) => {
@@ -574,7 +606,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
   };
   // Replay every store's existing restore on overlays first, in the worker's write queue. Only a complete successful
   // replay is committed. The journal holds the old values until all writes succeed, including Notes bodies and keys.
-  const atomic = async (steps, env, disk) => {
+  const atomicBody = async (steps, env, disk) => {
     const memory = new Map();
     disk ||= { get: async (k) => memory.get(k), put: async (k, v) => { memory.set(k, structuredClone(v)); } };
     const changes = [], areas = {}, databases = {};
@@ -593,8 +625,13 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
         const keys = [...patch.keys()], before = await source.get(keys), gone = keys.filter((k) => !Object.hasOwn(before, k));
         const set = Object.fromEntries([...patch].filter(([, v]) => v !== undefined)), remove = keys.filter((k) => patch.get(k) === undefined);
         const write = async (put, del) => {
-          if (Object.keys(put).length && await source.set(put) === false) throw fail('write');
-          if (del.length && await source.remove(del) === false) throw fail('write');
+          try {
+            if (Object.keys(put).length && await source.set(put) === false) throw fail('write');
+            if (del.length && await source.remove(del) === false) throw fail('write');
+          } finally {
+            // Publication and rollback both invalidate leases, including turns begun during a partial publication.
+            if (name === 'local' && keys.some((k) => k.startsWith('rimeMemory:'))) lib('GZ_MEMORY').invalidateHeld(env);
+          }
         };
         return { put: () => write(set, remove), undo: () => write(before, gone) };
       } });
@@ -642,7 +679,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
             }
             owners.add(k);
           }
-          check(await apply(value, { ...areas, files }));
+          check(await applyRaw(value, { ...areas, files }));
         }
         else if (action === 'settings') check(await env.settings(value, areas));
         else if (action === 'send') {
@@ -677,6 +714,9 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
       } catch { /* retain claims until a later reconciliation */ }
     }
   };
+  // Keep the live merge, publication and possible rollback together with UI/tool memory mutations. The caller holds
+  // the worker's generic broker queue first; replay uses applyRaw on overlays and never reenters this memory queue.
+  const atomic = (steps, env, disk) => lib('GZ_MEMORY').queued({}, () => atomicBody(steps, env, disk));
 
   // Upload only the selected categories through begin/own/settings/send. finish replays them on the worker's overlays
   // and commits them together; abort always clears the scratch upload. Old Notes ZIPs require an explicit account.
@@ -686,7 +726,7 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     const notes = on('notes') ? c.notes.map((n) => ({ ...n, account: n.account || account })).filter((n) => ACCOUNT.test(n.account)) : [];
     if (on('notes') && notes.length !== c.notes.length) return { ...out, failed: CATS.filter(on) };
     const favorites = on('settings') && Array.isArray(c.settings.favorites) && c.settings.favorites.length ? c.settings.favorites : null;
-    const own = { ...Object.fromEntries(['dashNotes', 'classes', 'gpa', 'widgets', 'writerWords', 'sources'].filter(on).map((k) => [k, c[k]])),
+    const own = { ...Object.fromEntries(['dashNotes', 'classes', 'gpa', 'widgets', 'writerWords', 'sources', 'memories'].filter(on).map((k) => [k, c[k]])),
       ...(favorites && { favorites }), ...(on('tasks') && !on('settings') && { tasks: c.tasks }), ...(notes.length && plan.kind === 'backup' && { notes: notes.map((n) => n.account) }) };
     try {
       await io.begin();

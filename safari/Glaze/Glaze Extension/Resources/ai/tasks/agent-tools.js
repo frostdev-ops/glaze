@@ -2,7 +2,7 @@
 // courses with Glaze's own Agents tools (agents/*.js), one turn at a time: each run either calls one tool or gives the final
 // answer. Ask Glaze runs it (ai/ask.js), one run a step.
 // input: { question, tools: [names from SPECS], steps: [{ call: { name, arguments }, result }], now (ms), zone (IANA),
-//   locale? }. A feature runs each call itself, through Agents' grants and the student's approval for a write
+//   locale?, current? }. A feature runs each call itself, through Agents' grants and the student's approval for a write
 //   (agents/calls.js), and runs the task again with the step added.
 // output: { call: { name, arguments, kind } | null, answer: { text, quotes } | null }, exactly one of them.
 // check() refuses a call whose arguments its tool's schema refuses, whose ids (account, course, assignment, document, type,
@@ -17,6 +17,9 @@
 var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const S = typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('../schema.js');
   const T = typeof GZ_AI_TASKS !== 'undefined' ? GZ_AI_TASKS : require('../task.js');
+  const R = () => (typeof GZ_AI_RECALL !== 'undefined' ? GZ_AI_RECALL : require('../recall.js'));
+  const M = () => (typeof GZ_AI_RIME_MEMORY !== 'undefined' ? GZ_AI_RIME_MEMORY : require('../agent/memory.js'));
+  const C = () => (typeof GZ_AI_CURRENT !== 'undefined' ? GZ_AI_CURRENT : require('../current.js'));
   const X = () => (typeof GZ_AI_TEXT !== 'undefined' ? GZ_AI_TEXT : require('../text.js'));
   const LIMIT = { question: 2000, steps: 6, result: 3000, string: 1200, text: 1200, quotes: 12, quote: 300, json: 64 << 10 };
   const HISTORY = { turns: 3, question: 300, answer: 600, summary: 700 };
@@ -93,11 +96,12 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       parameters: params({ course: COURSE('The course id.'), account: ACCOUNT }, ['course']) },
     { name: 'discussion_read', kind: 'read', description: "One discussion's prompt, paged (1,000 characters), whether graded, the student's own replies and how many classmates replied, never their names or words. On Canvas only a teacher's or TA's prompt is read.",
       parameters: params({ course: COURSE('The course id.'), id: { type: 'string', pattern: UID, description: 'The discussion id from discussions_list.' }, page: PAGE, account: ACCOUNT }, ['course', 'id']) },
+    ...M().SPECS,
   ].map((t) => Object.freeze(t)));
   const NAMES = SPECS.map((t) => t.name);
   // Agents' tools (agents/*.js) and Ask Rime's own.
   const OWN = Object.freeze(['run_js', 'places_list', 'place_open', 'page_highlight', 'wake_create', 'monitor_create', 'wakes_list', 'wake_cancel',
-    'announcements_list', 'announcement_read', 'content_list', 'content_read', 'syllabus_read', 'discussions_list', 'discussion_read']);
+    'announcements_list', 'announcement_read', 'content_list', 'content_read', 'syllabus_read', 'discussions_list', 'discussion_read', ...M().SPECS.map((t) => t.name)]);
   const AGENTS = Object.freeze(NAMES.filter((n) => !OWN.includes(n)));
   const spec = (name) => SPECS.find((t) => t.name === name) || null;
   // Arguments that name something: they must come from the question or a result, never be made up.
@@ -228,7 +232,10 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     one: 'Give either one tool call or the final answer, not both.',
   });
   const FIXES = Object.keys(FIX);
-  const instructions = (locale, first = false) => `${SYSTEM}${first ? `\n${SYSTEM3}` : ''}\nReply in ${LANGUAGES[locale]}.`;
+  const CURRENT = 'current describes this turn’s active page/draft; explicit requests win. Matching typed IDs support reads only, not fresh facts. Material may be partial or unsaved; document_read returns saved text.';
+  const MEMORY = `${R().TRUST}\nWhen memory_save is offered, automatically save useful reusable personal facts or preferences from direct current user words, with exact unquoted evidence. Recalled personal facts must come from current memory tool results, never history or summary. If there is nothing useful to save, answer without saving. Replace only with matching id and revision.`;
+  const memoryOn = (inp) => !!inp.recall || inp.tools.some((name) => name.startsWith('memory_'));
+  const instructions = (locale, first = false, current = false, memory = false) => `${SYSTEM}${first ? `\n${SYSTEM3}` : ''}${current ? `\n${CURRENT}` : ''}${memory ? `\n${MEMORY}` : ''}\nReply in ${LANGUAGES[locale]}.`;
   const OUTPUT = S.obj({
     call: { anyOf: [{ type: 'null' }, S.obj({ name: { enum: NAMES }, arguments: { type: 'object', description: "The tool's arguments" } }, ['name', 'arguments'])] },
     answer: { anyOf: [{ type: 'null' }, S.obj({
@@ -241,12 +248,19 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // What Glaze's own model may write for a turn: the answer's JSON or one native call to an offered tool, as the engine
   // host's run takes it ({ schema, tools }: ai/local/grammar.js compile's tools), so a turn the grammar lets through is one
   // fromNative() reads and OUTPUT holds.
-  const constraint = (inp) => ({ schema: ANSWER, tools: offered(inp.tools).map((t) => ({ name: t.name, parameters: t.parameters })) });
+  const constraint = (inp) => ({ schema: ANSWER, tools: offered(inp.tools).flatMap((t) => {
+    if (t.name !== 'memory_save') return [{ name: t.name, parameters: t.parameters }];
+    // The native grammar unions these two forms. A replacement's id and revision must never be independently optional.
+    const create = Object.fromEntries(Object.entries(t.parameters.properties).filter(([key]) => !['id', 'revision'].includes(key)));
+    return [{ name: t.name, parameters: { ...t.parameters, properties: create } },
+      { name: t.name, parameters: { ...t.parameters, required: [...t.parameters.required, 'id', 'revision'] } }];
+  }) });
 
   const zoneOk = (z) => { try { clock(z); return true; } catch { return false; } };
   // A history step may carry check()'s derived kind. It is checked here, then omitted from the native call.
+  const validArgs = (name, args) => S.isObj(args) && !S.validate(args, spec(name).parameters).length && (name !== 'memory_save' || Object.hasOwn(args, 'id') === Object.hasOwn(args, 'revision'));
   const validCall = (c, names) => S.isObj(c) && Object.keys(c).filter((k) => k !== 'kind').sort().join() === 'arguments,name' && names.includes(c.name)
-    && (!Object.hasOwn(c, 'kind') || c.kind === spec(c.name).kind) && S.isObj(c.arguments) && !S.validate(c.arguments, spec(c.name).parameters).length;
+    && (!Object.hasOwn(c, 'kind') || c.kind === spec(c.name).kind) && validArgs(c.name, c.arguments);
   // A wake or monitor that fired (ai/agent/wakes.js take()): its own record as the model reads it, before the question (the
   // record's say). → the readable JSON, or null when it isn't one.
   const WATCHES = ['grade', 'announcement', 'due', 'submitted'];
@@ -272,7 +286,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   };
   const input = (raw, { caps } = {}) => {
     const scale = T.retention(caps).scale, historyLimit = (key) => Math.floor(HISTORY[key] * scale);
-    if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'tools', 'steps', 'now', 'zone', 'locale', 'fired', 'first', 'help', 'history', 'summary', 'fix'].includes(k))) return null;
+    if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'tools', 'steps', 'now', 'zone', 'locale', 'fired', 'first', 'help', 'history', 'summary', 'fix', 'current', 'recall'].includes(k))) return null;
     // first: answer only from tool results (tools level 3: Ask Rime's tool-first rule, check() 'first' and 'ground'); help:
     // study.help's subject, for a turn that reads what the student's help question names before study help answers it.
     if ((raw.first !== undefined && raw.first !== true) || (raw.help !== undefined && !HELP.includes(raw.help))) return null;
@@ -293,17 +307,26 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (!steps.every((s) => S.isObj(s) && Object.keys(s).sort().join() === 'call,result' && validCall(s.call, tools))) return null;
     const shown_ = steps.map((s) => readable(s.result, zone, raw.first === true ? { locale, now } : undefined, caps));
     if (shown_.includes(null)) return null;
+    const recall = Object.hasOwn(raw, 'recall') ? R().clean(raw.recall, { caps }) : undefined;
+    if (recall === null) return null;
+    const current = Object.hasOwn(raw, 'current') ? C().clean(raw.current, { caps }) : undefined;
+    if (current === null) return null;
     const fired = Object.hasOwn(raw, 'fired') ? firedOf(raw.fired, zone) : undefined;
     if (fired === null) return null;
-    return { question: question.trim(), tools: offered(tools).map((t) => t.name), steps: steps.map((s, i) => ({ call: { name: s.call.name, arguments: s.call.arguments }, result: shown_[i] })), now, zone, locale, ...(fired && { fired }), ...(raw.first === true && { first: true }), ...(raw.help && { help: raw.help }), ...(history.length && { history }), ...(summary && { summary }), ...(raw.fix && { fix: raw.fix }) };
+    return { question: question.trim(), tools: offered(tools).map((t) => t.name), steps: steps.map((s, i) => ({ call: { name: s.call.name, arguments: s.call.arguments }, result: shown_[i] })), now, zone, locale, ...(fired && { fired }), ...(raw.first === true && { first: true }), ...(raw.help && { help: raw.help }), ...(history.length && { history }), ...(summary && { summary }), ...(raw.fix && { fix: raw.fix }), ...(current && { current }), ...(recall && { recall }) };
   };
   const earlierText = (history) => history.map((h) => `Student: ${h.question}\nRime: ${h.answer}`).join('\n');
   const nowText = (inp) => `${local(inp.now, inp.zone, true)}, ${inp.zone}${inp.first ? `\n${windows(inp.now, inp.zone)}` : ''}`;
   const label = (i, name) => `result ${i + 1} ${name}`;
+  const currentBlocks = (current) => {
+    if (!current) return [];
+    const { material, ...identity } = current;
+    return [{ label: 'current', text: JSON.stringify({ ...identity, ...(material && { material: { source: material.source, truncated: material.truncated } }) }) }, ...(material ? [{ label: 'current material', text: material.text }] : [])];
+  };
   const build = (inp, { text }) => text.request({
-    system: `${instructions(inp.locale, inp.first === true)}\n\n<tools>\n${offered(inp.tools).map(line).join('\n')}\n</tools>`,
+    system: `${instructions(inp.locale, inp.first === true, !!inp.current, memoryOn(inp))}\n\n<tools>\n${offered(inp.tools).map(line).join('\n')}\n</tools>`,
     context: [{ label: 'now', text: nowText(inp) }],
-    data: [...(inp.fired ? [{ label: 'fired', text: inp.fired }] : []), ...(inp.help ? [{ label: 'help', text: inp.help }] : []), ...(inp.summary ? [{ label: 'summary', text: inp.summary }] : []), ...(inp.history ? [{ label: 'earlier', text: earlierText(inp.history) }] : []), { label: 'question', text: inp.question }, ...inp.steps.flatMap((s, i) => [{ label: `call ${i + 1}`, text: JSON.stringify(s.call) }, { label: label(i, s.call.name), text: s.result }]), ...(inp.fix ? [{ label: 'check', text: FIX[inp.fix] }] : [])],
+    data: [...(inp.fired ? [{ label: 'fired', text: inp.fired }] : []), ...(inp.help ? [{ label: 'help', text: inp.help }] : []), ...(inp.summary ? [{ label: 'summary', text: inp.summary }] : []), ...(inp.history ? [{ label: 'earlier', text: earlierText(inp.history) }] : []), ...currentBlocks(inp.current), ...(inp.recall ? [{ label: 'recall', text: R().serialize(inp.recall, { caps: { context: 131072 } }) }] : []), { label: 'question', text: inp.question }, ...inp.steps.flatMap((s, i) => [{ label: `call ${i + 1}`, text: JSON.stringify(s.call) }, { label: label(i, s.call.name), text: s.result }]), ...(inp.fix ? [{ label: 'check', text: FIX[inp.fix] }] : [])],
     // D4: p3dpo's answers ran to 469 tokens, LFM2.5 350M's to 497 with two cut at 512; 768 with a full think budget fits
     // the 99th-percentile prompt (3,059 tokens) in the 4,096 window.
     temperature: 0, maxTokens: 768,
@@ -317,7 +340,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // fired, a fired wake's or monitor's record, as a data block of its own before the question (absent: the turns as before).
   // help: study help's subject, a data block before the question (absent: as before).
   // window: the window's size token after the task's (format.js sizeOf; absent: none).
-  const draw = ({ head, lines, now, question, steps, fired, help, summary, earlier, check, window }) => {
+  const draw = ({ head, lines, now, question, steps, fired, help, summary, earlier, current = [], recall, check, window }) => {
     const name = window === undefined ? null : F().sizeOf(window);
     if (window !== undefined && !name) throw Object.assign(new Error(`agent.tools: window ${window}`), { code: 'request' });
     const size = name ? [{ special: name }] : [];
@@ -327,14 +350,14 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       ...turn('system', { special: '<|gz_task:agent.tools|>' }, ...size, { text: `${head}\n\n${X().TRUST}\n\n` }, { special: '<tools>' }, { text: `\n${lines}\n` }, { special: '</tools>' }),
       // Stable first, for the engine's prefix reuse: the summary and earlier turns (append-only), then what changes every turn.
       ...turn('user', ...(summary ? [...block('gz_data', 'summary', summary), { text: '\n' }] : []), ...(earlier ? [...block('gz_data', 'earlier', earlier), { text: '\n' }] : []),
-        ...block('gz_ctx', 'now', now), { text: '\n' }, ...(fired ? [...block('gz_data', 'fired', fired), { text: '\n' }] : []), ...(help ? [...block('gz_data', 'help', help), { text: '\n' }] : []), ...block('gz_data', 'question', question)),
+        ...block('gz_ctx', 'now', now), { text: '\n' }, ...(fired ? [...block('gz_data', 'fired', fired), { text: '\n' }] : []), ...(help ? [...block('gz_data', 'help', help), { text: '\n' }] : []), ...current.flatMap((b) => [...block('gz_data', b.label, b.text), { text: '\n' }]), ...(recall ? [...block('gz_data', 'recall', recall), { text: '\n' }] : []), ...block('gz_data', 'question', question)),
       ...steps.flatMap((s, i) => [...turn('assistant', ...native.parts(s.call)),
         ...turn('tool', { special: '<tool_response>' }, { text: '\n' }, ...block('gz_data', label(i, s.call.name), s.result), { text: '\n' }, { special: '</tool_response>' })]),
       // The corrective turn (fix): the rule the last answer broke, as data in a user turn after the results.
       ...(check ? turn('user', ...block('gz_data', 'check', check)) : []),
       { special: '<|im_start|>' }, { text: 'assistant\n' }]);
   };
-  const layout = (inp, { window } = {}) => draw({ head: instructions(inp.locale, inp.first === true), lines: offered(inp.tools).map(line).join('\n'), now: nowText(inp), question: inp.question, steps: inp.steps, fired: inp.fired, help: inp.help,
+  const layout = (inp, { window } = {}) => draw({ head: instructions(inp.locale, inp.first === true, !!inp.current, memoryOn(inp)), lines: offered(inp.tools).map(line).join('\n'), now: nowText(inp), question: inp.question, steps: inp.steps, current: currentBlocks(inp.current), recall: inp.recall && R().serialize(inp.recall, { caps: { context: 131072 } }), fired: inp.fired, help: inp.help,
     ...(inp.summary && { summary: inp.summary }), ...(inp.history && { earlier: earlierText(inp.history) }), ...(inp.fix && { check: FIX[inp.fix] }), window });
   // Glaze's own model gets a run's request, never its input: build()'s request read back (format.js parse) into the same
   // pieces → { parts: layout()'s, tools: the names offered }. A request build() didn't make is refused (code 'request').
@@ -343,7 +366,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const { system, blocks } = F().parse(req);
     const at = system.indexOf('\n\n<tools>\n');
     const head = system.slice(0, at), lines = system.slice(at + 10, -9);
-    if (at < 0 || !system.endsWith('\n</tools>') || !Object.keys(LANGUAGES).some((l) => instructions(l) === head || instructions(l, true) === head)) throw refuse('system');
+    if (at < 0 || !system.endsWith('\n</tools>') || !Object.keys(LANGUAGES).some((l) => [false, true].some((first) => [false, true].some((current) => [false, true].some((memory) => instructions(l, first, current, memory) === head))))) throw refuse('system');
     const tools = SPECS.filter((t) => lines.split('\n').includes(line(t)));
     if (!tools.length || offered(tools.map((t) => t.name)).map(line).join('\n') !== lines) throw refuse('tools');
     const fired = blocks[1]?.kind === 'data' && blocks[1].label === 'fired' ? blocks[1].text : undefined;
@@ -355,7 +378,22 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const summary = helped[1]?.kind === 'data' && helped[1].label === 'summary' ? helped[1].text : undefined;
     const summed = summary === undefined ? helped : [helped[0], ...helped.slice(2)];
     const earlier = summed[1]?.kind === 'data' && summed[1].label === 'earlier' ? summed[1].text : undefined;
-    const [now, question, ...all] = earlier === undefined ? summed : [summed[0], ...summed.slice(2)];
+    const contextual = earlier === undefined ? summed : [summed[0], ...summed.slice(2)];
+    const current = [];
+    if (contextual[1]?.kind === 'data' && contextual[1].label === 'current') {
+      current.push(contextual.splice(1, 1)[0]);
+      if (contextual[1]?.kind === 'data' && contextual[1].label === 'current material') current.push(contextual.splice(1, 1)[0]);
+      try {
+        const identity = JSON.parse(current[0].text);
+        const cleaned = C().clean({ ...identity, ...(identity.material && { material: { ...identity.material, text: current[1]?.text } }) }, { caps: { context: 131072 } });
+        if (!cleaned || JSON.stringify(currentBlocks(cleaned)) !== JSON.stringify(current.map(({ label, text }) => ({ label, text })))) throw refuse('current');
+      } catch { throw refuse('current'); }
+    }
+    if (!!current.length !== head.includes(CURRENT)) throw refuse('current');
+    const recall = contextual[1]?.kind === 'data' && contextual[1].label === 'recall' ? contextual.splice(1, 1)[0].text : undefined;
+    if (recall !== undefined && !R().parse(recall, { caps: { context: window || 131072 } })) throw refuse('recall');
+    if (head.includes(MEMORY) !== (recall !== undefined || tools.some((t) => t.name.startsWith('memory_')))) throw refuse('memory');
+    const [now, question, ...all] = contextual;
     const check = all.length % 2 && all.at(-1)?.kind === 'data' && all.at(-1).label === 'check' ? all.at(-1).text : undefined;
     if (check !== undefined && !FIXES.some((k) => FIX[k] === check)) throw refuse('check');
     const rest = check === undefined ? all : all.slice(0, -1);
@@ -368,7 +406,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       if (rest[i].label !== `call ${n + 1}` || !validCall(c, tools.map((t) => t.name)) || rest[i + 1].label !== label(n, c.name)) throw refuse('step');
       steps.push({ call: { name: c.name, arguments: c.arguments }, result: rest[i + 1].text });
     }
-    return { parts: draw({ head, lines, now: now.text, question: question.text, steps, fired, help, summary, earlier, check, window }), tools: offered(tools.map((t) => t.name)).map((t) => t.name) };
+    return { parts: draw({ head, lines, now: now.text, question: question.text, steps, fired, help, summary, earlier, current, recall, check, window }), tools: offered(tools.map((t) => t.name)).map((t) => t.name) };
   };
   // The answer Glaze's own model writes for an output: a native call, or the answer as compact JSON.
   const answerParts = (out) => (out.call ? native.parts(out.call) : [{ text: JSON.stringify({ text: out.answer.text, quotes: out.answer.quotes }) }]);
@@ -500,8 +538,30 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     return out;
   };
   // → '' or why a call to one of Rime's own tools may not go: work, place, text, time, monitor, asked.
+  // A solving request can refer to active assessed work without repeating its title or problem. Current text stays
+  // data: it can restrict this calculator route, never supply executable code, permission or an answer receipt.
+  const WORK_THIS = phrases(['work (?:this|that|it) out']);
+  const CURRENT_REF = phrases(['this', 'that', 'it', 'these', 'those', 'here', 'esto', 'esta', 'este', 'eso', 'esa', 'ese', 'isso', 'isto', 'essa', 'esse', 'aqui', 'cela', 'ceci', 'ça', 'ici', 'das', 'dies(?:e[nsrm]?)?', 'hier', 'dit', 'dat', 'deze']);
+  const currentWork = (inp) => {
+    const q = fold(inp.question), c = inp.current;
+    return !!c && CURRENT_REF.test(q) && (ASK.test(q) || WORK_THIS.test(q)) && !gradeMath(q)
+      && (!!c.assignment || ['assignment', 'quiz', 'test'].includes(c.content?.kind) || c.document?.kind === 'assignment'
+        || gradedWork(fold(c.material?.text || '')));
+  };
+  const recalledWork = (inp) => {
+    const q = fold(inp.question);
+    if (!CURRENT_REF.test(q) || !(ASK.test(q) || WORK_THIS.test(q)) || gradeMath(q)) return false;
+    const records = [...(inp.recall?.records || [])];
+    for (const s of inp.steps) if (['memory_read', 'memory_search'].includes(s.call.name)) {
+      try { const r = JSON.parse(s.result); if (r?.ok === true) records.push(...(s.call.name === 'memory_search' && Array.isArray(r.items) ? r.items : [r])); } catch { /* no course snapshot */ }
+    }
+    return records.some((r) => r?.kind === 'course' && r.source?.type === 'course-read'
+      && (r.source.tool === 'assignment_read' || typeof r.text === 'string' && gradedWork(fold(r.text))));
+  };
   const ownWhy = (name, args, inp) => {
-    if (name === 'run_js') return gradedWork(fold(inp.question)) || inp.steps.some((s) => ['assignment_read', 'document_read', 'announcement_read', 'content_read', 'discussion_read'].includes(s.call.name)) ? 'work' : '';
+    if (name === 'memory_save') return typeof args.evidence === 'string' && args.evidence.trim() && inp.question.includes(args.evidence) && M().userText(inp.question).includes(args.evidence) ? '' : 'text';
+    if (name === 'memory_forget') return M().forgetRequested(inp.question) ? '' : 'asked';
+    if (name === 'run_js') return gradedWork(fold(inp.question)) || currentWork(inp) || recalledWork(inp) || inp.steps.some((s) => ['assignment_read', 'document_read', 'announcement_read', 'content_read', 'discussion_read'].includes(s.call.name)) ? 'work' : '';
     if (name === 'place_open') return under(inp, 'places_list', ['place', 'here']).includes(args.place) ? '' : 'place';
     if (name === 'page_highlight') {
       const want = fold(args.text);
@@ -615,6 +675,65 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     });
   };
 
+  // Revision provenance is a pair, not any 32-hex string seen in a page or a different record.
+  const memoryRevision = (args, inp) => {
+    if (inp.recall?.records.some((r) => r.id === args.id && r.revision === args.revision)) return true;
+    if (inp.question.includes(args.id) && inp.question.includes(args.revision)) return true;
+    const pair = (v) => S.isObj(v) && v.id === args.id && v.revision === args.revision || Array.isArray(v) && v.some(pair)
+      || S.isObj(v) && Object.values(v).some(pair);
+    return inp.steps.filter((st) => st.call.name.startsWith('memory_')).some((st) => { try { return pair(JSON.parse(st.result)); } catch { return false; } });
+  };
+  const memoryAttempt = (step) => {
+    let result; try { result = JSON.parse(step.result); } catch { /* no receipt */ }
+    const r = result?.receipt, args = step.call.arguments, saving = step.call.name === 'memory_save';
+    const ok = S.isObj(result) && result.ok === true && Object.keys(result).every((k) => ['ok', 'receipt'].includes(k)) && S.isObj(r)
+      && Object.keys(r).every((k) => ['operation', 'id', 'revision', 'at', 'text', 'persistence'].includes(k))
+      && typeof r.id === 'string' && R().ID.test(r.id) && typeof r.revision === 'string' && R().REVISION.test(r.revision)
+      && (stamp(r.at) || typeof r.at === 'string' && !!r.at.trim() && r.at.length <= 120) && r.persistence === 'device'
+      && (r.text === undefined || typeof r.text === 'string' && r.text.length <= 600)
+      && (r.operation !== 'unchanged' || saving && !args.id || r.revision === args.revision)
+      && (saving ? r.id.startsWith('m-') && (args.id ? ['updated', 'unchanged'].includes(r.operation) && r.id === args.id : ['created', 'unchanged'].includes(r.operation))
+        : r.id === args.id && ['forgotten', 'unchanged'].includes(r.operation));
+    return { ...step, id: args.id || r?.id, receipt: r, ok };
+  };
+  const memoryGrounded = (text, inp) => {
+    if (!memoryOn(inp) && !inp.steps.some((s) => s.call.name.startsWith('memory_'))) return true;
+    if (R().synced(text)) return false;
+    const attempts = inp.steps.filter((s) => M().isWrite(s.call.name)).map(memoryAttempt);
+    return R().claims(text).every(({ clause, operation, present }) => {
+      const saving = operation !== 'forgotten', ids = clause.match(/[ms]-[0-9a-f]{32}/g) || [];
+      const relevant = attempts.filter((a) => (a.call.name === 'memory_save') === saving);
+      const valid = (a) => a?.ok && (!present || attempts.filter((attempt) => attempt.id === a.id).at(-1) === a)
+        && (operation !== 'updated' || a.call.arguments.id && ['updated', 'unchanged'].includes(a.receipt.operation));
+      return ids.length ? ids.every((id) => valid(relevant.filter((a) => a.id === id).at(-1))) : valid(relevant.at(-1));
+    });
+  };
+  const FRESH = {
+    due: { question: /\b(?:due|deadline|vence|vencimiento|prazo|entregar|échéance|rendre|fällig|abgabe|inleveren|verschuldigd)\b/u, tools: ['todo_list', 'schedule_list', 'assignments_list', 'assignment_read', 'document_assignment'] },
+    grade: { question: /\b(?:(?:my|current|latest|new|mi|mis|minha|minhas|ma|mes|meine|mein|mijn)\s+(?:[\p{L}]+\s+){0,2}(?:grades?|scores?|calificaciones?|notas?|notes?|noten|cijfers)|(?:grade|score) (?:am i|do i|is mine))\b/u, tools: ['grades_list', 'course_grades'] },
+    submitted: { question: /\b(?:submit(?:ted|sion)?|handed in|turned in|entregad[oa]|enviad[oa]|soumis|rendu|abgegeben|eingereicht|ingeleverd)\b/u, tools: ['todo_list', 'schedule_list', 'assignments_list', 'course_grades', 'document_assignment'] },
+  };
+  const memoryFresh = (text, inp) => {
+    if (!inp.steps.some((s) => ['memory_read', 'memory_search'].includes(s.call.name)) && !inp.recall?.records.length) return true;
+    const question = fold(M().userText(inp.question));
+    // Only the historical part of a question can use a snapshot. A separate or explicitly current request still needs
+    // fresh school results, even when the same turn also asks what a saved observation reported.
+    const clauses = question.split(/[.!?;]+|\b(?:and|but|y|pero|e|mas|et|mais|und|aber|en|maar)\b/u);
+    const historical = (clause) => /\b(?:saved|cached|historical|as read|last semester|last year|guardad[oa]|registrad[oa]|enregistré|gespeichert|opgeslagen)\b/u.test(clause)
+      || /\b(?:previous|anterior)\b/u.test(clause) && /\b(?:was|were|had|era|eran|foi|était|war|waren)\b/u.test(clause);
+    const current = /\b(?:current|latest|now|today|still|actual|ahora|hoy|todavía|atual|agora|hoje|ainda|actuel|maintenant|encore|aktuell|jetzt|heute|noch|huidig|nu|vandaag|nog|when (?:is|are)|have i|did i)\b/u;
+    const topics = Object.values(FRESH).filter((topic) => clauses.some((clause) => topic.question.test(clause) && (!historical(clause) || current.test(clause))));
+    const hasFresh = (topic) => inp.steps.some((s) => {
+      if (!topic.tools.includes(s.call.name)) return false;
+      try { const r = JSON.parse(s.result); return S.isObj(r) && r.ok !== false && r.error == null && r.missing == null && facts(s.result).length > 0; } catch { return false; }
+    });
+    if (topics.every(hasFresh)) return true;
+    const prose = actionWords(fold(text));
+    const limitation = /\b(?:cannot|can't|could not|couldn't|unable to|no puedo|não posso|ne peux pas|kann nicht|kan niet) (?:verify|confirm|determine|check|verificar|confirmar|determinar|vérifier|confirmer|bestätigen|prüfen|bevestigen|controleren)\b/u.test(prose);
+    const assertion = /\b(?:is|are|it's|will be|was|were|está|es|são|é|est|ist|zijn) (?:not |currently |now )?(?:due|submitted|handed in|turned in|missing|late|\d)|\b(?:grade|score|calificación|nota|note|note|cijfer) (?:is|es|é|est|ist|is now|:)\s*\d/u.test(prose);
+    return limitation && !assertion;
+  };
+
   // study.help's subjects (ai/tasks/study-help.js SUBJECTS), a help turn's block.
   const HELP = ['math', 'science', 'code', 'essay', 'reading', 'other'];
   // A result that holds something: not a failure, nothing missing, and some words beyond who and when.
@@ -638,6 +757,23 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // → '' when the output may be used, else why not: schema, one, tool, arguments, id, repeat, steps, quote, number; for
   // Rime's own tools also work, place, text, time, monitor, asked (ownWhy); with first or help, first (an answer with no
   // result behind it) and ground (results that hold facts, an answer quoting none).
+  const currentId = (name, args, key, current) => {
+    if (!current || spec(name)?.kind !== 'read') return false;
+    if (key === 'course') return args.course === current.course?.id && !['run_js', 'place_open'].includes(name);
+    if (key === 'assignment') return name === 'assignment_read' && args.course === current.course?.id && args.assignment === current.assignment?.id;
+    if (key === 'id') return (name === 'content_read' || name === 'discussion_read' && current.content?.kind === 'discussion') && args.course === current.course?.id && args.id === current.content?.id;
+    return key === 'document' && ['document_read', 'document_assignment'].includes(name) && args.document === current.document?.id;
+  };
+  const heldId = (v, inp, data) => {
+    const word = new RegExp(`(?<![\\p{L}\\p{N}_])${v.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![\\p{L}\\p{N}_])`, 'u');
+    return word.test(inp.question) || data.some((x) => String(x) === v);
+  };
+  // The worker uses exactly the task's provenance when deciding whether a live account pin is needed. Mere equality
+  // with a current id must not redirect an independently question/result-grounded cross-account request.
+  const currentBound = (call, inp) => {
+    const data = values([...(inp.fired ? [inp.fired] : []), ...inp.steps.map((s) => s.result)], inp.first === true);
+    return IDS.some((key) => typeof call.arguments[key] === 'string' && !heldId(call.arguments[key], inp, data) && currentId(call.name, call.arguments, key, inp.current));
+  };
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length) return 'schema';
     if ((out.call === null) === (out.answer === null)) return 'one';
@@ -646,13 +782,13 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (out.call) {
       const { name, arguments: args } = out.call;
       if (!inp.tools.includes(name)) return 'tool';
-      if (S.validate(args, spec(name).parameters).length) return 'arguments';
+      if (!validArgs(name, args)) return 'arguments';
       for (const k of IDS) {
         const v = args[k];
         if (typeof v !== 'string') continue;
-        const word = new RegExp(`(?<![\\p{L}\\p{N}_])${v.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![\\p{L}\\p{N}_])`, 'u');
-        if (!word.test(inp.question) && !data.some((x) => String(x) === v)) return 'id';
+        if (!heldId(v, inp, data) && !currentId(name, args, k, inp.current) && !(name.startsWith('memory_') && k === 'id' && inp.recall?.records.some((r) => r.id === v))) return 'id';
       }
+      if (name.startsWith('memory_') && args.revision !== undefined && !memoryRevision(args, inp)) return 'id';
       if (inp.steps.some((s) => JSON.stringify(canon(s.call)) === JSON.stringify(canon(out.call)))) return 'repeat';
       if (inp.steps.length >= LIMIT.steps) return 'steps';
       return OWN.includes(name) ? ownWhy(name, args, inp) : '';
@@ -660,7 +796,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const { text, quotes } = out.answer;
     if (!text.trim()) return 'schema';
     // Knowing a destination (or quoting another factual value) never proves that a navigation ran successfully.
-    if (!navigationGrounded(text, inp)) return 'ground';
+    if (!navigationGrounded(text, inp) || !memoryGrounded(text, inp) || !memoryFresh(text, inp)) return 'ground';
     // Tool first: an answer about the student's school stands on results Glaze read for it, never on nothing; facts from a
     // result that holds any are quoted (empty and failed results hold none, so the answer says only that).
     if ((inp.first || inp.help) && !inp.steps.length && !inp.fired) return 'first';
@@ -736,6 +872,6 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     return [w[0], ...lines, ...(items.length > 12 ? [`- … ${items.length - 12}`] : [])].join('\n');
   };
   const task = T.add(T.define({ id: 'agent.tools', version: 1, input, build, output: OUTPUT, check, why: (out, inp) => why(out, inp), limits: { ms: 60000 }, rate: { perMinute: 6 * (LIMIT.steps + 1) } }));
-  return { task, LIMIT, HISTORY, FIX, FIXES, listAnswer, SPECS, NAMES, OWN, PHRASES, AGENTS, AHEAD, HELP, rich, gradedWork, fold, LATER, moment, SYSTEM, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, why };
+  return { task, LIMIT, HISTORY, FIX, FIXES, listAnswer, SPECS, NAMES, OWN, PHRASES, AGENTS, AHEAD, HELP, rich, gradedWork, fold, LATER, moment, SYSTEM, CURRENT, MEMORY, currentBound, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, why };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASK_AGENT_TOOLS; else GZ_AI_TASK_AGENT_TOOLS;

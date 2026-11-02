@@ -1679,7 +1679,7 @@ GZ_UI.load().then((s) => {
   // One file (background/backup.js): the settings, with Better To Do's own tasks and plans (storage.local, per Canvas site and user)
   // and the pet beside them, card styles and bookmarks (a picture kept on this computer stays here), Look favorites, every
   // Notes account, and this device's own records. Restore… lists what a file holds; each ticked category joins what is here.
-  const backupNames = () => ({ settings: t('Settings and Looks'), notes: t('Notes'), tasks: t('Tasks and pet'), dashNotes: t('Dashboard notes'),
+  const backupNames = () => ({ settings: t('Settings and Looks'), memories: t('Saved memories'), notes: t('Notes'), tasks: t('Tasks and pet'), dashNotes: t('Dashboard notes'),
     classes: t('Class schedules'), gpa: t('GPA past terms'), widgets: t('Widgets'), shareKeys: t('Share keys'), papers: t('Papers'),
     writerWords: t('Personal dictionary'), sources: t('Saved sources') });
   const sessionsOp = async (op, rest = {}) => {
@@ -1977,6 +1977,7 @@ GZ_UI.load().then((s) => {
   GZ_WRITEREDIT.mount({ t, hint, elsewhere: ownTabAt });
   GZ_AIEDIT.mount({ t, when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at),
     pct: (x) => GZ_I18N.pct(Math.round(x * 100), GZ_I18N.ui()) });
+  GZ_MEMORYEDIT.mount({ t, when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at) });
   // Agents (settings/editor-agents.js): agent access, the helper's link, the paired apps and their groups, and the activity list.
   GZ_AGENTSEDIT.mount({ t, hint, when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at),
     day: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium' }).format(at) });

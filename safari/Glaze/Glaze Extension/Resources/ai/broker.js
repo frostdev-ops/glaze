@@ -178,6 +178,14 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       ...(typeof known?.weights === 'string' && { weights: known.weights }) };
     return { chosen, cfg };
   };
+  // Ask's earlier capability check can precede a model change or use a different catalog. Memory-bearing requests must
+  // match the final pinned weights before the provider counts, warms or runs them. Other requests keep their own path.
+  const memoryReady = async (use, cfg, input) => {
+    if (use.p.id !== 'local' || (input?.recall === undefined && !(Array.isArray(input?.tools) && input.tools.some((name) => typeof name === 'string' && name.startsWith('memory_'))))) return;
+    let version;
+    try { version = await use.p.memoryVersion?.(cfg); } catch { /* unavailable is not a supported capability */ }
+    if (version !== 1) throw R().error('caps');
+  };
 
   // ---- limits shared by every port ------------------------------------------------------------------------------------
   const inflight = new Map(); // `${who}|${feature}` (a supersede task: `…|${task}`) → AbortController
@@ -301,6 +309,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         admitted.set(control, use);
         // Built as the run's would be: for the window and model its catalog gives (sized).
         const { cfg } = sized(use, await catalog(env, use, both.signal, (env.now || Date.now)()), task);
+        await memoryReady(use, cfg, m.input);
         const req = T().prepare(task, m.input, { provider: use.p, cfg, over: over(use) });
         done(!!req && !both.signal.aborted && await P().warm(use.p, req, cfg, { signal: both.signal }));
       } catch { done(false); } finally { mine.delete(m.id); admitted.delete(control); deadline.done(); both.done(); }
@@ -321,6 +330,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         const { task, use } = await F().wait(() => admit(m), both.signal);
         admitted.set(control, use);
         const { cfg } = sized(use, await catalog(env, use, both.signal, (env.now || Date.now)()), task);
+        await memoryReady(use, cfg, m.input);
         const req = T().prepare(task, m.input, { provider: use.p, cfg, over: over(use) });
         const n = req && !both.signal.aborted ? await P().count(use.p, req, cfg, { signal: both.signal }) : null;
         const window = P().caps(use.p, use.p.config(cfg)).context;
@@ -374,6 +384,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         const list = await catalog(env, use, control.signal, now(), use.p.id === 'local' && (task.caps.images === true || task.id === 'writer.feedback'));
         const { chosen, cfg } = sized(use, list, task);
         if (use.p.id === 'local' && typeof cfg.weights === 'string') row.model = cfg.weights;
+        await memoryReady(use, cfg, m.input);
         // Ask's outer router can race a model change or this broker's cached catalog. Check the pinned weights before
         // any Rime tool or fired turn reaches the model, including requests on the ordinary AI port.
         if (task.id === 'agent.tools' && use.p.id === 'local') {

@@ -76,6 +76,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const PLACES = () => (typeof GZ_AI_RIME_PLACES !== 'undefined' ? GZ_AI_RIME_PLACES : require('./agent/places.js'));
   const WAKES = () => (typeof GZ_AI_RIME_WAKES !== 'undefined' ? GZ_AI_RIME_WAKES : require('./agent/wakes.js'));
   const SCHOOL = () => (typeof GZ_AI_RIME_SCHOOL !== 'undefined' ? GZ_AI_RIME_SCHOOL : require('./agent/school.js'));
+  const MEMORY = () => (typeof GZ_AI_RIME_MEMORY !== 'undefined' ? GZ_AI_RIME_MEMORY : require('./agent/memory.js'));
+  const RECALL = () => (typeof GZ_AI_RECALL !== 'undefined' ? GZ_AI_RECALL : require('./recall.js'));
   const SITES = ['canvas', 'ultra', 'moodle'];
   // Fired records the panel was shown, by id, until the click that asks about one (or an hour).
   const KEPT = new Map();
@@ -124,6 +126,21 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     if (marks.length) list.push({ tab: env.tab, url, marks, until: env.now() + 60e3 });
   });
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
+  // Only direct current user words select memory management. A quotation, supplied document or earlier turn cannot.
+  const memoryQuestion = (question) => {
+    const q = MEMORY().userText(question).normalize('NFKC').toLowerCase();
+    if (MEMORY().forgetRequested(question)) return true;
+    const target = /\b(?:memor(?:y|ies)|saved (?:facts?|preferences?)|about (?:me|my preferences)|my (?:facts?|preferences?)|memorias?|recuerdos?|mis preferencias|sobre m[ií]|lembran[çc]as?|minhas prefer[eê]ncias|sobre mim|m[ée]moires?|souvenirs?|mes pr[ée]f[ée]rences|sur moi|erinnerungen?|meine vorlieben|[üu]ber mich|herinneringen|mijn voorkeuren|over mij)\b/u;
+    const action = /\b(?:remember|recall|show|list|read|search|save|update|edit|correct|change|recuerda|recuerdas|recordar|muestra|guarda|actualiza|corrige|lembrar|lembra|lembre|mostre|salve|atualize|corrija|rappelle|souviens|souvenez|montre|affiche|enregistre|corrige|modifie|erinnere|erinnerst|zeige|speichere|korrigiere|[äa]ndere|onthoud|herinner|toon|bewaar|corrigeer|wijzig)\b/u;
+    return target.test(q) && action.test(q) || /\b(?:remember (?:that )?(?:i|my)|recuerda (?:que )?(?:yo|mi)|lembre (?:que )?(?:eu|minha?)|(?:rappelle-toi|souviens-toi) que je|merke dir[,]? (?:dass ich|meine?)|onthoud (?:dat ik|mijn))\b/u.test(q);
+  };
+  // Reuse the affirmative request grammar, including its negation/conditional checks. A correction verb elsewhere in
+  // a school question is no permission to replace a preference the student edited themselves.
+  const memoryCorrection = (question) => MEMORY().userText(question).split(/[\u0000\n.!?;]+/u).some((clause) => {
+    const mapped = clause.replace(/(?<!\p{L})(?:correct|replace|update|change|corrige|reemplaza|actualiza|corrija|substitua|atualize|modifie|remplace|mets à jour|korrigiere|[äa]ndere|corrigeer|vervang|wijzig)(?!\p{L})/giu, 'forget')
+      .replace(/(?<!\p{L})[äa]ndern(?!\p{L})/giu, 'vergessen').replace(/(?<!\p{L})wijzigen(?!\p{L})/giu, 'vergeten');
+    return mapped !== clause && !MEMORY().forgetRequested(clause) && MEMORY().forgetRequested(mapped);
+  });
 
   // ---- the routing rule ------------------------------------------------------------------------------------------------
   // Each entry a regular expression's source, matched as whole words, case folded.
@@ -273,7 +290,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     'das stimmt (?:nicht|so nicht)|das ist (?:falsch|nicht richtig)|du hast [\\p{L} ]{0,30}vergessen|bist du sicher|was ist mit|und (?:n[äa]chste|morgen|montag|f[üu]r)|falsch',
     'dat klopt niet|dat is (?:niet waar|fout)|je bent [\\p{L} ]{0,30}vergeten|weet je het zeker|hoe zit het met|en (?:volgende|morgen|maandag|voor)|fout',
   ].join('|')})(?![\\p{L}])`, 'iu');
-  const route = (question, { attempt = '', locale = 'en', level = 1, history } = {}) => {
+  const route = (question, { attempt = '', locale = 'en', level = 1, history, current } = {}) => {
     const last = level >= 3 && Array.isArray(history) && history.length ? history[history.length - 1] : null;
     if (last && !String(attempt).trim() && FOLLOW.test(String(question).replace(/[‘’]/g, "'"))) {
       // Follow-up-only questions carry no topic themselves. Walk back to the question that supplied their tools.
@@ -293,22 +310,27 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const computing = own.includes('compute') && !AT().gradedWork(AT().fold(q));
     const working = computing ? words(lists(WORK, locale).filter((w) => !COMPUTING.includes(w))).test(q) : has(WORK);
     const subject = () => subjectOf(`${q}\n${work}`);
+    // A deictic question names the active resource only when the worker independently captured one.
+    const deictic = level >= 3 && /\b(?:this|here|it|este|esta|esto|aqui|isso|isto|ici|ceci|dies|hier|dit|deze)\b/iu.test(q);
+    const active = deictic && current?.document?.id ? TOOLS.documents : deictic && current?.course?.id ? current.assignment?.id ? TOOLS.assignments : current.content?.id
+      ? (current.view === 'discussion' ? TOOLS3.discussions : TOOLS3.content) : current.view === 'course' ? TOOLS.assignments : [] : [];
+    const contextualWork = deictic && /\b(?:what (?:do|should|can) i do|explain|help)\b/iu.test(q);
     // Tool first (level 3): help with work that names the student's records reads them first (read: agent.tools' help turn,
     // its tools these topics' reads), then study.help answers with what was read; help naming nothing is study help alone.
-    if (work.trim() || working) {
+    if (work.trim() || working || contextualWork) {
       const numbered = words(lists(NAMED, locale).map((n) => `(?:${n}) #?\\d+`)).test(q);
       const particular = words(lists(NAMED, locale).map((n) => `${PARTICULAR.source}[ -]+(?:[\\p{L}-]+[ -]+){0,2}(?:${n})`)).test(q);
       const named = level >= 3 && (CODE.test(q) || particular || numbered) && !on.includes('assignments') ? TOOLS.assignments : [];
-      const reads = level >= 3 ? [...on.filter((k) => READS.includes(k) && k !== 'mark').flatMap((k) => TOOLS[k]), ...own.filter((k) => READS.includes(k)).flatMap((k) => TOOLS3[k]), ...named] : [];
+      const reads = level >= 3 ? [...active, ...on.filter((k) => READS.includes(k) && k !== 'mark').flatMap((k) => TOOLS[k]), ...own.filter((k) => READS.includes(k)).flatMap((k) => TOOLS3[k]), ...named] : [];
       return reads.length ? { task: 'study.help', subject: subject(), read: [...new Set(reads)].slice(0, LIMIT.tools - 1).concat('accounts_list') } : { task: 'study.help', subject: subject() };
     }
-    if (!on.length && !own.length) return { task: 'study.help', subject: subject() };
+    if (!on.length && !own.length && !active.length) return { task: 'study.help', subject: subject() };
     if (on.includes('mark') && !on.includes('todo')) on.push('todo');
     // Rime's own topics first: their tools must fit the window before records' ones fill it.
     const tools = [...Object.keys(TOOLS3).filter((k) => own.includes(k) && (k !== 'compute' || computing)).flatMap((k) => TOOLS3[k]),
-      ...Object.keys(TOOLS).filter((k) => on.includes(k)).flatMap((k) => TOOLS[k])];
+      ...active, ...Object.keys(TOOLS).filter((k) => on.includes(k)).flatMap((k) => TOOLS[k])];
     if (!tools.length) return { task: 'study.help', subject: subjectOf(`${q}\n${work}`) };
-    const accounts = on.some((k) => ACCOUNTS.includes(k)) || own.some((k) => k === 'watch' || READS.includes(k));
+    const accounts = active.length > 0 || on.some((k) => ACCOUNTS.includes(k)) || own.some((k) => k === 'watch' || READS.includes(k));
     // Multiple topics may fill the window. Keep discovery available so a student with two accounts can still choose one.
     return { task: 'agent.tools', tools: [...new Set(tools)].slice(0, LIMIT.tools - (accounts ? 1 : 0)).concat(accounts ? ['accounts_list'] : []) };
   };
@@ -320,11 +342,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
 
   // ---- the step loop ---------------------------------------------------------------------------------------------------
   const cancelled = () => Object.assign(R().error('cancelled'), { category: 'cancelled' });
-  const episode = async ({ question, tools, locale, now, zone, run, call, signal, fired, first, help, history, summary, measure, caps }) => {
+  const episode = async ({ question, tools, locale, now, zone, run, call, signal, fired, first, help, history, summary, measure, caps, current, recall }) => {
     const steps = [];
     let fix, fixed = false;
     const inputOf = () => ({ question, tools, steps: steps.map((s) => ({ call: s.call, result: s.result })), now, zone, locale, ...(fired && { fired }), ...(first && { first: true }), ...(help && { help }),
-      ...(first && history?.length && { history }), ...(first && summary && { summary }), ...(fix && { fix }) });
+      ...(first && history?.length && { history }), ...(first && summary && { summary }), ...(fix && { fix }), ...(current && { current }), ...(recall && { recall }) });
     for (;;) {
       if (signal?.aborted) throw cancelled();
       // Results that would overflow the window: those the model has used become digests, the latest never.
@@ -334,8 +356,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       }
       // An answer that fails its check after results came back gets one corrective turn naming the rule (FIX); if that fails
       // too, Glaze's own list from the results (built), when they hold one. The error says why (its code, the steps, the raw).
-      let out;
-      try { out = await run('agent.tools', inputOf()); }
+      let out, supplied;
+      try { out = await run('agent.tools', supplied = inputOf()); }
       catch (e) {
         if (signal?.aborted) throw e;
         const failed = R().code(e) === 'check' && first && steps.length;
@@ -352,10 +374,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       if (!isObj(out?.call)) throw R().error('check');
       if (steps.length >= AT().LIMIT.steps) throw R().error('steps');
       const { name, arguments: args, kind } = out.call;
-      const r = await call({ name, arguments: args, kind });
+      const r = await call({ name, arguments: args, kind }, supplied);
       if (signal?.aborted) throw cancelled();
       // A change the student didn't allow: nothing more is asked, so nothing can claim it was done.
-      if ((kind === 'write' || kind === 'confirm') && r?.asked !== 'yes') return { declined: r?.asked || 'refused', steps };
+      const memoryPolicy = MEMORY().isWrite(name) && r?.authorization === 'memory-policy';
+      if ((kind === 'write' || kind === 'confirm') && r?.asked !== 'yes' && !memoryPolicy) return { declined: r?.asked || 'refused', steps };
       steps.push({ call: { name, arguments: args }, result: r?.result ?? null });
     }
   };
@@ -435,7 +458,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     let contextCaps = { context: 4096 };
     const scale = () => TASKS().retention(contextCaps).scale;
     const retained = (history) => history.slice(-Math.floor(LIMIT.turns * scale())).map((h) => ({ question: h.question.slice(0, Math.floor(LIMIT.turn * scale())), answer: h.answer.slice(0, Math.floor(LIMIT.turn * scale())) }));
-    const materialOf = (steps, zone, how) => steps.map((s) => AT().readable(s.result, zone, how, contextCaps) || '').join('\n').slice(0, Math.floor(LIMIT.material * scale()));
+    const materialOf = (steps, zone, how) => steps.filter((s) => !s.call.name.startsWith('memory_'))
+      .map((s) => AT().readable(s.result, zone, how, contextCaps) || '').join('\n').slice(0, Math.floor(LIMIT.material * scale()));
     const measure = async (task, input, signal) => {
       if (env.counts !== true) return null;
       try { const a = await broker({ op: 'count', feature: FEATURE, task, input }, signal); if (Number.isSafeInteger(a.window) && a.window > 0) contextCaps = { context: Math.min(131072, a.window) }; return Number.isSafeInteger(a.used) && Number.isSafeInteger(a.window) ? { used: a.used, window: a.window, reserve: Number.isSafeInteger(a.reserve) ? a.reserve : 0, exact: a.exact === true } : null; }
@@ -445,10 +469,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     // clears it. A compaction still running when the next question comes gives way to its fallback, so asking never waits.
     const CHAT = { summary: '', covered: new Set(), gen: 0, pending: null, tools: [] };
     // The tools a level-3 run offers: the question's own; from UNION.from up, the chat's union with them.
-    const offer = async (routed, input, signal) => {
-      const fit = await measure('agent.tools', input, signal);
+    const offer = async (routed, input, signal, count) => {
+      const fit = await count('agent.tools', input);
       if (signal.aborted) throw cancelled();
-      let keep = [...CHAT.tools.filter((t) => !routed.includes(t)), ...routed];
+      let keep = [...CHAT.tools.filter((t) => !routed.includes(t)), ...routed]
+        .filter((t) => !t.startsWith('memory_') || current?.memory?.enabled === true);
       while (unionCost(keep) > UNION.budget && keep.length > routed.length) keep = keep.slice(1);
       CHAT.tools = keep;
       post({ id: current.id, type: 'tools', tools: keep });
@@ -496,7 +521,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
 
     // Ask's tool calls, through Agents' one call path, as an app of Glaze's own that Ask's switch has granted every group.
     const live = async () => SET().allowed(SET().clean(await env.settings()), FEATURE) && (await env.enabled()) === true
-      && await allowed({ op: 'run', feature: FEATURE }) === true;
+      && await allowed({ op: 'run', feature: FEATURE }) === true && (!current?.fresh || await current.fresh());
     let asked; // the student's answer to the current call's change, from Agents' approval window
     const calls = CALLS().create({
       registry: env.registry, state: env.state, refresh: env.refresh, accounts: env.accounts, local: env.local, keys: env.keys, now: env.now, turn: env.turn,
@@ -555,13 +580,18 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           if (!reads.has(key)) reads.set(key, Promise.resolve(wakes.read(name, args, account)).then(structuredClone));
           return structuredClone(await reads.get(key));
         } };
-      return new Map([...JS().tools(), ...PLACES().tools(), ...WAKES().tools(snapshot), ...SCHOOL().tools()].map((d) => [d.name, TL().define(d)]));
+      return new Map([...JS().tools(), ...PLACES().tools(), ...WAKES().tools(snapshot), ...SCHOOL().tools(),
+        ...(current?.memory?.env ? MEMORY().tools(current.memory.env) : [])].map((d) => [d.name, TL().define(d)]));
     };
     const detail = (name, r) => (name === 'run_js' ? (r?.ok ? (typeof r.value === 'string' ? r.value : JSON.stringify(r.value)) : r?.error) : name === 'place_open' ? r?.title
       : name === 'page_highlight' ? r?.marked : undefined);
     const own = async (c, signal) => {
-      const mine = current, def = owned(signal).get(c.name), { step, ms } = card(mine, c, def.kind === 'confirm' ? 'write' : 'read');
-      const context = await F().wait(() => ownContext(c.arguments, mine, signal), signal);
+      const mine = current, def = owned(signal).get(c.name);
+      if (!def) throw R().error('tool');
+      const memory = MEMORY().SPECS.some((s) => s.name === c.name);
+      const { step, ms } = card(mine, c, ['confirm', 'write'].includes(def.kind) ? 'write' : 'read');
+      // Memory already has the single fresh account lease. It never selects an account through ordinary tool caches.
+      const context = memory ? { signal } : await F().wait(() => ownContext(c.arguments, mine, signal), signal);
       if (signal?.aborted) throw cancelled();
       if (def.kind === 'confirm') {
         let summary;
@@ -580,7 +610,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       try { result = await def.run(structuredClone(c.arguments), context); } catch (e) { result = { ok: false, error: e instanceof Error ? e.message : 'The tool failed.' }; }
       const more = detail(c.name, result);
       step(result?.ok === false ? 'fail' : 'done', { ms: ms(), ...(typeof more === 'string' && more && { detail: more.slice(0, 120) }) });
-      return { result, ...(def.kind === 'confirm' && { asked: 'yes' }) };
+      return { result, ...(def.kind === 'confirm' && { asked: 'yes' }), ...(memory && MEMORY().isWrite(c.name) && { authorization: 'memory-policy' }) };
     };
     const ownContext = async (args, mine, signal) => {
       const page = mine?.page || {}, accounts = await env.accounts().catch(() => []);
@@ -607,10 +637,10 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
 
     const ask = async (m) => {
       const { id } = m;
-      const fail = (error) => post({ id, type: 'error', error });
+      const fail = (error, feature) => post({ id, type: 'error', error, ...(feature && { feature }) });
       const inputScale = env.counts === true ? 32 : 1;
       const turn = (h) => isObj(h) && Object.keys(h).sort().join() === 'answer,question' && [h.question, h.answer].every((x) => typeof x === 'string' && x.length <= LIMIT.turn * inputScale);
-      if (Object.keys(m).some((k) => !['id', 'op', 'question', 'attempt', 'locale', 'history', 'summary', 'tools', 'site', 'text', 'fired'].includes(k)) || typeof m.question !== 'string' || !m.question.trim()
+      if (Object.keys(m).some((k) => !['id', 'op', 'question', 'attempt', 'locale', 'history', 'summary', 'tools', 'site', 'text', 'fired', 'current', 'currentPage', 'writer'].includes(k)) || typeof m.question !== 'string' || !m.question.trim()
         || (m.tools !== undefined && !(Array.isArray(m.tools) && m.tools.length <= AT().NAMES.length && new Set(m.tools).size === m.tools.length && m.tools.every((n) => AT().NAMES.includes(n)) && unionCost(m.tools) <= UNION.budget))
         || (m.summary !== undefined && (typeof m.summary !== 'string' || m.summary.length > LIMIT.summary))
         || (m.attempt !== undefined && typeof m.attempt !== 'string') || (m.locale !== undefined && typeof m.locale !== 'string')
@@ -633,14 +663,111 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       current = { id, control, n: 0, locale, zone, actions: [], text: (m.text || '').slice(0, LIMIT.text), page: { site: m.site, url: env.page?.()?.url } };
       const keep = (a) => { if (a.type === 'keepalive') post({ id, type: 'keepalive' }); };
       let level = 1;
+      let active, memory;
+      const validate = async () => {
+        if (signal.aborted) throw cancelled();
+        if (active?.valid && !await F().wait(() => active.valid(), signal)) throw R().error('changed');
+        if (signal.aborted) throw cancelled();
+      };
+      const count = async (task, input) => {
+        await validate();
+        await memoryCurrent(input.recall?.records);
+        const fit = await measure(task, input, signal);
+        await validate();
+        await memoryCurrent(input.recall?.records);
+        return fit;
+      };
+      const memoryState = async (key) => typeof env.memory?.[key] === 'function' && await F().wait(() => env.memory[key](), signal) === true;
+      const memoryLive = async () => {
+        await validate();
+        if (!memory || memory.revoked || !await memoryState('on') || !await memoryState('capable') || !await live()) {
+          if (memory) memory.revoked = true;
+          return false;
+        }
+        return !signal.aborted;
+      };
+      const refs = (records) => {
+        for (const r of records) if (isObj(r) && RECALL().ID.test(r.id) && RECALL().REVISION.test(r.revision)) memory.used.set(r.id, { id: r.id, revision: r.revision });
+      };
+      const memoryCurrent = async (records = []) => {
+        if (!memory?.enabled) return;
+        const used = new Map(memory.used);
+        for (const r of records) if (isObj(r) && RECALL().ID.test(r.id) && RECALL().REVISION.test(r.revision)) used.set(r.id, { id: r.id, revision: r.revision });
+        if (!await memoryLive() || !await F().wait(() => memory.store.current(memory.account, [...used.values()]), signal)) throw R().error('changed');
+        await validate();
+      };
+      // Count the complete request, keeping generation/result reserves intact. Optional references give way before IDs.
+      const fitInput = async (task, input) => {
+        if (input.current) input.current = structuredClone(input.current);
+        if (input.recall) {
+          input.recall = RECALL().bound(input.recall, { caps: contextCaps });
+          if (!input.recall?.records.length) delete input.recall;
+        }
+        let fit = await count(task, input);
+        while (fit && fit.used + fit.reserve > fit.window) {
+          if (input.recall?.records.length) {
+            input.recall.records.pop(); input.recall.truncated = true;
+            if (!input.recall.records.length) delete input.recall;
+          } else if (input.current?.url) delete input.current.url;
+          else if (input.current?.title && [input.current.assignment?.title, input.current.content?.title, input.current.document?.title, input.current.course?.name].includes(input.current.title)) delete input.current.title;
+          else if (input.current?.material) {
+            const material = input.current.material;
+            if (material.text.length > 160) { material.text = material.text.slice(0, Math.floor(material.text.length / 2)); material.truncated = true; }
+            else delete input.current.material;
+          } else break;
+          fit = await count(task, input);
+        }
+        return fit;
+      };
+      const call = async (c, input) => {
+        await validate();
+        const bound = active?.bind ? active.bind(c, AT().task.input(input, { caps: contextCaps })) : c;
+        const out = await tool(bound, signal);
+        if (memory?.enabled) {
+          const result = out?.result;
+          if (c.name === 'memory_search' && result?.ok === true && Array.isArray(result.items)) refs(result.items);
+          if (c.name === 'memory_read' && result?.ok === true) refs([result]);
+          if (MEMORY().isWrite(c.name) && result?.ok === true && isObj(result.receipt)) {
+            let receipt = result.receipt;
+            // A no-op forget means an existing matching content-free tombstone, never an unchanged live record.
+            if (c.name === 'memory_forget' && receipt.operation === 'unchanged' && receipt.id === c.arguments.id && receipt.revision === c.arguments.revision && receipt.text === undefined) {
+              receipt = { ...receipt, operation: 'forgotten' }; out.result = { ...result, receipt };
+            }
+            if (memory.recall) memory.recall.records = memory.recall.records.filter((r) => r.id !== receipt.id);
+            if (receipt.operation === 'forgotten') memory.used.delete(receipt.id); else refs([receipt]);
+            post({ id, type: 'memory', receipt });
+          }
+          if (MEMORY().READS.includes(c.name) && c.kind === 'read' && result?.ok !== false && result?.error == null) {
+            await validate();
+            await MEMORY().ingest(memory.env, { name: bound.name, arguments: bound.arguments, result }, { signal });
+          }
+        }
+        await validate();
+        return out;
+      };
       const run = async (task, input) => {
+        await validate();
+        await memoryCurrent();
         if (level >= 3 && (await env.level?.().catch(() => 1) ?? 1) < 3) throw R().error('changed');
         // { id, type: 'context', task, used, window, reserve, exact }: the request about to go, against the model's window.
-        const fit = await measure(task, input, signal);
+        const fit = await fitInput(task, input);
+        if (fit && fit.used + fit.reserve > fit.window && (input.current || input.recall || input.tools?.includes('memory_save'))) throw R().error('size');
         if (fit && !signal.aborted) post({ id, type: 'context', task, ...fit });
-        return (await broker({ op: 'run', feature: FEATURE, task, input }, signal, keep)).output;
+        await validate();
+        await memoryCurrent(input.recall?.records);
+        if (memory?.enabled && input.recall?.records.length) { refs(input.recall.records); post({ id, type: 'recall', records: input.recall.records }); }
+        const output = (await broker({ op: 'run', feature: FEATURE, task, input }, signal, keep)).output;
+        await validate();
+        await memoryCurrent();
+        return output;
       };
       try {
+        active = await F().wait(() => env.current?.(m), signal);
+        current.fresh = async () => { await validate(); return true; };
+        if (active?.page) current.page = active.page;
+        const context = active?.current;
+        const inCurrent = context ? { current: context } : {};
+        const studyContext = context ? { context: { kind: context.assignment ? 'assignment' : context.view, course: { name: context.course?.name || '' }, ...(context.assignment && { assignment: { title: context.assignment.title || '' } }) } } : {};
         level = await env.level?.().catch(() => 1) ?? 1;
         if (signal.aborted) throw cancelled();
         // A fired record the student asked about: its own turn for a model trained on it; else the say as any question.
@@ -649,35 +776,92 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (level >= 3 && m.fired !== undefined && (!kept || (kept.say && kept.say !== question))) throw R().error('request');
         const record = kept && level >= 3 ? kept : undefined;
         if (record) KEPT.delete(firedKey(m.fired));
-        const r = record ? routeFired(record) : route(question, { attempt, locale, level, ...(level >= 3 && history.length && { history }) });
+        const explicitMemory = !record && memoryQuestion(question);
+        const memoryOn = await memoryState('on'), capable = await memoryState('capable');
+        if (explicitMemory && !memoryOn) return fail('off', 'memory');
+        if (explicitMemory && (!capable || level < 3)) return fail('caps', 'memory');
+        if (!record && memoryOn && capable && level >= 3 && env.memory?.store) {
+          const store = env.memory.store, account = active?.account;
+          const lease = typeof account === 'string' && typeof active?.valid === 'function' ? store.lease(account) : undefined;
+          memory = { store, account, enabled: !!lease, used: new Map(), revoked: false };
+          // Capture a producer once for this real user turn. Forget, clear, restore or off may revoke it permanently.
+          memory.lease = lease;
+          memory.env = { store, now: env.now, on: memoryLive, context: async () => {
+            await validate();
+            return memory.enabled ? { account, question, lease: memory.lease,
+              explicitCorrection: memoryCorrection(question) } : null;
+          } };
+          current.memory = memory;
+          if (memory.enabled) {
+            await validate();
+            const found = await F().wait(() => store.search(account, question.slice(0, 240), { limit: 3, maxChars: 600, includePreferences: true, ...(context?.course?.id && { course: context.course.id }) }), signal);
+            await validate();
+            if (found?.ok && Array.isArray(found.items)) {
+              const records = found.items.map(({ score: _score, ...r }) => RECALL().record(r)).filter(Boolean);
+              memory.recall = RECALL().bound({ records, truncated: found.truncated === true || records.length < found.items.length }, { caps: contextCaps });
+              if (!memory.recall?.records.length) memory.recall = undefined;
+            }
+          }
+        }
+        if (explicitMemory && !memory?.enabled) return fail('changed', 'memory');
+        const inRecall = memory?.recall ? { recall: memory.recall } : {};
+        const r = explicitMemory ? { task: 'agent.tools', tools: MEMORY().SPECS.map((s) => s.name) }
+          : record ? routeFired(record) : route(question, { attempt, locale, level, ...inCurrent, ...(level >= 3 && history.length && { history }) });
+        const optionalSave = async () => {
+          if (!memory?.enabled) return;
+          const input = { question, tools: ['memory_save'], steps: [], now: env.now(), zone, locale, ...inRecall };
+          const fit = await fitInput('agent.tools', input);
+          if (fit && fit.used + fit.reserve > fit.window) return;
+          // No first/history/help: this pass may choose no save, and its prose never reaches the answer or compaction.
+          await episode({ question, tools: ['memory_save'], locale, now: env.now(), zone, run, call, signal, ...inRecall, caps: contextCaps });
+        };
+        const withSave = async (tools, input) => {
+          if (!memory?.enabled || explicitMemory || record) return tools;
+          if (tools.length < LIMIT.tools) {
+            const candidate = [...tools, 'memory_save'];
+            const fit = await fitInput('agent.tools', { ...input, tools: candidate, ...inRecall });
+            if (fit?.exact && fit.used + fit.reserve <= fit.window) return candidate;
+          }
+          await optionalSave();
+          return tools;
+        };
         post({ id, type: 'route', task: r.task });
         if (r.task === 'study.help') {
           // Help naming the student's records (level 3): agent.tools' help turn reads them; study.help then helps with what
           // was read as its material, under its own rules. Its reader's answer is never shown.
-          let material = '', tools = ['accounts_list'];
+          let material = context?.material?.text || '', tools = ['accounts_list'];
           if (r.read) {
-            tools = await offer(r.read, { question, tools: r.read, steps: [], now: env.now(), zone, locale, first: true, help: r.subject }, signal);
+            const reader = { question, tools: r.read, steps: [], now: env.now(), zone, locale, first: true, help: r.subject, ...inCurrent, ...inRecall };
+            tools = await offer(r.read, reader, signal, count);
+            tools = await withSave(tools, reader);
             // A reader that can't finish (its turn refused, too many steps) leaves study help to answer without it.
             let seen = null;
-            try { seen = await episode({ question, tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, first: true, help: r.subject, caps: contextCaps }); }
+            try { seen = await episode({ question, tools, locale, now: env.now(), zone, run, call, signal, first: true, help: r.subject, ...inCurrent, ...inRecall, caps: contextCaps }); }
             catch (e) { if (signal.aborted || !['check', 'steps', 'refusal', 'invalid-response'].includes(R().code(e))) throw e; }
             if (seen?.declined) return post({ id, type: 'end', task: r.task, declined: true });
-            if (seen) material = materialOf(seen.steps, zone);
+            if (seen) material = [material, materialOf(seen.steps, zone)].filter(Boolean).join('\n').slice(0, Math.floor(LIMIT.material * scale()));
           }
+          else await optionalSave();
           // The page renews this port between questions. Discover the provider's current window before cutting history;
           // record-reading help already did so through offer(), but a study-only follow-up has no reader.
-          if (level >= 3 && !r.read) await measure('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale }, signal);
+          if (level >= 3 && !r.read) await count('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...studyContext, ...inRecall, ...(material && { material }) });
           // Level 3: the summary as the conversation's first turn, then the turns it doesn't cover (a model reads them).
           const past = level >= 3 ? [...(CHAT.summary ? [{ question: 'Earlier in this chat', answer: CHAT.summary }] : []), ...retained(open)].slice(-Math.floor(LIMIT.turns * scale())) : history;
-          const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...(past.length && { history: past }), ...(material && { material }) });
+          const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...studyContext, ...inRecall, ...(past.length && { history: past }), ...(material && { material }) });
+          await memoryCurrent();
           if (level >= 3 && isObj(output)) void compact({ id, open, turn: { question, answer: [output.reply, output.followUp].filter((x) => typeof x === 'string' && x).join('\n\n') }, locale, tools, zone }).catch(() => {});
           post({ id, type: 'end', task: r.task, output });
           return;
         }
-        const tools = level >= 3 ? await offer(r.tools, { question, tools: r.tools, steps: [], now: env.now(), zone, locale, first: true }, signal) : r.tools;
+        const reader = { question, tools: r.tools, steps: [], now: env.now(), zone, locale, first: true, ...inCurrent, ...inRecall,
+          ...(open.length && { history: retained(open) }), ...(CHAT.summary && { summary: CHAT.summary }) };
+        let tools = level >= 3 ? await offer(r.tools, reader, signal, count) : r.tools;
+        tools = await withSave(tools, reader);
         if (signal.aborted) throw cancelled();
-        const res = await episode({ question, tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, caps: contextCaps, ...(level >= 3 && { first: true, ...(open.length && { history: retained(open) }), ...(CHAT.summary && { summary: CHAT.summary }), measure: (task, input) => measure(task, input, signal) }),
+        const res = await episode({ question, tools, locale, now: env.now(), zone, run, call, signal, ...inCurrent, ...inRecall, caps: contextCaps, ...(level >= 3 && { first: true, ...(open.length && { history: retained(open) }), ...(CHAT.summary && { summary: CHAT.summary }), measure: count }),
           ...(record && { fired: { what: record.what, ...(record.watch && { watch: record.watch }), say: question, at: record.at, ...(record.fact && { fact: record.fact }) } }) });
+        await validate();
+        await memoryCurrent();
         if (res.declined) return post({ id, type: 'end', task: r.task, declined: true });
         // The study rule on this path too: an answer about records never gives the answer to work.
         // The results as the model read them (friendly dates at level 3), so the answer's copied values are in the material.
@@ -687,7 +871,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (!res.built && (!inp || SH().hands(res.answer.text, inp))) throw Object.assign(R().error('check'), { why: 'hands', steps: res.steps.length });
         // What the tools asked of the page (open, highlight), for the panel to perform once it shows the answer.
         await carry(env, current.actions).catch(() => {});
-        if (signal.aborted) throw cancelled();
+        await validate();
+        await memoryCurrent();
         for (const a of current.actions) { const { action, ...rest } = a; post({ id, type: 'action', action: { kind: action, ...rest } }); }
         // A built answer also carries the failed answer it replaced and its code, to this panel only (never Activity).
         if (level >= 3) void compact({ id, open, turn: { question, answer: res.answer.text }, locale, tools, zone }).catch(() => {});

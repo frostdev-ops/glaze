@@ -58,6 +58,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     { cat: 'looks', area: 'local', test: (k) => k === 'lookHistory' || k === 'lookFavorites' },
     { cat: 'writerWords', area: 'local', test: (k) => k === 'writerWords' },
     { cat: 'sources', area: 'local', test: (k) => /^writer:sources:(?:[\w.!~*'()%-]{1,2700}\|){3}[\w.!~*'()%-]{1,2700}$/.test(k) },
+    // Saved Markdown memories are user data. Course material and retrieval indexes remain a device's read cache.
+    { cat: 'memories', area: 'local', test: (k) => k.startsWith('rimeMemory:') && L.memory().parseKey(k)?.kind === 'memory' },
     // Gradescope: what the student chose (the account, each course's placing, the bar's dismissal, each Canvas account's
     // answer); what was read from Gradescope stays on the device that read it. A device signed in to a Gradescope account
     // keeps it: another account's record (a second device signed in to someone else's) changes nothing here, so the two
@@ -89,6 +91,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     notes: () => (typeof GZ_NOTES !== 'undefined' ? GZ_NOTES : require('../planner/notes.js')),
     gradescope: () => (typeof GZ_GRADESCOPE !== 'undefined' ? GZ_GRADESCOPE : require('../planner/gradescope.js')),
     backup: () => (typeof GZ_BACKUP !== 'undefined' ? GZ_BACKUP : require('./backup.js')),
+    memory: () => (typeof GZ_MEMORY !== 'undefined' ? GZ_MEMORY : require('../ai/memory.js')),
     sync: () => (typeof GZ_DRIVE_SYNC !== 'undefined' ? GZ_DRIVE_SYNC : require('../documents/drive-sync.js')),
   };
   const obj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -105,6 +108,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (cat === 'looks') return Array.isArray(v) ? (key === 'lookFavorites' ? L.history().favorites(v) : L.history().entries(v)) : undefined;
       if (cat === 'writerWords') return Array.isArray(v) ? v.filter((w) => typeof w === 'string' && w && w === w.trim() && w.length <= 60).slice(-5000) : undefined;
       if (cat === 'sources') return obj(v) && Array.isArray(v.sources) && v.sources.length <= 2000 && Number.isFinite(v.at) && v.sources.every((x) => obj(x) && typeof x.id === 'string') ? v : undefined;
+      if (cat === 'memories') return L.memory().parseKey(key)?.kind === 'memory' ? L.memory().clean(v, key) || undefined : undefined;
       if (cat === 'gradescope') { const g = L.gradescope().clean(v); return { acct: g.acct, map: g.map, hide: g.hide, bind: g.bind }; }
       if (cat === 'notes') return obj(v) && obj(v.note) && typeof v.html === 'string' && v.html.length <= L.notes().LIMIT.body * 2 ? { note: v.note, html: v.html } : undefined;
       if (cat === 'noteFolders') { if (!obj(v) || !obj(v.folders)) return undefined; const c = L.notes().clean({ folders: v.folders, fgone: v.gone }); return { folders: c.folders, ...(c.fgone && { gone: c.fgone }) }; }
@@ -305,7 +309,15 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       });
       turn = p.catch(() => {}); return p;
     };
-    const valueOf = async (area, key) => { const v = (await env.area(area).get(key))[key], d = defOf(area, key); return d?.view ? d.view(v) : v; };
+    const valueOf = async (area, key) => {
+      const v = (await env.area(area).get(key))[key], d = defOf(area, key);
+      if (d?.cat === 'memories' && v !== undefined) {
+        const checked = clean('memories', key, v);
+        if (!checked) throw new Fail('bad');
+        return checked;
+      }
+      return d?.view ? d.view(v) : v;
+    };
     const owned = new Map(); // Notes record id → the exact index transition this layer is committing in the broker queue
     const transition = (key, before, after) => {
       const m = NREC.exec(key), part = (idx) => m[2] ? { folders: idx.folders, gone: idx.fgone } : idx.notes[m[4]];
@@ -377,7 +389,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       let j;
       try { j = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new Fail('bad'); }
       if (j?.glaze !== 'record' || j.v !== 1 || !['local', 'sync', 'notes'].includes(j.area) || catOf(j.area, j.key) !== j.cat || (await hk(j.area, j.key)) !== h
-        || !Number.isFinite(j.at) || (j.deleted !== true && j.value === undefined)) throw new Fail('bad');
+        || !Number.isFinite(j.at) || (j.deleted !== true && j.value === undefined) || (j.cat === 'memories' && j.deleted === true)) throw new Fail('bad');
       const value = j.deleted === true ? undefined : (env.clean || clean)(j.cat, j.key, j.value);
       if (j.deleted !== true && value === undefined) throw new Fail('bad');
       // Its sum from what came, as its writer summed it, never from the metadata it was asked by: a change page read before
@@ -401,6 +413,10 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // to pass over the student's own later change back to this value. A value of null is a value (a palette of the
       // student's own), not the key gone.
       if (write === undefined ? before !== undefined : before === undefined || canon(write) !== canon(before)) {
+        if (d?.cat === 'memories') {
+          const all = await a.get(null), values = Object.fromEntries(Object.entries(all).filter(([key]) => key.startsWith('rimeMemory:')));
+          if (!L.memory().fits({ ...values, [got.key]: write }, 'memory')) throw new Fail('bad');
+        }
         applying.set(id, canon(write));
         const mine = [id];
         try {
@@ -434,9 +450,26 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (ctx.up) return ctx.up(slot, tag, target, make, owner, commit);
       const m = await make();
       let file = null;
-      if (m.id) { try { file = await ctx.D((c) => c.put({ id: m.id, meta: m.meta, mime: m.mime, bytes: m.bytes })); } catch (e) { if (e.why !== 'missing') throw e; } }
+      if (m.id) { try { file = await ctx.D((c) => c.put({ id: m.id, meta: m.meta, mime: m.mime, bytes: m.bytes, match: m.match ?? null })); } catch (e) { if (e.why !== 'missing') throw e; } }
       file ||= await ctx.D((c) => c.put({ meta: m.create, mime: m.mime, bytes: m.bytes }));
       return { file, info: m.info ?? null };
+    };
+    // An inline Drive update has no compare-and-swap fence. A live edit already on its way can therefore land after
+    // a forget. Keep one separate, content-free receipt which no writer of an active value could have targeted.
+    // It participates in the existing duplicate merge, including a new device's first full listing.
+    const keepForgotten = async (ctx, h, key, value, at, sum) => {
+      let page = null;
+      do {
+        const r = await ctx.D((c) => c.find(`'${ctx.data}' in parents and appProperties has { key='glaze' and value='rec' } and appProperties has { key='key' and value='${h}' } and appProperties has { key='forgotten' and value='true' } and trashed=false`, { pageToken: page }));
+        for (const R of r.files) {
+          const got = await fetchRec(ctx, R, h);
+          if (got.cat === 'memories' && got.value?.deleted) return;
+        }
+        page = r.nextPageToken || null;
+      } while (page);
+      const bytes = new TextEncoder().encode(JSON.stringify({ glaze: 'record', v: 1, cat: 'memories', area: 'local', key, at, value }));
+      await ctx.D((c) => c.put({ meta: { name: `memories-${h.slice(0, 12)}-forgotten.json`, mimeType: JSON_TYPE, parents: [ctx.data],
+        appProperties: { glaze: 'rec', cat: 'memories', key: h, sum, at: String(at), forgotten: 'true' } }, mime: JSON_TYPE, bytes }));
     };
     // This device's value up, at its time (or a tombstone once it is gone). One too large for a request is staged: its file's
     // id is written into its link as Drive's answer comes (commit), and the record is held as this push left it until then
@@ -445,13 +478,21 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     // newer time, sends it back to be weighed again.
     const push = async (ctx, h, area, key, cat, was, at, aim) => {
       const value = await valueOf(area, key), sum = await sumOf(area, key, value), link = { area, key, cat, lsum: sum, rsum: sum, at, seen: at };
+      if (cat === 'memories' && value === undefined) throw new Fail('stale');
+      if (cat === 'memories') {
+        const all = await env.area('local').get(null), memories = Object.fromEntries(Object.entries(all).filter(([k]) => k.startsWith('rimeMemory:')));
+        if (!L.memory().fits({ ...memories, [key]: value }, 'memory')) throw new Fail('bad');
+        if (value.deleted && was?.id) await keepForgotten(ctx, h, key, value, at, sum);
+      }
       const expect = aim !== undefined ? aim?.appProperties?.sum : was?.rsum;
       const r = await send(ctx, `R:${h}`, sum, was?.id ?? null, async () => {
         const meta = { appProperties: { glaze: 'rec', cat, key: h, sum, at: String(at) } };
         const bytes = new TextEncoder().encode(JSON.stringify({ glaze: 'record', v: 1, cat, area, key, at, ...(value === undefined ? { deleted: true } : { value }) }));
         if (bytes.length > MAX) throw new Fail('large');
         return { bytes, id: was?.id ?? null, rev: was?.id && aim?.id === was.id ? aim.headRevisionId ?? null : null,
-          sum: was?.id && SUM.test(expect || '') ? expect : null, meta, create: { ...meta, name: `${cat}-${h.slice(0, 12)}.json`, mimeType: JSON_TYPE, parents: [ctx.data] }, mime: JSON_TYPE };
+          match: cat === 'memories' && was?.id ? aim?.headRevisionId || '' : null,
+          sum: was?.id && SUM.test(expect || '') ? expect : null, meta, create: { ...meta, name: `${cat}-${h.slice(0, 12)}.json`, mimeType: JSON_TYPE, parents: [ctx.data],
+            ...(cat === 'memories' && value.deleted && { appProperties: { ...meta.appProperties, forgotten: 'true' } }) }, mime: JSON_TYPE };
       }, { rec: h, area, key }, { rec: h, link });
       await put(h, { ...link, id: r.file.id }, was);
     };
@@ -473,6 +514,16 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // Another device's file for the same record, made while this one made its own (first syncs that overlapped): every
       // device keeps the lowest id, met as a first meeting, so neither side's value is lost and each hears the other's after.
       if (was?.id && R?.id && !R.removed && R.id !== was.id) {
+        // A higher-id memory copy may be the only surviving receipt of a forget from a device that has since closed.
+        // Meet its value before following the canonical file. Keep that file's known sum until it is read below.
+        if (was.cat === 'memories' && R.appProperties?.cat === 'memories' && R.id > was.id && !R.trashed) {
+          const got = await fetchRec(ctx, R, h), value = await valueOf(was.area, was.key), next = L.memory().merge(value, got.value, was.key);
+          if (!next) throw new Fail('bad');
+          if (canon(next) !== canon(value)) {
+            await take(h, { ...got, value: next, sum: was.rsum, at: Math.max(was.at || 0, got.at) }, { id: was.id }, was, value, { pending: true });
+            was = await recOf(h);
+          }
+        }
         if (R.id < was.id && !R.trashed) await leave(); else R = undefined;
       }
       area ||= was?.area || left?.area; key ||= was?.key || left?.key;
@@ -523,6 +574,18 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
           return;
         }
         if (was && R && !R.removed) return;
+      }
+      // Memory identity and its content-free deletion live in the value, independent of this device's sync stamp.
+      // Always meet a present remote record, including a dirty local value against an unchanged remote tombstone.
+      // The same merge handles first connection, reconnecting and active conflicts; a deleted ID never revives.
+      if (cat === 'memories' && R && !R.removed) {
+        const got = await fetchRec(ctx, R, h, owner);
+        await stamp();
+        const next = L.memory().merge(value, got.value, key), t = Math.max(at, got.at) || now();
+        if (!next) throw new Fail('bad');
+        if (canon(next) === canon(got.value)) return take(h, got, R, was, value);
+        if (canon(next) !== canon(value)) await take(h, { ...got, value: next, at: t }, R, was, value, { pending: true });
+        return push(ctx, h, area, key, cat, (await recOf(h)) || was || { id: R.id }, t, R);
       }
       if (!was) {
         // Here only. With no time of its own (it was here before Sync was bound to this account): older than any change made
@@ -611,7 +674,17 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     const idOf = async (h, x) => { const r = await recOf(h); return x.area && x.key ? `${x.area}:${x.key}` : r ? `${r.area}:${r.key}` : null; };
     const each = async (ctx, h, x) => {
       try {
-        await one(ctx, h, x);
+        for (let retry = 0; ; retry++) {
+          try { await one(retry ? { ...ctx, listed: false } : ctx, h, x); break; }
+          catch (e) {
+            const rec = await recOf(h);
+            if (e?.why !== 'stale' || retry >= 2 || (catOf(x.area, x.key) || rec?.cat) !== 'memories') throw e;
+            // Another device won the conditional write. Merge its actual current record before trying again, rather
+            // than reusing a stale change-list or full-listing snapshot, even before this device has a record link.
+            // Further contention stays dirty for the next ordinary run.
+            x = { ...x, R: undefined };
+          }
+        }
         { const id = await idOf(h, x); if (id) await ctx.large?.(id, false); }
         // A note's pictures and attachments go up with it (each once).
         const r = await recOf(h);
@@ -666,11 +739,14 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     };
     // Every record, both sides, in ctx.data.
     const all = async (ctx) => {
-      const remote = new Map();
+      const remote = new Map(), memoryCopies = [];
       let page = null;
       do {
         const r = await ctx.D((c) => c.find(`'${ctx.data}' in parents and appProperties has { key='glaze' and value='rec' } and trashed=false`, { pageToken: page }));
-        for (const f of r.files) if (HASH.test(f.appProperties?.key || '') && (!remote.has(f.appProperties.key) || f.id < remote.get(f.appProperties.key).id)) remote.set(f.appProperties.key, f);
+        for (const f of r.files) if (HASH.test(f.appProperties?.key || '')) {
+          if (f.appProperties.cat === 'memories') memoryCopies.push(f);
+          if (!remote.has(f.appProperties.key) || f.id < remote.get(f.appProperties.key).id) remote.set(f.appProperties.key, f);
+        }
         page = r.nextPageToken || null;
       } while (page);
       ctx.known = remote;
@@ -686,6 +762,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         }
         for (const [h, R] of [...remote].sort(([, a], [, b]) => (ORDER[a.appProperties?.cat] || 0) - (ORDER[b.appProperties?.cat] || 0))) if (!seen.has(h)) { seen.add(h); await each(ctx, h, { R }); }
         for (const k of (await S.keys()).filter((x) => x.startsWith(REC))) if (!seen.has(k.slice(REC.length))) await each(ctx, k.slice(REC.length), {});
+        for (const R of memoryCopies) if ((await recOf(R.appProperties.key))?.id !== R.id) await each(ctx, R.appProperties.key, { R });
       } finally { ctx.listed = false; }
     };
     // A page of Drive's changes: the record files among them.
