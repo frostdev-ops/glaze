@@ -797,6 +797,14 @@ This avoids repeatedly crossing the fast single-token GEMV / expensive small-GEM
 on these drivers; cancellation is checked between completed submissions, and decode also yields. Synthetic linear and
 launch-floor regressions verify this controller; actual GPU throughput, frame latency and cancellation remain external checks.
 The grammar mask is built after the preceding token's GPU forward is submitted, overlapping CPU grammar work with it.
+For the f32 engine's long-context numerical checks, the llama.cpp oracle uses the original quantized GGUF's exact
+**dequantized f32 weights**, f32 K/V and full-float matmuls. Before accepting that oracle, compare every tensor value
+bit for bit with the original model's dequantization and preserve all architecture/tokenizer metadata; only the GGUF's
+file-type declaration changes. Disable TF32 and record the backend dispatch used. Quantized CUDA MMQ/MMVQ instead
+quantizes activations to q8_1, while this engine keeps them f32: its logits are a separate backend diagnostic, not the
+same numerical program. Keep both results. Use identical fixed prompts and teacher-forced token histories at 8K, 32K and
+128K, with 200 steps per size; the gates stay top-1 agreement at least 99% and mean KL at most 0.02.
+
 Integer dot-product and experimental subgroup-matrix candidates are optional. On each engine/device load, they must
 match the normal matmul on the loaded model's representative matrices and run at least 10% faster, including activation
 packing, before that exact matrix/tile shape can use them. Unsupported, inaccurate, slower or failed candidates retain
