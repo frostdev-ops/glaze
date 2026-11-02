@@ -204,6 +204,29 @@ test('a warm-up reserves its selected room before reading large history and yiel
   } finally { await s.h.release(); }
 });
 
+test('a queued newer run prevents an older think answer from scheduling stale read-ahead', async () => {
+  const s = setup({ script: [TOK.id('</think>'), ...TOK.encode('hi')] });
+  let unblock;
+  const gate = new Promise((r) => { unblock = r; });
+  try {
+    await s.call({ op: 'warm', model: 'm', parts: SYS });
+    const m = s.models[0], decode = m.decode;
+    let entered;
+    const waiting = new Promise((r) => { entered = r; });
+    m.decode = async (opts) => { entered(); await gate; m.decode = decode; return decode(opts); };
+    const first = s.call(req(['question\nolder'], {
+      parts: [...SYS, ...user(['question\nolder'], true)], maxTokens: 16,
+      think: { budget: 4, close: [{ special: '</think>' }], after: [] },
+    }));
+    await waiting;
+    const newer = req(['question\nnewer']), second = s.call(newer);
+    unblock();
+    await Promise.all([first, second]);
+    await settle(100);
+    assert.deepEqual(s.extends.at(-1).ids, [...TOK.encodeWith(newer.parts)], 'the newer run retains its sequence');
+  } finally { unblock(); await s.h.release(); }
+});
+
 // A closed direct-mode think block needs no rewind point: splitting before its two ids re-reads every model weight.
 test('direct mode keeps the prompt in one feed after its stable prefix', async () => {
   const s = setup();
