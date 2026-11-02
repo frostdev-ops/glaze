@@ -1,10 +1,19 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const path = require('node:path');
 const vm = require('node:vm');
 const C = require('../../extension/planner/classes.js');
 const G = require('../../extension/planner/gpa.js');
 const N = require('../../extension/planner/notes.js');
+
+// The extracted Drive wiring also calls the worker's shared storage-key and canonical memory helpers.
+const memoryHelpers = (source, context) => {
+  const keys = source.match(/^const keysOf = .+;$/m)?.[0];
+  const from = source.indexOf('let memoryStore = null;'), to = source.indexOf('const rimeMemoryOn =', from);
+  assert.ok(keys && from >= 0 && to > from, 'the real worker memory helpers are present');
+  vm.runInContext(keys + '\n' + source.slice(from, to), context);
+};
 
 // Run the actual sync wiring as a restarted classic worker: install handlers have not loaded optional libraries.
 const worker = (extra = {}) => {
@@ -27,7 +36,7 @@ const worker = (extra = {}) => {
   };
   let documents, records;
   const context = vm.createContext({
-    console, TextEncoder, TextDecoder,
+    console, TextEncoder, TextDecoder, URL, crypto: globalThis.crypto,
     chrome: { storage: { local, sync, onChanged: changed }, runtime: { onMessage: listener, onStartup: listener } },
     GZ_CARDS: { queue: () => { let tail = Promise.resolve(); return (fn) => { const p = tail.then(fn); tail = p.catch(() => {}); return p; }; } },
     GZ_DRIVE_SYNC: { create: (env) => { documents = env; return {}; } }, brokerTurn: null,
@@ -35,10 +44,12 @@ const worker = (extra = {}) => {
     NOTES_DB: db, brokerArea: () => ({ get: local.get, set: async (o) => { await local.set(o); return true; } }), GZ_NOTES: N,
     brokerIn: (name) => { assert.equal(name, 'backup'); context.GZ_CLASSES = C; context.GZ_GPA = G; }, ...extra,
   });
+  context.importScripts = (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../../extension/background', f), 'utf8'), context); };
   vm.runInContext(fs.readFileSync(require.resolve('../../extension/background/drive-store.js'), 'utf8'), context);
   const create = context.GZ_DRIVE_STORE.create;
   context.GZ_DRIVE_STORE.create = (env) => { records = env; return create(env); };
   const source = fs.readFileSync(require.resolve('../../extension/background/background.js'), 'utf8');
+  memoryHelpers(source, context);
   const from = source.indexOf('// Sync to Google Drive (documents/drive-sync.js');
   vm.runInContext(source.slice(from, source.indexOf('// A Download all wait owns', from)), context);
   vm.runInContext('openDriveSync()', context);
@@ -66,6 +77,8 @@ test('a long transfer keeps Chrome\'s and Firefox\'s worker up with a cheap call
 
 test('a restarted worker loads validators before accepting class schedules and GPA records', () => {
   const { context } = worker();
+  assert.equal(typeof context.GZ_MEMORY?.replace, 'function', 'the actual memory dependency loaded');
+  assert.equal(vm.runInContext('rimeMemory()', context), vm.runInContext('rimeMemory()', context), 'the real helper keeps one canonical store');
   const classes = C.clean({ courses: [{ id: '101', name: 'Art', at: 3, periods: [] }] });
   const gpa = G.clean({ t: [] });
   context.values = { classes, gpa };
@@ -261,6 +274,7 @@ test('a restarted worker\'s push run checks a document saved before it stopped, 
   context.importScripts = (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../../extension/background', f), 'utf8'), context); };
   context.openPapers = () => { if (!context.paperStore) { context.importScripts('../writer/writer-styles.js', '../writer/writer-papers.js'); context.paperStore = context.GZ_WRITER_PAPERS.open(local, () => Date.now(), {}); } return context.paperStore; };
   const source = fs.readFileSync(require.resolve('../../extension/background/background.js'), 'utf8');
+  memoryHelpers(source, context);
   const from = source.indexOf('// Sync to Google Drive (documents/drive-sync.js');
   vm.runInContext(source.slice(from, source.indexOf('// A Download all wait owns', from)), context);
   // A paper saved, its push still waiting when the last worker stopped; Sync on, its folders known, today's snapshot made.

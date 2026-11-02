@@ -29,7 +29,13 @@ test("Settings in its own tab restores a backup's records; its frame, a school p
 
 test('the Firefox package loads the backup library with the worker', () => {
   const src = require('node:fs').readFileSync(require.resolve('../../extension/background/background.js'), 'utf8');
-  assert.match(src, /importScripts\('backup\.js'\)/);
+  // package-firefox.sh lists literal worker imports in order, deduplicating after flattening each call's arguments.
+  const calls = [...src.matchAll(/importScripts\(([^)]*)\)/g)].map(([, args]) => [...args.matchAll(/'([^']+)'/g)].map(([, file]) => file));
+  const backup = calls.find((files) => files.includes('backup.js'));
+  assert.ok(backup, 'the backup library is a literal worker import');
+  assert.ok(backup.indexOf('../ai/memory.js') >= 0 && backup.indexOf('../ai/memory.js') < backup.indexOf('backup.js'), 'memory loads before backup in its import call');
+  const order = [...new Set(calls.flat())];
+  assert.ok(order.indexOf('../ai/memory.js') < order.indexOf('backup.js'), 'Firefox retains the memory-before-backup dependency order');
 });
 
 test('staged restores belong to one Settings document and merge against commit-time data', { timeout: 3000 }, async () => {
