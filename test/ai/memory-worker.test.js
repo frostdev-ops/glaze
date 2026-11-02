@@ -16,8 +16,8 @@ const key = (r) => `${r.kind === 'memory' ? 'rimeMemory' : 'rimeMaterial'}:${r.a
 const editor = (extra = {}) => ({ id: 'glaze', frameId: 0, url: `${EXT}/options.html`, origin: EXT, tab: { id: 9, url: `${EXT}/options.html` }, ...extra });
 const school = (extra = {}) => ({ id: 'glaze', frameId: 0, documentId: 'school-doc', url: `${SITE}/courses/25`, origin: SITE, tab: { id: 4, url: `${SITE}/courses/25` }, ...extra });
 const request = (op, rest = {}) => ({ type: 'glaze:memory', op, ...rest });
-const make = (rows = [record(A, 1), record(B, 2)]) => {
-  const w = worker({ globals: fakeIDB(), fetch: async () => { throw Error('unexpected network'); }, store: {
+const make = (rows = [record(A, 1), record(B, 2)], globals = {}) => {
+  const w = worker({ globals: { ...fakeIDB(), ...globals }, fetch: async () => { throw Error('unexpected network'); }, store: {
     sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], ai: { on: false, memory: false, features: { ask: false }, future: { preserve: true } }, ...Object.fromEntries(rows.map((r) => [key(r), r])) }, session: {},
   } });
   // Chrome constructs results in the worker's realm; the shared VM fixture uses a host structuredClone.
@@ -37,6 +37,22 @@ const live = (w, sender = school()) => {
   return state;
 };
 const until = async (w, condition) => { const end = Date.now() + 5000; while (!condition() && Date.now() < end) await w.settle(); assert.ok(condition(), 'worker reached expected state'); };
+
+test('a restarted service worker can import memory controls from its install cache', async () => {
+  const installs = [], cached = new Set();
+  const w = make(undefined, { addEventListener: (event, run) => { if (event === 'install') installs.push(run); } });
+  const importing = w.context.importScripts;
+  // MV3 records imports during install; a later worker wake may load only those recorded script URLs.
+  w.context.importScripts = (...files) => { for (const file of files) cached.add(file); };
+  for (const install of installs) install();
+  w.context.importScripts = (...files) => {
+    for (const file of files) if (!cached.has(file)) throw Error('script was not cached at install: ' + file);
+    importing(...files);
+  };
+  assert.equal(w.context.GZ_MEMORY_MANAGER, undefined, 'the manager remains lazy on a fresh worker wake');
+  assert.deepEqual(await w.send(request('state'), editor()), { ok: true, enabled: false });
+  assert.equal(w.context.GZ_AI_BROKER, undefined, 'management imports no model harness');
+});
 
 test('top-level memory controls work with AI off, without loading a model or fetching an account', async () => {
   const w = make();
@@ -120,6 +136,31 @@ test('Ask receives the same singleton memory store with separate switch and mode
   w.store.local.ai.memory = false; assert.equal(await env.memory.on(), false);
   w.store.local.ai.memory = true; w.store.local.ai.features.ask = false; assert.equal(await env.memory.on(), false);
   w.store.local.ai.features.ask = true; w.store.sync.enabled = false; assert.equal(await env.memory.on(), false);
+});
+
+test('AI, Ask, Memory and Glaze off fence already queued automatic producers', async () => {
+  for (const off of ['memory', 'ai', 'ask', 'glaze']) {
+    const w = make();
+    w.store.local.ai = { on: true, memory: true, features: { ask: true } };
+    await w.send(request('list', { kind: 'memory' }), editor());
+    const store = vm.runInContext('rimeMemory()', w.context), lease = store.lease(A);
+    let release, started, changed;
+    const ready = new Promise((done) => { started = done; });
+    const held = w.context.GZ_MEMORY.queued({}, () => { started(); return new Promise((done) => { release = done; }); });
+    await ready;
+    const text = 'This queued write must stay cancelled.';
+    const pending = store.save(A, w.realm({ text, evidence: text }), { question: text, lease });
+    try {
+      if (off === 'memory') {
+        changed = w.send(request('settings', { enabled: false }), editor());
+        await until(w, () => w.store.local.ai.memory === false);
+      } else if (off === 'glaze') await w.context.chrome.storage.sync.set({ enabled: false });
+      else await w.raw.set({ ai: { ...w.store.local.ai, ...(off === 'ai' ? { on: false } : { features: { ask: false } }) } });
+    } finally { release(); await held; }
+    assert.deepEqual(await pending, { ok: false, error: 'scope' }, off);
+    if (changed) assert.equal((await changed).ok, true);
+    assert.equal(Object.values(w.store.local).some((r) => r?.markdown === text), false, off);
+  }
 });
 
 test('Drive memory CAS uses raw local core queue and deletion dominance', async () => {

@@ -310,3 +310,17 @@ test('scoped edits revalidate after storage reads and before publishing a write'
   assert.deepEqual(edited, { ok: false, error: 'scope' });
   assert.deepEqual(local.data, before);
 });
+
+test('lease invalidation during an awaited final guard still prevents publication', async () => {
+  const local = area(), s = make(local), lease = s.lease(A);
+  let checks = 0, started, release;
+  const ready = new Promise((done) => { started = done; });
+  const pending = save(s, A, 'Cancel this pending memory.', { lease, guard: async () => {
+    if (++checks === 2) { started(); return new Promise((done) => { release = done; }); }
+    return true;
+  } });
+  await ready;
+  M.invalidateHeld({ local }); release(true);
+  assert.deepEqual(await pending, { ok: false, error: 'scope' });
+  assert.deepEqual(local.data, {});
+});
