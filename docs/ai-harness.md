@@ -203,7 +203,7 @@ meter**: a ring and the percentage of the model's window the request about to go
 only in its `aria-label`; New chat puts it back at the chat's own share (the smallest a first question took). Turns the
 worker folded (below) are one line in the log, "Earlier messages summarized", opened to read the summary: the worker tells
 the chat `{ id, type: 'summary', text, turns }` after a question's end, and since each question may come on a new port, the
-chat sends that `summary` with its later questions and only the turns after the folded ones. A failure's card (`{ type: 'error', error, why?, steps?, raw? }`)
+chat sends that `summary` with its later questions and only the turns after the folded ones. The worker also sends a bounded `{ id, type: 'tools', tools }` union before a tool run; the chat carries it across fresh ports with its history, and New chat clears it. The worker validates carried names and the token budget before restoring them. A failure's card (`{ type: 'error', error, why?, steps?, raw? }`)
 opens to the rule's code and the steps run, then the model's raw answer in a monospace block, as text; an answer Glaze built
 itself (`answer.built`) reads as any answer, with the same detail under it when it carries `why`, `steps` or `raw`.
 

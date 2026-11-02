@@ -8,7 +8,7 @@
 //     loop. run(task, input) → the task's checked output; call({ name, arguments, kind }) → { result, asked? }. A write the
 //     student didn't allow (asked isn't 'yes') ends it with no further run; a seventh call ends it as 'steps'.
 //   connect(port, env): the panel's port 'glaze:ask' (background/background.js checks its sender with the AI port's rules).
-//     page → { id, op: 'ask', question, attempt?, locale, history?, summary?, site?, text?, fired? }  { id, op: 'fired' }  { id, op: 'cancel' }
+//     page → { id, op: 'ask', question, attempt?, locale, history?, summary?, tools?, site?, text?, fired? }  { id, op: 'fired' }  { id, op: 'cancel' }
 //       { id, op: 'status' }; site: the school's LMS (canvas, ultra, moodle), its address the sender's; text: the page's
 //       visible words (page_highlight's check); fired: the id of a fired record 'fired' gave (its own turn at level 3).
 //       history: the panel's conversation so far, [{ question, answer }] (at most six), for study.help's follow-ups (a cloud
@@ -445,6 +445,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       let keep = [...CHAT.tools.filter((t) => !routed.includes(t)), ...routed];
       while (unionCost(keep) > UNION.budget && keep.length > routed.length) keep = keep.slice(1);
       CHAT.tools = keep;
+      post({ id: current.id, type: 'tools', tools: keep });
       return fit?.window >= UNION.from ? AT().NAMES.filter((n) => keep.includes(n)) : routed;
     };
     const keyOf = (h) => `${h.question.trim()}\u0000${h.answer.trim().slice(0, 200)}`;
@@ -597,7 +598,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const { id } = m;
       const fail = (error) => post({ id, type: 'error', error });
       const turn = (h) => isObj(h) && Object.keys(h).sort().join() === 'answer,question' && [h.question, h.answer].every((x) => typeof x === 'string' && x.length <= LIMIT.turn);
-      if (Object.keys(m).some((k) => !['id', 'op', 'question', 'attempt', 'locale', 'history', 'summary', 'site', 'text', 'fired'].includes(k)) || typeof m.question !== 'string' || !m.question.trim()
+      if (Object.keys(m).some((k) => !['id', 'op', 'question', 'attempt', 'locale', 'history', 'summary', 'tools', 'site', 'text', 'fired'].includes(k)) || typeof m.question !== 'string' || !m.question.trim()
+        || (m.tools !== undefined && !(Array.isArray(m.tools) && m.tools.length <= AT().NAMES.length && new Set(m.tools).size === m.tools.length && m.tools.every((n) => AT().NAMES.includes(n)) && unionCost(m.tools) <= UNION.budget))
         || (m.summary !== undefined && (typeof m.summary !== 'string' || m.summary.length > LIMIT.summary))
         || (m.attempt !== undefined && typeof m.attempt !== 'string') || (m.locale !== undefined && typeof m.locale !== 'string')
         || (m.history !== undefined && !(Array.isArray(m.history) && m.history.length <= LIMIT.turns && m.history.every(turn)))
@@ -609,6 +611,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       if (!history.length) { CHAT.pending?.now(false); CHAT.summary = ''; CHAT.covered.clear(); CHAT.tools = []; } else CHAT.pending?.now();
       // The chat's own summary of its folded turns (a summary event's, on an earlier port): it sends only the turns after it.
       if (history.length && !CHAT.summary && typeof m.summary === 'string' && m.summary.trim()) CHAT.summary = m.summary.trim();
+      if (history.length && !CHAT.tools.length && m.tools) CHAT.tools = m.tools.slice();
       CHAT.gen++;
       // The turns the summary doesn't cover yet, verbatim.
       const open = history.filter((h) => !CHAT.covered.has(keyOf(h)));

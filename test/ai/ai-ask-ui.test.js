@@ -884,7 +884,7 @@ test('the chat carries its worker tool union across fresh ports and clears it wi
   P.doc.fire(P.box().querySelector('.gz-ask-new'), 'click');
   P.ask('What is my grade?'); await settle();
   assert.equal(P.posted.filter((m) => m.op === 'ask').at(-1).tools, undefined);
-  P.ui.close();
+  P.setAi({ on: false });
 });
 
 test('a built answer shows diagnostics from the worker end envelope, excluded from the next turn', async () => {
@@ -899,5 +899,5 @@ test('a built answer shows diagnostics from the worker end envelope, excluded fr
   assert.equal(detail.querySelector('b'), null);
   P.ask('And next week?'); await settle();
   assert.equal(P.posted.filter((m) => m.op === 'ask').at(-1).history[0].answer, '- Lab report');
-  P.ui.close();
+  P.setAi({ on: false });
 });

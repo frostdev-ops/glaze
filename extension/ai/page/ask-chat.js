@@ -273,7 +273,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     let actionEpoch = 0, current = 0, pending = null, follow = true, frame = 0, written = -1, sizes = null, moved = 0, alive_ = true;
     // memo: the worker's summary of the turns it folded and how many of turns it covers; sentFrom: the first turn the last
     // question carried; base: the chat's own share of the window, read from a first question's context.
-    const memo = { summary: '', folded: 0 };
+    const memo = { summary: '', folded: 0, tools: [] };
     let sentFrom = 0, lastAsk = 0, base = null, accepting = true;
     const port = channel((a) => { if (a?.type === 'summary' && a.id === lastAsk) folded(a); });
     const root = make('div', { className: 'gz-ask-chat' });
@@ -537,7 +537,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       busy(true);
       const run = { line: null, cards: null }, past = history(), queued = [], first = !past.length && !memo.summary;
       const site = ['canvas', 'ultra', 'moodle'].includes(ctx.site) ? ctx.site : undefined, words = pageText();
-      const go = port.send({ op: 'ask', question: q, ...(attempt && { attempt }), locale: lang(), ...(past.length && { history: past }), ...(past.length && memo.summary && { summary: memo.summary }),
+      const go = port.send({ op: 'ask', question: q, ...(attempt && { attempt }), locale: lang(), ...(past.length && { history: past }), ...(past.length && memo.summary && { summary: memo.summary }), ...(past.length && memo.tools.length && { tools: memo.tools }),
         ...(site && { site }), ...(words && { text: words }), ...(typeof fired === 'string' && { fired }) }, (ev) => {
         if (current !== go.id) return;
         if (ev.type === 'step') {
@@ -545,6 +545,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
           if (ev.step?.state === 'run') say(t('Reading your courses…'));
         } else if (ev.type === 'approve') say(t('Waiting for your answer in Glaze’s window'));
         else if (ev.type === 'context') context(ev, first);
+        else if (ev.type === 'tools' && Array.isArray(ev.tools) && ev.tools.length <= 64 && ev.tools.every((n) => typeof n === 'string' && /^[a-z_]{1,64}$/.test(n))) memo.tools = ev.tools.slice();
         else if (ev.type === 'action' && ev.action && typeof ev.action === 'object') queued.push(ev.action);
       });
       current = lastAsk = go.id;
@@ -573,7 +574,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
           // Glaze's own answer (built from the results), drawn as any is, its detail under it.
           if (end.answer?.built === true) {
             li.dataset.built = '';
-            const why = whyOf(end.answer);
+            const why = whyOf({ ...end, ...end.answer });
             if (why) li.querySelector('.gz-ask-acts')?.before(why);
           }
           turns.push({ question: q, answer: String(end.answer?.text || ''), li });
@@ -621,7 +622,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       lastAsk = 0; sentFrom = 0;
       port.hangUp();
       turns.length = 0;
-      memo.summary = ''; memo.folded = 0;
+      memo.summary = ''; memo.folded = 0; memo.tools = [];
       releaseView();
       log()?.replaceChildren(empty());
       if (sizes && log()) sizes.observe(log());
@@ -719,7 +720,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       alive_ = false;
       releaseView();
       sizes = null; written = -1;
-      turns.length = 0; memo.summary = ''; memo.folded = 0;
+      turns.length = 0; memo.summary = ''; memo.folded = 0; memo.tools = [];
       try { document.removeEventListener('visibilitychange', shownAgain); } catch { /* none */ }
       port.hangUp();
       root.remove();
