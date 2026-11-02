@@ -65,18 +65,24 @@ async function pass(scheme) {
       await shoot('off');
     });
     await check('edit preserves draft and caret during a broker refresh', async () => {
+      const refresh = async () => {
+        const before = await page.evaluate(() => memoryUi.sent.filter((m) => m.op === 'list' && m.kind === 'memory').length);
+        await page.evaluate((value) => chrome.storage.local.set({ 'rimeMemory:synthetic-not-a-record': value }), before);
+        await page.waitForFunction((count) => memoryUi.sent.filter((m) => m.op === 'list' && m.kind === 'memory').length > count, before);
+      };
+      await saved.getByRole('button', { name: 'Edit', exact: true }).focus(); await refresh();
+      assert.equal(await saved.getByRole('button', { name: 'Edit', exact: true }).evaluate((e) => document.activeElement === e), true);
+      await cache.locator('summary').focus(); await refresh();
+      assert.equal(await cache.locator('summary').evaluate((e) => document.activeElement === e), true);
       await saved.getByRole('button', { name: 'Edit', exact: true }).click();
       await page.locator('#memory-edit-text').fill('Use numbered steps.');
       await page.locator('#memory-edit-text').evaluate((e) => e.setSelectionRange(4, 8));
-      await page.evaluate(() => chrome.storage.local.set({ 'rimeMemory:synthetic-not-a-record': null }));
-      for (let end = Date.now() + 5000; ;) {
-        if (await page.evaluate(() => memoryUi.sent.filter((m) => m.op === 'list' && m.kind === 'memory').length >= 2)) break;
-        if (Date.now() > end) throw new Error('refresh did not run'); await wait(20);
-      }
+      await refresh();
       assert.equal(await page.locator('#memory-edit-text').inputValue(), 'Use numbered steps.');
       assert.equal(await page.locator('#memory-edit-text').evaluate((e) => e.selectionStart), 4);
       await saved.getByRole('button', { name: 'Save', exact: true }).click();
       await saved.locator('pre').waitFor(); assert.match(await saved.innerText(), /Use numbered steps/);
+      assert.equal(await saved.getByRole('button', { name: 'Edit', exact: true }).evaluate((e) => document.activeElement === e), true);
     });
     await check('conflict preserves draft until explicit Reload', async () => {
       await saved.getByRole('button', { name: 'Edit', exact: true }).click(); await page.locator('#memory-edit-text').fill('Unsaved draft');
@@ -87,6 +93,7 @@ async function pass(scheme) {
       await shoot('conflict'); await saved.getByRole('button', { name: 'Reload', exact: true }).click();
       assert.equal(await page.locator('#memory-edit-text').inputValue(), 'Updated on another device.');
       await saved.getByRole('button', { name: 'Cancel', exact: true }).click();
+      assert.equal(await saved.getByRole('button', { name: 'Edit', exact: true }).evaluate((e) => document.activeElement === e), true);
     });
     await check('saved Markdown export excludes course cache', async () => {
       const download = page.waitForEvent('download'); await page.locator('#memory-export').click(); const result = await download;
@@ -105,6 +112,7 @@ async function pass(scheme) {
       await page.keyboard.press('Escape'); assert.equal(await cache.count(), 1);
       await page.locator('#memory-course-clear').click(); await page.locator('#memory-clear-ask button[value="ok"]').click();
       await page.locator('#memory-course-empty').waitFor(); assert.equal(await saved.count(), 1);
+      assert.equal(await page.locator('#memory-refresh').evaluate((e) => document.activeElement === e), true);
     });
     await check('Memory switch uses the worker and page has no errors', async () => {
       await page.locator('#memory-on').click();

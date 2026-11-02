@@ -22,6 +22,10 @@ async function page({ items = [memory(), course()], enabled = true, embedded = f
       focus() { if (!this.disabled) doc.activeElement = this; }, setSelectionRange(a, b) { this.selectionStart = a; this.selectionEnd = b; },
       remove() {}, click() { exports.push({ href: this.href, download: this.download }); },
       returnValue: '', open: false, showModal() { this.open = true; }, close(value = '') { this.open = false; this.returnValue = value; for (const f of this.on.close || []) f(); } };
+    let disabled = false;
+    Object.defineProperty(e, 'disabled', { enumerable: true, get: () => disabled, set: (value) => {
+      disabled = value; if (value && doc.activeElement === e) doc.activeElement = doc.body;
+    } });
     return e;
   };
   for (const [, id] of read('options.html').matchAll(/\bid="(ai-memory|memory-[^"]+)"/g)) ids.set(id, Object.assign(el(), { id }));
@@ -173,6 +177,15 @@ test('clear preserves revised records and tells the user why', async () => {
   const p = await page(); await p.fire('memory-memory-clear'); p.worker.items[0].revision = R2;
   p.$('memory-clear-ask').close('ok'); await settle();
   assert.ok(p.record(M)); assert.match(p.$('memory-said').textContent, /Some records changed/);
+});
+
+test('clearing the last record returns focus to Refresh when its trigger becomes disabled', async () => {
+  const p = await page(); await p.fire('memory-memory-clear');
+  p.$('memory-clear-ask').close('ok'); await settle();
+  assert.equal(p.$('memory-memory-clear').disabled, true);
+  assert.equal(p.doc.activeElement, p.$('memory-refresh'));
+  p.$('memory-on').focus(); p.$('memory-on').checked = false; await p.fire('memory-on', 'change');
+  assert.equal(p.doc.activeElement, p.$('memory-on'));
 });
 
 test('export downloads the broker Markdown without course content and releases its object URL', async () => {
