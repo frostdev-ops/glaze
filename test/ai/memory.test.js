@@ -168,7 +168,7 @@ test('retrieval offsets follow original Unicode text after compatibility folding
 });
 
 test('search flags suffix-clipped complete course material as an excerpt', async () => {
-  const local = area(), s = make(local), markdown = 'Chemistry studies matter. '.repeat(60);
+  const local = area(), s = make(local), markdown = 'Chemistry studies matter. '.repeat(60).trim();
   const saved = await s.ingest(A, { source: source({ complete: true }), markdown });
   const out = await s.search(A, 'Chemistry', { maxChars: 600 });
   assert.equal(out.items.length, 1); assert.equal(out.items[0].text.length, 600);
