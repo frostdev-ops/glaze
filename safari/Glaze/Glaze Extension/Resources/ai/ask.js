@@ -851,7 +851,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         };
         const withSave = async (tools, input) => {
           if (!memory?.enabled || explicitMemory || record) return tools;
-          if (tools.length < LIMIT.tools) {
+          // In 4K, later school results can consume the room an initially fitting save schema/policy took. Keep the
+          // optional mutation and its receipts in their own episode, preserving every school tool and output reserve.
+          if (contextCaps.context > 4096 && tools.length < LIMIT.tools) {
             const candidate = [...tools, 'memory_save'];
             const fit = await fitInput('agent.tools', { ...input, tools: candidate, ...inRecall });
             if (fit?.exact && fit.used + fit.reserve <= fit.window) return candidate;

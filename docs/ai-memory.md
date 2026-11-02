@@ -30,6 +30,10 @@ conversation compaction. Current user instructions take precedence. Recall grant
 tool action. Agent answers retain the existing tool-first rule; study help may use remembered preferences while keeping
 its tutoring restrictions.
 
+For 4K contexts, automatic saving uses a separate short, optional tool pass. Its durable receipt appears immediately,
+while the main school request keeps its required tools and answer budget. Larger contexts may offer saving inline
+when the complete request fits. Explicit memory-management requests keep their own memory tools.
+
 The four private tools are `memory_search`, `memory_read`, `memory_save` and `memory_forget`. A save uses a bounded
 current-message excerpt and may classify the record as a preference or fact. Corrections and deletion require the
 record's current revision. The model can forget a record only when the current user directly requests forgetting;
