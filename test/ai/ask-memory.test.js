@@ -25,7 +25,7 @@ const harness = ({ script = {}, counts, verified = true, active, assignment } = 
   registry.add({ name: 'assignment_read', kind: 'read', group: 'assignments', scope: 'account', title: 'Assignment', description: 'Assignment', parameters: A.SPECS.find((s) => s.name === 'assignment_read').parameters,
     run: async (_, ctx) => assignment || ({ account: ctx.account, title: 'Invented lab', instructions: 'Compare two invented samples.', at: NOW }) });
   const broker = (port) => port.onMessage.addListener(async (m) => {
-    if (m.op === 'count') { state.counts.push(m); const fit = counts ? counts(m.input, m.task) : { used: 1000, window: 4096, reserve: 768, exact: true }; return port.postMessage({ id: m.id, type: 'end', ...fit }); }
+    if (m.op === 'count') { state.counts.push(m); const fit = counts ? await counts(m.input, m.task) : { used: 1000, window: 4096, reserve: 768, exact: true }; return port.postMessage({ id: m.id, type: 'end', ...fit }); }
     if (m.op !== 'run') return;
     state.runs.push(m);
     const next = (script[m.task] || [])[state.runs.filter((r) => r.task === m.task).length - 1];
@@ -46,7 +46,7 @@ const harness = ({ script = {}, counts, verified = true, active, assignment } = 
   const connected = K.connect(worker, env);
   page.onMessage.addListener((m) => got.push(m));
   let id = 0;
-  return { store, state, got, env, close: () => { connected.close(); page.disconnect(); }, ask: async (question) => { const next = ++id; page.postMessage({ id: next, op: 'ask', question, locale: 'en', site: 'canvas' }); await settled(() => got.some((m) => m.id === next && ['end', 'error'].includes(m.type))); return got.find((m) => m.id === next && ['end', 'error'].includes(m.type)); } };
+  return { store, state, got, env, close: () => { connected.close(); page.disconnect(); }, ask: async (question, extra = {}) => { const next = ++id; page.postMessage({ id: next, op: 'ask', question, locale: 'en', site: 'canvas', ...extra }); await settled(() => got.some((m) => m.id === next && ['end', 'error'].includes(m.type))); return got.find((m) => m.id === next && ['end', 'error'].includes(m.type)); } };
 };
 const preference = (store, text = 'I prefer short bullet points.') => store.save(ACC, { text, evidence: text, category: 'preference' }, { question: text });
 
@@ -231,14 +231,60 @@ test('exact fitting removes optional current URL before losing any typed resourc
 });
 
 test('only a direct correction request may replace a user-edited memory', async (t) => {
-  for (const explicit of [false, true]) {
+  for (const [request, explicit] of [['Explain why this approach is correct.', false], ['Do not change my saved preference.', false], ['If I change my saved preference later, remind me.', false], ['Update my assignment.', false], ['Correct my saved preference.', true]]) {
     let saved, edited;
     const text = 'I prefer short bullet points.';
     const h = harness({ script: { 'agent.tools': [() => call('memory_save', { id: saved.receipt.id, revision: edited.receipt.revision, text, evidence: text, category: 'preference' }, 'write'), said(explicit ? 'Updated.' : 'No change.')], 'study.help': [study] } }); t.after(h.close);
     saved = await preference(h.store);
     edited = await h.store.edit(ACC, { id: saved.receipt.id, revision: saved.receipt.revision, markdown: 'I prefer long paragraphs.' });
-    await h.ask(`${explicit ? 'Correct my saved preference.' : 'Explain why this approach is correct.'} ${text}`);
-    assert.equal((await h.store.read(ACC, saved.receipt.id)).text, explicit ? text : 'I prefer long paragraphs.');
+    await h.ask(`${request} ${text}`);
+    assert.equal((await h.store.read(ACC, saved.receipt.id)).text, explicit ? text : 'I prefer long paragraphs.', request);
     assert.equal(h.got.some((m) => m.type === 'memory'), explicit);
   }
+});
+
+test('large-window tool unions remove memory tools when off, incapable or unverified', async (t) => {
+  for (const unavailable of ['off', 'capable', 'unverified']) {
+    const h = harness({ counts: () => ({ used: 1000, window: 16384, reserve: 768, exact: true }),
+      script: { 'agent.tools': [call('memory_search', { query: 'preferences' }), said('No matching memory.'), call('todo_list'), said('There are no matching records.')] } }); t.after(h.close);
+    assert.equal((await h.ask('Show my saved memories.')).type, 'end');
+    if (unavailable === 'off') h.state.on = false;
+    else if (unavailable === 'capable') h.state.capable = false;
+    else h.env.current = async () => ({ valid: async () => true });
+    assert.equal((await h.ask('What is due today?', { history: [{ question: 'Show my saved memories.', answer: 'No matching memory.' }] })).type, 'end');
+    const main = h.state.runs.find((r) => r.input.tools?.includes('todo_list'));
+    assert.ok(main, unavailable);
+    assert.equal(main.input.tools.some((name) => name.startsWith('memory_')), false, unavailable);
+    assert.equal(main.input.recall, undefined);
+  }
+});
+
+test('recall revisions are checked before the first model exposure after exact counting', async (t) => {
+  let saved, removed = false;
+  const h = harness({ counts: async (input) => {
+    if (!removed && input.recall?.records.length) { removed = true; await h.store.forget(ACC, { id: saved.receipt.id, revision: saved.receipt.revision }); }
+    return { used: 1000, window: 4096, reserve: 768, exact: true };
+  }, script: { 'agent.tools': [said()], 'study.help': [study] } }); t.after(h.close);
+  saved = await preference(h.store);
+  assert.equal((await h.ask('Explain photosynthesis.')).type, 'error');
+  assert.equal(removed, true);
+  assert.equal(h.state.runs.length, 0, 'deleted personal text never reaches a model request');
+});
+
+test('memory receipts stay out of school material passed to study help', async (t) => {
+  const text = 'I prefer short bullet points.';
+  const h = harness({ counts: () => ({ used: 1000, window: 4096, reserve: 768, exact: true }),
+    script: { 'agent.tools': [call('memory_save', { text, evidence: text, category: 'preference' }, 'write'), call('assignment_read', { course: '25', assignment: '41' }), said('Compare the samples.')], 'study.help': [study] },
+    active: { site: 'canvas', view: 'assignment', course: { id: '25' }, assignment: { id: '41' } } }); t.after(h.close);
+  assert.equal((await h.ask(`Explain this assignment. ${text}`)).type, 'end');
+  assert.ok(h.got.some((m) => m.type === 'memory'), 'save has its own durable receipt');
+  const help = h.state.runs.find((r) => r.task === 'study.help');
+  assert.match(help.input.material, /Compare two invented samples/);
+  assert.doesNotMatch(help.input.material, /short bullet points|persistence|receipt|m-[0-9a-f]{32}/);
+});
+
+test('explicit memory management requires a freshly verified account before exposing its tools', async (t) => {
+  const h = harness({ verified: false, script: { 'agent.tools': [call('memory_search', { query: 'preferences' }), said('No matching memory.')] } }); t.after(h.close);
+  assert.equal((await h.ask('Show my saved memories.')).type, 'error');
+  assert.equal(h.state.runs.length, 0);
 });
