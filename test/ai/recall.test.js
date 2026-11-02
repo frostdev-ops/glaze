@@ -73,3 +73,9 @@ test('memory category is optional fact or preference; course material has no pre
   assert.equal(R.clean(raw([memory(1, { category: 'system' })])), null);
   assert.equal(R.clean(raw([course({ category: 'preference' })])), null);
 });
+
+test('recall rejects sparse record arrays and boxed identities before serialization', () => {
+  assert.equal(R.clean({ records: Array(1), truncated: false }), null);
+  assert.equal(R.clean(raw([memory(1, { id: { toString: () => id(1) } })])), null);
+  assert.equal(R.clean(raw([memory(1, { revision: { toString: () => revision } })])), null);
+});
