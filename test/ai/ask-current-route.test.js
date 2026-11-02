@@ -87,11 +87,14 @@ const harness = async ({ current = { site: 'ultra', view: 'content', course: { i
 };
 
 test('front door dispatches a typed current read through SCHOOL on the freshly captured account', async (t) => {
-  const h = await harness({ plans: [(_, s) => call('content_read', { course: s.current.course.id, id: s.current.content.id }), said()] });
+  const questions = ['Read this course content.', 'Read the whole item and list the required materials and delivery format.', 'Read the full item and summarize its materials and later instructions.'];
+  const h = await harness({ plans: questions.flatMap(() => [(_, s) => call('content_read', { course: s.current.course.id, id: s.current.content.id }), said()]) });
   t.after(h.close);
-  const end = await h.ask('Read this course content.');
-  assert.equal(end.type, 'end', JSON.stringify({ end, errors: h.state.errors, runs: h.state.runs }));
-  assert.deepEqual(h.state.tabs, [{ account: ACCOUNT, op: 'document', args: { course: '_25_1', id: '_7_1' } }]);
+  for (const question of questions) {
+    const end = await h.ask(question);
+    assert.equal(end.type, 'end', JSON.stringify({ end, errors: h.state.errors, runs: h.state.runs }));
+  }
+  assert.deepEqual(h.state.tabs, questions.map(() => ({ account: ACCOUNT, op: 'document', args: { course: '_25_1', id: '_7_1' } })));
   assert.deepEqual(h.state.errors, []);
 });
 
