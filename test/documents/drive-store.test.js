@@ -172,6 +172,21 @@ test('rime a new device refuses memory overflow without evicting its saved facts
   for (const [k, value] of Object.entries(mine)) assert.deepEqual((await b.local.get(k))[k], value);
 });
 
+test('rime a forgotten duplicate record is not lost when the deleting device stops', async () => {
+  const drive = standin(), a = device(drive), key = memoryKey(7), live = memory(7, 'Old preference'), deleted = forgotten(live);
+  await a.local.set({ [key]: live }); await a.on();
+  const file = recFile(drive, 'local', key), record = { ...body(file), at: 2000, value: deleted };
+  const sum = sha(ST.canon({ area: 'local', key, value: deleted }));
+  const duplicate = drive.seed({ name: 'memory-duplicate.json', parents: file.meta.parents, mimeType: 'application/json',
+    appProperties: { ...file.meta.appProperties, sum, at: '2000' } }, JSON.stringify(record));
+  assert.ok(duplicate.meta.id > file.meta.id, 'the forgotten record is in the duplicate that normally loses');
+  const fresh = device(drive); await fresh.on();
+  assert.deepEqual((await fresh.local.get(key))[key], deleted, 'a full first meeting reads the forgotten duplicate');
+  await a.run();
+  assert.deepEqual((await a.local.get(key))[key], deleted, 'the change feed also reads a losing duplicate');
+  assert.deepEqual(body(file).value, deleted, 'the canonical lowest-id file now holds the deletion');
+});
+
 test('a local change syncs when its timestamp equals or precedes the last agreed stamp', async () => {
   const drive = standin(), a = device(drive);
   await a.local.set({ writerWords: ['First'] });
