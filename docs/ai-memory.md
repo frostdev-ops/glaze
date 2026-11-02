@@ -32,7 +32,8 @@ its tutoring restrictions.
 
 The four private tools are `memory_search`, `memory_read`, `memory_save` and `memory_forget`. A save uses a bounded
 current-message excerpt and may classify the record as a preference or fact. Corrections and deletion require the
-record's current revision. Successful writes return a device receipt; failures cannot be described as remembered or
+record's current revision. The model can forget a record only when the current user directly requests forgetting;
+automatic saving does not authorize automatic deletion. Successful writes return a device receipt; failures cannot be described as remembered or
 forgotten. Used record revisions are checked again before a reply is published. Switching Memory off, editing, deleting
 or clearing invalidates pending producers so earlier work cannot restore removed content.
 
@@ -45,10 +46,18 @@ backup cannot know about a later deletion until it receives that marker. New exp
 separate from a local save receipt. Course excerpts and derived search data never enter Drive or backups.
 
 There is no timed expiry. Saved memories are bounded to 500 active records per school account, with at most 600
-characters each. The course cache is bounded separately. Full stores report a limit rather than silently discarding
+characters each. Each account's course cache holds at most 250 sources with at most 20,000 characters per source,
+within a 2 MiB active-record allowance for each kind of record. Full stores report a limit rather than silently discarding
 saved memories. Deleting active content does not remove earlier exports, backup files, provider-side data or messages
 already shown in the open conversation. Export produces Markdown; no model or network request is needed.
+
+Forgetting an individual course source suppresses that source from being saved again. Clearing the course cache
+removes the selected cached sources and its suppression markers; fresh verified reads can then refill it. Removing a
+school from Glaze purges that school's course cache. Saved memories remain available in Settings for explicit deletion.
 
 Memory applies only to Ask Rime in this version. Writer's AI features do not consume these records. Runtime contracts
 and changes must be reflected in the model's training and evaluation before a model is published; runtime test success
 does not establish that an untrained model uses the tools correctly.
+Local models declare the supported memory contract separately from general tool support, using `memory: 1` in their
+model metadata. Missing or unsupported versions leave ordinary Ask available without memory recall or tools; existing
+model entries are not relabeled as trained. The capability follows the downloaded model version through update and rollback.
