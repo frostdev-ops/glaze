@@ -445,3 +445,11 @@ test('a fresh SCHOOL read cannot authorize a final answer after the captured acc
   assert.equal(h.state.tabs.length, 1); assert.equal(h.state.tabs[0].account, ACCOUNT);
   assert.equal(h.got.some((m) => m.type === 'end' && m.answer), false);
 });
+
+test('a quoted document title remains usable as the target of a direct read request', async (t) => {
+  const h = await harness({ current: null, plans: [call('documents_list'), said()] }); t.after(h.close);
+  const end = await h.ask('Read "My draft".');
+  assert.equal(end.type, 'end');
+  assert.equal(h.state.reads.filter((r) => r.name === 'documents_list').length, 1);
+  assert.deepEqual(h.state.errors, []);
+});
