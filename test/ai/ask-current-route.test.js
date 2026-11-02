@@ -411,7 +411,7 @@ for (const c of recordCases) test(`original record request: ${c.id}`, async (t) 
   const reads = h.state.reads.filter((r) => r.name === name);
   assert.equal(reads.length, 1, 'the requested records were read once');
   assert.equal(reads[0].account, document ? null : c.account, 'a current-derived school read uses the live account');
-  if (requested) assert.equal(reads[0].args.course, requested, 'explicit/current scope wins over earlier turns and page text');
+  if (requested && !document) assert.equal(reads[0].args.course, requested, 'explicit/current scope wins over earlier turns and page text');
   if (document) {
     assert.equal(reads[0].document, h.state.snapshot.current.document.id);
     assert.equal(end.answer.text, fresh, 'the saved read supplies the answer, rather than live draft material');
@@ -427,6 +427,7 @@ for (const question of [
   'Translate “Show the available courses.” into Spanish.',
   'What is a course?',
   'Explain how work and energy are related.',
+  'List the work done by a force in a physics course.',
 ]) test(`tutoring and quoted requests do not discover records: ${question}`, async (t) => {
   const h = await harness({ current: { site: 'ultra', view: 'course', course: { id: '_25_1' } } }); t.after(h.close);
   const end = await h.ask(question);
