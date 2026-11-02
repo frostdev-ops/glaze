@@ -675,12 +675,13 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     const each = async (ctx, h, x) => {
       try {
         for (let retry = 0; ; retry++) {
-          try { await one(ctx, h, x); break; }
+          try { await one(retry ? { ...ctx, listed: false } : ctx, h, x); break; }
           catch (e) {
             const rec = await recOf(h);
             if (e?.why !== 'stale' || retry >= 2 || (catOf(x.area, x.key) || rec?.cat) !== 'memories') throw e;
             // Another device won the conditional write. Merge its actual current record before trying again, rather
-            // than reusing a stale change-list snapshot. Further contention stays dirty for the next ordinary run.
+            // than reusing a stale change-list or full-listing snapshot, even before this device has a record link.
+            // Further contention stays dirty for the next ordinary run.
             x = { ...x, R: undefined };
           }
         }
