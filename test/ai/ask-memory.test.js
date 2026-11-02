@@ -187,15 +187,15 @@ test('automatic memory saving keeps all six selected school tools and uses a sep
   assert.equal(h.state.runs[0].input.help, undefined);
 });
 
-test('memory_save joins a larger-window main request only when its full measured request fits', async (t) => {
-  for (const fit of [true, false]) {
-    const h = harness({ counts: (input) => ({ used: input.tools?.includes('memory_save') && input.tools.length > 1 && !fit ? 7500 : 1000, window: 8192, reserve: 768, exact: true }),
-      script: { 'agent.tools': fit ? [call('todo_list'), said('There are no matching records.')] : [said(), call('todo_list'), said('There are no matching records.')] } }); t.after(h.close);
+test('automatic saves use their own episode even when a larger-window inline request would initially fit', async (t) => {
+  for (const window of [4096, 8192, 16384]) {
+    const h = harness({ counts: () => ({ used: 1000, window, reserve: 768, exact: true }),
+      script: { 'agent.tools': [said(), call('todo_list'), said('There are no matching records.')] } }); t.after(h.close);
     assert.equal((await h.ask('What is due today?')).type, 'end');
     const main = h.state.runs.find((r) => r.input.tools.includes('todo_list'));
-    assert.equal(main.input.tools.includes('memory_save'), fit);
-    assert.equal(h.state.runs[0].input.tools.length === 1, !fit);
-    assert.ok(h.state.counts.some((r) => r.input.tools?.includes('memory_save') && r.input.tools.length > 1));
+    assert.equal(main.input.tools.includes('memory_save'), false);
+    assert.deepEqual(h.state.runs[0].input.tools, ['memory_save']);
+    assert.equal(h.state.counts.some((r) => r.input.tools?.includes('memory_save') && r.input.tools.length > 1), false);
   }
 });
 
@@ -281,7 +281,7 @@ test('recall revisions are checked before the first model exposure after exact c
 test('memory receipts stay out of school material passed to study help', async (t) => {
   const text = 'I prefer short bullet points.';
   const h = harness({ counts: () => ({ used: 1000, window: 8192, reserve: 768, exact: true }),
-    script: { 'agent.tools': [call('memory_save', { text, evidence: text, category: 'preference' }, 'write'), call('assignment_read', { course: '25', assignment: '41' }), said('Compare the samples.')], 'study.help': [study] },
+    script: { 'agent.tools': [call('memory_save', { text, evidence: text, category: 'preference' }, 'write'), said(), call('assignment_read', { course: '25', assignment: '41' }), said('Compare the samples.')], 'study.help': [study] },
     active: { site: 'canvas', view: 'assignment', course: { id: '25' }, assignment: { id: '41' } } }); t.after(h.close);
   assert.equal((await h.ask(`Explain this assignment. ${text}`)).type, 'end');
   assert.ok(h.got.some((m) => m.type === 'memory'), 'save has its own durable receipt');
@@ -290,18 +290,18 @@ test('memory receipts stay out of school material passed to study help', async (
   assert.doesNotMatch(help.input.material, /short bullet points|persistence|receipt|m-[0-9a-f]{32}/);
 });
 
-test('4K school requests reserve room for later tool results with saving isolated in a prelude', async (t) => {
-  for (const save of [false, true]) {
+test('4K, 8K and 16K school requests reserve room for late results with saving isolated in a prelude', async (t) => {
+  for (const window of [4096, 8192, 16384]) for (const save of [false, true]) {
     const text = 'I prefer short bullet points.';
     const step = (input) => {
       if (input.tools.includes('memory_save') && !input.steps.length && save) return call('memory_save', { text, evidence: text }, 'write');
       if (input.tools.length === 1 && input.tools[0] === 'memory_save') return said();
       return input.steps.length ? said('There are no matching records.') : call('todo_list');
     };
-    const h = harness({ counts: (input) => ({ used: input.tools?.includes('memory_save') && input.tools.length > 1 && input.steps.length ? 3454 : input.steps?.length ? 3100 : 1000,
-      window: 4096, reserve: 768, exact: true }), script: { 'agent.tools': Array(5).fill(step) },
+    const h = harness({ counts: (input) => ({ used: input.tools?.includes('todo_list') && input.steps.length ? window - 768 + (input.tools.includes('memory_save') ? 320 : -5) : 1000,
+      window, reserve: 768, exact: true }), script: { 'agent.tools': Array(5).fill(step) },
       active: { site: 'canvas', view: 'assignment', course: { id: '25' }, assignment: { id: '41' } } }); t.after(h.close);
-    assert.equal((await h.ask(`What is due today? ${text}`)).type, 'end', save ? 'a committed save does not crowd out the school answer' : 'an unused save offer does not crowd out later results');
+    assert.equal((await h.ask(`What is due today? ${text}`)).type, 'end', `${window}/${save}: later school results retain their reserved room`);
     const main = h.state.runs.filter((r) => r.input.tools.includes('todo_list'));
     assert.equal(main.length, 2);
     for (const run of main) {
@@ -317,6 +317,33 @@ test('4K school requests reserve room for later tool results with saving isolate
       assert.ok(h.state.runs.some((r) => r.input.tools.length === 1 && r.input.steps.some((s) => s.call.name === 'memory_save' && s.result.receipt.id === saved.id)), 'the prelude retains the successful mutation receipt for grounding');
     }
     assert.ok(h.state.counts.filter((r) => r.input.tools?.includes('todo_list')).every((r) => r.input.tools.length >= 3), 'required school tool slots remain available');
+  }
+});
+
+test('8K school history stays intact without a current block when optional saving would overflow late', async (t) => {
+  const history = [{ question: 'Earlier general question. '.repeat(100), answer: 'Earlier explanatory response. '.repeat(100) }];
+  const step = (input) => input.tools.length === 1 && input.tools[0] === 'memory_save' ? said()
+    : input.steps.length ? said('There are no matching records.') : call('todo_list');
+  const h = harness({ counts: (input) => ({ used: input.tools?.includes('todo_list') && input.steps.length ? input.tools.includes('memory_save') ? 7744 : 7419 : 1000,
+    window: 8192, reserve: 768, exact: true }), script: { 'agent.tools': Array(3).fill(step) } }); t.after(h.close);
+  assert.equal((await h.ask('What is due today?', { history })).type, 'end');
+  const main = h.state.runs.filter((r) => r.input.tools.includes('todo_list'));
+  for (const run of main) { assert.deepEqual(run.input.history, history); assert.equal(run.input.current, undefined); }
+  assert.equal(h.state.runs[0].input.history, undefined, 'the optional prelude never rewrites or carries conversation history');
+});
+
+test('ordinary large-window tool unions do not inherit memory schemas from explicit management turns', async (t) => {
+  const h = harness({ counts: () => ({ used: 1000, window: 16384, reserve: 768, exact: true }),
+    script: { 'agent.tools': [call('memory_search', { query: 'preferences' }), said('No matching memory.'), said(), call('todo_list'), said('There are no matching records.')] } }); t.after(h.close);
+  const question = 'Show my saved memories.';
+  assert.equal((await h.ask(question)).type, 'end');
+  assert.deepEqual(h.state.runs[0].input.tools, ['memory_search', 'memory_read', 'memory_save', 'memory_forget'], 'direct management retains its tools');
+  const history = [{ question, answer: 'No matching memory.' }];
+  assert.equal((await h.ask('What is due today?', { history })).type, 'end');
+  const main = h.state.runs.filter((r) => r.input.tools.includes('todo_list'));
+  for (const run of main) {
+    assert.equal(run.input.tools.some((name) => name.startsWith('memory_')), false);
+    assert.deepEqual(run.input.history, history, 'the management conversation remains historical text');
   }
 });
 
