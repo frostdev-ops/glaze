@@ -561,7 +561,12 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
     }
     return !Object.keys(patch).length || await local.set(patch) ? { ok: true } : { ok: false, error: 'write' };
   };
-  const apply = (r, io) => r?.memories !== undefined ? lib('GZ_MEMORY').queued({}, () => applyRaw(r, io)) : applyRaw(r, io);
+  // Invalidate inside the held queue: a pre-restore turn must not recreate a restored deletion under a new ID.
+  const apply = (r, io) => r?.memories !== undefined ? lib('GZ_MEMORY').queued({}, async () => {
+    const out = await applyRaw(r, io);
+    if (out.ok) lib('GZ_MEMORY').invalidateHeld(io);
+    return out;
+  }) : applyRaw(r, io);
   // One Notes account from the zip into account `key`, through the worker's Notes import (sharing/sessions.js): its files, then
   // its notes five at a time, each kept only where it is newer than what is here. → { done, skipped }.
   const notesIn = async (zip, dir, key, send, step = () => {}) => {
@@ -620,8 +625,13 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
         const keys = [...patch.keys()], before = await source.get(keys), gone = keys.filter((k) => !Object.hasOwn(before, k));
         const set = Object.fromEntries([...patch].filter(([, v]) => v !== undefined)), remove = keys.filter((k) => patch.get(k) === undefined);
         const write = async (put, del) => {
-          if (Object.keys(put).length && await source.set(put) === false) throw fail('write');
-          if (del.length && await source.remove(del) === false) throw fail('write');
+          try {
+            if (Object.keys(put).length && await source.set(put) === false) throw fail('write');
+            if (del.length && await source.remove(del) === false) throw fail('write');
+          } finally {
+            // Publication and rollback both invalidate leases, including turns begun during a partial publication.
+            if (name === 'local' && keys.some((k) => k.startsWith('rimeMemory:'))) lib('GZ_MEMORY').invalidateHeld(env);
+          }
         };
         return { put: () => write(set, remove), undo: () => write(before, gone) };
       } });

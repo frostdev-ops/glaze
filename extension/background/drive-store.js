@@ -454,6 +454,23 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       file ||= await ctx.D((c) => c.put({ meta: m.create, mime: m.mime, bytes: m.bytes }));
       return { file, info: m.info ?? null };
     };
+    // An inline Drive update has no compare-and-swap fence. A live edit already on its way can therefore land after
+    // a forget. Keep one separate, content-free receipt which no writer of an active value could have targeted.
+    // It participates in the existing duplicate merge, including a new device's first full listing.
+    const keepForgotten = async (ctx, h, key, value, at, sum) => {
+      let page = null;
+      do {
+        const r = await ctx.D((c) => c.find(`'${ctx.data}' in parents and appProperties has { key='glaze' and value='rec' } and appProperties has { key='key' and value='${h}' } and appProperties has { key='forgotten' and value='true' } and trashed=false`, { pageToken: page }));
+        for (const R of r.files) {
+          const got = await fetchRec(ctx, R, h);
+          if (got.cat === 'memories' && got.value?.deleted) return;
+        }
+        page = r.nextPageToken || null;
+      } while (page);
+      const bytes = new TextEncoder().encode(JSON.stringify({ glaze: 'record', v: 1, cat: 'memories', area: 'local', key, at, value }));
+      await ctx.D((c) => c.put({ meta: { name: `memories-${h.slice(0, 12)}-forgotten.json`, mimeType: JSON_TYPE, parents: [ctx.data],
+        appProperties: { glaze: 'rec', cat: 'memories', key: h, sum, at: String(at), forgotten: 'true' } }, mime: JSON_TYPE, bytes }));
+    };
     // This device's value up, at its time (or a tombstone once it is gone). One too large for a request is staged: its file's
     // id is written into its link as Drive's answer comes (commit), and the record is held as this push left it until then
     // (documents/drive-sync.js holds). It goes over Drive's file as this run met it (aim: its sum and revision; undefined:
@@ -462,13 +479,19 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     const push = async (ctx, h, area, key, cat, was, at, aim) => {
       const value = await valueOf(area, key), sum = await sumOf(area, key, value), link = { area, key, cat, lsum: sum, rsum: sum, at, seen: at };
       if (cat === 'memories' && value === undefined) throw new Fail('stale');
+      if (cat === 'memories') {
+        const all = await env.area('local').get(null), memories = Object.fromEntries(Object.entries(all).filter(([k]) => k.startsWith('rimeMemory:')));
+        if (!L.memory().fits({ ...memories, [key]: value }, 'memory')) throw new Fail('bad');
+        if (value.deleted && was?.id) await keepForgotten(ctx, h, key, value, at, sum);
+      }
       const expect = aim !== undefined ? aim?.appProperties?.sum : was?.rsum;
       const r = await send(ctx, `R:${h}`, sum, was?.id ?? null, async () => {
         const meta = { appProperties: { glaze: 'rec', cat, key: h, sum, at: String(at) } };
         const bytes = new TextEncoder().encode(JSON.stringify({ glaze: 'record', v: 1, cat, area, key, at, ...(value === undefined ? { deleted: true } : { value }) }));
         if (bytes.length > MAX) throw new Fail('large');
         return { bytes, id: was?.id ?? null, rev: was?.id && aim?.id === was.id ? aim.headRevisionId ?? null : null,
-          sum: was?.id && SUM.test(expect || '') ? expect : null, meta, create: { ...meta, name: `${cat}-${h.slice(0, 12)}.json`, mimeType: JSON_TYPE, parents: [ctx.data] }, mime: JSON_TYPE };
+          sum: was?.id && SUM.test(expect || '') ? expect : null, meta, create: { ...meta, name: `${cat}-${h.slice(0, 12)}.json`, mimeType: JSON_TYPE, parents: [ctx.data],
+            ...(cat === 'memories' && value.deleted && { appProperties: { ...meta.appProperties, forgotten: 'true' } }) }, mime: JSON_TYPE };
       }, { rec: h, area, key }, { rec: h, link });
       await put(h, { ...link, id: r.file.id }, was);
     };
