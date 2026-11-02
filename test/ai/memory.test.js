@@ -198,3 +198,12 @@ test('shared queue CAS rejects stale sync reads and recovers from failed writes'
   local.fail = true; assert.equal((await make(local).list(A)).error, 'write');
   local.fail = false; assert.equal((await save(make(local), A, 'Use headings.')).ok, true);
 });
+
+test('restore publication invalidates held leases without reentering the memory queue', async () => {
+  const local = area(), s = make(local), before = s.lease(A), other = s.lease(B);
+  await M.queued({}, async () => {
+    assert.equal(M.invalidateHeld({ local }, A), true);
+  });
+  assert.equal(s.validateLease(A, before), false);
+  assert.equal(s.validateLease(B, other), true);
+});
