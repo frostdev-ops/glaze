@@ -75,7 +75,7 @@ test('a stock model reads the harness\'s messages in its own chat template, held
   assert.deepEqual(sent.schema, A.OUTPUT);
   assert.equal(sent.tools, undefined);
   assert.equal(sent.think, undefined);
-  assert.equal(sent.window, undefined);
+  assert.equal(sent.window, LOCAL.CONTEXT);
   const text = sent.parts.map((p) => p.special ?? p.text).join('');
   assert.ok(text.startsWith('<|startoftext|><|im_start|>system\n') && !text.includes('<|gz_task:') && text.endsWith('<|im_start|>assistant\n<think></think>'), 'LFM3\'s template, thinking off');
 });

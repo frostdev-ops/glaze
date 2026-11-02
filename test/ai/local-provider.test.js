@@ -145,7 +145,7 @@ test('the local provider is registered, and Settings offers it everywhere but Sa
   assert.deepEqual(A.HERE, ['device', 'apple', 'local']);
   assert.equal(A.kind('local'), 'device');
   assert.equal(A.chosen({ use: 'local', model: '' }), true, 'no model id needed');
-  assert.deepEqual(LOCAL.caps(LOCAL.config({})), { text: true, json: true, stream: true, tools: false, images: false, local: true, context: 16000 });
+  assert.deepEqual(LOCAL.caps(LOCAL.config({})), { text: true, json: true, stream: true, tools: false, images: false, local: true, context: 131072 });
   assert.deepEqual(LOCAL.config({ tier: 2 }), { model: 'glaze-local', tier: 2 });
   for (const bad of [{ tier: 0 }, { tier: 'big' }, { model: 'gpt-x' }, { key: 'k' }]) assert.equal(LOCAL.config(bad), null, JSON.stringify(bad));
 });
@@ -667,7 +667,7 @@ test('a feature on Glaze\'s model: status says download until it is ready; a run
   assert.deepEqual([p.posted[0].ready, p.posted[0].why, p.posted[0].provider], [false, 'download', 'local']);
   await LOCAL.prepare(LOCAL.config({}));
   p.say({ id: 2, op: 'status', feature: 'writing' }); await settle();
-  assert.deepEqual(p.posted[1], { id: 2, type: 'status', on: true, allowed: true, ready: true, provider: 'local', caps: { text: true, json: true, stream: true, tools: false, images: false, local: true, context: LOCAL.CONTEXT - LOCAL.CONTEXT / 10 }, identity: p.posted[1].identity });
+  assert.deepEqual(p.posted[1], { id: 2, type: 'status', on: true, allowed: true, ready: true, provider: 'local', caps: { text: true, json: true, stream: true, tools: false, images: false, local: true, context: Math.floor(LOCAL.CONTEXT * 0.9) }, identity: p.posted[1].identity });
   p.say({ id: 3, op: 'run', feature: 'writing', task: TASK.id, input: { text: 'hi' } }); await settle(80);
   const end = p.posted.find((m) => m.type === 'end');
   assert.ok(end, JSON.stringify(p.posted));

@@ -1,7 +1,7 @@
 // Glaze's own model plans a request for the window of the model that runs it (docs/ai-harness.md "Glaze's own model"):
 // a Glaze-tuned model (no `stock`) for FORMAT.md's 4,096 tokens, so through the real broker writer.review and syllabus.read
 // split and size their input as the fine-tune's training data was made (test/fixtures/ai/local-format/window.json, from
-// lfm-tune's training items and examples by tools/dev/local-window-fixture.js); a stock model keeps its 16k window; the
+// lfm-tune's training items and examples by tools/dev/local-window-fixture.js); a stock model keeps its 128K window; the
 // picture model (stock) its own; and a request runs on the model it was sized for.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -13,7 +13,7 @@ for (const f of ['syllabus-read', 'writer-review', 'writer-image', 'writer-compl
 const W = require('../fixtures/ai/local-format/window.json');
 
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
-const STOCK = { window: LOCAL.CONTEXT, input: LOCAL.CONTEXT - LOCAL.CONTEXT / 10 };
+const STOCK = { window: LOCAL.CONTEXT, input: Math.floor(LOCAL.CONTEXT * 0.9) };
 // A prompt as FORMAT.md's segments: specials by name, adjacent text runs joined (the fixture's form).
 const segments = (parts) => {
   const out = [];
@@ -201,7 +201,7 @@ test('Advanced can\'t raise a Glaze-tuned model past its trained window; a stock
     assert.ok(s.seen.length && s.seen.every((x) => x.context === 8000));
     s.seen.length = 0;
     assert.equal((await run('writing', 'writer.review', W.review.input, env(advanced(16000))))?.type, 'end');
-    assert.ok(s.seen.length && s.seen.every((x) => x.context === LOCAL.CONTEXT), 'the stock model\'s own 16,000 for Advanced\'s 16,000');
+    assert.ok(s.seen.length && s.seen.every((x) => x.context === 16000), 'Advanced keeps a stock model at 16,000');
   } finally { s.done(); }
 });
 

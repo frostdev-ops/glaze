@@ -402,7 +402,7 @@ test('a stock model never thinks: its own template\'s <think></think>, however f
   const r = await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({}));
   assert.deepEqual(r.json, { text: 'ok' });
   assert.equal(s.runs[0].think, undefined);
-  assert.equal(s.runs[0].window, undefined);
+  assert.equal(s.runs[0].window, LOCAL.CONTEXT);
   assert.ok(!fed(s).includes('gz_') && fed(s).endsWith('<|im_start|>assistant\n<think></think>'));
   assert.ok(s.eng.log.decodes.every((d) => d.phase === 'answer'));
 });

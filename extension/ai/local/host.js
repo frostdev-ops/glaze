@@ -46,7 +46,7 @@
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
-  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, maxContext: 131072, first: 8192, step: 8, busy: 25, background: 128, spacing: 2048, rate: 16, answer: 256, spans: 2 };
+  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, maxContext: 131072, first: 8192, step: 8, busy: 20, background: 128, spacing: 2048, rate: 16, answer: 256, spans: 2 };
   // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
   const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js', 'updates.js']),
     optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
@@ -192,6 +192,14 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       for (let p = from + LIMIT.spacing; p < ids.length; p += LIMIT.spacing) out.push(p);
       return [...new Set(out)].sort((a, b) => a - b);
     };
+    // Background work leaves room for painting and cancellation between finished GPU submissions.
+    const paced = () => {
+      let steps = LIMIT.step;
+      return { step: () => steps, pace: async (ms, tokens) => {
+        if (ms > 0 && tokens > 0) steps = Math.max(1, Math.min(512, 2 * steps, Math.floor(LIMIT.busy * tokens / ms)));
+        await pause();
+      } };
+    };
     // The JSON grammar's matcher for a schema (grammar.js), with tools a turn that may instead call one of them in LFM3's
     // own syntax: its vocabulary once per model (with the tool tags' ids, where the model has them), each schema compiled
     // once. No grammar, or no vocabulary: provider-unavailable 'engine'; a schema or tools it refuses (tools on a model
@@ -312,7 +320,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     const feed = (job, parts, pictures) => {
       const ids = [], slots = [];
       let text = [];
-      const flush = () => { if (text.length) ids.push(...encode(job, text)); text = []; };
+      const flush = () => { if (text.length) for (const id of encode(job, text)) ids.push(id); text = []; };
       for (const p of parts) {
         if (p?.image === undefined) { text.push(p); continue; }
         const pic = Number.isSafeInteger(p.image) ? pictures[p.image] : undefined;
@@ -367,12 +375,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         // the first LIMIT.step tokens and each next sized to take about LIMIT.busy ms from the last one's time.
         const low = m.priority === 'low' || head.includes(tok.id('<|gz_task:writer.complete|>'));
         const yieldNow = pause;
-        let steps = LIMIT.step;
-        const pacing = !low ? {} : { step: () => steps, pace: async (ms, tokens) => {
-          // From this step's ms a token; at most twice the last step, so one short reading can't stall a frame.
-          if (ms > 0 && tokens > 0) steps = Math.max(1, Math.min(512, 2 * steps, Math.floor(LIMIT.busy * tokens / ms)));
-          await yieldNow();
-        } };
+        const pacing = low ? paced() : {};
         const read = await prefix(job, head, signal, pacing);
         const ids = keeps ? [...head, ...rest] : null;
         let cached = 0;
@@ -491,10 +494,12 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         if ((await env.store.status(m.model)).state !== 'ready') return { ok: false };
         const job = await wait(load(m.model, null, m.window), signal);
         const stable = Number.isSafeInteger(m.stable) && m.stable > 0 && m.stable < m.parts.length ? m.stable : m.parts.length;
-        const head = encode(job, m.parts.slice(0, stable)), pacing = { step: LIMIT.background };
+        const head = encode(job, m.parts.slice(0, stable)), ids = [...head, ...encode(job, m.parts.slice(stable))], pacing = paced();
+        const room = typeof job.model.reserve === 'function' ? job.context : Math.min(job.model.context || job.context, job.context);
+        if (ids.length > room) throw fail('request-rejected', 'context', { tokens: ids.length, context: room });
+        if (typeof job.model.reserve === 'function') await job.model.reserve(ids.length, room).catch((e) => { throw e?.reason === 'memory' ? fail('provider-unavailable', 'hardware') : e; });
         await prefix(job, head, signal, pacing);
         if (stable < m.parts.length && typeof job.model.extend === 'function') {
-          const ids = [...head, ...encode(job, m.parts.slice(stable))];
           await job.model.extend(ids, { at: stops(job, ids, head.length), signal, ...pacing });
         }
         return { ok: true };

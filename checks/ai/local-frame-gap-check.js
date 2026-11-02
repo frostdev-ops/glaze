@@ -1,6 +1,7 @@
 // Browser frame and cancellation check for the real host + engine on a synthetic WebGPU queue. No hardware GPU is used.
 // Each token costs 2 ms of CPU work when the queue is awaited, on the page's own thread: this deliberately contends with
 // requestAnimationFrame, unlike a timer-only GPU double. An unpaced control must stall frames, proving sensitivity.
+// A preliminary system-only warm-up isolates inference scheduling from model initialization and shader loading.
 // This verifies scheduling under synthetic contention, not GPU kernel correctness or real adapter frame latency.
 // Run: glaze-remote -o <evidence> -- node checks/ai/local-frame-gap-check.js /out
 const fs = require('node:fs');
@@ -96,6 +97,9 @@ function fakeGPU(perToken) {
         const host = H.create({ store: { open: async () => ({}), status: async () => ({ state: 'ready' }) }, gguf: { open: async () => ({ kv: {} }) },
           tokenizer: { ...K, fromGGUF: () => K.load(vocab) }, engine: () => engine, gpu: () => ({}), grammar: () => null, ladder: () => null, post: (m) => posted.push(m) });
         const parts = [{ text: 'system\nHelp the student.' }, { text: 'user\n' + 'Cells turn food into energy. '.repeat(22) }];
+        await host.handle({ id: 'prepare', op: 'warm', model: 'm', parts: parts.slice(0, 1) });
+        if (posted.some((m) => m.type === 'error')) throw Error(JSON.stringify(posted));
+        posted.length = 0; gpu.fed.length = 0; gpu.busy.length = 0;
         const gaps = [], frames = [], start = performance.now();
         let previous = null, active = true, cancelAt = null, cancelFed = null;
         const paint = () => { if (!active) return; const t = performance.now(); if (previous !== null) gaps.push(t - previous); previous = t; frames.push(t - start); requestAnimationFrame(paint); };
