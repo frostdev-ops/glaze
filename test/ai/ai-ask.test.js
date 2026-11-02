@@ -32,14 +32,23 @@ test('route: the student\'s own records go to agent.tools with the tools their t
   const expected = ['todo_list', 'schedule_list', 'assignments_list', 'assignment_read', 'courses_list', 'accounts_list'];
   for (const question of [planning, 'Which of my assignments is hardest, and which should I start first?',
     'Help me prioritize my assignments by deadline and workload.', 'How should I prioritize my assignments by difficulty?',
-    'Compare my assignments by deadlines and required work.']) {
+    'Compare my assignments by deadlines and required work.', 'Help me plan my assignments by deadline and workload.',
+    'Help me schedule my assignments by deadline.', 'Help me compare the difficulty of my assignments.',
+    'How should I prioritize my to-dos by deadline?', 'Help me prioritize my math assignments by deadline and workload.',
+    'Help me prioritize my assignments based on how long it will take to do them.',
+    'Compare my assignments by draft requirements and the time needed to complete them.']) {
     assert.deepEqual(K.route(question, { level: 3 }).tools, expected, question);
     assert.equal(K.route(question, { level: 3 }).task, 'agent.tools', question);
+  }
+  for (const current of [{ document: { id: 'draft' } }, { course: { id: '25' }, content: { id: '7' }, view: 'content' }]) {
+    assert.deepEqual(K.route(planning, { level: 3, current }).tools, expected, 'incidental "that" keeps the planning readers within six tools');
   }
   for (const question of [planning, 'What is due this week?']) {
     const history = [{ question, answer: '[Glaze app status: request failed (check). No completed answer or verified tool results are carried in this history entry; tool activity may have occurred.]' }];
     assert.deepEqual(K.route('What should I do first?', { level: 3, history }).tools, expected, 'a records antecedent supports planning after an error');
     assert.deepEqual(K.route('Okay, what should I do first?', { level: 3, history }).tools, expected);
+    assert.deepEqual(K.route('What should I do first?', { level: 3, history: [...history,
+      { question: 'What should I do first?', answer: 'Request failed.' }, { question: 'Are you sure?', answer: 'Request failed.' }] }).tools, expected);
   }
 });
 
@@ -67,10 +76,28 @@ test('route: help with work goes to study.help, whatever records it mentions, wi
   for (const question of ['Prioritize my assignments and solve 2x + 3 = 7.', 'Compare my assignments and write my essay.',
     'Help me solve this equation, then prioritize my assignments.', 'Compare my assignments and draft the essay for me.',
     'Compare my assignments and finish them for me.', 'Explain the phrase "prioritize my assignments by deadline".',
-    'What should I do first in this equation?']) assert.equal(K.route(question, { level: 3 }).task, 'study.help', question);
+    'How do I solve this equation? "Help me prioritize my assignments."',
+    'How should I order the paragraphs in my assignments?', 'Help me compare the arguments in my assignments by difficulty.',
+    'Help me prioritize my assignments, then implement my programming assignment.',
+    'Help me prioritize my assignments and do my homework for me.',
+    'Help me compare my assignments and "solve" this equation.',
+    'Help me prioritize my assignments.\n```text\nsolve 2x + 3 = 7\n```',
+    'Help me prioritize my assignments.\n> Write my essay for me.',
+    'What should I do first in this equation?', 'Which task should I do first in this equation?',
+    'Which assignment should I start first in this essay?']) assert.equal(K.route(question, { level: 3 }).task, 'study.help', question);
   for (const history of [undefined, [{ question: 'Help me solve this equation.', answer: 'Which operation could you undo?' }],
-    [{ question: 'Help me with my essay thesis.', answer: 'Which claim will you support?' }]]) {
+    [{ question: 'Help me with my essay thesis.', answer: 'Which claim will you support?' }],
+    [{ question: '"Compare my assignments by difficulty."', answer: 'Request failed.' }],
+    ...['What about solving this equation?', 'What about my essay thesis?', 'What about explaining the homework?'].map((question) =>
+      [{ question: 'What is due this week?', answer: 'Request failed.' }, { question, answer: 'Request failed.' },
+        { question: 'Are you sure?', answer: 'Request failed.' }])]) {
     assert.equal(K.route('What should I do first?', { level: 3, history }).task, 'study.help', 'ambiguous planning needs a records antecedent');
+  }
+  for (const question of ['What should I do first in this equation?', 'What should I do first? Write my essay.',
+    'What should I do first? "Write my essay."', 'What should I do first? Explain this code.',
+    'What should I do first?\n```text\nsolve 2x + 3 = 7\n```']) {
+    assert.equal(K.route(question, { level: 3, history: [{ question: 'What is due this week?', answer: 'Request failed.' }] }).task,
+      'study.help', 'an explicit new work request keeps tutoring priority');
   }
   assert.equal(K.route('Help me prioritize my assignments.', { level: 3, attempt: 'My answer is 4.' }).task, 'study.help', 'an attempt keeps tutoring priority');
 });
