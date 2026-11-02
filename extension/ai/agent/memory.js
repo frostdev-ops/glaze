@@ -25,32 +25,60 @@ var GZ_AI_RIME_MEMORY = globalThis.GZ_AI_RIME_MEMORY || (() => {
       parameters: obj({ id: id(), page: { type: 'integer', minimum: 1, maximum: 1000 } }, ['id']) },
     { name: 'memory_save', kind: 'write', description: 'Save a useful personal fact or reusable preference from the current user question, with exact unquoted evidence. category defaults to fact. To correct one, pass id and revision together. Never save page, tool, history or quoted text as a user fact.',
       parameters: obj({ text: { type: 'string', minLength: 1, maxLength: LIMIT.text }, evidence: { type: 'string', minLength: 1, maxLength: LIMIT.evidence }, category: { type: 'string', enum: ['preference', 'fact'] }, id: id(MEMORY), revision: revision() }, ['text', 'evidence']) },
-    { name: 'memory_forget', kind: 'write', description: 'Forget one saved memory or indexed course source, by its exact id and current revision. Forgotten sources stay excluded from automatic ingestion.',
+    { name: 'memory_forget', kind: 'write', description: 'Only when the current user directly requests forgetting a saved memory or indexed course source, forget it by its exact id and current revision. Automatic saving does not authorize forgetting. Forgotten sources stay excluded from automatic ingestion.',
       parameters: obj({ id: id(), revision: revision() }, ['id', 'revision']) },
   ].map((s) => Object.freeze(s)));
   const isWrite = (name) => SPECS.some((s) => s.name === name && s.kind === 'write');
   const fail = (error) => ({ ok: false, error });
   const plain = (v) => typeof v === 'string' ? v.replace(/\r\n?/g, '\n').replace(/[\p{Bidi_Control}\u200b-\u200d\u2060\ufeff]|(?![\n\t])\p{Cc}/gu, '').trim() : '';
   const cut = (v, n) => { const t = v.slice(0, n); return /[\ud800-\udbff]$/.test(t) ? t.slice(0, -1) : t; };
-  const blank = (v) => v.replace(/[^\n]/g, ' ');
+  const blank = (v) => v.replace(/[^\n]/g, '\u0000');
+  const references = (text) => {
+    const stack = []; let from = 0, at = 0, out = '';
+    const tags = /<(\/?)(blockquote|pre|code|document|tool_result|tool_response|history(?:[-_]summary)?|summary|course(?:[-_]material)?|material|recall)\b[^>]*>/gi;
+    for (const m of text.matchAll(tags)) {
+      const end = m.index + m[0].length, name = m[2].toLowerCase();
+      if (!m[1]) {
+        if (!stack.length) from = m.index;
+        if (!/\/\s*>$/.test(m[0])) stack.push(name);
+        else if (!stack.length) { out += text.slice(at, from) + blank(m[0]); at = end; }
+      } else if (stack.at(-1) === name) {
+        stack.pop();
+        if (!stack.length) { out += text.slice(at, from) + blank(text.slice(from, end)); at = end; }
+      }
+    }
+    return out + (stack.length ? text.slice(at, from) + blank(text.slice(from)) : text.slice(at));
+  };
   // Keep positions rather than joining fragments: a quote spanning removed reference text must never become evidence.
   // The remaining text is still a user's assertion, not proof that the asserted fact is objectively true.
   const userText = (question) => {
     if (typeof question !== 'string') return '';
     let fence = null, quoted = false;
     let out = question.replace(/\r\n?/g, '\n').split('\n').map((line) => {
-      const m = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
-      if (fence) { if (m && m[1][0] === fence[0] && m[1].length >= fence.length) fence = null; return blank(line); }
+      const m = /^\s{0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+      if (fence) { if (m && m[1][0] === fence[0] && m[1].length >= fence.length && !m[2].trim()) fence = null; return blank(line); }
       if (m) { fence = m[1]; return blank(line); }
       if (!line.trim()) quoted = false;
       if (/^\s*>/.test(line)) quoted = true;
       return quoted || /^(?: {4}|\t)/.test(line) ? blank(line) : line;
     }).join('\n');
-    out = out.replace(/<(blockquote|pre|code|document|tool_result|tool_response)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, blank);
+    out = references(out);
     out = out.replace(/(`+)([\s\S]*?)(?:\1|$)/g, blank);
     out = out.replace(/"[^"]*(?:"|$)|“[^”]*(?:”|$)|«[^»]*(?:»|$)|‘[^’]*(?:’|$)|„[^“]*(?:“|$)|(?<![\p{L}\p{N}])'(?:[^']|'(?=[\p{L}\p{N}]))*(?:'(?![\p{L}\p{N}])|$)/gu, blank);
     return out;
   };
+  // Saving is automatic; deleting needs a new affirmative request. This shared pure check is deliberately about
+  // current user intent, not model-selected ids. A request to disregard a question/instruction does not delete records.
+  const FORGET_TARGET = /^(?:that\s+i\b|what\s+you\s+(?:know|remember)\s+about\s+me\b|everything\s+you\s+(?:know|remember)\s+about\s+me\b|(?:my|the|this|that|these|those|all(?:\s+(?:my|the))?)\s+(?:(?:saved|stored|remembered|personal|indexed)\s+)*(?:memor(?:y|ies)|preferences?|facts?|(?:course\s+)?sources?)\b|(?:mi|mis|el|la|los|las|ese|esa|esos|esas|este|esta|estos|estas)\s+(?:recuerdos?|memorias?|preferencias?|datos?)\b|que\s+yo\b|(?:minha|minhas|meu|meus|essa|esse|essas|esses|esta|este|a|o|as|os)\s+(?:mem[óo]rias?|prefer[êe]ncias?|fatos?|fontes?)\b|que\s+eu\b|(?:ma|mon|mes|ce|cet|cette|ces|le|la|les)\s+(?:souvenirs?|m[ée]moires?|pr[ée]f[ée]rences?|faits?|sources?)\b|que\s+je\b|(?:meine?n?|diese[nmrs]?|die|den|das|alle(?:\s+meine)?)\s+(?:(?:gespeicherte[nmrs]?|pers[öo]nliche[nmrs]?|indexierte[nmrs]?)\s+)*(?:erinnerung(?:en)?|pr[äa]ferenz(?:en)?|vorliebe(?:n)?|fakten|quellen?)\b|dass\s+ich\b|(?:mijn|de|het|deze|dit|die|dat|alle(?:\s+mijn)?)\s+(?:(?:opgeslagen|bewaarde|persoonlijke|ge[ïi]ndexeerde)\s+)*(?:herinnering(?:en)?|voorkeur(?:en)?|feiten|bronnen?)\b|dat\s+ik\b)/iu;
+  const FORGET_START = /^(?:(?:please|por favor|por gentileza|s['’]il (?:te|vous) pla[îi]t|bitte|alsjeblieft)[,\s]+)?(?:(?:(?:can|could|would|will) you(?: please)?|i (?:want|would like) you to|puedes|podr[ií]as|pode|voc[êe] (?:pode|poderia)|peux-tu|pouvez-vous|pourrais-tu|pourriez-vous)\s+)?(?:forget|delete|remove|erase|olvida|olvide|olvidar|borra|borrar|elimina|eliminar|esque[çc]a|esquecer|apague|apagar|exclua|excluir|oublie|oubliez|oublier|supprime|supprimez|supprimer|efface|effacez|effacer|vergiss|l[öo]sche|entferne|vergeet|verwijder|wis)\s+/iu;
+  const FORGET_FINAL = /^(?:(?:bitte|alsjeblieft)[,\s]+)?(?:kannst du|k[öo]nntest du|k[öo]nnen sie|k[öo]nnten sie|kun je|kan je|kunt u|wil je|zou je)\s+(.+?)\s+(?:vergessen|l[öo]schen|entfernen|vergeten|verwijderen|wissen)(?:\s+(?:bitte|alsjeblieft))?$/iu;
+  const forgetRequested = (question) => userText(question).normalize('NFKC').split(/[\u0000\n.!?;]+/u).some((part) => {
+    const clause = part.trim().replace(/^[¿¡]/u, '');
+    // German and Dutch negate after the target/verb. Conditionals and explanatory subordinate clauses are not consent.
+    if (/(?:^|\s)(?:nicht|nie|niemals|niet|nooit|geen|if|unless|wenn|falls|als|si|se)(?:\s|$)/iu.test(clause)) return false;
+    const start = FORGET_START.exec(clause), final = !start && FORGET_FINAL.exec(clause);
+    return FORGET_TARGET.test(start ? clause.slice(start[0].length) : final ? final[1] : '');
+  });
   const invalid = (spec, args) => {
     if (!S().isObj(args) || Object.keys(args).some((k) => !Object.hasOwn(spec.parameters.properties, k))) return 'scope';
     if (spec.name === 'memory_save' && (typeof args.evidence !== 'string' || !args.evidence.trim() || args.evidence.length > LIMIT.evidence)) return 'evidence';
@@ -60,10 +88,10 @@ var GZ_AI_RIME_MEMORY = globalThis.GZ_AI_RIME_MEMORY || (() => {
     return spec.name === 'memory_save' && Object.hasOwn(args, 'id') !== Object.hasOwn(args, 'revision') ? 'scope' : '';
   };
   const ready = async (env, ctx) => {
-    if (ctx?.signal?.aborted || !await env.on()) return fail('off');
+    if (!await env.on() || ctx?.signal?.aborted) return fail('off');
     const current = await env.context(ctx);
     if (!current || !accountOk(current.account)) return fail('scope');
-    if (ctx?.signal?.aborted || !await env.on()) return fail('off');
+    if (!await env.on() || ctx?.signal?.aborted) return fail('off');
     return current;
   };
   const tools = (env) => {
@@ -77,7 +105,7 @@ var GZ_AI_RIME_MEMORY = globalThis.GZ_AI_RIME_MEMORY || (() => {
         const { account } = current;
         if (spec.name === 'memory_search') return await env.store.search(account, args.query, { ...(args.kind && { kind: args.kind }), limit: LIMIT.hits });
         if (spec.name === 'memory_read') return await env.store.read(account, args.id, { page: args.page || 1 });
-        if (spec.name === 'memory_forget') return await env.store.forget(account, { ...args });
+        if (spec.name === 'memory_forget') return forgetRequested(current.question) ? await env.store.forget(account, { ...args }) : fail('evidence');
         const question = userText(current.question);
         if (!question.includes(args.evidence) || !String(current.question || '').includes(args.evidence)) return fail('evidence');
         return await env.store.save(account, { ...args }, { question, explicitCorrection: current.explicitCorrection === true, ...(current.lease !== undefined && { lease: current.lease }) });
@@ -96,13 +124,17 @@ var GZ_AI_RIME_MEMORY = globalThis.GZ_AI_RIME_MEMORY || (() => {
     const courseId = account.slice(account.lastIndexOf('/') + 1).startsWith('_') ? /^_\d{1,20}_\d{1,20}$/ : /^\d{1,20}$/;
     const validId = (v) => typeof v === 'string' && v.length <= 40 && courseId.test(v);
     if (!S().isObj(a) || !S().isObj(r) || r.ok === false || r.error != null || r.cancelled === true || r.missing != null
-      || a.account !== undefined && a.account !== account || r.account !== undefined && r.account !== account || !validId(a.course)) return null;
-    const resource = call.name === 'assignment_read' ? a.assignment : a.id;
+      || a.account !== undefined && a.account !== account || r.account !== account || !validId(a.course)) return null;
+    const syllabus = call.name === 'syllabus_read', document = syllabus && S().isObj(r.document) ? r.document : null;
+    const resource = call.name === 'assignment_read' ? a.assignment : syllabus ? document?.id : a.id;
     if (resource !== undefined && !validId(resource) || call.name !== 'syllabus_read' && resource === undefined) return null;
+    if ((call.name === 'assignment_read' || syllabus) && r.course !== undefined && r.course !== a.course
+      || call.name === 'assignment_read' && r.assignment !== undefined && r.assignment !== resource) return null;
     const page = a.page === undefined ? 1 : a.page;
-    if (!Number.isInteger(page) || page < 1 || page > 1000 || r.page !== undefined && r.page !== page) return null;
+    if (!Number.isInteger(page) || page < 1 || page > 1000 || r.page !== undefined && r.page !== page || document?.page !== undefined && document.page !== page) return null;
     let complete = r.complete !== false && r.truncated !== true && r.cut !== true && r.incomplete !== true && !r.more && !r.mineMore && !(r.pages > 1);
-    const title = short(r.title || r.document?.title, 200), lines = [];
+    let retained = call.name === 'assignment_read';
+    const title = short(syllabus ? document?.title : r.title, 200), lines = [];
     if (title) lines.push(`# ${title}`, '');
     const section = (label, text) => { const v = plain(text); if (v) lines.push(`## ${label}`, v, ''); };
     const field = (label, text) => { const v = typeof text === 'number' ? number(text) : short(text, 1000); if (v) lines.push(`- ${label}: ${v}`); };
@@ -131,35 +163,43 @@ var GZ_AI_RIME_MEMORY = globalThis.GZ_AI_RIME_MEMORY || (() => {
       }
     } else if (call.name === 'syllabus_read') {
       // Syllabus import's known structured fields, written as human-readable Markdown without arbitrary result keys.
-      if (S().isObj(r.instructor)) for (const k of ['name', 'email', 'office', 'note']) field(`Instructor ${k}`, r.instructor[k]);
+      const imported = date(r.at) ? r : {};
+      if (S().isObj(imported.instructor)) for (const k of ['name', 'email', 'office', 'note']) field(`Instructor ${k}`, imported.instructor[k]);
       for (const [label, key, fields] of [['Office hours', 'hours', ['label', 'days', 'start', 'end', 'location']], ['Meetings', 'meetings', ['label', 'days', 'start', 'end', 'location']], ['Dates', 'dates', ['title', 'day', 'kind']]]) {
-        const rows = arr(r[key]).slice(0, 100).filter(S().isObj).map((v) => fields.map((k) => Array.isArray(v[k]) ? v[k].map((x) => short(x)).filter(Boolean).join(', ') : short(v[k])).filter(Boolean).join(' · ')).filter(Boolean);
+        const rows = arr(imported[key]).slice(0, 100).filter(S().isObj).map((v) => fields.map((k) => Array.isArray(v[k]) ? v[k].map((x) => short(x)).filter(Boolean).join(', ') : short(v[k])).filter(Boolean).join(' · ')).filter(Boolean);
         if (rows.length) section(label, rows.map((v) => `- ${v}`).join('\n'));
       }
       for (const [label, key] of [['Grade scale', 'scale'], ['Grade weights', 'weights']]) {
-        const rows = arr(r[key]).slice(0, 100).map((v) => Array.isArray(v) ? v.map((x) => typeof x === 'number' ? number(x) : short(x)).filter(Boolean).join(': ')
-          : S().isObj(v) ? [short(v.letter || v.title || v.name), number(v.min ?? v.weight ?? v.percent)].filter(Boolean).join(': ') : '').filter(Boolean);
+        const rows = arr(imported[key]).slice(0, 100).map((v) => {
+          const pair = key === 'scale' && Array.isArray(v) ? [short(v[0]), number(v[1])]
+            : S().isObj(v) ? [short(key === 'scale' ? v.letter : v.name), number(key === 'scale' ? v.min : v.weight)] : [];
+          return pair.length === 2 && pair.every(Boolean) ? pair.join(': ') : '';
+        }).filter(Boolean);
         if (rows.length) section(label, rows.map((v) => `- ${v}`).join('\n'));
       }
-      if (S().isObj(r.document)) {
-        if (r.document.truncated === true || r.document.pages > 1) complete = false;
-        section('Syllabus text', r.document.text);
+      retained = lines.some((l) => l.startsWith('## ') || l.startsWith('- '));
+      if (document) {
+        if (document.truncated === true || document.pages > 1) complete = false;
+        section('Syllabus text', document.text);
       }
     } else {
-      field('Posted as read', date(r.at));
+      if (call.name !== 'content_read') field('Posted as read', date(r.at));
       section(call.name === 'discussion_read' ? 'Discussion prompt' : 'Text', r.text);
     }
     // A title or attachment name by itself is no readable course material.
     if (!lines.some((l) => l.startsWith('## ') || l.startsWith('- '))) return null;
-    const files = [...arr(r.files), ...arr(r.document?.files)].filter((f) => typeof f === 'string' && !/^https?:\/\//i.test(f)).map((f) => short(f, 200)).filter(Boolean).slice(0, 20);
-    if (files.length) { complete = false; section('Attachments named, not read', files.map((f) => `- ${f}`).join('\n')); }
+    const attachments = arr(syllabus ? document?.files : r.files);
+    const files = attachments.map((f) => short(typeof f === 'string' ? f : S().isObj(f) ? f.name : '', 200)).filter((f) => f && !/^https?:\/\//i.test(f)).slice(0, 20);
+    if (attachments.length) complete = false;
+    if (files.length) section('Attachments named, not read', files.map((f) => `- ${f}`).join('\n'));
     const body = lines.join('\n').trim();
     if (!body) return null;
     const clipped = body.length > LIMIT.material - 80;
     if (clipped) complete = false;
     const markdown = `${cut(body, LIMIT.material - 80)}${clipped ? '\n\n[Text shortened.]' : ''}${complete ? '' : '\n\n[Partial source: Glaze has not read the whole item.]'}`;
     // These two readers can answer from a retained import/cache: rereading it is not a new LMS observation.
-    const retainedAt = ['assignment_read', 'syllabus_read'].includes(call.name) && Number.isSafeInteger(r.at) && r.at > 0 ? Math.min(r.at, observedAt) : observedAt;
+    const retainedAt = retained ? (date(r.at) ? Math.min(r.at, observedAt) : null) : observedAt;
+    if (retainedAt === null) return null;
     const source = { type: 'course-read', tool: call.name, course: a.course, ...(resource && { id: resource }), page, observedAt: retainedAt, complete, ...(title && { title }) };
     return { markdown, source };
   };
@@ -169,10 +209,10 @@ var GZ_AI_RIME_MEMORY = globalThis.GZ_AI_RIME_MEMORY || (() => {
       if (current.ok === false) return current;
       const record = material(call, current.account, typeof env.now === 'function' ? env.now() : Date.now());
       if (!record) return fail('scope');
-      if (ctx?.signal?.aborted || !await env.on()) return fail('off');
+      if (!await env.on() || ctx?.signal?.aborted) return fail('off');
       return await env.store.ingest(current.account, record, current.lease === undefined ? {} : { lease: current.lease });
     } catch { return fail('write'); }
   };
-  return { LIMIT, SPECS, READS, isWrite, tools, userText, material, ingest };
+  return { LIMIT, SPECS, READS, isWrite, tools, userText, forgetRequested, material, ingest };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_RIME_MEMORY; else GZ_AI_RIME_MEMORY;
