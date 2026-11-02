@@ -136,6 +136,23 @@ test('a long context costs its RoPE rows only as positions come into use', async
   m.release();
 });
 
+test('snapshots taken before growth restore into the live cache buffers after repeated growth', async () => {
+  const h = host(), m = await h.load(model({ kinds: KINDS }), { context: 16, chunk: CHUNK });
+  try {
+    await m.extend([1, 2, 3, 4]);
+    const snap = await m.snapshot();
+    await m.reserve(32, 32);
+    await m.reserve(64, 64);
+    await m.extend([6, 6, 6, 6]);
+    await m.restore(snap);
+    assert.equal(m.pos, 4);
+    assert.equal(m.common([1, 2, 3, 4, 5]), 4);
+    await m.decode(greedy);
+    snap.drop();
+  } finally { m.release(); }
+  assert.ok(h.buffers.every((b) => b.destroyed));
+});
+
 test('a feed in small steps pauses between them, and a cancel lands within a step', async () => {
   const h = host(), m = await h.load(model({ kinds: KINDS }), { context: 64, chunk: CHUNK });
   let paces = 0;
