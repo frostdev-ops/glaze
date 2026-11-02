@@ -54,6 +54,8 @@ const results = [];
         await page.evaluate(({ ID, REV }) => { window.response = async (message) => message.op === 'read' ? { ok: true, record: { id: ID, revision: REV, kind: 'memory', markdown: 'Prefer short explanations with one example.' } } : { ok: false, error: 'write' }; }, { ID, REV });
         await page.locator('.gz-ask-memory-edit').click();
         const input = page.locator('.gz-ask-memory-input'); await input.waitFor();
+        assert.notEqual(await input.evaluate((el) => getComputedStyle(el).outlineStyle), 'none', 'the focused memory editor has a visible focus ring');
+        await page.locator('.gz-ask-memory').screenshot({ path: path.join(out, `ask-memory-${name}-edit.png`) });
         await input.fill('Keep this unsaved draft when another device changes the memory.');
         await page.locator('.gz-ask-memory-save').click();
         await page.getByText('Could not save. Try again.', { exact: true }).waitFor();
