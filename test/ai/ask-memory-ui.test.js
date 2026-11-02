@@ -164,10 +164,26 @@ test('Stop retains committed receipts and usable record controls', async () => {
 
 test('invalid receipts and recall records do not manufacture saved or supplied context', async () => {
   const P = page(); await P.ask();
-  for (const change of [{ persistence: 'drive' }, { id: SOURCE }, { revision: 'bad' }, { operation: 'synced' }, { at: NaN }]) P.emit({ type: 'memory', receipt: receipt('created', change) });
+  for (const change of [{ persistence: 'drive' }, { id: SOURCE }, { revision: 'bad' }, { operation: 'synced' }, { at: NaN }, { at: 1.5 }, { text: undefined }, { text: '' }, { text: ' '.repeat(4) }, { text: 'x'.repeat(601) }]) P.emit({ type: 'memory', receipt: receipt('created', change) });
+  P.emit({ type: 'memory', receipt: receipt('forgotten') });
   assert.equal(P.find('.gz-ask-memory'), null);
   P.emit({ type: 'recall', records: [{ id: ID, revision: 'bad', kind: 'memory', text: 'Bad revision' }, { id: SOURCE, revision: REV, kind: 'memory', text: 'Mismatched kind' }], truncated: false });
   assert.equal(P.find('.gz-ask-recall'), null);
+});
+
+test('a late read or save keeps focus that moved back to the composer', async () => {
+  const P = page(); await P.ask(); P.emit({ type: 'memory', receipt: receipt() });
+  let release;
+  P.response = () => new Promise((r) => { release = r; });
+  P.click('.gz-ask-memory-edit'); await settle();
+  const composer = P.find('.gz-ask-input'); composer.focus();
+  release({ ok: true, record: record() }); await settle();
+  assert.equal(P.doc.activeElement, composer);
+  const input = P.find('.gz-ask-memory-input'); input.value = 'Use one example.'; input.focus();
+  P.click('.gz-ask-memory-save'); await settle(); composer.focus();
+  release({ ok: true, receipt: receipt('updated', { revision: NEXT, text: input.value }) }); await settle();
+  assert.equal(P.doc.activeElement, composer);
+  assert.equal(P.find('.gz-ask-memory summary').textContent, 'Memory updated on this device');
 });
 
 test('an edit stays intact when a broker response is malformed or exceeds the memory limit', async () => {
