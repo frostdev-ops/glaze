@@ -16,7 +16,7 @@ const setup = (kind = 'assignment') => {
     GZ_WRITER_PAPER: { current: () => ({ key: () => key, kind: () => 'paper', paper: () => ({ title: 'Title' }) }) } });
   vm.runInContext(source(), context);
   hooks.ready();
-  return { port, parent, messages, events, hooks, editor, listeners, setKey: (v) => { key = v; }, setKind: (v) => { kind = v; hooks.context(); }, update: () => { editor.view.state.doc = doc('Changed body'); hooks.change(); } };
+  return { context, port, parent, messages, events, hooks, editor, listeners, setKey: (v) => { key = v; }, setKind: (v) => { kind = v; hooks.context(); }, update: () => { editor.view.state.doc = doc('Changed body'); hooks.change(); } };
 };
 test('dedicated Ask binding is read-only, independent of MCP settings, and contains bounded editor material', () => {
   const p = setup();
@@ -71,6 +71,22 @@ test('an ineligible document cannot restore an earlier revision when it becomes 
   assert.ok(p.parent.at(-1).revision > b.revision);
 });
 
+test('switching to a non-paper surface and back revokes the old document pin', async () => {
+  const p = setup(), api = p.context.GZ_WRITER_PAPER.current();
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer/frame/writer-paper.js'), 'utf8');
+  Object.assign(p.context, { api, clearTimeout, GZ_WRITER_KINDS: { mount: async () => ({ kind: () => 'pdf' }) } });
+  vm.runInContext('let current = api, parked = null, saveTimer = null, key = api.key(), host = {}; GZ_WRITER_PAPER.current = () => current;\n' +
+    source.slice(source.indexOf('    const kindOfRec ='), source.indexOf('    const api =')) + '\nglobalThis.hand = hand;', p.context);
+  const b = p.parent.at(-1);
+  await p.context.hand({ kind: 'pdf' });
+  assert.equal(p.parent.at(-1).token, null, 'the paper binding is revoked as the PDF takes over');
+  const unpark = /unpark: (\(\) => \{[^}]+\})/.exec(source)[1];
+  vm.runInContext('(' + unpark + ')();', p.context);
+  p.port.answer({ id: 1, op: 'current', token: b.token, revision: b.revision });
+  assert.equal(p.messages.at(-1).value, undefined);
+  assert.ok(p.parent.at(-1).revision > b.revision);
+});
+
 const parentSetup = () => {
   const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer/page/writer.js'), 'utf8');
   const start = source.indexOf('  let activeCurrent'), end = source.indexOf('  const declined', start);
@@ -102,6 +118,27 @@ test('a binding delivered before frame focus is retained when Ask takes focus', 
   assert.equal(p.capture.pinCurrent().revision, 1, 'direct frame focus establishes a pin');
   p.document.activeElement = {};
   assert.equal(p.capture.pinCurrent()?.revision, 1, 'Ask focus retains that exact pin');
+});
+
+test('focus in an ineligible frame clears the preceding active document before Ask focus', () => {
+  const p = parentSetup();
+  p.capture.pinCurrent();
+  const other = { editor: {}, frame: { isConnected: true }, live: true };
+  p.context.boxes.set(other.editor, other); p.document.activeElement = other.frame;
+  p.capture.hear(other, { type: 'ask:binding', token: null });
+  p.document.activeElement = {};
+  assert.equal(p.capture.pinCurrent(), null);
+});
+
+test('a recovered frame has no binding until its own document announces one', () => {
+  const p = parentSetup();
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer/page/writer.js'), 'utf8');
+  Object.assign(p.context, { endFlush() {}, focusMode() {}, clearTimeout });
+  p.box.frame.remove = () => {};
+  vm.runInContext(source.slice(source.indexOf('  const retire ='), source.indexOf('  const reopen =')) + '\nglobalThis.retire = retire;', p.context);
+  p.capture.pinCurrent(); p.context.retire(p.box);
+  p.box.frame = { isConnected: true }; p.document.activeElement = p.box.frame;
+  assert.equal(p.capture.pinCurrent(), null);
 });
 
 test('parent pins one exact frame and revision, omitting replacements and ambiguous focus', () => {
