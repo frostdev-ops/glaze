@@ -440,31 +440,54 @@ for (const error of ['cancelled', 'connection-lost']) test(`a run ending with ${
   assert.ok(cards.every((c) => !['run', 'ask'].includes(c.dataset.state)), 'no card claims the ended run is still active');
   assert.equal(P.box().querySelector('.gz-ask-step-note'), null, 'an ended run is not waiting in the approval window');
   assert.equal(P.box().querySelector('.gz-ask-busy'), null);
+  P.ask('What should I do first?'); await settle();
+  const previous = asked(P).at(-1).history[0];
+  assert.equal(previous.question, 'Mark my lab report done');
+  assert.match(previous.answer, /^\[Glaze app status: request (?:cancelled|failed)/);
+  assert.match(previous.answer, /No completed answer or tool results are recorded in this history entry/);
+  assert.equal(previous.answer.includes('cancelled'), error === 'cancelled');
   P.box().close();
 });
 
 test('a failure shows in the conversation with Try again, which asks the same question again for the student\'s own click', async () => {
   const P = page({ reply: ready });
   await P.ui.open({ event: { isTrusted: true } });
-  P.ask('What is due this week?');
+  P.ask('Plan my study week from my assignments');
   await settle();
   answer(P, { type: 'error', error: 'check' });
   await settle();
+  const failedPort = P.ports.at(-1);
+  P.ask('What should I do first?'); await settle();
+  const failed = asked(P).at(-1).history[0];
+  assert.deepEqual(Object.keys(failed).sort(), ['answer', 'question'], 'keep the existing history wire schema');
+  assert.equal(failed.question, 'Plan my study week from my assignments');
+  assert.match(failed.answer, /^\[Glaze app status: request failed \(check\)/);
+  assert.match(failed.answer, /No completed answer or tool results are recorded in this history entry/);
+  assert.ok(failedPort.hungUp, 'the failed request survives a fresh port');
+  answer(P, study('Start with your next assignment.')); await settle();
   const err = P.box().querySelector('.gz-ask-err');
   assert.match(err.textContent, /Rime couldn’t answer that\. Try asking another way\./);
   const retry = err.querySelector('.gz-ask-retry');
   P.doc.fire(retry, 'click', { trusted: false });
   await settle();
-  assert.equal(asked(P).length, 1);
+  assert.equal(asked(P).length, 2);
   P.doc.fire(retry, 'click');
   await settle();
-  assert.equal(asked(P).length, 2);
-  assert.equal(asked(P)[1].question, 'What is due this week?');
+  assert.equal(asked(P).length, 3);
+  assert.equal(asked(P).at(-1).question, 'Plan my study week from my assignments');
   assert.equal(P.box().querySelector('.gz-ask-err'), null, 'the failure gives way to the new try');
-  assert.equal(P.turns().filter(([c]) => c === 'gz-ask-q').length, 1, 'the question isn\'t shown twice');
+  assert.equal(P.turns().filter(([c, q]) => c === 'gz-ask-q' && q === 'Plan my study week from my assignments').length, 1, 'the question isn\'t shown twice');
+  answer(P, { type: 'error', error: 'connection-lost' }); await settle();
+  P.doc.fire(P.box().querySelector('.gz-ask-retry'), 'click'); await settle();
+  assert.equal(asked(P).at(-1).history.length, 2, 'repeated retries replace the original history entry');
+  assert.match(asked(P).at(-1).history[0].answer, /request failed \(connection-lost\)/);
   answer(P, { type: 'end', task: 'agent.tools', answer: { text: 'Lab report, Friday.' } });
   await settle();
-  assert.deepEqual(P.turns().map(([, t]) => t), ['What is due this week?', 'Lab report, Friday.']);
+  assert.deepEqual(P.turns().map(([, t]) => t), ['Plan my study week from my assignments', 'What should I do first?', 'Start with your next assignment.', 'Lab report, Friday.']);
+  P.ask('And after that?'); await settle();
+  assert.equal(asked(P).at(-1).history.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(asked(P).at(-1).history[0])), { question: 'Plan my study week from my assignments', answer: 'Lab report, Friday.' }, 'a successful retry replaces the app status');
+  P.box().close();
 });
 
 test('follow-ups carry the conversation so far, the last three questions and answers', async () => {
@@ -473,7 +496,7 @@ test('follow-ups carry the conversation so far, the last three questions and ans
   for (let i = 1; i <= 4; i++) {
     P.ask(`Question ${i}`);
     await settle();
-    answer(P, study(`Answer ${i}`, i === 2 ? 'Which one?' : null));
+    answer(P, i === 3 ? { type: 'error', error: 'check' } : study(`Answer ${i}`, i === 2 ? 'Which one?' : null));
     await settle();
   }
   assert.equal(asked(P)[0].history, undefined);
@@ -481,6 +504,8 @@ test('follow-ups carry the conversation so far, the last three questions and ans
   P.ask('Question 5');
   await settle();
   assert.deepEqual([...asked(P)[4].history.map((h) => h.question)], ['Question 2', 'Question 3', 'Question 4']);
+  assert.match(asked(P)[4].history[1].answer, /^\[Glaze app status: request failed \(check\)/);
+  P.box().close();
 });
 
 test('a UI action a run returns goes to the handler for its kind once the answer shows, only for its question', async () => {
@@ -739,7 +764,7 @@ test('the context meter shows the share of the window the request takes, as a ri
 test('turns the worker folded show as one line where they were, opened to read the summary; later questions carry it with only the newer turns', async () => {
   const P = page({ reply: ready });
   await P.ui.open({ event: { isTrusted: true } });
-  for (let i = 1; i <= 3; i++) { P.ask(`Question ${i}`); await settle(); answer(P, study(`Answer ${i}`)); await settle(); }
+  for (let i = 1; i <= 3; i++) { P.ask(`Question ${i}`); await settle(); answer(P, i === 2 ? { type: 'error', error: 'check' } : study(`Answer ${i}`)); await settle(); }
   const last = asked(P).at(-1);
   P.ports.at(-1).answer({ id: last.id - 1, type: 'summary', text: '- stale', turns: 2 });
   await settle();
@@ -749,7 +774,7 @@ test('turns the worker folded show as one line where they were, opened to read t
   const fold = P.box().querySelector('.gz-ask-fold');
   assert.ok(fold);
   const items = P.box().querySelector('.gz-ask-log').children;
-  assert.equal(items.indexOf(fold), items.indexOf(P.box().querySelectorAll('.gz-ask-a')[1]) + 1, 'right after the second answer');
+  assert.equal(items.indexOf(fold), items.indexOf(P.box().querySelector('.gz-ask-err')) + 1, 'right after the second, failed turn');
   assert.equal(fold.querySelector('summary').textContent, 'Earlier messages summarized');
   assert.equal(fold.querySelector('details').open, undefined, 'closed until the student opens it');
   assert.equal(fold.querySelector('details strong').textContent, 'Mitosis', 'the summary, drawn as the answers are');
@@ -789,11 +814,12 @@ test('a summary handed off before end survives an immediate follow-up on a fresh
   for (let i = 1; i <= 3; i++) { P.ask(`Question ${i}`); await settle(); answer(P, study(`Answer ${i}`)); await settle(); }
   P.ask('Question 4'); await settle();
   answer(P, { type: 'summary', text: '- Asked: Question 1\n- Asked: Question 2', turns: 2 });
-  answer(P, study('Answer 4')); await settle();
+  answer(P, { type: 'error', error: 'check' }); await settle();
   P.ask('Question 5'); await settle();
   const sent = asked(P).at(-1);
   assert.equal(sent.summary, '- Asked: Question 1\n- Asked: Question 2');
   assert.deepEqual(Array.from(sent.history, (h) => h.question), ['Question 3', 'Question 4']);
+  assert.match(sent.history[1].answer, /^\[Glaze app status: request failed \(check\)/);
   assert.ok(P.ports.at(-2).hungUp, 'the summary is retained across port replacement');
   P.box().close();
 });
