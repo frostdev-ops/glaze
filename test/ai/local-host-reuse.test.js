@@ -181,3 +181,15 @@ test('a warm-up reserves its selected room before reading large history and yiel
     assert.equal(s.fed.length, 0, 'an oversized warm-up never starts feeding');
   } finally { await s.h.release(); }
 });
+
+// A closed direct-mode think block needs no rewind point: splitting before its two ids re-reads every model weight.
+test('direct mode keeps the prompt in one feed after its stable prefix', async () => {
+  const s = setup();
+  const m = req(['question\nWhat is due?']);
+  await s.call(m);
+  const ids = TOK.encodeWith(m.parts), open = ids.lastIndexOf(TOK.id('<think>'));
+  const read = s.extends.find((x) => x.ids.length === ids.length);
+  assert.ok(read);
+  assert.ok(!read.at.includes(open), `unnecessary direct-mode split at ${open}`);
+  s.h.release();
+});
