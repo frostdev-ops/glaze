@@ -345,3 +345,15 @@ test('study-help readers share and extend the chat tool union, and New chat clea
     assert.deepEqual([...runs[3].input.tools].sort(), [...routes[3].tools].sort(), 'New chat forgets every earlier tool');
   }
 });
+
+test('a large selected window carries more than six complete turns without premature compaction', async () => {
+  const history = Array.from({ length: 12 }, (_, i) => turn(`Earlier topic ${i}: ${'reading '.repeat(100)}`, 'Consider the quoted source. '.repeat(50)));
+  const h = harness({ count: () => ({ used: 9000, window: 32768, reserve: 768, exact: true }),
+    script: { 'agent.tools': [said('Done.')] } });
+  h.say({ id: 1, op: 'ask', question: "What's due in BIO 1100?", history });
+  await settle();
+  assert.equal(h.got.find((m) => m.type === 'error'), undefined, 'the worker accepts bounded history for the selected window');
+  const run = h.seen.runs.find((r) => r.task === 'agent.tools');
+  assert.deepEqual(run?.input.history, history);
+  assert.equal(h.seen.runs.some((r) => r.task === 'chat.compact'), false, 'available context retains those turns verbatim');
+});
