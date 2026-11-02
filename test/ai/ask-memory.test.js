@@ -160,11 +160,16 @@ test('models without the memory contract keep ordinary Ask usable and report uns
   assert.deepEqual(h.state.runs.map((r) => r.task), ['study.help']);
   assert.equal(h.state.runs[0].input.recall, undefined);
   assert.equal(h.state.searches.length, 0);
-  const out = await h.ask('What do you remember about my preferences?');
-  assert.equal(out.type, 'error');
-  assert.equal(out.error, 'caps');
-  assert.equal(out.feature, 'memory');
+  for (const question of ['What do you remember about my preferences?', 'Remember that I prefer short answers.', 'Forget my saved preference.']) {
+    const out = await h.ask(question);
+    assert.equal(out.type, 'error');
+    assert.equal(out.error, 'caps');
+    assert.equal(out.feature, 'memory');
+  }
   assert.equal(h.state.runs.length, 1);
+  assert.equal(h.state.searches.length, 0);
+  assert.equal(h.state.approvals.length, 0);
+  assert.equal((await h.store.list(ACC)).items.length, 1, 'unsupported remember/forget cannot mutate stored memories');
 });
 
 test('automatic memory saving keeps all six selected school tools and uses a separate optional pass', async (t) => {
