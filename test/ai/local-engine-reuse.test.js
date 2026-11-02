@@ -182,7 +182,7 @@ test('decode takes the mask as a function, called once the decoded token\'s forw
   await m.decode(greedy);
   const before = h.submissions.length;
   let at = null;
-  const all = new Uint32Array(1); all[0] = 0xff;
+  const all = new (require('node:vm').runInContext('Uint32Array', h.context))(1); all[0] = 0xff;
   await m.decode({ ...greedy, mask: () => { at = h.submissions.length; return all; } });
   assert.equal(at, before + 1, 'the pending token\'s forward was submitted before the mask was asked for');
   await assert.rejects(m.decode({ ...greedy, mask: () => new Uint32Array(3) }), /mask: a Uint32Array of 1 words/);

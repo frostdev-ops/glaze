@@ -35,9 +35,10 @@ const setup = (perToken) => {
   const submit = g.device.queue.submit;
   g.device.queue.submit = function (commands) {
     if (pending) {
-      const start = Math.max(performance.now(), until);
+      const at = performance.now(), start = Math.max(at, until);
       until = start + pending * perToken;
-      busy.push([start, until]); fed.push(pending); pending = 0;
+      // queued: submitted while the GPU was still busy, so nothing else (the page's frame) could run between.
+      busy.push([start, until, at < start]); fed.push(pending); pending = 0;
     }
     return submit.call(this, commands);
   };
@@ -66,10 +67,11 @@ const SYS = [{ special: '<|startoftext|>' }, { special: '<|im_start|>' }, { text
 const doc = (n) => [{ special: '<|im_start|>' }, { text: 'user\n' }, { special: '<|gz_ctx|>' }, { text: `document\n${'Cells turn food into energy in the mitochondria. '.repeat(n)}` }, { special: '<|/gz_ctx|>' },
   { special: '<|im_end|>' }, { text: '\n' }, { special: '<|im_start|>' }, { text: 'assistant\n' }, { special: '<think>' }, { special: '</think>' }];
 const complete = (n, maxTokens = 4) => ({ op: 'run', model: 'm', parts: [...SYS, ...doc(n)], stable: SYS.length, sampler: { temperature: 0 }, maxTokens });
-// The longest stretch the simulated GPU stays busy without an idle moment (a frame's wait).
+// The longest stretch the simulated GPU stays busy without an idle moment (a frame's wait): submissions queued behind
+// running work join its stretch.
 const stall = (busy) => {
   let most = 0, from = null, to = null;
-  for (const [a, b] of busy) { if (to === null || a > to + 0.5) { from = a; to = b; } else to = Math.max(to, b); most = Math.max(most, to - from); }
+  for (const [a, b, queued] of busy) { if (to === null || !queued) { from = a; to = b; } else to = Math.max(to, b); most = Math.max(most, to - from); }
   return most;
 };
 
