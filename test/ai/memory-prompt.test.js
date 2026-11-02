@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const A = require('../../extension/ai/tasks/agent-tools.js');
+const H = require('../../extension/ai/tasks/study-help.js');
 const M = require('../../extension/ai/agent/memory.js');
 const X = require('../../extension/ai/text.js');
 const F = require('../../extension/ai/local/format.js');
@@ -145,4 +146,35 @@ test('historical cached course questions remain grounded, and honest missing-fre
   assert.equal(A.why(answer('The saved material says Lab report is due Sunday.', ['Lab report', 'Sunday']), historical), '');
   const current = A.task.input(raw({ question: 'When is my assignment due?', steps }));
   assert.equal(A.why(answer('I cannot verify the current due date of Lab report from saved material.', ['Lab report']), current), '');
+});
+
+test('study help conditionally carries recall as untrusted data and preserves its tutoring boundary', () => {
+  const given = { question: 'Help me reason about this exercise.', subject: 'math' };
+  const plain = H.task.input(given);
+  assert.equal(F.parse(H.task.build(plain, { text: X })).system, H.system('en'));
+  const inp = H.task.input({ ...given, recall: recall() });
+  assert.ok(inp);
+  const { system, blocks } = F.parse(H.task.build(inp, { text: X }));
+  assert.match(system, /current question wins/i);
+  assert.ok(!system.includes(memory().text));
+  assert.deepEqual(JSON.parse(blocks.find((b) => b.label === 'recall').text), inp.recall);
+  const reply = { kind: 'hint', step: null, reply: 'Think about which quantity stays constant.', followUp: null };
+  assert.equal(H.why(reply, inp), '');
+  assert.equal(H.why({ ...reply, reply: 'The answer is 8.' }, inp), 'answer');
+  const course = { ...cached().record, text: 'Solve 2x + 3 = 7.' };
+  const recalledProblem = H.task.input({ ...given, recall: recall([course]) });
+  assert.ok(recalledProblem);
+  assert.equal(H.why({ ...reply, reply: 'Your next step is x = 2.' }, recalledProblem), 'solves');
+  assert.equal(H.task.input({ ...given, recall: { ...recall(), account: 'untrusted' } }), null);
+});
+
+test('study help with recall cannot claim memory mutations or Drive sync without receipts', () => {
+  const inp = H.task.input({ question: 'Help me reason about this exercise.', subject: 'math', recall: recall() });
+  assert.ok(inp);
+  const reply = (text) => ({ kind: 'hint', step: null, reply: text, followUp: null });
+  for (const text of ['I saved your preference.', 'I updated your preference.', 'I forgot that memory.', 'Your preference is saved.', 'I synced your preference to Drive.']) {
+    assert.equal(H.why(reply(text), inp), 'ground', text);
+  }
+  assert.equal(H.why(reply('I could not save your preference.'), inp), '');
+  assert.equal(H.why(reply('The phrase "I saved it" is not a receipt.'), inp), '');
 });
