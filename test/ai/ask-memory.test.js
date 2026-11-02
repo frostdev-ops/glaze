@@ -16,7 +16,7 @@ const harness = ({ script = {}, counts, verified = true, active, assignment } = 
     set: async (patch) => { Object.assign(data, structuredClone(patch)); } };
   let random = 0;
   const store = M.create({ local, keys: async () => Object.keys(data), now: () => NOW, random: () => (++random).toString(16).padStart(32, '0') });
-  const state = { on: true, capable: true, valid: true, account: ACC, runs: [], counts: [], approvals: [], searches: [] };
+  const state = { on: true, capable: true, valid: true, ask: true, enabled: true, account: ACC, runs: [], counts: [], approvals: [], searches: [] };
   const original = store.search;
   store.search = async (...args) => { state.searches.push(structuredClone(args)); return original(...args); };
   const registry = TL.registry();
@@ -32,7 +32,7 @@ const harness = ({ script = {}, counts, verified = true, active, assignment } = 
     try { const output = typeof next === 'function' ? await next(m.input, state, store) : next; port.postMessage(output ? { id: m.id, type: 'end', output } : { id: m.id, type: 'error', error: 'check' }); }
     catch { port.postMessage({ id: m.id, type: 'error', error: 'check' }); }
   });
-  const env = { allowed: async () => true, broker, settings: async () => ({ on: true, memory: state.on, model: { use: 'openai', model: 'm' }, features: { ask: true } }), enabled: async () => true,
+  const env = { allowed: async () => true, broker, settings: async () => ({ on: true, memory: state.on, model: { use: 'openai', model: 'm' }, features: { ask: state.ask } }), enabled: async () => state.enabled,
     registry: { get: (n) => registry.get(n), describe: (t) => ({ name: t.name, inputSchema: t.parameters }) }, state: async () => ({}), refresh: async () => null,
     accounts: async () => [{ account: state.account, origin: 'https://school.instructure.com' }], local, keys: async () => Object.keys(data), now: () => NOW, turn: (f) => f(), zone: 'UTC', level: async () => 3,
     page: () => ({ url: 'https://school.instructure.com/courses/25' }), counts: counts ? true : false,
@@ -287,4 +287,29 @@ test('explicit memory management requires a freshly verified account before expo
   const h = harness({ verified: false, script: { 'agent.tools': [call('memory_search', { query: 'preferences' }), said('No matching memory.')] } }); t.after(h.close);
   assert.equal((await h.ask('Show my saved memories.')).type, 'error');
   assert.equal(h.state.runs.length, 0);
+});
+
+test('queued memory producers recheck scope and switches after awaited storage reads', async (t) => {
+  for (const operation of ['save', 'ingest', 'forget']) for (const change of ['on', 'capable', 'valid', 'ask', 'enabled']) {
+    let saved;
+    const text = 'I prefer short bullet points.';
+    const h = harness({ script: { 'agent.tools': operation === 'ingest' ? [said(), call('assignment_read', { course: '25', assignment: '41' }), said('Compare the samples.')]
+      : [() => operation === 'forget' ? call('memory_forget', { id: saved.receipt.id, revision: saved.receipt.revision }, 'write') : call('memory_save', { text, evidence: text }, 'write'), said()], 'study.help': [study] } }); t.after(h.close);
+    if (operation === 'forget') saved = await preference(h.store);
+    const original = h.store[operation], get = h.env.local.get;
+    let revoked = false;
+    h.store[operation] = (...args) => {
+      h.env.local.get = async (keys) => {
+        const value = await get(keys);
+        if (!revoked) { revoked = true; h.state[change] = false; }
+        return value;
+      };
+      return original(...args);
+    };
+    await h.ask(operation === 'ingest' ? 'What are the instructions for this assignment?' : operation === 'forget' ? 'Forget my saved preference.' : `${text} Explain photosynthesis.`);
+    assert.equal(revoked, true, `${operation}/${change} reached the awaited mutation`);
+    assert.equal(h.got.some((m) => m.type === 'memory'), false, `${operation}/${change} did not publish a receipt`);
+    const records = (await h.store.list(ACC)).items;
+    assert.equal(records.length, operation === 'forget' ? 1 : 0, `${operation}/${change} did not commit`);
+  }
 });
