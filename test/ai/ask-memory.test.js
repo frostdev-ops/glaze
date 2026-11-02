@@ -16,7 +16,7 @@ const harness = ({ script = {}, counts, verified = true, active, assignment } = 
     set: async (patch) => { Object.assign(data, structuredClone(patch)); } };
   let random = 0;
   const store = M.create({ local, keys: async () => Object.keys(data), now: () => NOW, random: () => (++random).toString(16).padStart(32, '0') });
-  const state = { on: true, valid: true, account: ACC, runs: [], counts: [], approvals: [], searches: [] };
+  const state = { on: true, capable: true, valid: true, account: ACC, runs: [], counts: [], approvals: [], searches: [] };
   const original = store.search;
   store.search = async (...args) => { state.searches.push(structuredClone(args)); return original(...args); };
   const registry = TL.registry();
@@ -38,7 +38,7 @@ const harness = ({ script = {}, counts, verified = true, active, assignment } = 
     page: () => ({ url: 'https://school.instructure.com/courses/25' }), counts: counts ? true : false,
     current: async () => ({ ...(verified && { account: state.account }), ...(active && { current: structuredClone(active) }), page: { site: 'canvas', url: 'https://school.instructure.com/courses/25' },
       valid: async () => state.valid && state.account === ACC, bind: (c) => c }),
-    memory: { store, on: async () => state.on },
+    memory: { store, on: async () => state.on, capable: async () => state.capable },
     approve: { ask: async (...args) => { state.approvals.push(args); return 'yes'; } },
     own: { writer: async () => true, read: async () => ({ items: [] }), wakes: { on: async () => false, local, read: async () => null } },
   };
@@ -153,6 +153,20 @@ test('explicit memory management while off returns its feature error without a m
   assert.deepEqual(h.state.runs, []);
 });
 
+test('models without the memory contract keep ordinary Ask usable and report unsupported memory', async (t) => {
+  const h = harness({ script: { 'study.help': [study] } }); t.after(h.close); h.state.capable = false;
+  await preference(h.store);
+  assert.equal((await h.ask('Explain photosynthesis.')).type, 'end');
+  assert.deepEqual(h.state.runs.map((r) => r.task), ['study.help']);
+  assert.equal(h.state.runs[0].input.recall, undefined);
+  assert.equal(h.state.searches.length, 0);
+  const out = await h.ask('What do you remember about my preferences?');
+  assert.equal(out.type, 'error');
+  assert.equal(out.error, 'caps');
+  assert.equal(out.feature, 'memory');
+  assert.equal(h.state.runs.length, 1);
+});
+
 test('automatic memory saving keeps all six selected school tools and uses a separate optional pass', async (t) => {
   const question = 'What are my assignments, grades and due dates?';
   const selected = K.route(question, { level: 3 }).tools;
@@ -192,7 +206,7 @@ test('a producer begun before deletion cannot capture a new lease and save after
 });
 
 test('successful verified assignment reads are ingested with their actual observed time', async (t) => {
-  const h = harness({ script: { 'agent.tools': [call('assignment_read', { course: '25', assignment: '41' }), said('The assignment asks you to compare two invented samples.')] },
+  const h = harness({ script: { 'agent.tools': [said(), call('assignment_read', { course: '25', assignment: '41' }), said('The assignment asks you to compare two invented samples.')] },
     active: { site: 'canvas', view: 'assignment', course: { id: '25' }, assignment: { id: '41' } },
     assignment: { title: 'Invented lab', instructions: 'Compare two invented samples.', at: NOW - 60000 } }); t.after(h.close);
   assert.equal((await h.ask('What are the instructions for this assignment?')).type, 'end');
