@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.1 (French)
+# Chrome Web Store listing — Glaze 4.0.2 (French)
 
 ## Short summary (132 character maximum)
 
@@ -73,18 +73,15 @@ Canvas est une marque d’Instructure, Inc. Blackboard est une marque d’Anthol
 
 ## Release notes
 
-NOUVEAUTÉS DE LA VERSION 4.0.1
+NOUVEAUTÉS DE LA VERSION 4.0.2
 
-• Blackboard Ultra : les onglets de cours s’ouvrent depuis une page déjà chargée et commencent à charger dès que vous appuyez sur un onglet ou le survolez (Réglages › Onglets de cours › Ouvrir les onglets de cours à l’avance).
-• Garder le contenu du cours prêt : un élément s’ouvre par-dessus le contenu du cours, et le retour est instantané, au même endroit.
-• Ouvrir les pages instantanément : Notes, Cours, Activité ainsi que le contenu, les annonces et le carnet de notes d’un cours montrent votre dernière visite pendant que Blackboard charge. Montrer tout de suite le chargement des pages : un clic se voit tout de suite. La barre de Glaze est là dès le premier affichage, son pied de page et ses panneaux ne décalent plus la page, et À faire, les notes et la barre latérale apparaissent à partir des données enregistrées dès que Blackboard confirme qui est connecté. Les pages se chargent derrière un seul écran de chargement à votre Look, sans écran gris ni indicateurs empilés.
-• Charger les données des cours à l'avance, moins de requêtes à Blackboard et moins de travail sur les ordinateurs portables plus lents.
-• PDF : surlignage, stylo, texte, images, formes et signatures, et un panneau des pages pour déplacer, faire pivoter, supprimer et ajouter des pages. Un PDF garde une seule copie, sa dernière version annotée.
-• Joindre depuis Documents ajoute vos documents au dépôt d’un devoir Blackboard Ultra. Les classeurs .xlsm s’exportent et se déposent en .xlsm.
-• Canvas : Ouvrir dans Glaze sur les fichiers PDF, de diapositives et de feuilles de calcul. Les diapositives gagnent Imprimer avec les notes…, et les cartes de Documents montrent les graphiques d’une feuille.
-• Les commentaires de Writer répondent dans la langue de votre brouillon, et ses vérifications de citations fonctionnent dans les six langues.
-• Si un commentaire de Writer échoue à ses vérifications, Writer affiche le niveau vérifié de la grille d’évaluation au lieu de retenir la note.
-• Firefox : Google Drive (Réglages › Writer › Travaux) ouvre, enregistre, joint et synchronise vos documents, gros fichiers compris. Désactivé tant que vous ne vous connectez pas.
-• Firefox : un site dont vous avez retiré l’accès n’est plus sollicité à nouveau.
-• Chrome : Synchronisation avec Google Agenda (Réglages › Partage) tient à jour un agenda nommé Glaze dans votre compte Google, et Google Drive (Réglages › Writer › Travaux) ouvre, enregistre, joint et synchronise vos documents, gros fichiers compris. Les deux restent désactivés tant que vous ne vous connectez pas.
-• Safari : Synchronisation avec Google Agenda (Réglages › Partage) tient à jour un agenda nommé Glaze dans votre compte Google, et Google Drive (Réglages › Writer › Travaux) ouvre, enregistre, joint et synchronise vos documents, gros fichiers compris. Les deux restent désactivés tant que vous ne vous connectez pas.
+• Blackboard Ultra : la barre du cours se replie en pastille et se rouvre sans trembler, même sur les portables plus lents.
+• Ouvrir un dossier, un module d’apprentissage ou un menu ne fait plus sauter la page et ne jette plus les copies enregistrées de vos pages.
+• Messages : Répondre reste visible sous la barre supérieure de Glaze.
+• Activité : le nom de chaque élément vient d’abord, en gras, avec son cours en dessous.
+• Le texte que Blackboard laisse sans fond sur votre apparence (SafeAssign, informations supplémentaires d’un devoir, barres d’outils, filtres, notes, messages) reçoit une surface lisible, et les coches de À faire s’affichent.
+• Sur un ordinateur partagé, le cours d’un autre étudiant ne s’affiche plus comme une carte vide, chaque étudiant reçoit ses propres premières cartes du tableau de bord, et Réinitialiser la disposition déplace toutes les cartes de cours que vous voyez.
+• Ouvrir Blackboard sur le tableau de bord ne remplace jamais une page ouverte par son lien.
+• À faire ne se redessine plus chaque minute quand rien n’y a changé.
+• Safari : taper vite dans Writer ne perd plus les dernières lettres d’un mot et ne fait plus reculer le curseur.
+• Safari : Google Drive et Agenda continuent de fonctionner après que Google a refusé une connexion expirée.

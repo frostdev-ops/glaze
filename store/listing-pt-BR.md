@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.1 (Portuguese (Brazil))
+# Chrome Web Store listing — Glaze 4.0.2 (Portuguese (Brazil))
 
 ## Short summary (132 character maximum)
 
@@ -73,18 +73,15 @@ Canvas é uma marca da Instructure, Inc. Blackboard é uma marca da Anthology In
 
 ## Release notes
 
-NOVO NA 4.0.1
+NOVO NA 4.0.2
 
-• Blackboard Ultra: as abas de cursos abrem a partir de uma página já carregada e começam a carregar quando você pressiona ou passa o cursor sobre uma aba (Configurações › Abas de cursos › Abrir as abas de cursos com antecedência).
-• Manter o conteúdo do curso pronto: um item abre sobre o conteúdo do curso, e voltar é instantâneo, no mesmo lugar.
-• Abrir páginas na hora: Notas, Cursos, Atividade e o conteúdo, os avisos e as notas de um curso mostram sua última visita enquanto o Blackboard carrega. Mostrar na hora que a página está carregando: um clique aparece na hora. A barra do Glaze aparece desde o primeiro desenho, o rodapé e os painéis não empurram mais a página, e A fazer, as notas e a barra lateral aparecem a partir de dados salvos assim que o Blackboard confirma quem está conectado. As páginas carregam atrás de uma única tela de carregamento no seu Look, sem tela cinza nem vários indicadores.
-• Carregar os dados do curso com antecedência, menos solicitações ao Blackboard e menos trabalho em notebooks mais lentos.
-• PDFs: realce, caneta, texto, imagens, formas e assinaturas, e um painel de páginas para mover, girar, excluir e adicionar páginas. Um PDF guarda uma só cópia, sua última versão com marcações.
-• Anexar de Documentos adiciona seus documentos à entrega de uma tarefa do Blackboard Ultra. Pastas de trabalho de .xlsm são exportadas e entregues como .xlsm.
-• Canvas: Abrir no Glaze em arquivos PDF, de slides e de planilhas. Os slides ganham Imprimir com anotações…, e os cartões de Documentos mostram os gráficos de uma planilha.
-• Os comentários do Writer respondem no idioma do seu rascunho, e as verificações de citações funcionam nos seis idiomas.
-• Se um comentário do Writer não passar nas verificações, o Writer mostra o nível da rubrica que conferiu em vez de reter a nota.
-• Firefox: o Google Drive (Configurações › Writer › Trabalhos) abre, salva, anexa e sincroniza seus documentos, inclusive arquivos grandes. Desativado até você se conectar.
-• Firefox: um site do qual você retirou o acesso não é mais tentado de novo.
-• Chrome: Sincronização com o Google Agenda (Configurações › Compartilhamento) mantém em dia uma agenda chamada Glaze na sua conta do Google, e o Google Drive (Configurações › Writer › Trabalhos) abre, salva, anexa e sincroniza seus documentos, inclusive arquivos grandes. Os dois ficam desativados até você se conectar.
-• Safari: Sincronização com o Google Agenda (Configurações › Compartilhamento) mantém em dia uma agenda chamada Glaze na sua conta do Google, e o Google Drive (Configurações › Writer › Trabalhos) abre, salva, anexa e sincroniza seus documentos, inclusive arquivos grandes. Os dois ficam desativados até você se conectar.
+• Blackboard Ultra: a barra do curso se recolhe na pílula e volta sem tremer, também em notebooks mais lentos.
+• Abrir uma pasta, um módulo de aprendizagem ou um menu não faz mais a página pular nem descarta as cópias salvas das suas páginas.
+• Mensagens: Responder fica visível sob a barra superior do Glaze.
+• Atividade: o nome de cada item vem primeiro, em negrito, com o curso embaixo.
+• O texto que o Blackboard deixa sem fundo sobre a sua aparência (SafeAssign, informações adicionais de uma tarefa, barras de ferramentas, filtros, notas, mensagens) ganha uma superfície legível, e as marcações de A fazer aparecem.
+• Em um computador compartilhado, o curso de outro estudante não aparece mais como um cartão vazio, cada estudante recebe os próprios primeiros cartões do Painel, e Redefinir layout move todos os cartões de curso que você vê.
+• Abrir o Blackboard no Painel nunca toma o lugar de uma página que você abriu pelo link.
+• A fazer não é mais redesenhado a cada minuto quando nada mudou.
+• Safari: digitar rápido no Writer não perde mais as últimas letras de uma palavra nem faz o cursor voltar.
+• Safari: o Google Drive e o Google Agenda continuam funcionando depois que o Google recusa um login expirado.

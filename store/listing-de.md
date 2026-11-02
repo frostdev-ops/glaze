@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.1 (German)
+# Chrome Web Store listing — Glaze 4.0.2 (German)
 
 ## Short summary (132 character maximum)
 
@@ -73,18 +73,15 @@ Canvas ist eine Marke von Instructure, Inc. Blackboard ist eine Marke von Anthol
 
 ## Release notes
 
-NEU IN 4.0.1
+NEU IN 4.0.2
 
-• Blackboard Ultra: Kurs-Tabs öffnen sich aus einer schon geladenen Seite und laden, sobald du auf einen Tab drückst oder darüberfährst (Einstellungen › Kurs-Tabs › Kurs-Tabs vorab öffnen).
-• Kursinhalte bereithalten: Ein Element öffnet sich über den Kursinhalten, und zurück geht es sofort an dieselbe Stelle.
-• Seiten sofort öffnen: Noten, Kurse, Aktivität und die Inhalte, Ankündigungen und Noten eines Kurses zeigen deinen letzten Besuch, während Blackboard lädt. Laden von Seiten sofort zeigen: Ein Klick zeigt sich sofort. Die Leiste von Glaze ist ab dem ersten Bild da, ihre Fußzeile und Panels verschieben die Seite nicht mehr, und To-do, Noten und Seitenleiste erscheinen aus gespeicherten Daten, sobald Blackboard bestätigt, wer angemeldet ist. Seiten laden hinter einer einzigen Ladeansicht in deinem Look statt hinter einem grauen Bildschirm und mehreren Ladekreisen.
-• Kursdaten vorab laden, weniger Anfragen an Blackboard und weniger Arbeit auf langsameren Laptops.
-• PDFs: Hervorheben, Stift, Text, Bilder, Formen und Unterschriften sowie ein Seitenbereich zum Verschieben, Drehen, Löschen und Hinzufügen von Seiten. Ein PDF behält eine Kopie, seine zuletzt markierte Fassung.
-• Aus Dokumenten anhängen fügt deine Dokumente der Abgabe einer Aufgabe in Blackboard Ultra hinzu. Arbeitsmappen aus .xlsm werden als .xlsm exportiert und abgegeben.
-• Canvas: In Glaze öffnen bei PDF-, Folien- und Tabellendateien. Folien bekommen Mit Notizen drucken…, und die Karten unter Dokumente zeigen die Diagramme einer Tabelle.
-• Das Feedback von Writer antwortet in der Sprache deines Entwurfs, und seine Zitierhinweise und -prüfungen funktionieren in allen sechs Sprachen.
-• Besteht ein Kommentar des Feedbacks seine Prüfungen nicht, zeigt Writer die geprüfte Bewertung nach dem Bewertungsraster, statt die Note zurückzuhalten.
-• Firefox: Google Drive (Einstellungen › Writer › Arbeiten) öffnet, speichert, hängt an und synchronisiert deine Dokumente, auch große Dateien. Aus, bis du dich verbindest.
-• Firefox: Eine Website, der du den Zugriff entzogen hast, wird nicht mehr erneut angefragt.
-• Chrome: Google Kalender-Synchronisierung (Einstellungen › Teilen) hält einen Kalender namens Glaze in deinem Google-Konto aktuell, und Google Drive (Einstellungen › Writer › Arbeiten) öffnet, speichert, hängt an und synchronisiert deine Dokumente, auch große Dateien. Beides bleibt aus, bis du dich verbindest.
-• Safari: Google Kalender-Synchronisierung (Einstellungen › Teilen) hält einen Kalender namens Glaze in deinem Google-Konto aktuell, und Google Drive (Einstellungen › Writer › Arbeiten) öffnet, speichert, hängt an und synchronisiert deine Dokumente, auch große Dateien. Beides bleibt aus, bis du dich verbindest.
+• Blackboard Ultra: Die Kursleiste klappt ohne Zittern zur Pille ein und wieder auf, auch auf langsameren Laptops.
+• Ein Ordner, ein Lernmodul oder ein Menü lässt beim Öffnen die Seite nicht mehr springen und verwirft nicht mehr die gespeicherten Kopien deiner Seiten.
+• Nachrichten: Antworten bleibt unter der oberen Leiste von Glaze sichtbar.
+• Aktivität: Der Name jedes Eintrags steht zuerst, fett, der Kurs darunter.
+• Text, den Blackboard ohne Fläche auf deinem Hintergrund lässt (SafeAssign, Zusätzliche Informationen einer Aufgabe, Symbolleisten, Filter, Noten, Nachrichten), bekommt eine lesbare Fläche, und die Häkchen im To-do sind zu sehen.
+• Auf einem gemeinsam genutzten Computer erscheint der Kurs eines anderen Studierenden nicht mehr als leere Karte, alle bekommen ihre eigenen ersten Dashboard-Karten, und Layout zurücksetzen verschiebt jede Kurskarte, die du siehst.
+• Blackboard auf dem Dashboard öffnen übernimmt nie eine Seite, die du über ihren Link geöffnet hast.
+• Das To-do wird nicht mehr jede Minute neu gezeichnet, wenn sich darin nichts geändert hat.
+• Safari: Schnelles Tippen in Writer verliert nicht mehr die letzten Buchstaben eines Wortes und setzt den Cursor nicht mehr zurück.
+• Safari: Google Drive und Kalender funktionieren weiter, nachdem Google eine abgelaufene Anmeldung abgelehnt hat.

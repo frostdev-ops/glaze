@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.1 (Spanish)
+# Chrome Web Store listing — Glaze 4.0.2 (Spanish)
 
 ## Short summary (132 character maximum)
 
@@ -73,18 +73,15 @@ Canvas es una marca comercial de Instructure, Inc. Blackboard es una marca comer
 
 ## Release notes
 
-NOVEDADES DE 4.0.1
+NOVEDADES DE 4.0.2
 
-• Blackboard Ultra: las pestañas de cursos se abren desde una página ya cargada y empiezan a cargar cuando pulsas o pasas el puntero sobre una pestaña (Ajustes › Pestañas de cursos › Abrir las pestañas de cursos por adelantado).
-• Mantener listo el contenido del curso: un elemento se abre sobre el contenido del curso, y volver es instantáneo, en el mismo lugar.
-• Abrir páginas al instante: Calificaciones, Cursos, Actividad y el contenido, los anuncios y las calificaciones de un curso muestran tu última visita mientras Blackboard carga. Mostrar al instante que la página carga: un clic se ve al instante. La barra de Glaze está desde el primer dibujado, su pie y sus paneles ya no desplazan la página, y Tareas, las calificaciones y la barra lateral aparecen desde datos guardados en cuanto Blackboard confirma quién inició sesión. Las páginas cargan tras una sola vista de carga con tu Look, sin pantalla gris ni varios indicadores de carga.
-• Cargar los datos del curso por adelantado, menos solicitudes a Blackboard y menos trabajo en portátiles más lentos.
-• PDF: resaltado, lápiz, texto, imágenes, formas y firmas, y un panel de páginas para mover, girar, eliminar y añadir páginas. Un PDF guarda una sola copia, su última versión con marcas.
-• Adjuntar desde Documentos añade tus documentos a la entrega de una tarea de Blackboard Ultra. Los libros de .xlsm se exportan y entregan como .xlsm.
-• Canvas: Abrir en Glaze en archivos PDF, de diapositivas y de hojas de cálculo. Las diapositivas tienen Imprimir con notas…, y las tarjetas de Documentos muestran los gráficos de una hoja.
-• Los comentarios de Writer responden en el idioma de tu borrador, y sus revisiones de citas funcionan en los seis idiomas.
-• Si un comentario de Writer no supera sus revisiones, Writer muestra el nivel de la rúbrica que comprobó en lugar de retener la nota.
-• Firefox: Google Drive (Ajustes › Writer › Trabajos) abre, guarda, adjunta y sincroniza tus documentos, también archivos grandes. Desactivado hasta que te conectes.
-• Firefox: un sitio al que retiraste el acceso ya no se vuelve a intentar.
-• Chrome: Sincronización con Google Calendar (Ajustes › Compartir) mantiene al día un calendario llamado Glaze en tu cuenta de Google, y Google Drive (Ajustes › Writer › Trabajos) abre, guarda, adjunta y sincroniza tus documentos, también archivos grandes. Ambos siguen desactivados hasta que te conectes.
-• Safari: Sincronización con Google Calendar (Ajustes › Compartir) mantiene al día un calendario llamado Glaze en tu cuenta de Google, y Google Drive (Ajustes › Writer › Trabajos) abre, guarda, adjunta y sincroniza tus documentos, también archivos grandes. Ambos siguen desactivados hasta que te conectes.
+• Blackboard Ultra: la barra del curso se pliega en su píldora y vuelve sin temblar, también en portátiles más lentos.
+• Abrir una carpeta, un módulo de aprendizaje o un menú ya no hace saltar la página ni descarta las copias guardadas de tus páginas.
+• Mensajes: Responder sigue a la vista bajo la barra superior de Glaze.
+• Actividad: el nombre de cada elemento va primero, en negrita, con su curso debajo.
+• El texto que Blackboard deja sin fondo sobre tu aspecto (SafeAssign, la información adicional de una tarea, barras de herramientas, filtros, calificaciones, mensajes) recibe una superficie legible, y se ven las marcas de Tareas.
+• En un ordenador compartido, el curso de otro estudiante ya no aparece como una tarjeta vacía, cada estudiante recibe sus propias primeras tarjetas del Tablero, y Restablecer diseño mueve todas las tarjetas de curso que ves.
+• Abrir Blackboard en el Tablero nunca sustituye una página que abriste desde su enlace.
+• Tareas ya no se vuelve a dibujar cada minuto cuando nada ha cambiado.
+• Safari: escribir rápido en Writer ya no pierde las últimas letras de una palabra ni hace retroceder el cursor.
+• Safari: Google Drive y Calendar siguen funcionando después de que Google rechace un inicio de sesión caducado.
