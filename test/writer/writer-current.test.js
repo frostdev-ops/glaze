@@ -42,3 +42,24 @@ test('old revision, replaced key, and test editors cannot be read by an old bind
   const restricted = setup('test');
   assert.equal(restricted.parent.length, 0);
 });
+
+test('parent pins one exact frame and revision, omitting replacements and ambiguous focus', () => {
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer/page/writer.js'), 'utf8');
+  const start = source.indexOf('  let activeCurrent'), end = source.indexOf('  const declined', start);
+  assert.ok(start > 0 && end > start);
+  const listeners = {}, document = { activeElement: null, addEventListener: (e, f) => { listeners[e] = f; } };
+  const context = vm.createContext({ document, boxes: new Map(), sameBox: (b) => b.live });
+  vm.runInContext(source.slice(start, end) + '\nglobalThis.capture = {current,pinCurrent};', context);
+  const box = { editor: {}, frame: { isConnected: true }, live: true, askBinding: { token: 'a'.repeat(32), revision: 1 } };
+  context.boxes.set(box.editor, box); document.activeElement = box.frame;
+  assert.equal(context.capture.pinCurrent().revision, 1);
+  document.activeElement = {}; box.askBinding.revision = 2;
+  assert.equal(context.capture.current(), null, 'background changes invalidate the old pin');
+  assert.equal(context.capture.pinCurrent(), null, 'Ask focus cannot rank and repin a changed document');
+  document.activeElement = box.frame; context.capture.pinCurrent();
+  box.frame = { isConnected: true };
+  assert.equal(context.capture.current(), null, 'same box with new frame is a different binding');
+  document.activeElement = box.frame; context.capture.pinCurrent();
+  listeners.focusin({ isTrusted: true, target: { closest: () => null } });
+  assert.equal(context.capture.current(), null, 'moving to another editor clears the active document');
+});
