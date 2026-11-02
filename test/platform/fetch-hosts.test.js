@@ -43,6 +43,9 @@ const SITES = {
     // Runs inside the claimed LMS document via executeScript; its origin is fixed by that document. The worker's
     // Writer admission gate and the browser's held school grant are required before injecting the account read.
     { at: 'fetch(`${location.origin}/learn/api/v1/users/me`', kind: 'asked', flow: 'the verified Blackboard assignment host, under its existing school grant, for the visual cache account binding', guard: /if \(await aiWriter\(s, \{ op: 'run', feature: 'writing' \}\) !== true\) return null/ },
+    { at: "const res = await fetch(location.origin + endpoint, { credentials: 'same-origin', cache: 'no-store', redirect: 'error'", kind: 'asked',
+      flow: 'Ask Rime account binding in the pinned LMS document under its existing school host grant; only the Canvas or Ultra current-user profile endpoint', in: 'background/background.js',
+      guard: /const endpoint = site === 'ultra' \? '\/learn\/api\/v1\/users\/me' : site === 'canvas' \? '\/api\/v1\/users\/self\/profile' : '';[\s\S]*?const target = s\.documentId \? \{ tabId: s\.tab\.id, documentIds: \[s\.documentId\] \} : \{ tabId: s\.tab\.id, frameIds: \[s\.frameId\] \};[\s\S]*?chrome\.scripting\.executeScript\(\{ target, func: rimeRead \}\)/ },
     { at: 'return GZ_WRITER_LOOKUP.listener', kind: 'via', to: 'writer/writer-lookup.js' },
     { at: "{ fetch: (u, i) => fetch(u, i), allow", kind: 'via', to: 'looks/media.js' },
     { at: 'GZ_MEDIA.fromGallery(h, m.type, { fetch:', kind: 'via', to: 'looks/media.js' },

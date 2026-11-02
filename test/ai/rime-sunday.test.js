@@ -47,7 +47,7 @@ test('level 3: the now block gives the student\'s windows, resolved in their zon
   const wed = Date.parse('2026-11-04T09:00:00-05:00');
   assert.match(nowBlock(inputOf('due soon?', [], { now: wed })), /this week 2026-11-04 to 2026-11-08\nthis weekend 2026-11-07 to 2026-11-08\nnext week 2026-11-09 to 2026-11-15\ndue soon 2026-11-04 to 2026-11-11/);
   // Level 1: as before.
-  const one = A.task.input({ question: "What's due this week?", tools: [...A.NAMES], steps: [], now: SUNDAY, zone: ZONE, locale: 'en' });
+  const one = A.task.input({ question: "What's due this week?", tools: [...A.AGENTS], steps: [], now: SUNDAY, zone: ZONE, locale: 'en' });
   assert.equal(nowBlock(one), '2026-11-01 15:00 (Sunday), America/New_York');
 });
 
@@ -57,7 +57,7 @@ test('level 3: dates in results are friendly and localized in the student\'s zon
   const shown = inputOf("What's due this week?", [step]).steps[0].result;
   assert.match(shown, /"title":"Reflection Week 11"[^}]*"due":"Monday, November 2, 11:59 PM"/);
   assert.match(A.task.input({ question: 'Was ist fällig?', tools: [...A.NAMES], steps: [step], now: SUNDAY, zone: ZONE, locale: 'de', first: true }).steps[0].result, /"due":"Montag, 2\. November, 23:59"/);
-  const one = A.task.input({ question: "What's due this week?", tools: [...A.NAMES], steps: [step], now: SUNDAY, zone: ZONE, locale: 'en' }).steps[0].result;
+  const one = A.task.input({ question: "What's due this week?", tools: [...A.AGENTS], steps: [step], now: SUNDAY, zone: ZONE, locale: 'en' }).steps[0].result;
   assert.match(one, /"due":"2026-11-02 23:59"/);
 });
 
@@ -85,10 +85,11 @@ test('the Sunday scenario: the week\'s window holds Monday\'s three unsubmitted 
 
 test('level 3: the system text asks for MARKDOWN.md\'s answer format; level 1\'s is unchanged', () => {
   const sys = (inp) => /<\|im_start\|>system\n([\s\S]*?)<\|im_end\|>/.exec(text(A.layout(inp)))[1];
-  const three = sys(inputOf('x?')), one = sys(A.task.input({ question: 'x?', tools: [...A.NAMES], steps: [], now: SUNDAY, zone: ZONE, locale: 'en' }));
+  const three = sys(inputOf('x?')), one = sys(A.task.input({ question: 'x?', tools: [...A.AGENTS], steps: [], now: SUNDAY, zone: ZONE, locale: 'en' }));
   assert.ok(three.includes('- **title** (course): friendly date, status'), three);
   assert.ok(three.includes('the windows in now'), three);
   assert.ok(!one.includes('**title**') && one.includes(`${A.SYSTEM}\nReply in English.`));
+  assert.ok(!one.includes(A.MEMORY), 'the legacy Agents-only tool set has no memory policy');
 });
 
 test('level 3: agent.tools gets the conversation, bounded, as an earlier block; build() and fromRequest() keep it', () => {
@@ -106,7 +107,7 @@ test('level 3: agent.tools gets the conversation, bounded, as an earlier block; 
   assert.equal(b.history.length, 3);
   assert.ok(b.history.every((h) => h.question.length <= 300 && h.answer.length <= 600));
   // Level 1 takes none.
-  assert.equal(A.task.input({ question: 'x?', tools: [...A.NAMES], steps: [], now: SUNDAY, zone: ZONE, locale: 'en', history }), null);
+  assert.equal(A.task.input({ question: 'x?', tools: [...A.AGENTS], steps: [], now: SUNDAY, zone: ZONE, locale: 'en', history }), null);
 });
 
 test('level 3: pushback and follow-ups go back to agent.tools with the earlier question\'s tools, never study help', () => {

@@ -13,6 +13,7 @@ const A = require('../../extension/ai/tasks/agent-tools.js');
 const P = require('../../extension/ai/agent/places.js');
 const J = require('../../extension/ai/agent/js.js');
 const W = require('../../extension/ai/agent/wakes.js');
+const M = require('../../extension/ai/agent/memory.js');
 const SET = require('../../extension/ai/settings.js');
 const ST = require('../../extension/agents/tools-study.js');
 const GR = require('../../extension/agents/tools-grades.js');
@@ -20,7 +21,8 @@ const C = require('../helpers/mcp-caches.cjs');
 
 const ROOT = path.join(__dirname, '..', '..');
 const OWN = ['run_js', 'places_list', 'place_open', 'page_highlight', 'wake_create', 'monitor_create', 'wakes_list', 'wake_cancel',
-  'announcements_list', 'announcement_read', 'content_list', 'content_read', 'syllabus_read', 'discussions_list', 'discussion_read'];
+  'announcements_list', 'announcement_read', 'content_list', 'content_read', 'syllabus_read', 'discussions_list', 'discussion_read',
+  'memory_search', 'memory_read', 'memory_save', 'memory_forget'];
 const NOW = Date.UTC(2026, 9, 30, 19, 5); // Friday 2026-10-30 14:05 in Chicago
 const ZONE = 'America/Chicago';
 const step = (name, args, result) => ({ call: { name, arguments: args }, result });
@@ -33,9 +35,11 @@ test('Rime\'s own tools are agent.tools tools with the kinds and schemas Glaze s
   for (const n of OWN) assert.ok(A.NAMES.includes(n), n);
   const kinds = Object.fromEntries(A.SPECS.filter((t) => OWN.includes(t.name)).map((t) => [t.name, t.kind]));
   assert.deepEqual(kinds, { run_js: 'read', places_list: 'read', place_open: 'read', page_highlight: 'read', wake_create: 'confirm', monitor_create: 'confirm', wakes_list: 'read', wake_cancel: 'confirm',
-    announcements_list: 'read', announcement_read: 'read', content_list: 'read', content_read: 'read', syllabus_read: 'read', discussions_list: 'read', discussion_read: 'read' });
+    announcements_list: 'read', announcement_read: 'read', content_list: 'read', content_read: 'read', syllabus_read: 'read', discussions_list: 'read', discussion_read: 'read',
+    memory_search: 'read', memory_read: 'read', memory_save: 'write', memory_forget: 'write' });
   const env = { local: C.area({}), alarms: null, read: async () => null, on: async () => true, now: () => NOW };
-  const defs = [...J.tools(), ...P.tools(), ...W.tools(env), ...require('../../extension/ai/agent/school.js').tools()];
+  const defs = [...J.tools(), ...P.tools(), ...W.tools(env), ...require('../../extension/ai/agent/school.js').tools(),
+    ...M.tools({ store: {}, on: env.on, context: async () => null })];
   assert.deepEqual(defs.map((d) => d.name).sort(), [...OWN].sort());
   for (const d of defs) {
     const t = TL.define(d), s = A.SPECS.find((x) => x.name === d.name);
@@ -46,8 +50,16 @@ test('Rime\'s own tools are agent.tools tools with the kinds and schemas Glaze s
     assert.equal(t.group, undefined, `${d.name}: no group, so Agents' MCP view never lists it`);
     if (t.kind === 'confirm') assert.equal(typeof t.summarize, 'function', `${d.name}: the student sees Glaze's own sentence`);
   }
-  // Every parameter is a string or an integer: LFM3's native call holds nothing else (ai/local/grammar.js).
-  for (const s of A.SPECS) for (const [k, p] of Object.entries(s.parameters.properties)) assert.ok(['string', 'integer'].includes(p.type) && p.enum === undefined, `${s.name}.${k}`);
+  // Native calls hold strings (including the memory tools' finite choices) and integers only.
+  const choices = {};
+  for (const s of A.SPECS) for (const [k, p] of Object.entries(s.parameters.properties)) {
+    assert.ok(['string', 'integer'].includes(p.type), `${s.name}.${k}`);
+    if (p.enum !== undefined) {
+      assert.ok(p.type === 'string' && p.enum.every((v) => typeof v === 'string'), `${s.name}.${k}: raw string choices`);
+      choices[`${s.name}.${k}`] = p.enum;
+    }
+  }
+  assert.deepEqual(choices, { 'memory_search.kind': ['memory', 'course'], 'memory_save.category': ['preference', 'fact'] });
 });
 
 test('the <tools> lines: Agents\' unchanged, Rime\'s own sorted in by name', () => {
@@ -535,7 +547,8 @@ test('wakes: rearming preserves an existing monitor cadence and removes spent wa
 });
 
 test('wakes: startup and the off/on switch restore missing alarms from the stored records', async () => {
-  const store = {}, env = wakesEnv(store), events = { startup: [], installed: [], changed: [] };
+  const store = { ai: { on: true, wakes: true, memory: true, model: { use: 'local', model: 'glaze-q4' }, features: { ask: true } } },
+    env = wakesEnv(store), events = { startup: [], installed: [], changed: [] };
   await wtool(env, 'wake_create').run({ at: '2026-10-15 21:00', say: 'Lab' }, { zone: 'UTC' });
   const id = store.rimeWakes.wakes[0].id;
   env.alarms.live.clear();
@@ -545,18 +558,35 @@ test('wakes: startup and the off/on switch restore missing alarms from the store
   vm.runInNewContext(block, {
     chrome: { alarms: { ...env.alarms, onAlarm: { addListener() {} } }, storage: { local: env.local, onChanged: { addListener: (f) => events.changed.push(f) } },
       runtime: { onStartup: { addListener: (f) => events.startup.push(f) }, onInstalled: { addListener: (f) => events.installed.push(f) } } },
-    GZ_AI_RIME_WAKES: W, GZ_AI_SETTINGS: { clean: () => ({ wakes: enabled }), allowed: () => true },
-    ai() {}, glazeOn: async () => true, Date: { now: env.now },
+    GZ_AI_RIME_WAKES: W, GZ_AI_SETTINGS: SET,
+    ai() {}, glazeOn: async () => enabled, Date: { now: env.now },
   });
   assert.equal(events.startup.length, 1, 'startup must rebuild browser alarms');
   await events.startup[0]();
   assert.ok(env.alarms.live.has(`gz-rime:wake:${id}`));
+  const settings = async (patch) => {
+    const oldValue = structuredClone(store.ai);
+    store.ai = { ...store.ai, ...patch };
+    await Promise.all(events.changed.map((f) => f({ ai: { oldValue, newValue: structuredClone(store.ai) } }, 'local')));
+  };
+  const beforeMemory = structuredClone(env.alarms.log);
+  await settings({ memory: false });
+  await settings({ memory: true });
+  assert.deepEqual(env.alarms.log, beforeMemory, 'memory-only changes do not cancel or rearm wake alarms');
+  assert.ok(env.alarms.live.has(`gz-rime:wake:${id}`));
+  for (const [off, on] of [[{ wakes: false }, { wakes: true }], [{ on: false }, { on: true }], [{ features: { ask: false } }, { features: { ask: true } }]]) {
+    await settings(off);
+    assert.equal(env.alarms.live.size, 0);
+    assert.equal(store.rimeWakes.wakes.length, 1, 'turning off retains the saved wake');
+    await settings(on);
+    assert.ok(env.alarms.live.has(`gz-rime:wake:${id}`));
+  }
   enabled = false;
-  await Promise.all(events.changed.map((f) => f({ ai: {} }, 'local')));
+  await Promise.all(events.changed.map((f) => f({ enabled: { oldValue: true, newValue: false } }, 'sync')));
   assert.equal(env.alarms.live.size, 0);
   assert.equal(store.rimeWakes.wakes.length, 1, 'turning off retains the saved wake');
   enabled = true;
-  await Promise.all(events.changed.map((f) => f({ ai: {} }, 'local')));
+  await Promise.all(events.changed.map((f) => f({ enabled: { oldValue: false, newValue: true } }, 'sync')));
   assert.ok(env.alarms.live.has(`gz-rime:wake:${id}`));
 });
 
