@@ -24,7 +24,7 @@ const walk = (p) => {
 };
 // Vendored engines (pdf.js, Tesseract, three.js, Lottie, Harper, QuickJS) load only their own files, from the extension.
 // QuickJS's loader is handed its WebAssembly's bytes (ai/agent/js.js), so its own fetch path never runs.
-const VENDORED = /^vendor\/(pdfjs|tesseract|lottie|quickjs)\/|^vendor\/harper\/(?!shared\.js$)|^vendor\/three\.min\.js$/;
+const VENDORED = /^vendor\/(pdfjs|tesseract|lottie|quickjs|mathlive)\/|^vendor\/harper\/(?!shared\.js$)|^vendor\/three\.min\.js$/;
 const FILES = roots.flatMap(walk).filter((f) => /\.m?js$/.test(f));
 // Each line without its comment: a comment line, or what follows ` // ` (an address's `://` has no space before it).
 const lines = (js) => js.split('\n').map((l) => (/^\s*(\/\/|\/?\*)/.test(l) ? '' : l.replace(/\s\/\/\s.*$/, '')));

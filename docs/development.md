@@ -18,6 +18,24 @@ has no part; it is themed by `content.js` and `moodle.css`. Everything else, fro
 grade calculators, loads on demand from its area's `page/` folder the first time a page needs it.
 
 Pearson MyLab homework uses a separate appearance adapter, `content/pearson.js` and `content/pearson.css`.
+`enhance.pearsonEmbed` opens its native LTI launch inside Blackboard by default. The routed
+`courses/page/pearson-embed.js` module owns sizing and controls, while `pearson/launch.js` checks the exact socket
+opener and asks the worker for a document-pinned MAIN-world `pearson/launch-main.js` hook. It prepares a named child
+frame before invoking the original Open Pearson click handler, changing only the launch destination. Authentication
+callbacks and native launch models stay inside Pearson. The worker validates the current approved Ultra tab and
+returns its origin for the parent handshake; Pearson redirects can leave an interop referrer.
+`pearson/embedded.js` forwards a bounded, URL-free list of resolved appearance variables through the verified frame
+chain, including the current course Look, while transparent native documents share Blackboard's existing background.
+Native question frames keep their MyLab `Service/PlayerLaunch.ashx` source after redirecting; the bridge recognizes
+that exact route as a tdx destination and still checks the sending frame and final origin. Only the top-level page
+owns a background renderer. Embedded MyLab and tdx documents never start one, including before their context arrives;
+standalone MyLab keeps one renderer in its top-level shell, visible through transparent child canvases.
+Only the canonical homework URL and selected question ordinal travel back for Open in tab; other query parameters
+are dropped. During authentication, pop-out rebuilds a fresh same-course Blackboard LTI launch, never a consumed
+Pearson callback. Close invokes Blackboard's original Exit. Turning the default off affects later launches and keeps
+an existing session mounted so unsent work survives. No frame/security headers or cookie settings are changed.
+`checks/pearson/embed-check.js` uses invented native launcher and homework fixtures; cold sign-in, grading submission
+and native Safari/Firefox require separate live validation.
 The manifest matches MyLab's homework player/overview and the assignment/player frames on
 `tdx.acs.pearson.com`. The latter activate only when Pearson marks the viewer `playmode-homework`.
 Each frame reads the saved Look's palette, typography, surfaces, depth, navigation styling, pointer and motion
@@ -29,13 +47,28 @@ detail cards, summary strip and responsive question grid. A question tile expand
 the adapter does not copy or calculate any score or status. Hidden native actions and reminders stay hidden.
 The problem viewer lays out the original prompt and answer nodes as one worksheet, with a collapsible question
 list. Its page switch restores Pearson's layout; the persistent switch is under Course pages → Documents and quizzes.
-Glaze off restores native appearance and removes the renderer, controls and icon filters. Math fonts, diagrams,
-and native answer handling stay with Pearson. Common symbol templates use scalable Glaze artwork on the original buttons;
+Glaze off restores native appearance and removes the renderer, controls and icon filters. Diagrams and native answer
+handling stay with Pearson. Common symbol templates use scalable Glaze artwork on the original buttons;
 unrecognized controls retain Pearson's artwork. Names and shortcuts come from native button metadata. The question list
 owns its scroll area even when Dijit writes a zero-pixel inner height. Shared motion knobs and saved Look animations
 drive problem, panel and symbol transitions, with reduced motion and the entrance switch honored. Background frames
 stay hidden over the palette fallback until their own renderer confirms its first theme paint.
-This adapter has no LMS data bridge or Blackboard embedding behavior. The synthetic
+The optional modern-math setting loads the packaged, readable MathLive 0.111.4 runtime on demand. `pearson/adapter.js`
+renders exact LaTeX exported by the native label widget, preserving its original accessible label and DOM. A bounded
+sanitizer rejects active markup and leaves unsupported expressions native. `pearson-math.html` is an extension-owned
+composer with a source/origin-checked MessagePort, the saved palette, surfaces, text fonts, scale and motion preferences.
+Opening, editing and preparing an expression do not modify the answer. Use equation explicitly applies it through
+`background/pearson.js`, pinned to the requesting player document. `pearson/native.js` parses into a detached native
+editor, while the frame compares mathematical structure before enabling transfer. Infinity imports use Pearson's
+native `&inf;` token and must survive native reparsing; its grouped `{\infty_}` export is normalized for MathLive
+without changing genuine subscripts. Apply retains native undo and emits
+the native change event once; changed answers, replaced widgets, unsupported constructs and test mode are refused.
+Glaze does not persist math values, send them to a service, or invoke Check answer, Save or submission actions;
+Pearson continues its normal native handling of the explicit edit.
+The runtime, math fonts and license are reproducible with `tools/vendor/vendor-mathlive.sh`; optional appearance fonts
+use the existing font loader. The synthetic `checks/pearson/math-check.js` exercises the unpacked extension and invented
+native API fixtures; real parser interoperability was probed separately in detached editors in the owner's Chrome.
+The synthetic
 `checks/pearson/homework-check.js` exercises the unpacked extension across the nested frames;
 it does not establish support for Pearson tests, other products, or native Safari runtime.
 
@@ -242,4 +275,4 @@ create them. It never uploads unless `APPSTORE_UPLOAD=1` is set. To try it in th
 
 ## Bundled libraries
 
-Glaze is MIT licensed ([LICENSE](../LICENSE)). Bundled with it, each under its own license beside it: three.js (MIT, `vendor/three.LICENSE`), lottie-web's light canvas player (MIT, `vendor/lottie/LICENSE`), pdf.js 6.4.299 with its JBIG2 and JPEG 2000 decoders, the core-js it bundles, Brotli's dictionary and one of Firefox's viewer images (Apache-2.0, BSD, MIT and MPL-2.0, `vendor/pdfjs/`), the Tesseract OCR engine and its tessdata_fast models (Apache-2.0, `vendor/tesseract/`), ProseMirror, Writer's editor engine, as one readable esbuild bundle (MIT, `vendor/pm.js`, `vendor/pm.css`, `vendor/pm.LICENSE`), harper.js, Writer's spelling and grammar checker, as published with its slim wasm and two unused paths cut (Apache-2.0, `vendor/harper/`), and Writer's paper fonts Tinos, Arimo, Carlito and Cousine from @fontsource (SIL OFL 1.1, `vendor/fonts/`), each rebuilt by its `tools/vendor/vendor-*.sh` (`vendor-pdfjs.sh`, `vendor-prosemirror.sh`, `vendor-harper.sh`, `vendor-paper-fonts.sh`). Inter and Atkinson Hyperlegible (SIL OFL 1.1, `fonts/`) have no vendor script. The scripts check what they download against pinned hashes; `vendor-three.sh` and `vendor-prosemirror.sh`, which use npm, install with install scripts off and checks the installed packages against pinned integrity values (`tools/vendor/npm-integrity.js`).
+Glaze is MIT licensed ([LICENSE](../LICENSE)). Bundled with it, each under its own license beside it: three.js (MIT, `vendor/three.LICENSE`), lottie-web's light canvas player (MIT, `vendor/lottie/LICENSE`), pdf.js 6.4.299 with its JBIG2 and JPEG 2000 decoders, the core-js it bundles, Brotli's dictionary and one of Firefox's viewer images (Apache-2.0, BSD, MIT and MPL-2.0, `vendor/pdfjs/`), the Tesseract OCR engine and its tessdata_fast models (Apache-2.0, `vendor/tesseract/`), ProseMirror, Writer's editor engine, as one readable esbuild bundle (MIT, `vendor/pm.js`, `vendor/pm.css`, `vendor/pm.LICENSE`), harper.js, Writer's spelling and grammar checker, as published with its slim wasm and two unused paths cut (Apache-2.0, `vendor/harper/`), and Writer's paper fonts Tinos, Arimo, Carlito and Cousine from @fontsource (SIL OFL 1.1, `vendor/fonts/`), each rebuilt by its `tools/vendor/vendor-*.sh` (`vendor-pdfjs.sh`, `vendor-prosemirror.sh`, `vendor-harper.sh`, `vendor-paper-fonts.sh`). MathLive 0.111.4 (MIT, `vendor/mathlive/`) ships its readable ESM distribution and math fonts, reproduced from an integrity-pinned tarball by `tools/vendor/vendor-mathlive.sh`. Inter and Atkinson Hyperlegible (SIL OFL 1.1, `fonts/`) have no vendor script. The scripts check what they download against pinned hashes; `vendor-three.sh` and `vendor-prosemirror.sh`, which use npm, install with install scripts off and checks the installed packages against pinned integrity values (`tools/vendor/npm-integrity.js`).

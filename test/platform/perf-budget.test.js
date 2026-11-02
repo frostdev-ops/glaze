@@ -541,6 +541,9 @@ const STYLE_READS = [
   // one content panel to leave externally rendered questions in their native layout. No element sweep.
   ['content/pearson.js', 'getComputedStyle(node)', 1],
   ['content/pearson.js', 'getComputedStyle(content)', 1],
+  ['courses/page/pearson-embed.js', 'getComputedStyle(document.documentElement)', 1], // one active Look token read at mount and root appearance changes; no style read in scroll/sizing
+  ['pearson/adapter.js', 'getComputedStyle(document.documentElement)', 1], // one appearance snapshot on composer open or settings change
+  ['pearson/adapter.js', 'getComputedStyle(original)', 2], // two display checks per changed native formula in the bounded homework scan; preserve hidden content and fall back if native CSS cannot be hidden
 ];
 
 test('no new whole-page style reads or element sweeps beyond the reviewed ones', () => {

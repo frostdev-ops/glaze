@@ -85,10 +85,20 @@ Privacy and data → Sites** lists your sites, with Remove, which also forgets t
 See [Adding a school's own site](../PRIVACY.md#adding-a-schools-own-site).
 
 Pearson MyLab homework is themed on `mylab.pearson.com` and its player frames on `tdx.acs.pearson.com`.
+Pearson inside Blackboard is on by default and can be switched off under Course pages → Documents and quizzes.
+The exact `socket.pearsoned.com/uiservice/opener` launcher opens Pearson's own content in a child frame. Glaze forwards
+only resolved appearance variables into that frame and its known homework children. The canonical homework address
+and selected question number stay in memory to support Open in tab; launch tokens and unrelated URL parameters are
+excluded. During sign-in, Open in tab starts a fresh native Blackboard launch. Glaze does not store these locations,
+copy authentication credentials, change browser security policies, or send homework information to a new service.
 The problem viewer keeps the native question and answer nodes and changes their layout. Its Settings switch syncs;
 the page's layout switch is temporary. A Glaze frame draws the saved Look's background through the existing media
-and file checks. This appearance adapter reads the homework-mode marker and saved appearance settings; it does not read,
-store or submit answers, scores or course data, or make Pearson API requests. Other Pearson pages and test mode
+and file checks. Modern equations read each native formula's LaTeX locally. When you open the optional equation editor,
+it reads that field's current answer into an extension-owned frame; typing and validation leave the original answer intact.
+Use equation transfers a supported expression back through Pearson's native editor. These math values stay in memory
+in your browser; they are not stored or sent to a math service or AI provider. Glaze does not invoke Check answer, Save
+or submission actions, read scores or course data, or make Pearson API requests. Pearson handles the edit normally.
+Other Pearson pages and test mode
 keep their native appearance.
 
 The sidebar's title, style, page choices and other general settings sync too. Its width, open/fold state, To Do scope,

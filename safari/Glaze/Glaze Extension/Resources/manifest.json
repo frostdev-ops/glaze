@@ -59,7 +59,9 @@
         "content/motion.css",
         "looks/page/surfaces.css",
         "looks/page/lookx.css",
-        "content/pearson.css"
+        "vendor/mathlive/mathlive-static.css",
+        "content/pearson.css",
+        "pearson/embed.css"
       ],
       "js": [
         "core/color.js",
@@ -72,7 +74,24 @@
         "looks/lookx.js",
         "looks/lookparts.js",
         "looks/motionx.js",
-        "content/pearson.js"
+        "pearson/adapter.js",
+        "content/pearson.js",
+        "pearson/embed.js",
+        "pearson/embedded.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://socket.pearsoned.com/uiservice/opener*"
+      ],
+      "css": [
+        "pearson/embed.css"
+      ],
+      "js": [
+        "pearson/embed.js",
+        "pearson/launch.js"
       ],
       "run_at": "document_start",
       "all_frames": true
@@ -187,6 +206,7 @@
         "content/theme.css",
         "content/motion.css",
         "content/extras.css",
+        "pearson/embed.css",
         "content/canvas.css",
         "content/moodle.css",
         "fonts/*.woff2",
@@ -211,6 +231,17 @@
       ],
       "matches": [
         "https://*/*"
+      ]
+    },
+    {
+      "resources": [
+        "pearson-math.html",
+        "pearson/render.mjs",
+        "vendor/mathlive/mathlive.mjs",
+        "vendor/mathlive/fonts/*.woff2"
+      ],
+      "matches": [
+        "https://tdx.acs.pearson.com/*"
       ]
     },
     {

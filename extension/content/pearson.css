@@ -1,10 +1,14 @@
-/* Pearson MyLab homework only. Native controls and math fonts remain Pearson's. */
+/* Pearson MyLab homework only. Native controls remain Pearson's; modern math has its own optional renderer. */
 @font-face { font-family: "Glaze Inter"; src: url("../fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
 @font-face { font-family: "Glaze Atkinson"; src: url("../fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 @font-face { font-family: "Glaze Atkinson"; src: url("../fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
 @media screen {
 html[data-gz-pearson] { color-scheme: var(--gz-pearson-scheme); background: var(--gz-surface-2) !important; }
 html[data-gz-pearson] body { background: var(--gz-surface) !important; color: var(--gz-ink) !important; font-family: var(--gz-font) !important; }
+/* The top-level host owns the canvas; nested documents and native layout wrappers only reveal it. */
+html[data-gz-pearson][data-gz-pearson-nested], html[data-gz-pearson][data-gz-pearson-nested] body { background: transparent !important; }
+html[data-gz-pearson] iframe[data-gz-pearson-child] { background: transparent !important; }
+html[data-gz-pearson] :is(#playerViewer,#assignmentViewer,.mainPanel,.contentPanel,.framePanel,.contentHolder) { background: transparent !important; }
 html[data-gz-pearson] :is(#mainTopNavContainer, #mainTopNav, .navbar-inverse, .statusPanel, .assignmentreviewnavpanel, .assignmentreviewnavListContainer, .assignmentreviewnavListContainer ul, .controlPanel, .palettePanel) {
   background-color: var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
   background-image: none !important;
@@ -251,5 +255,16 @@ html[data-gz-pearson-viewer][data-gz-density="roomy"] .contentPanel { padding: 3
 }
 }
 @media print {
-  #gz-pearson-backdrop, #gz-pearson-icon-filters, .gz-pearson-controls, .gz-pearson-symbol { display: none !important; }
+  #gz-pearson-backdrop, #gz-pearson-icon-filters, .gz-pearson-controls, .gz-pearson-symbol, .gz-pearson-math-edit, .gz-pearson-math-composer { display: none !important; }
+  .gz-pearson-render { display:none !important; }
+  [data-gz-modern-math] > .eqDocument { display:inline-block !important; }
+}
+@media screen {
+  html[data-gz-pearson-math] .eqLabel[data-gz-modern-math] { width:auto !important; height:auto !important; overflow:visible; }
+  html[data-gz-pearson-math] .gz-pearson-render { display:inline-block; padding:.12em 0; font-size:1.2em; vertical-align:middle; color:var(--gz-ink); }
+  html[data-gz-pearson-math] .gz-pearson-math-edit { display:inline-flex; align-items:center; min-height:32px; padding:5px 9px; margin:0 6px; border:1px solid var(--gz-line); border-radius:min(var(--gz-radius),8px); background:var(--gz-surface-fill-2,var(--gz-surface-2)); color:var(--gz-accent); font:500 12px/1.4 var(--gz-font); vertical-align:middle; cursor:pointer; transition:background var(--gz-t) var(--gz-ease),border-color var(--gz-t) var(--gz-ease); }
+  html[data-gz-pearson-math] .gz-pearson-math-edit:hover { border-color:var(--gz-accent); background:var(--gz-accent-soft); }
+  html[data-gz-pearson-math] .gz-pearson-math-edit[aria-expanded="true"] { color:var(--gz-ink-muted); }
+  html[data-gz-pearson-math] .gz-pearson-math-composer { display:block; width:100%; margin:18px 0 4px; animation:var(--gz-enter-panel); }
+  html[data-gz-pearson-math] .gz-pearson-math-composer iframe { display:block; width:100%; height:300px; border:0; color-scheme:var(--gz-pearson-scheme); background:transparent; border-radius:var(--gz-radius); }
 }

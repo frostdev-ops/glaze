@@ -11,6 +11,8 @@ var GZ_ROUTES = globalThis.GZ_ROUTES || (() => {
   const table = [];
   const live = new Set();
   const add = (test, file, name) => { table.push({ test, file, name }); };
+  add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\/lti\/launchFrame\/?$/.test(l.pathname),
+    ['pearson/embed.js', 'courses/page/pearson-embed.js'], 'GZ_PEARSON_EMBED');
   add((url, site) => site === 'ultra' ? /^\/ultra\/courses\/_\d+_\d+\/(?:assessment\/_\d+_\d+\/(?:overview|attempt(?:\/(?:create|_\d+_\d+))?)|discussion\/_\d+_\d+)\/?$/.test(url.pathname)
     : site === 'canvas' && /^\/courses\/\d+\/assignments\/\d+\/?$/.test(url.pathname), 'courses/page/rubric.js', 'GZ_RUBRIC_UI');
   // The site's own announcement lists, opening in Glaze's pop-up: Ultra's Activity Stream and a course's Announcements;

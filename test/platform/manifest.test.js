@@ -50,7 +50,7 @@ test('the first content script is Glaze on each LMS\'s own hosts, and nothing ru
 
 test('host access: LMS hosts, the two Pearson homework hosts, gallery and share relay; other sites only when granted', () => {
   assert.ok(m.permissions.includes('scripting'));
-  assert.deepEqual(m.host_permissions, ['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*', 'https://mylab.pearson.com/*', 'https://tdx.acs.pearson.com/*', 'https://frostdev.io/*', 'https://share.frostdev.io/*']);
+  assert.deepEqual(m.host_permissions, ['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*', 'https://mylab.pearson.com/*', 'https://tdx.acs.pearson.com/*', 'https://socket.pearsoned.com/*', 'https://frostdev.io/*', 'https://share.frostdev.io/*']);
   assert.deepEqual(m.optional_host_permissions, ['https://*/*', 'http://localhost/*', 'http://127.0.0.1/*']);
   // Every content script's host is held from the start.
   const held = (p) => m.host_permissions.some((h) => { const [, hh] = /^https:\/\/([^/]+)\//.exec(h), [, ph] = /^https:\/\/([^/]+)\//.exec(p); return hh === ph || (hh.startsWith('*.') && ph.endsWith(hh.slice(1))); });
@@ -96,7 +96,7 @@ test('Safari keeps 3.3.8\'s access: every host, Ultra on /ultra anywhere and the
   assert.ok(now.permissions.includes('alarms'), 'Ask Rime\'s wakes, which prompt for nothing');
   const detector = now.content_scripts.find((c) => c.js.includes('content/detect.js'));
   assert.ok(detector.exclude_matches.includes('https://*.moodlecloud.com/*'), 'MoodleCloud has its own entry, so the detector leaves it alone');
-  const as338 = now.content_scripts.filter((c) => !c.matches.includes('https://*.moodlecloud.com/*') && !c.js.includes('content/pearson.js'))
+  const as338 = now.content_scripts.filter((c) => !c.matches.includes('https://*.moodlecloud.com/*') && !c.js.includes('content/pearson.js') && !c.js.includes('pearson/launch.js'))
     .map((c) => (c === detector ? { ...c, exclude_matches: c.exclude_matches.filter((p) => p !== 'https://*.moodlecloud.com/*') } : c));
   assert.deepEqual(as338, then.content_scripts);
   assert.deepEqual(now.content_scripts.find((c) => c.matches.includes('https://*.moodlecloud.com/*')), { ...moodle, exclude_matches: ['https://*/ultra', 'https://*/ultra/*'] });
@@ -177,7 +177,7 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
 const SANDBOX_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; font-src data: blob:; worker-src blob:; frame-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'";
 test('Glaze\'s pages may compile WebAssembly for OCR; only the approved pages are frameable, with local scripts and Documents\' approved font hosts and PDF fallback', () => {
   assert.deepEqual(m.content_security_policy, { extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'", sandbox: SANDBOX_CSP });
-  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['reader.html', 'writer.html', 'sharing/quick.html', 'options.html', 'papers.html', 'preview.html', 'courses/allow.html', 'mods/host.html']);
+  assert.deepEqual(m.web_accessible_resources.flatMap((w) => w.resources).filter((r) => /\.html?$/.test(r)), ['pearson-math.html', 'reader.html', 'writer.html', 'sharing/quick.html', 'options.html', 'papers.html', 'preview.html', 'courses/allow.html', 'mods/host.html']);
   // Documents is exposed as Settings is (including dynamic URLs if that group uses them). Its Look's fonts use only the
   // catalogued font endpoints; scripts and styles remain local, with no broader network or form authority.
   assert.deepEqual(m.web_accessible_resources.find((w) => w.resources.includes('papers.html')), m.web_accessible_resources.find((w) => w.resources.includes('options.html')));

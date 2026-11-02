@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data: blob: https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Equation editor · Glaze</title>
+<link rel="stylesheet" href="vendor/mathlive/mathlive-static.css">
+<link rel="stylesheet" href="pearson/frame.css">
+<body>
+<main id="editor" hidden>
+  <header><h1 id="title"></h1><button type="button" id="cancel"></button></header>
+  <div id="field"></div>
+  <div id="symbols" role="toolbar"></div>
+  <footer><span id="status" role="status" aria-live="polite"></span><button type="button" id="apply" disabled></button></footer>
+</main>
+<script src="pearson/notation.js"></script>
+<script src="looks/fonts.js"></script>
+<script type="module" src="pearson/frame.mjs"></script>
+</html>

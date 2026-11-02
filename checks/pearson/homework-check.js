@@ -93,7 +93,9 @@ const until = async (fn) => {
     for (const f of [page, assigned, play]) await themed(f);
     await until(async()=>await color(play,'.btn-primary')===rgb(D.GZ_DEFAULTS.colors['--gz-accent']));
     check(true, 'the real manifest themes the shell and both nested player documents');
-    for (const f of [page, assigned, play]) check(await color(f, 'body') === rgb(D.GZ_DEFAULTS.colors['--gz-surface']), 'each document uses the saved Frost surface');
+    const surface=f=>f.locator('html').evaluate(e=>getComputedStyle(e).getPropertyValue('--gz-surface').trim());
+    for (const f of [page, assigned, play]) check(await surface(f) === D.GZ_DEFAULTS.colors['--gz-surface'], 'each document receives the saved Frost surface palette');
+    check(await color(page,'body')===rgb(D.GZ_DEFAULTS.colors['--gz-surface'])&&(await Promise.all([assigned,play].map(f=>color(f,'body')))).every(c=>c==='rgba(0, 0, 0, 0)'), 'the top-level MyLab canvas owns the surface while nested documents stay transparent');
     check(await color(play, '.rvTxt', 'color') === rgb(D.GZ_DEFAULTS.colors['--gz-ink']), 'hardcoded black question text follows the palette');
     check(await color(play, '.eqText', 'color') === rgb(D.GZ_DEFAULTS.colors['--gz-ink']), 'math glyphs follow the palette');
     check(await play.locator('.assignmentreviewnavListContainer ul').evaluate(e=>getComputedStyle(e).backgroundColor==='rgba(0, 0, 0, 0)'), 'the native white question-list backing gives way to the themed sidebar');
@@ -179,7 +181,7 @@ const until = async (fn) => {
 
     const paper = D.GZ_PRESETS.find(([name]) => name === 'Paper')[1];
     await opts.evaluate(async (colors) => { await chrome.storage.sync.set({ colors }); }, paper);
-    await until(async () => (await Promise.all([page, assigned, play].map((f) => color(f, 'body')))).every((c) => c === rgb(paper['--gz-surface'])));
+    await until(async () => (await Promise.all([page, assigned, play].map(surface))).every((c) => c === paper['--gz-surface']));
     check(await color(play, '.eqText', 'color') === rgb(paper['--gz-ink']), 'a saved light palette reaches every frame without reload');
     check(await play.getByLabel('Sample answer').inputValue() === 'unsent work', 'theme changes preserve native answer text');
     const lightGlyph = await iconPixel();
@@ -197,7 +199,7 @@ const until = async (fn) => {
     const custom = { ...D.GZ_DEFAULTS.colors, '--gz-surface': '#20212a', '--gz-accent': '#ddbbff' };
     await opts.evaluate(async (colors) => { await chrome.storage.sync.set({ enabled: true, colors }); }, custom);
     await themed(play);
-    check(await color(play, 'body') === rgb(custom['--gz-surface']), 'custom colors are honored');
+    check(await surface(play) === custom['--gz-surface'], 'custom colors are honored');
     await opts.evaluate(async () => { const { enhance } = await chrome.storage.sync.get('enhance'); await chrome.storage.sync.set({ enhance: { ...enhance, pearsonViewer: false } }); });
     await play.waitForFunction(() => !document.documentElement.hasAttribute('data-gz-pearson-viewer'));
     check(true, 'the persistent viewer setting turns the new layout off');
@@ -210,24 +212,26 @@ const until = async (fn) => {
     await page.setViewportSize({ width: 1280, height: 820 });
     const look = { ...D.GZ_DEFAULTS.look, surfaceCustom: true, surfaceColor: '#152536', surfaceTint: 15, surfaceBorder: 50, glass: 18, depth: 3, font: 'serif', head: 'mono', scale: 1.15, density: 'roomy' };
     await opts.evaluate(async ({ look, bg }) => { await chrome.storage.sync.set({ look, bg, extras: { pointer: 'aqua', pointerOn: true } }); }, { look, bg: { ...D.GZ_DEFAULTS.bg, kind: 'gradient' } });
-    await play.waitForSelector('#gz-pearson-backdrop',{state:'attached'});
-    await play.waitForSelector('#gz-pearson-backdrop[data-ready]');
+    await page.waitForSelector('#gz-pearson-backdrop',{state:'attached'});
+    await page.waitForSelector('#gz-pearson-backdrop[data-ready]');
     check(true, 'the background frame is revealed only after its own renderer confirms a theme paint');
+    check(await play.locator('#gz-pearson-backdrop').count()===0,'standalone nested homework uses its top-level MyLab background without another renderer');
+    check(await color(play,'html')==='rgba(0, 0, 0, 0)'&&await color(play,'body')==='rgba(0, 0, 0, 0)','standalone nested player canvases reveal the top-level background');
     let background;
-    await until(async () => { background = play.childFrames().find((f) => f.url().includes('backdrop&saved')); return background && await background.locator('html').getAttribute('data-preview-ready') === 'true'; });
-    await play.evaluate(async()=>{
+    await until(async () => { background = page.frames().find((f) => f.url().includes('backdrop&saved')); return background && await background.locator('html').getAttribute('data-preview-ready') === 'true'; });
+    await page.evaluate(async()=>{
       document.querySelector('#gz-pearson-backdrop').removeAttribute('data-ready');
       await new Promise(resolve=>{addEventListener('message',()=>resolve(),{once:true});postMessage({gzPearsonBackdropReady:true},location.origin);});
     });
-    check(await play.locator('#gz-pearson-backdrop').getAttribute('data-ready')===null, 'a readiness message from the Pearson page cannot reveal an unpainted extension frame');
+    check(await page.locator('#gz-pearson-backdrop').getAttribute('data-ready')===null, 'a readiness message from the Pearson page cannot reveal an unpainted extension frame');
     await background.evaluate(()=>parent.postMessage({gzPearsonBackdropReady:true},new URL(document.referrer).origin));
-    await play.waitForSelector('#gz-pearson-backdrop[data-ready]');
+    await page.waitForSelector('#gz-pearson-backdrop[data-ready]');
     check(await background.locator('html').getAttribute('data-gz-bg') === 'gradient', 'the saved full-Look renderer draws the selected background');
     check(await play.locator('html').evaluate((e) => e.style.getPropertyValue('--gz-surface-color')) === '#152536' && await play.locator('html').getAttribute('data-gz-depth') === '3', 'custom surface color, tint, border and depth settings reach Pearson');
     check((await color(play, '.gz-pearson-controls button', 'fontFamily')).includes('serif') && await play.locator('html').evaluate((e) => e.style.getPropertyValue('--gz-scale')) === '1.15', 'the Look font and scale reach the viewer');
     check(await play.locator('html').getAttribute('data-gz-cursor') !== null, 'the chosen Glaze pointer reaches Pearson');
     await background.evaluate(() => { window.parentProbe = new Promise((resolve) => addEventListener('message', () => resolve(true), { once: true })); });
-    await play.locator('#gz-pearson-backdrop').evaluate((e) => e.contentWindow.postMessage({ gzPreview: { enabled: false } }, '*'));
+    await page.locator('#gz-pearson-backdrop').evaluate((e) => e.contentWindow.postMessage({ gzPreview: { enabled: false } }, '*'));
     await background.evaluate(() => window.parentProbe);
     check(await background.locator('html').getAttribute('data-gz-bg') === 'gradient', 'the saved renderer does not take settings from its Pearson parent');
     if (out) await page.screenshot({ path: path.join(out, 'homework-full-look.png') });
@@ -257,7 +261,7 @@ const until = async (fn) => {
     await background.waitForFunction(() => document.querySelector('#gz-scene img')?.naturalWidth > 0);
     check(true, "a kept animated-image Look actually decodes in Pearson's background frame");
     await opts.evaluate(async (d) => { await chrome.storage.sync.set({ look: d.look, bg: d.bg, extras: d.extras }); }, D.GZ_DEFAULTS);
-    await until(async () => await play.locator('#gz-pearson-backdrop').count() === 0);
+    await until(async () => await page.locator('#gz-pearson-backdrop').count() === 0);
     check(true, 'switching back to solid removes the background renderer');
     await page.emulateMedia({ media: 'print' });
     check(await color(play, 'body') === 'rgb(255, 255, 255)' && await color(play, '.eqText', 'color') === 'rgb(0, 0, 0)', 'printing uses native white paper and black math');
@@ -330,9 +334,9 @@ const until = async (fn) => {
     const auto = { ...D.GZ_DEFAULTS.auto, on: true, mode: 'device', light: 'Paper', dark: 'Frost' };
     await opts.evaluate(async (auto) => { await chrome.storage.sync.set({ auto }); }, auto);
     await page.emulateMedia({ colorScheme: 'dark' });
-    await until(async () => await color(assigned, 'body') === rgb(D.GZ_DEFAULTS.colors['--gz-surface']));
+    await until(async () => await surface(assigned) === D.GZ_DEFAULTS.colors['--gz-surface']);
     await page.emulateMedia({ colorScheme: 'light' });
-    await until(async () => await color(assigned, 'body') === rgb(paper['--gz-surface']));
+    await until(async () => await surface(assigned) === paper['--gz-surface']);
     check(true, 'device light/dark changes reach nested documents');
     check(errors.length === 0, `no page errors: ${errors.join(' | ')}`);
     console.log(`${results.length}/${results.length} Pearson homework checks passed`);

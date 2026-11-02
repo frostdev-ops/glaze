@@ -1,5 +1,4 @@
-// MyLab appearance and worksheet layout. Pearson retains its DOM, equation editor and events.
-// No answer values, problem text, grades or course data are read, copied or sent.
+// MyLab appearance and worksheet layout. The optional local math adapter retains Pearson's answer model and events.
 (() => {
   if (globalThis.__gzPearson || document.contentType !== 'text/html') return;
   const shell = location.origin === 'https://mylab.pearson.com' && /^\/Student\/(PlayerHomework|OverviewHomework)\.aspx$/i.exec(location.pathname);
@@ -111,6 +110,7 @@
   };
   const clear = () => {
     clearTimeout(timer);
+    globalThis.GZ_PEARSON_MATH?.update(false);
     backdrop?.remove(); backdrop = null; controls?.remove(); controls = null; restoreIcons();
     if (motionSheet) document.adoptedStyleSheets = document.adoptedStyleSheets.filter(s=>s!==motionSheet);
     motionStyle?.remove(); motionStyle=null; motionSheet=null;
@@ -150,8 +150,9 @@
   };
   const syncBackdrop = () => {
     if (backdrop && !backdrop.isConnected) backdrop = null;
-    const here = kind() === 'overview' || modeNode?.id === 'playerViewer';
-    if (!active() || !here || settings.bg.kind === 'solid' || !document.body) { backdrop?.remove(); backdrop = null; return; }
+    // The top-level page owns the background: Blackboard when embedded, MyLab when standalone.
+    // Nested homework documents must never start another renderer, including before the context handshake.
+    if (!active() || top !== window || settings.bg.kind === 'solid' || !document.body) { backdrop?.remove(); backdrop = null; return; }
     if (!backdrop) {
       backdrop = Object.assign(document.createElement('iframe'), { id: 'gz-pearson-backdrop', tabIndex: -1, title: 'Glaze background', referrerPolicy: 'origin' });
       backdrop.setAttribute('aria-hidden', 'true'); backdrop.inert = true;
@@ -186,6 +187,7 @@
       font: GZ_FONTS.stack(s.look.font), 'font-head': GZ_FONTS.stack(s.look.head === 'auto' ? s.look.font : s.look.head) })) put(`--gz-${key}`, value);
     const dark = GZ_COLOR.brightness(GZ_COLOR.parse(colors['--gz-surface'])) < .5;
     put('--gz-pearson-scheme', dark ? 'dark' : 'light'); attr('data-gz-pearson-dark', dark); attr('data-gz-pearson', kind());
+    attr('data-gz-pearson-nested', top !== window);
     attr('data-gz-bg', s.bg.kind); attr('data-gz-depth', String(s.look.depth)); attr('data-gz-density', s.look.density);
     attr('data-gz-motion', s.motion.followSystem && calmMQ.matches ? 'off' : s.motion.level);
     attr('data-gz-no-enter', !s.motion.enter);
@@ -194,6 +196,7 @@
     attr('data-gz-pearson-nav', s.nav.k === 'default' ? false : s.nav.k);
     for (const [key, value] of Object.entries({ ink: s.nav.ink, c: s.nav.c, d: s.nav.d, a: `${s.nav.a}deg`, o: s.nav.o / 100, img: navImage ? `url(${JSON.stringify(navImage)})` : 'none' })) put(`--gz-nav-${key}`, value);
     syncMotion(); syncPointer(); syncBackdrop(); syncViewer(); syncIcons();
+    globalThis.GZ_PEARSON_MATH?.update(modeNode?.id === 'playerViewer' && s.enhance.pearsonMath,s.look);
     if (s.auto.on && s.auto.mode === 'schedule') {
       const at = GZ_SCHEDULE_NEXT(s.auto.from, s.auto.to, new Date()); if (at) timer = setTimeout(paint, Math.max(0, at - Date.now()) + 20);
     }
