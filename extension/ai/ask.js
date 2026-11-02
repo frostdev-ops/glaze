@@ -136,9 +136,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   };
   // Reuse the affirmative request grammar, including its negation/conditional checks. A correction verb elsewhere in
   // a school question is no permission to replace a preference the student edited themselves.
-  const memoryCorrection = (question) => MEMORY().forgetRequested(MEMORY().userText(question)
-    .replace(/(?<!\p{L})(?:correct|replace|update|change|corrige|reemplaza|actualiza|corrija|substitua|atualize|modifie|remplace|mets à jour|korrigiere|[äa]ndere|corrigeer|vervang|wijzig)(?!\p{L})/giu, 'forget')
-    .replace(/(?<!\p{L})[äa]ndern(?!\p{L})/giu, 'vergessen').replace(/(?<!\p{L})wijzigen(?!\p{L})/giu, 'vergeten'));
+  const memoryCorrection = (question) => MEMORY().userText(question).split(/[\u0000\n.!?;]+/u).some((clause) => {
+    const mapped = clause.replace(/(?<!\p{L})(?:correct|replace|update|change|corrige|reemplaza|actualiza|corrija|substitua|atualize|modifie|remplace|mets à jour|korrigiere|[äa]ndere|corrigeer|vervang|wijzig)(?!\p{L})/giu, 'forget')
+      .replace(/(?<!\p{L})[äa]ndern(?!\p{L})/giu, 'vergessen').replace(/(?<!\p{L})wijzigen(?!\p{L})/giu, 'vergeten');
+    return mapped !== clause && !MEMORY().forgetRequested(clause) && MEMORY().forgetRequested(mapped);
+  });
 
   // ---- the routing rule ------------------------------------------------------------------------------------------------
   // Each entry a regular expression's source, matched as whole words, case folded.

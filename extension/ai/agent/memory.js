@@ -96,9 +96,9 @@ var GZ_AI_RIME_MEMORY = globalThis.GZ_AI_RIME_MEMORY || (() => {
   };
   // Core invokes this inside its queue and again after awaited reads, immediately before committing. Keep the same
   // producer lease/account; a later user turn or settings change cannot authorize work already queued by this one.
-  const mutationGuard = (env, ctx, current) => async () => {
+  const mutationGuard = (env, ctx, { account, lease }) => async () => {
     const fresh = await ready(env, ctx);
-    return fresh.ok !== false && fresh.account === current.account && fresh.lease === current.lease;
+    return fresh.ok !== false && fresh.account === account && fresh.lease === lease;
   };
   const tools = (env) => {
     if (!env?.store || typeof env.on !== 'function' || typeof env.context !== 'function') throw new TypeError('memory tools: store, on and context required');
