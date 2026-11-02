@@ -48,6 +48,8 @@ const page = ({ ai = { on: true, model: { use: 'openai', model: 'm' }, features:
     chrome: { runtime: { connect, lastError: undefined }, storage: { local: { get: (k, cb) => env.read(cb) }, onChanged: { addListener: (f) => env.changed.push(f) } } },
   });
   setup?.(env, context);
+  // The chat component first, as ai/page/ask.js loads it beside itself.
+  vm.runInContext(read('ai/page/ask-chat.js'), context);
   env.ui = vm.runInContext(read('ai/page/ask.js'), context);
   env.context = context;
   env.box = () => doc.getElementById('gz-ask');
@@ -146,7 +148,7 @@ test('Stop cancels the run in flight; Ask or AI turned off closes the panel and 
 test('the command palette offers Ask Rime only while AI and Ask are on, and opens it only for the student\'s own choice', () => {
   const src = read('navigation/page/palette.js');
   assert.match(src, /askOn = r\?\.ai\?\.on === true && r\.ai\.features\?\.ask === true/);
-  assert.match(src, /\.\.\.\(askOn \? \[\{ label: t\('Ask Rime'\), hint: 'Glaze', group: 'Glaze', run: \(e\) => e\?\.isTrusted && need\('ai\/page\/ask\.js'/);
+  assert.match(src, /\.\.\.\(askOn \? \[\{ label: t\('Ask Rime'\), hint: 'Glaze', group: 'Glaze', run: \(e\) => e\?\.isTrusted && \(globalThis\.GZ_WIDGETS_UI\?\.reveal\?\.\('ask'\) \|\| need\('ai\/page\/ask\.js'/);
   assert.match(src, /await Promise\.all\(\[keeping, asking\]\)/, 'read before the commands are built');
   const loadable = read('background/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1];
   assert.ok(loadable.includes("'ai/page/ask.js'"));
@@ -318,6 +320,17 @@ test('closing cancels the active question before its exit effect finishes and re
   assert.equal(P.frames.size, 0);
   await P.ui.open({ event: { isTrusted: true } }); await settle();
   assert.ok(P.box()?.open, 'old exit callbacks cannot close a reopened panel');
+  P.box().close();
+});
+
+test('a closing dialog cannot start another question during its exit effect', async () => {
+  const P = movingPage();
+  await P.ui.open({ event: { isTrusted: true } });
+  exitEffects(P);
+  P.ask('Explain mitosis'); await settle();
+  P.doc.fire(P.box().querySelector('.gz-ask-close'), 'click');
+  P.ask('Explain meiosis'); await settle();
+  assert.equal(asked(P).length, 1, 'closing must revoke admission before the fade ends');
   P.box().close();
 });
 
@@ -502,7 +515,7 @@ test('run() asks a question the student didn\'t type, for their own click only',
 });
 
 test('every word the panel shows is in all five translations', () => {
-  const src = read('ai/page/ask.js');
+  const src = read('ai/page/ask-chat.js') + read('ai/page/ask.js');
   const literals = [...src.matchAll(/\bt\(\s*'((?:\\.|[^'\\])*)'/g)].map((m) => m[1].replace(/\\(.)/g, '$1'));
   const P = page();
   const all = [...new Set([...literals, ...Object.values(P.ui.STEPS)])];
@@ -525,7 +538,7 @@ test('the panel\'s sheet moves nothing with reduced motion or Glaze\'s Motion of
   assert.doesNotMatch(rest.replace(/(?:animation(?:-name)?|transition):\s*none/g, ''), /animation|transition|@keyframes/, 'nothing moves outside the motion block');
   for (const [, selectors] of motion[1].matchAll(/(?:^|\})\s*([^{}@]+?)\s*\{/g)) {
     if (/^(from|to|\d+%)/.test(selectors)) continue;
-    for (const sel of selectors.split(',')) assert.match(sel.trim(), /^html:not\(\[data-gz-motion="off"\]\) /, sel);
+    for (const sel of selectors.split(/,(?![^(]*\))/)) assert.match(sel.trim(), /^html:not\(\[data-gz-motion="off"\]\) /, sel);
   }
   assert.match(sheet, /html\[data-gz-bg="solid"\] #gz-ask[^{]*\{[^}]*backdrop-filter: none/);
   assert.match(sheet, /prefers-reduced-transparency: reduce[\s\S]*#gz-ask[^{]*\{[^}]*backdrop-filter: none/);
@@ -535,8 +548,8 @@ test('the panel suppresses the host sheet\'s important button transitions when m
   assert.match(read('content/theme.css'), /button, \.MuiButtonBase-root\s*\{[^}]*transition:[^}]*!important/, 'Ultra gives every button an important transition');
   const css = read('core/page/apps.css');
   // A gated animation rule alone cannot reset an unrelated transition from the host page.
-  const off = /html\[data-gz-motion="off"\][^{]*#gz-ask button[^{}]*\{([^}]*)\}/.exec(css)?.[1] || '';
-  const reduce = /@media \(prefers-reduced-motion: reduce\)\s*\{\s*#gz-ask button\s*\{([^}]*)\}/.exec(css)?.[1] || '';
+  const off = /html\[data-gz-motion="off"\][^{]*(?:#gz-ask|:is\(#gz-ask, \.gz-ask-tile\)) button[^{}]*\{([^}]*)\}/.exec(css)?.[1] || '';
+  const reduce = /@media \(prefers-reduced-motion: reduce\)\s*\{\s*(?:#gz-ask|:is\(#gz-ask, \.gz-ask-tile\)) button\s*\{([^}]*)\}/.exec(css)?.[1] || '';
   for (const [mode, declarations] of [['Motion off', off], ['reduced motion', reduce]]) {
     assert.match(declarations, /transition:\s*none\s*!important/, mode);
   }
@@ -695,4 +708,211 @@ test('a new question cancels navigation waiting behind the preceding answer reve
   for (let i = 0; i < 100 && P.frames.size; i++) P.flushFrame();
   assert.deepEqual(performed, [], 'an earlier action must not navigate away during a new question');
   P.box().close();
+});
+
+// ---- the context meter, folded turns, and the chat in a tile --------------------------------------------------------------
+const meterOf = (P, root = P.box()) => { const m = root.querySelector('.gz-ask-meter'); return { hidden: m.hidden, n: m.querySelector('.gz-ask-meter-n').textContent, band: m.dataset.band || '', label: m.getAttribute('aria-label'), text: m.textContent }; };
+
+test('the context meter shows the share of the window the request takes, as a ring and its number, in three bands; New chat puts back the chat\'s own share', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  assert.equal(meterOf(P).hidden, true, 'nothing known yet');
+  P.ask('Explain mitosis');
+  await settle();
+  const ctx = (used) => answer(P, { type: 'context', task: 'study.help', used, window: 1000, reserve: 100, exact: true });
+  ctx(300);
+  await settle();
+  assert.deepEqual(meterOf(P), { hidden: false, n: '30%', band: '', label: '30% of the context window used', text: '30%' }, 'no word beside the number');
+  assert.equal(P.box().querySelector('.gz-ask-meter-v').style.strokeDasharray, '30 100', 'the ring\'s arc set inline: the sheet\'s own dasharray would win over an attribute');
+  for (const [used, band] of [[690, ''], [700, 'warm'], [899, 'warm'], [900, 'warn'], [1500, 'warn']]) {
+    ctx(used);
+    await settle();
+    assert.equal(meterOf(P).band, band, String(used));
+  }
+  assert.equal(meterOf(P).n, '100%', 'never past the whole window');
+  answer(P, study('What happens first?'));
+  await settle();
+  P.doc.fire(P.box().querySelector('.gz-ask-new'), 'click');
+  assert.deepEqual([meterOf(P).n, meterOf(P).band], ['30%', ''], 'the chat\'s own share again');
+});
+
+test('turns the worker folded show as one line where they were, opened to read the summary; later questions carry it with only the newer turns', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  for (let i = 1; i <= 3; i++) { P.ask(`Question ${i}`); await settle(); answer(P, study(`Answer ${i}`)); await settle(); }
+  const last = asked(P).at(-1);
+  P.ports.at(-1).answer({ id: last.id - 1, type: 'summary', text: '- stale', turns: 2 });
+  await settle();
+  assert.equal(P.box().querySelector('.gz-ask-fold'), null, 'only the last question\'s summary');
+  P.ports.at(-1).answer({ id: last.id, type: 'summary', text: '- **Mitosis**: asked twice', turns: 2 });
+  await settle();
+  const fold = P.box().querySelector('.gz-ask-fold');
+  assert.ok(fold);
+  const items = P.box().querySelector('.gz-ask-log').children;
+  assert.equal(items.indexOf(fold), items.indexOf(P.box().querySelectorAll('.gz-ask-a')[1]) + 1, 'right after the second answer');
+  assert.equal(fold.querySelector('summary').textContent, 'Earlier messages summarized');
+  assert.equal(fold.querySelector('details').open, undefined, 'closed until the student opens it');
+  assert.equal(fold.querySelector('details strong').textContent, 'Mitosis', 'the summary, drawn as the answers are');
+  P.ask('Question 4');
+  await settle();
+  assert.equal(asked(P).at(-1).summary, '- **Mitosis**: asked twice');
+  assert.deepEqual([...asked(P).at(-1).history.map((h) => h.question)], ['Question 3']);
+  P.doc.fire(P.box().querySelector('.gz-ask-stop'), 'click');
+  answer(P, { type: 'error', error: 'cancelled' });
+  await settle();
+  P.doc.fire(P.box().querySelector('.gz-ask-new'), 'click');
+  assert.equal(P.box().querySelector('.gz-ask-fold'), null);
+  P.ask('Question 5');
+  await settle();
+  assert.equal(asked(P).at(-1).summary, undefined, 'a new chat carries nothing');
+});
+
+test('New chat rejects a delayed summary from the conversation it cleared', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('Old question'); await settle();
+  answer(P, study('Old answer')); await settle();
+  const oldPort = P.ports.at(-1), oldId = asked(P).at(-1).id;
+  P.doc.fire(P.box().querySelector('.gz-ask-new'), 'click');
+  oldPort.answer({ id: oldId, type: 'summary', text: '- Old conversation', turns: 1 });
+  P.ask('New question'); await settle();
+  answer(P, study('New answer')); await settle();
+  P.ask('New follow-up'); await settle();
+  assert.equal(asked(P).at(-1).summary, undefined, 'no old summary can enter the new conversation');
+  assert.deepEqual([...asked(P).at(-1).history.map((h) => h.question)], ['New question']);
+  P.box().close();
+});
+
+test('a summary handed off before end survives an immediate follow-up on a fresh port', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  for (let i = 1; i <= 3; i++) { P.ask(`Question ${i}`); await settle(); answer(P, study(`Answer ${i}`)); await settle(); }
+  P.ask('Question 4'); await settle();
+  answer(P, { type: 'summary', text: '- Asked: Question 1\n- Asked: Question 2', turns: 2 });
+  answer(P, study('Answer 4')); await settle();
+  P.ask('Question 5'); await settle();
+  const sent = asked(P).at(-1);
+  assert.equal(sent.summary, '- Asked: Question 1\n- Asked: Question 2');
+  assert.deepEqual(Array.from(sent.history, (h) => h.question), ['Question 3', 'Question 4']);
+  assert.ok(P.ports.at(-2).hungUp, 'the summary is retained across port replacement');
+  P.box().close();
+});
+
+test('the chat mounts in a tile with its own port and conversation, no ids, its meter and New chat in its head, beside the dialog', async () => {
+  const P = page({ reply: ready });
+  const host = P.doc.createElement('div');
+  P.doc.body.append(host);
+  const chat = P.context.GZ_ASK_CHAT.mount(host, { variant: 'tile' });
+  await settle();
+  const root = host.querySelector('.gz-ask-chat');
+  assert.equal(root.dataset.variant, 'tile');
+  assert.ok(root.querySelector('.gz-ask-meter') && root.querySelector('.gz-ask-new'));
+  assert.equal(root.querySelector('.gz-ask-close'), null);
+  assert.equal(root.querySelector('h2'), null, 'the tile\'s own head names it');
+  assert.equal(root.all().filter((e) => e.id).length, 0, 'no ids');
+  await P.ui.open({ event: { isTrusted: true } });
+  assert.equal(P.doc.root.all().filter((e) => e.id === 'gz-ask-q').length, 1, 'the dialog\'s ids stay unique');
+  const input = root.querySelector('.gz-ask-input');
+  input.value = 'From the tile';
+  P.doc.fire(input, 'keydown', { key: 'Enter' });
+  await settle();
+  const sent = asked(P).find((m) => m.question === 'From the tile');
+  assert.ok(sent);
+  chat.focus();
+  assert.equal(P.doc.activeElement, input);
+  chat.stop();
+  assert.equal(host.querySelector('.gz-ask-chat'), null, 'gone with stop');
+  assert.ok(P.ports.filter((p) => p.posted.includes(sent))[0].hungUp, 'its port with it');
+  assert.ok(P.box()?.open, 'the dialog untouched');
+});
+
+test('a tile answer preserves focus after the student moves to the host page', async () => {
+  const P = page({ reply: ready });
+  const host = P.doc.createElement('div'), other = P.doc.createElement('textarea');
+  P.doc.body.append(host, other);
+  const chat = P.context.GZ_ASK_CHAT.mount(host, { variant: 'tile' });
+  await settle();
+  const input = chat.root.querySelector('.gz-ask-input');
+  input.value = 'Explain mitosis';
+  input.focus();
+  P.doc.fire(input, 'keydown', { key: 'Enter' }); await settle();
+  other.focus();
+  answer(P, study('What happens to the chromosomes?')); await settle();
+  assert.equal(P.doc.activeElement, other, 'the answer must not steal focus from another editor');
+  chat.stop();
+});
+
+// ---- why a question failed, and Glaze's own answers (built) --------------------------------------------------------------
+test('a failure\'s card opens to the rule, the steps run and the model\'s raw answer, as text; without them, no detail', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('What is due this week?');
+  await settle();
+  answer(P, { type: 'error', error: 'check', why: 'hands', steps: 2, raw: '{"call":null,"answer":{"text":"<b>x = 5</b>"}}' });
+  await settle();
+  const why = P.box().querySelector('.gz-ask-err details.gz-ask-why');
+  assert.ok(why, 'a detail on the card');
+  assert.equal(why.open, undefined, 'closed until opened');
+  assert.equal(why.querySelector('summary').textContent, 'check: hands · 2');
+  assert.equal(why.querySelector('pre').textContent, '{"call":null,"answer":{"text":"<b>x = 5</b>"}}');
+  assert.equal(why.querySelectorAll('b').length, 0, 'the raw answer stays text');
+  P.doc.fire(P.box().querySelector('.gz-ask-retry'), 'click');
+  await settle();
+  answer(P, { type: 'error', error: 'busy' });
+  await settle();
+  assert.equal(P.box().querySelector('.gz-ask-err details.gz-ask-why'), null, 'nothing to show, no detail');
+});
+
+test('an answer Glaze built itself renders as any answer, with the same detail under it when it carries why and raw', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('Which assignments are coming up?');
+  await settle();
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text: '- **Lab report** (BIO 1100)\n- **Reading response**', built: true, why: 'number', steps: 3, raw: 'Lab report is due on the 14th.' } });
+  await settle();
+  const a = P.box().querySelector('.gz-ask-a');
+  assert.deepEqual(a.querySelectorAll('.gz-ask-md li strong').map((x) => x.textContent), ['Lab report', 'Reading response']);
+  assert.equal(a.dataset.built, '');
+  const why = a.querySelector('details.gz-ask-why');
+  assert.equal(why.querySelector('summary').textContent, 'number · 3');
+  assert.equal(why.querySelector('pre').textContent, 'Lab report is due on the 14th.');
+  assert.deepEqual(P.turns().at(-1), ['gz-ask-a', 'Lab report (BIO 1100)Reading response'], 'the detail is not part of the answer\'s words');
+  P.ask('And next week?');
+  await settle();
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text: '- **Essay**', built: true } });
+  await settle();
+  assert.equal(P.box().querySelectorAll('.gz-ask-a')[1].querySelector('details.gz-ask-why'), null, 'built, nothing more to show: no detail');
+});
+
+test('the chat carries its worker tool union across fresh ports and clears it with New chat', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('What is due?'); await settle();
+  answer(P, { type: 'tools', tools: ['todo_list', 'accounts_list'] });
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text: 'Nothing due.' } });
+  await settle();
+  P.ask('Any announcements?'); await settle();
+  const sent = P.posted.filter((m) => m.op === 'ask');
+  assert.deepEqual(Array.from(sent[1].tools), ['todo_list', 'accounts_list']);
+  assert.ok(P.ports.at(-2).hungUp, 'each question uses a new port');
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text: 'Nothing new.' } }); await settle();
+  P.doc.fire(P.box().querySelector('.gz-ask-new'), 'click');
+  P.ask('What is my grade?'); await settle();
+  assert.equal(P.posted.filter((m) => m.op === 'ask').at(-1).tools, undefined);
+  P.setAi({ on: false });
+});
+
+test('a built answer shows diagnostics from the worker end envelope, excluded from the next turn', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('What is due?'); await settle();
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text: '- Lab report', built: true }, why: 'number', raw: '<b>42 tasks</b>' });
+  await settle();
+  const detail = P.box().querySelector('.gz-ask-a details.gz-ask-why');
+  assert.ok(detail);
+  assert.equal(detail.querySelector('pre').textContent, '<b>42 tasks</b>');
+  assert.equal(detail.querySelector('b'), null);
+  P.ask('And next week?'); await settle();
+  assert.equal(P.posted.filter((m) => m.op === 'ask').at(-1).history[0].answer, '- Lab report');
+  P.setAi({ on: false });
 });

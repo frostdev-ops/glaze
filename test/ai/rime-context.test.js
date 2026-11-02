@@ -171,6 +171,22 @@ test('a summary that fails its check falls back to the deterministic one', async
   assert.match(next.summary, /- BIO 1100/);
 });
 
+test('a displayed summary cannot solve an earlier study question even when its compact check passes', async () => {
+  const compact = require('../../extension/ai/tasks/chat-compact.js');
+  const older = turn('How do I solve 3x + 5 = 20?', 'What could you do to both sides?');
+  const output = { text: '- For 3x + 5 = 20, x = 5.', quotes: ['3x + 5 = 20'] };
+  assert.ok(compact.task.check(output, compact.task.input({ turns: [older] })), 'the grounding check alone accepts this');
+  const h = harness({ count: () => ({ used: 3500, window: 4096, reserve: 768, exact: true }), script: {
+    'agent.tools': [said('BIO 1100.', ['BIO 1100'])], 'chat.compact': [output],
+  } });
+  h.say({ id: 1, op: 'ask', question: "What's due this week?", history: [older, H3[0]] });
+  await settle(120);
+  const summary = h.got.find((m) => m.type === 'summary');
+  assert.ok(summary, 'a safe deterministic summary can still be shown');
+  assert.doesNotMatch(summary.text, /x = 5/, 'the summary must obey the same study rule as an answer');
+  assert.match(summary.text, /How do I solve 3x \+ 5 = 20\?/);
+});
+
 test('within one run, results the model has used become digests when the next request would overflow; the latest never', async () => {
   const big = { account: ACC, items: Array.from({ length: 30 }, (_, i) => ({ id: String(i + 1), title: `Item ${i + 1}`, course: 'BIO 1100', due: C.NOW + i * 36e5, url: 'x'.repeat(200) })) };
   const h = harness({ count: (m) => ({ used: (m.input.steps?.length || 0) >= 2 ? 5000 : 1000, window: 4096, reserve: 768, exact: true }),
@@ -259,6 +275,52 @@ test('a rejected oversized question cannot clear the accepted chat summary', asy
   h.say({ id: 3, op: 'ask', question: 'And next week?', history: [...H3, turn("What's due this week?", 'BIO 1100.')] });
   await settle();
   assert.equal(h.seen.runs.filter((m) => m.task === 'agent.tools').at(-1).input.summary, summary);
+});
+
+// The chat's side of folding (ai/page/ask-chat.js): each question may come on a new port, so the panel hears the summary
+// and carries it back with only the turns after the folded ones.
+test('a fold is told to the chat as a summary event, with how many of the turns it was sent it folded', async () => {
+  const summary = '- Asked: Which courses am I in?\n- **BIO 1100**.';
+  const h = harness({ count: (m) => ({ used: m.input.history?.length >= 3 ? 2400 : 900, window: 4096, reserve: 768, exact: true }),
+    script: { 'agent.tools': [said('BIO 1100 has nothing due.', ['BIO 1100'])], 'chat.compact': [{ text: summary, quotes: ['Which courses am I in?', 'BIO 1100'] }] } });
+  h.say({ id: 1, op: 'ask', question: "What's due in BIO 1100 this week?", history: H3 });
+  await settle(120);
+  const told = h.got.filter((m) => m.type === 'summary');
+  assert.deepEqual(told, [{ id: 1, type: 'summary', text: summary, turns: 1 }]);
+  assert.ok(h.got.findIndex((m) => m.type === 'end') < h.got.findIndex((m) => m.type === 'summary'), 'after its question ends');
+});
+
+for (const task of ['agent.tools', 'study.help']) test(`${task}: the fourth answer hands off a fallback before end while model compaction is unfinished`, async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const history = [...H3, turn('Any reminders?', 'None.')];
+  const h = harness({ count: () => ({ used: 900, window: 32768, reserve: 768 }), script: {
+    'agent.tools': [said('BIO 1100.', ['BIO 1100'])],
+    'study.help': [{ reply: 'Look at the chromosomes.', followUp: '' }],
+    'chat.compact': [() => gate],
+  } });
+  try {
+    h.say({ id: 1, op: 'ask', question: task === 'study.help' ? 'Explain mitosis' : "What's due this week?", history });
+    await settle();
+    assert.ok(h.seen.runs.some((m) => m.task === 'chat.compact'), 'model compaction is still running');
+    const end = h.got.findIndex((m) => m.type === 'end');
+    assert.ok(end >= 0, 'the answer does not wait for compaction');
+    const handoff = h.got.findIndex((m) => m.type === 'summary');
+    assert.ok(handoff >= 0 && handoff < end, 'the page must own the summary before it can replace the port');
+    assert.equal(h.got[handoff].turns, 2);
+    assert.match(h.got[handoff].text, /Which courses am I in/);
+  } finally { release({ text: '- BIO 1100', quotes: ['BIO 1100'] }); await settle(); }
+});
+
+test('a question on a new port carries the chat\'s summary: the next request has it; a bad one is refused', async () => {
+  const summary = '- Asked: Which courses am I in?\n- **BIO 1100**.';
+  const h = harness({ script: { 'agent.tools': [said('Still nothing.', ['BIO 1100'])] } });
+  h.say({ id: 1, op: 'ask', question: 'And next week?', history: H3.slice(1), summary });
+  await settle(120);
+  assert.equal(h.seen.runs.filter((r) => r.task === 'agent.tools').at(-1).input.summary, summary);
+  for (const [id, bad] of [[2, 5], [3, 'x'.repeat(701)]]) h.say({ id, op: 'ask', question: 'And next week?', history: H3, summary: bad });
+  await settle(60);
+  assert.deepEqual(h.got.filter((m) => m.id >= 2 && m.type === 'error').map((m) => [m.id, m.error]), [[2, 'request'], [3, 'request']]);
 });
 
 test('from 16K up the tools offered are the chat\'s union, so later turns share the system turn; below 16K each question gets its own; the union stays under its budget, oldest dropped first', async () => {
@@ -356,4 +418,34 @@ test('a large selected window carries more than six complete turns without prema
   const run = h.seen.runs.find((r) => r.task === 'agent.tools');
   assert.deepEqual(run?.input.history, history);
   assert.equal(h.seen.runs.some((r) => r.task === 'chat.compact'), false, 'available context retains those turns verbatim');
+});
+
+// The page deliberately recreates its port between questions (Safari can retire the idle worker).
+test('a recreated port restores the bounded tool union, even after its topic was folded away', async () => {
+  const first = harness({ count: () => ({ used: 900, window: 16384, reserve: 768 }), script: { 'agent.tools': [said('Done.')] } });
+  first.say({ id: 1, op: 'ask', question: "What's due this week?" });
+  await settle();
+  const carried = first.got.find((m) => m.type === 'tools');
+  assert.ok(carried?.tools.includes('todo_list'), 'the page receives the union before the answer');
+  const next = harness({ count: () => ({ used: 900, window: 16384, reserve: 768 }), script: { 'agent.tools': [said('Done.')] } });
+  next.say({ id: 2, op: 'ask', question: 'Any new announcements in BIO 1100?', history: H3.slice(0, 1), summary: '- Earlier due dates', tools: carried.tools });
+  await settle();
+  const input = next.seen.runs.find((m) => m.task === 'agent.tools').input;
+  assert.ok(input.tools.includes('todo_list'));
+  assert.ok(input.tools.includes('announcements_list'));
+  assert.ok(next.got.findIndex((m) => m.type === 'tools') < next.got.findIndex((m) => m.type === 'end'));
+  next.say({ id: 3, op: 'ask', question: 'What is my grade in BIO 1100?', tools: carried.tools });
+  await settle();
+  assert.ok(!next.seen.runs.filter((m) => m.task === 'agent.tools').at(-1).input.tools.includes('todo_list'), 'New chat ignores carried tools');
+});
+
+test('carried tools reject unknown, repeated, oversized and non-list values before changing the chat', async () => {
+  const h = harness();
+  const expensive = A.NAMES.filter((n) => n !== 'accounts_list');
+  assert.ok(K.unionCost(expensive) > K.UNION.budget);
+  const bad = [['not_a_tool'], ['todo_list', 'todo_list'], expensive, 'todo_list', null];
+  for (const [i, tools] of bad.entries()) h.say({ id: i, op: 'ask', question: 'What is due?', history: H3, tools });
+  await settle();
+  assert.deepEqual(h.got.filter((m) => m.type === 'error').map((m) => m.error), bad.map(() => 'request'));
+  assert.equal(h.seen.runs.length, 0);
 });

@@ -147,11 +147,15 @@ test('fallback list fields render literally, with one bullet per item even when 
       : { type: 'end', task: 'agent.tools', answer: { text, built: true } };
     setTimeout(() => listeners.forEach((f) => f({ id: m.id, ...answer })), 0);
   } };
-  const ui = vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname, '../../extension/ai/page/ask.js'), 'utf8'), {
+  const context = vm.createContext({
     document: doc, window: {}, navigator: { userActivation: { isActive: true } }, setTimeout, clearTimeout, URL, structuredClone,
     GZ_CTX: { t: (k) => k, on: () => true, locale: () => 'en', settings: () => ({ enabled: true }) },
     chrome: { runtime: { connect: () => port }, storage: { local: { get: (_k, cb) => cb({ ai }) }, onChanged: { addListener: () => {} } } },
   });
+  // The chat component first (ai/page/ask-chat.js), as the dialog loads it beside itself.
+  const file = (f) => fs.readFileSync(require('node:path').join(__dirname, '../../extension/ai/page', f), 'utf8');
+  vm.runInContext(file('ask-chat.js'), context);
+  const ui = vm.runInContext(file('ask.js'), context);
   try {
     await ui.run({ event: { isTrusted: true }, question: 'Which assignments are coming up?' });
     for (let n = 0; n < 30 && !doc.querySelector('.gz-ask-a'); n++) await new Promise((r) => setTimeout(r, 2));

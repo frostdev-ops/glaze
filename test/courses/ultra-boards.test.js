@@ -153,8 +153,8 @@ const page = ({ at = 'courses', width = 1280, local = {}, store: shared = null, 
   }
   vm.createContext(c);
   if (courses) vm.runInContext(read('core/color.js'), c);
-  const ui = vm.runInContext(read('core/page/widgets.js').replace('return { sync, held, cover, hub: open, register, declare, who: account, avatar, catalog };',
-    'return { sync, held, cover, hub: open, register, declare, who: account, avatar, catalog, probeLayout: layoutBoard };'), c);
+  const ui = vm.runInContext(read('core/page/widgets.js').replace('return { sync, held, cover, hub: open, register, declare, who: account, avatar, catalog, reveal };',
+    'return { sync, held, cover, hub: open, register, declare, who: account, avatar, catalog, reveal, probeLayout: layoutBoard };'), c);
   const tile = (id) => doc.querySelector(`section[data-tile="${id}"]`);
   const ev = (type, x = {}) => ({ type, target: null, button: 0, pointerId: 1, clientX: 0, clientY: 0, altKey: false, shiftKey: false, preventDefault() {}, stopPropagation() {}, ...x });
   const tool = (id, name) => tile(id).querySelector('.gz-w-tools').children.find((x) => x.getAttribute('aria-label') === name);

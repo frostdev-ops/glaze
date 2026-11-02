@@ -8,7 +8,7 @@
 //     loop. run(task, input) → the task's checked output; call({ name, arguments, kind }) → { result, asked? }. A write the
 //     student didn't allow (asked isn't 'yes') ends it with no further run; a seventh call ends it as 'steps'.
 //   connect(port, env): the panel's port 'glaze:ask' (background/background.js checks its sender with the AI port's rules).
-//     page → { id, op: 'ask', question, attempt?, locale, history?, site?, text?, fired? }  { id, op: 'fired' }  { id, op: 'cancel' }
+//     page → { id, op: 'ask', question, attempt?, locale, history?, summary?, tools?, site?, text?, fired? }  { id, op: 'fired' }  { id, op: 'cancel' }
 //       { id, op: 'status' }; site: the school's LMS (canvas, ultra, moodle), its address the sender's; text: the page's
 //       visible words (page_highlight's check); fired: the id of a fired record 'fired' gave (its own turn at level 3).
 //       history: the panel's conversation so far, [{ question, answer }] (at most six), for study.help's follow-ups (a cloud
@@ -19,7 +19,10 @@
 //       { id, type: 'action', action: { kind: 'open' | 'highlight', … } } just before an answer's end (the panel performs them
 //       once it shows the answer); 'fired' → { id, type: 'end', fired: [{ id, what, watch?, say, at }] }.
 //       then { id, type: 'end', task, output (study.help's) | answer: { text } | declined: true } or { id, type: 'error',
-//       error }; status → the broker's status for the feature 'ask'.
+//       error }; status → the broker's status for the feature 'ask'. A compaction's { id, type: 'summary', text, turns }
+//       follows an end, or precedes it with the fallback when the next question would drop older turns. The turns it folded
+//       are of the ones that question carried and itself; the panel sends that summary (summary)
+//       with its later questions and only the turns after them, since each question may come on a new port.
 //     Model runs go to the AI broker over a channel in the worker (env.broker(port): ai/broker.js connect with this sender's
 //     checks), as the feature 'ask'. Tool calls go through agents/calls.js: Ask's own switch is the grant of Agents' groups,
 //     the one write waits for the student in Agents' approval window (env.approve), and results reach the model as the tool
@@ -81,7 +84,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   // question: agent.tools' own; attempt: study.help's; tools: offered at once (training offered three to six, and Glaze's own
   // model's 4,096-token window can't hold all twelve); material: what an agent answer is measured against.
   // text: the page's visible words a question may carry, for page_highlight's check.
-  const LIMIT = { question: 2000, attempt: 12000, tools: 6, material: 24000, sender: 5000, turns: 6, turn: 2000, text: 20000 };
+  const LIMIT = { question: 2000, attempt: 12000, tools: 6, material: 24000, sender: 5000, turns: 6, turn: 2000, text: 20000, summary: 700 };
   const GROUPS = ['courses', 'grades', 'assignments', 'writer'];
   // Navigation handoffs live only in the extension. Page sessionStorage is controlled by school scripts.
   const CARRY = 'rimeCarry';
@@ -443,14 +446,16 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       let keep = [...CHAT.tools.filter((t) => !routed.includes(t)), ...routed];
       while (unionCost(keep) > UNION.budget && keep.length > routed.length) keep = keep.slice(1);
       CHAT.tools = keep;
+      post({ id: current.id, type: 'tools', tools: keep });
       return fit?.window >= UNION.from ? AT().NAMES.filter((n) => keep.includes(n)) : routed;
     };
     const keyOf = (h) => `${h.question.trim()}\u0000${h.answer.trim().slice(0, 200)}`;
-    const compact = async ({ open, turn, locale, tools, zone }) => {
+    const compact = async ({ id, open, turn, locale, tools, zone }) => {
       const turns = [...open, turn];
       if (turns.length <= COMPACT.keep) return;
       const gen = ++CHAT.gen;
-      let need = turns.length > AT().HISTORY.turns;
+      const handoff = turns.length > AT().HISTORY.turns;
+      let need = handoff;
       if (!need) {
         const fit = await measure('agent.tools', { question: turn.question, tools, steps: [], now: env.now(), zone, locale, first: true, history: turns, ...(CHAT.summary && { summary: CHAT.summary }) });
         need = !!fit && fit.used + fit.reserve > COMPACT.share * fit.window;
@@ -458,11 +463,29 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       if (!need || gen !== CHAT.gen || closed) return;
       const older = turns.slice(0, -COMPACT.keep);
       const input = { turns: older.slice(-CC().LIMIT.turns), ...(CHAT.summary && { summary: CHAT.summary }), locale };
-      const apply = (out) => { if (gen !== CHAT.gen || !out?.text) return; CHAT.summary = out.text; for (const h of older) CHAT.covered.add(keyOf(h)); CHAT.pending = null; };
+      // The chat hears it ({ id, type: 'summary', text, turns }: the summary and how many of the turns it was sent it covers
+      // now), shows the line where they were folded and carries the summary with its next question.
+      const apply = (out) => {
+        if (gen !== CHAT.gen || !out?.text) return;
+        CHAT.summary = out.text; for (const h of older) CHAT.covered.add(keyOf(h)); CHAT.pending = null;
+        post({ id, type: 'summary', text: CHAT.summary, turns: older.length });
+      };
       const fallback = () => { const inp = CC().task.input(input); if (inp) apply(CC().fallback(inp)); };
+      // The page renews its port for the next question. Give it the fallback before end makes that possible; the model
+      // can refine it afterwards, but an immediate follow-up must not discard turns while that model run is pending.
+      if (handoff) fallback();
       const control = new AbortController();
       CHAT.pending = { now: (keep = true) => { if (keep) fallback(); CHAT.gen++; CHAT.pending = null; control.abort(); } };
-      try { apply((await broker({ op: 'run', feature: FEATURE, task: 'chat.compact', input }, control.signal)).output); } catch { fallback(); }
+      try {
+        const out = (await broker({ op: 'run', feature: FEATURE, task: 'chat.compact', input }, control.signal)).output;
+        // Summaries now appear on the page too. Grounded values alone can still solve a student's problem.
+        const safe = typeof out?.text === 'string' && older.every((h) => {
+          const inp = SH().task.input({ question: h.question, subject: route(h.question, { locale, level: 3 }).subject || 'math', locale,
+            ...(input.summary && { material: input.summary }) });
+          return inp && !SH().hands(out.text, inp);
+        });
+        if (safe) apply(out); else fallback();
+      } catch { fallback(); }
     };
 
     // Ask's tool calls, through Agents' one call path, as an app of Glaze's own that Ask's switch has granted every group.
@@ -580,7 +603,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const { id } = m;
       const fail = (error) => post({ id, type: 'error', error });
       const turn = (h) => isObj(h) && Object.keys(h).sort().join() === 'answer,question' && [h.question, h.answer].every((x) => typeof x === 'string' && x.length <= LIMIT.turn);
-      if (Object.keys(m).some((k) => !['id', 'op', 'question', 'attempt', 'locale', 'history', 'site', 'text', 'fired'].includes(k)) || typeof m.question !== 'string' || !m.question.trim()
+      if (Object.keys(m).some((k) => !['id', 'op', 'question', 'attempt', 'locale', 'history', 'summary', 'tools', 'site', 'text', 'fired'].includes(k)) || typeof m.question !== 'string' || !m.question.trim()
+        || (m.tools !== undefined && !(Array.isArray(m.tools) && m.tools.length <= AT().NAMES.length && new Set(m.tools).size === m.tools.length && m.tools.every((n) => AT().NAMES.includes(n)) && unionCost(m.tools) <= UNION.budget))
+        || (m.summary !== undefined && (typeof m.summary !== 'string' || m.summary.length > LIMIT.summary))
         || (m.attempt !== undefined && typeof m.attempt !== 'string') || (m.locale !== undefined && typeof m.locale !== 'string')
         || (m.history !== undefined && !(Array.isArray(m.history) && m.history.length <= LIMIT.turns && m.history.every(turn)))
         || (m.site !== undefined && !SITES.includes(m.site)) || (m.text !== undefined && typeof m.text !== 'string') || (m.fired !== undefined && typeof m.fired !== 'string')) return fail('request');
@@ -589,6 +614,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       if (question.length > LIMIT.question || attempt.length > LIMIT.attempt) return fail('size');
       if (current) return fail('busy');
       if (!history.length) { CHAT.pending?.now(false); CHAT.summary = ''; CHAT.covered.clear(); CHAT.tools = []; } else CHAT.pending?.now();
+      // The chat's own summary of its folded turns (a summary event's, on an earlier port): it sends only the turns after it.
+      if (history.length && !CHAT.summary && typeof m.summary === 'string' && m.summary.trim()) CHAT.summary = m.summary.trim();
+      if (history.length && !CHAT.tools.length && m.tools) CHAT.tools = m.tools.slice();
       CHAT.gen++;
       // The turns the summary doesn't cover yet, verbatim.
       const open = history.filter((h) => !CHAT.covered.has(keyOf(h)));
@@ -632,8 +660,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           // Level 3: the summary as the conversation's first turn, then the turns it doesn't cover (a cloud model reads them).
           const past = level >= 3 ? [...(CHAT.summary ? [{ question: 'Earlier in this chat', answer: CHAT.summary }] : []), ...open].slice(-LIMIT.turns) : history;
           const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...(past.length && { history: past }), ...(material && { material }) });
+          if (level >= 3 && isObj(output)) void compact({ id, open, turn: { question, answer: [output.reply, output.followUp].filter((x) => typeof x === 'string' && x).join('\n\n') }, locale, tools, zone }).catch(() => {});
           post({ id, type: 'end', task: r.task, output });
-          if (level >= 3 && isObj(output)) void compact({ open, turn: { question, answer: [output.reply, output.followUp].filter((x) => typeof x === 'string' && x).join('\n\n') }, locale, tools, zone }).catch(() => {});
           return;
         }
         const tools = level >= 3 ? await offer(r.tools, { question, tools: r.tools, steps: [], now: env.now(), zone, locale, first: true }, signal) : r.tools;
@@ -652,8 +680,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (signal.aborted) throw cancelled();
         for (const a of current.actions) { const { action, ...rest } = a; post({ id, type: 'action', action: { kind: action, ...rest } }); }
         // A built answer also carries the failed answer it replaced and its code, to this panel only (never Activity).
+        if (level >= 3) void compact({ id, open, turn: { question, answer: res.answer.text }, locale, tools, zone }).catch(() => {});
         post({ id, type: 'end', task: r.task, answer: { text: res.answer.text, ...(res.built && { built: true }) }, ...(res.built && { ...(res.why && { why: res.why }), ...(res.raw && { raw: res.raw.slice(0, 2000) }) }) });
-        if (level >= 3) void compact({ open, turn: { question, answer: res.answer.text }, locale, tools, zone }).catch(() => {});
       } catch (e) {
         // { id, type: 'error', error, why?, steps?, raw? }: the check's code, the tool steps run, and the model's raw answer
         // (to this panel only; Activity keeps the code, never the answer).
