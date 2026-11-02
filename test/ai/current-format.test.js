@@ -207,3 +207,15 @@ test('current requests count all blocks while preserving answer and thinking res
     assert.equal(Buffer.byteLength(blocks.find((b) => b.label === 'current material').text), 1536);
   }
 });
+
+test('deictic solving on active assessed work cannot use run_js', () => {
+  const mk = (question, c) => A.task.input(raw({ question, current: c, tools: ['run_js'] }));
+  for (const [question, c] of [
+    ['Solve this.', current()],
+    ['Calculate it.', current({ assignment: undefined, content: { id: '88122', kind: 'test' } })],
+    ['Work this out.', { site: 'canvas', view: 'document', document: { kind: 'paper', revision: 1 }, material: { text: 'Solve for x: 2x = 8.', source: 'writer', truncated: false } }],
+  ]) assert.equal(A.why(call('run_js', { code: '2+2' }), mk(question, c)), 'work', question);
+  assert.equal(A.why(call('run_js', { code: '2+2' }), A.task.input(raw({ question: 'Calculate it.', tools: ['run_js'] }))), '', 'no active graded identity');
+  assert.equal(A.why(call('run_js', { code: '80*.4+90*.6' }), mk('Calculate my overall grade.', current())), '', 'own-grade arithmetic remains allowed');
+  assert.equal(A.why(call('run_js', { code: 'Math.PI' }), mk('Tell me about the calculator.', current())), '', 'presence alone does not restrict unrelated tools');
+});
