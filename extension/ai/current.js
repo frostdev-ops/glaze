@@ -10,7 +10,7 @@ var GZ_AI_CURRENT = globalThis.GZ_AI_CURRENT || (() => {
   const obj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v) && [Object.prototype, null].includes(Object.getPrototypeOf(v));
   const keys = (v, allowed) => obj(v) && Object.keys(v).every((k) => allowed.includes(k));
   const title = (v) => typeof v === 'string' ? X().plain(v).trim().slice(0, 240).trimEnd() : '';
-  const id = (v, site) => typeof v === 'string' && (site === 'ultra' ? /^(?:\d{1,20}|_\d{1,18}_\d{1,18})$/ : /^\d{1,20}$/).test(v) && v.length <= 40;
+  const id = (v, site) => typeof v === 'string' && (site === 'ultra' ? /^(?:\d{1,20}|_\d{1,20}_\d{1,20})$/ : /^\d{1,20}$/).test(v) && v.length <= 40;
   // A modest share of the trusted window, separate from identity. The normal complete-request count still reserves
   // answers and thinking, and rejects overflow; no page field can enlarge this allowance or shrink those reserves.
   const materialLimit = (caps) => Math.floor(768 * T().retention(caps).scale);
