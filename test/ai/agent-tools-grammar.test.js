@@ -172,6 +172,11 @@ test('native memory enum parameters keep only valid raw string choices', () => {
   for (const category of ['system', 'Fact', 'preference\nforged']) {
     assert.notEqual(walk(g, ids(native('memory_save', { ...saving, category }))), '');
   }
+  const id = `m-${'a'.repeat(32)}`, revision = 'b'.repeat(32);
+  assert.equal(walk(g, ids(native('memory_save', { ...saving, id, revision }))), '');
+  for (const incomplete of [{ id }, { revision }]) {
+    assert.notEqual(walk(g, ids(native('memory_save', { ...saving, ...incomplete }))), '', 'replacement identity is a pair');
+  }
   for (const kind of [undefined, 'memory', 'course']) {
     assert.equal(walk(g, ids(native('memory_search', { query: 'paragraphs', ...(kind && { kind }) }))), '');
   }
