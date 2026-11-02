@@ -45,8 +45,8 @@ const unref = (f, ms) => { const t = setTimeout(f, ms); t.unref?.(); return t; }
 const setup = (opts = {}) => {
   const fs = opts.fs || fakeFs(opts);
   const hf = fakeHf({ [old.url]: OLD, [fresh.url]: NEW, [broken.url]: BAD }, opts);
-  const store = S.create({ models: [old], fetch: hf, root: async () => fs.root, estimate: fs.estimate, locks: fakeLocks(), channel: fakeBus() });
-  const log = { loads: [], released: [], order: [] };
+  const store = S.create({ models: opts.models || [old], fetch: hf, root: async () => fs.root, estimate: fs.estimate, locks: fakeLocks(), channel: fakeBus() });
+  const log = { loads: [], released: [], order: [], tokenized: [] };
   let gate = null; // while set, decode waits on it
   const E = {
     load: async (g) => {
@@ -64,12 +64,12 @@ const setup = (opts = {}) => {
   };
   const posted = [];
   const waiters = new Map();
-  const host = H.create({ store, gguf: { open: async (f) => ({ version: Buffer.from(await f.read(0, 4)).toString(), kv: VOCAB }) }, tokenizer: K, engine: () => E,
+  const host = H.create({ store, gguf: { open: async (f) => { const version = Buffer.from(await f.read(0, 4)).toString(); log.tokenized.push(version); return { version, kv: VOCAB }; } }, tokenizer: K, engine: () => E,
     grammar: () => null, ladder: () => null, gpu: () => ({}), updates: () => U, key: KEY, setTimeout: unref, saveData: () => !!opts.saveData,
     post: (m) => { posted.push(m); if (m.type === 'done' || m.type === 'error') waiters.get(m.id)?.(m); } });
   let seq = 0;
   const call = (op, args = {}) => { const id = ++seq; const p = new Promise((r) => waiters.set(id, r)); host.handle({ id, op, ...args }); return { id, done: p }; };
-  const run = () => call('run', { model: 'rime-q4', parts: [{ text: 'hi' }], stable: 0, sampler: {}, maxTokens: 32 });
+  const run = (extra = {}) => call('run', { model: 'rime-q4', parts: [{ text: 'hi' }], stable: 0, sampler: {}, maxTokens: 32, ...extra });
   const text = (id) => posted.filter((m) => m.id === id && m.type === 'delta').map((m) => m.text).join('');
   return { fs, hf, store, host, log, posted, call, run, text, hold: () => { let open; gate = new Promise((r) => { open = r; }); return () => { gate = null; open(); }; } };
 };
@@ -160,6 +160,42 @@ test('a new version that fails to load rolls back to the old one: the run still 
   assert.equal(t.hf.log.length, before);
   // A newer serial with the same entry: the owner published again, so it is tried again.
   assert.equal((await update(t, sign(listOf(4, [broken]))).done).result.state, 'swapped');
+});
+
+test('a failed memory-capable trial never replays a memory prompt on legacy rollback weights', async () => {
+  const t = setup();
+  await ready(t);
+  assert.equal((await update(t, sign(listOf(3, [{ ...broken, memory: 1 }]))).done).result.state, 'swapped');
+  const request = t.run({ memory: 1 });
+  const result = await request.done;
+  assert.equal(result.type, 'error', JSON.stringify(result));
+  assert.equal(result.error.code, 'caps');
+  assert.deepEqual(t.log.loads, ['BAD!'], 'the legacy model never loads the memory prompt');
+  assert.deepEqual(t.log.tokenized, ['BAD!'], 'legacy weights are rejected before tokenizing the prompt');
+  assert.equal(t.text(request.id), '');
+  assert.equal((await t.store.catalog()).entries.get(old.id).memory, undefined);
+});
+
+test('host rechecks memory support before count, warm-up or a queued run consumes the prompt', async () => {
+  const t = setup();
+  await ready(t);
+  for (const op of ['count', 'warm', 'run']) {
+    const result = await t.call(op, { model: old.id, memory: 1, parts: [{ text: 'saved personal preference' }], stable: 0, sampler: {}, maxTokens: 32 }).done;
+    assert.equal(result.type, 'error', `${op}: ${JSON.stringify(result)}`);
+    assert.equal(result.error.code, 'caps', op);
+  }
+  assert.deepEqual(t.log.loads, []);
+  assert.deepEqual(t.log.tokenized, []);
+});
+
+test('a memory request can retry after rollback when the previous weights also support memory', async () => {
+  const t = setup({ models: [{ ...old, memory: 1 }] });
+  await ready(t);
+  assert.equal((await update(t, sign(listOf(3, [{ ...broken, memory: 1 }]))).done).result.state, 'swapped');
+  const request = t.run({ memory: 1 });
+  assert.equal((await request.done).type, 'done');
+  assert.equal(t.text(request.id), 'answer from OLD!');
+  assert.deepEqual(t.log.loads, ['BAD!', 'OLD!']);
 });
 
 test('a chunk failing its hash twice never swaps; that version is not kept or tried again for the serial', async () => {

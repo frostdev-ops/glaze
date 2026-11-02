@@ -130,3 +130,25 @@ test('actual local model selection refuses memory after a same-ID capability rol
     assert.deepEqual(seen, ['run', 'count', 'warm', 'run']);
   } finally { LOCAL._env(null); }
 });
+
+test('local transport marks only memory-bearing requests for the host execution-time gate', async () => {
+  const seen = [], cfg = LOCAL.config({ weights: fresh.id });
+  LOCAL._env({ store: { list: async () => [{ ...fresh, state: 'ready' }] }, gpu: () => ({}), link: { kind: 'worker', call: async (op, args) => {
+    seen.push({ op, args });
+    return op === 'count' ? { tokens: 20 } : op === 'warm' ? { ok: true } : { text: '{"text":"Checked.","quotes":[]}', finish: 'stop' };
+  } } });
+  const agent = (input) => Q.clean({ ...T.prepare(A.task, { question: 'What do you remember?', tools: ['run_js'], now: Date.UTC(2026, 10, 2), zone: 'UTC', ...input }, { provider: LOCAL, cfg }), task: { id: 'agent.tools', version: 1 } });
+  const recall = { records: [], truncated: false };
+  const study = Q.clean({ ...X.request({ system: 'Give a study hint.', data: [{ label: 'recall', text: JSON.stringify(recall) }, { label: 'question', text: 'What should I consider?' }] }), task: { id: 'study.help', version: 1 } });
+  try {
+    for (const req of [agent({ recall }), agent({ tools: ['memory_search'] }), study]) {
+      await LOCAL.count(req, cfg); await LOCAL.warm(req, cfg); await LOCAL.run(req, cfg);
+    }
+    assert.equal(seen.length, 9);
+    assert.ok(seen.every(({ args }) => args.memory === 1), 'count, warm and run all reach the same host gate');
+    seen.length = 0;
+    await LOCAL.count(agent({}), cfg); await LOCAL.warm(agent({}), cfg); await LOCAL.run(agent({}), cfg);
+    assert.deepEqual(seen.map(({ op }) => op), ['count', 'warm', 'run']);
+    assert.ok(seen.every(({ args }) => !Object.hasOwn(args, 'memory')), 'ordinary requests keep their transport unchanged');
+  } finally { LOCAL._env(null); }
+});
