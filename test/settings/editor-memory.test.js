@@ -14,15 +14,20 @@ async function page({ items = [memory(), course()], enabled = true, embedded = f
   const walk = (e) => [e, ...e.children.flatMap(walk)];
   const el = (tag = 'div') => {
     const e = { tagName: tag.toUpperCase(), id: '', children: [], textContent: '', className: '', value: '', disabled: false, hidden: false, checked: false, attrs: {}, on: {}, dataset: {},
-      append(...children) { this.children.push(...children); }, replaceChildren(...children) { this.children = children; },
+      append(...children) { this.children.push(...children); }, replaceChildren(...children) {
+        if (this.children.some((child) => walk(child).includes(doc.activeElement))) doc.activeElement = doc.body;
+        this.children = children;
+      },
       setAttribute(key, value) { this.attrs[key] = value; }, addEventListener(type, listener) { (this.on[type] ||= []).push(listener); },
-      focus() { doc.activeElement = this; }, setSelectionRange(a, b) { this.selectionStart = a; this.selectionEnd = b; },
+      focus() { if (!this.disabled) doc.activeElement = this; }, setSelectionRange(a, b) { this.selectionStart = a; this.selectionEnd = b; },
       remove() {}, click() { exports.push({ href: this.href, download: this.download }); },
       returnValue: '', open: false, showModal() { this.open = true; }, close(value = '') { this.open = false; this.returnValue = value; for (const f of this.on.close || []) f(); } };
     return e;
   };
-  const $ = (id) => { for (const node of ids.values()) { const found = walk(node).find((n) => n.id === id); if (found) return found; } if (!ids.has(id)) ids.set(id, Object.assign(el(), { id })); return ids.get(id); };
+  for (const [, id] of read('options.html').matchAll(/\bid="(ai-memory|memory-[^"]+)"/g)) ids.set(id, Object.assign(el(), { id }));
+  const $ = (id) => { for (const node of ids.values()) { const found = walk(node).find((n) => n.id === id); if (found) return found; } return null; };
   Object.assign(doc, { getElementById: $, createElement: el, body: el('body') });
+  doc.activeElement = doc.body;
   const worker = { enabled, items: structuredClone(items) };
   const changed = async (keys) => { for (const f of listeners) f(Object.fromEntries(keys.map((key) => [key, { newValue: { markdown: 'untrusted event payload' } }])), 'local'); await settle(); };
   const config = async (m) => {
@@ -107,6 +112,40 @@ test('a concurrent edit conflicts without losing the draft; Reload accepts the n
   await p.fire(p.button(M, 'Reload')); assert.equal(p.$('memory-edit-text').value, 'Other device edit');
   await p.edit('Final edit'); await p.fire(p.button(M, 'Save'));
   assert.equal(p.sent.filter((m) => m.op === 'update').at(-1).revision, R2);
+});
+
+test('broker refresh preserves keyboard focus on record buttons and course summaries', async () => {
+  const p = await page(); p.button(M, 'Edit').focus();
+  await p.changed(['rimeMaterial:synthetic']);
+  assert.equal(p.doc.activeElement, p.button(M, 'Edit'));
+  p.button(M, 'Delete').focus(); await p.changed(['rimeMemory:synthetic']);
+  assert.equal(p.doc.activeElement, p.button(M, 'Delete'));
+  p.record(S).children[0].children[0].focus(); await p.changed(['ai']);
+  assert.equal(p.doc.activeElement, p.record(S).children[0].children[0]);
+});
+
+test('Cancel and successful Save return keyboard focus to Edit; deletion has a reachable fallback', async () => {
+  const p = await page(); await p.fire(p.button(M, 'Edit'));
+  p.button(M, 'Cancel').focus(); await p.fire(p.button(M, 'Cancel'));
+  assert.equal(p.doc.activeElement, p.button(M, 'Edit'));
+  await p.fire(p.button(M, 'Edit')); await p.edit('Updated preference');
+  p.button(M, 'Save').focus(); await p.fire(p.button(M, 'Save'));
+  assert.equal(p.doc.activeElement, p.button(M, 'Edit'));
+  p.button(M, 'Delete').focus(); await p.fire(p.button(M, 'Delete'));
+  assert.equal(p.doc.activeElement, p.$('memory-refresh'));
+});
+
+test('failed Save restores keyboard focus without stealing it from another control during the request', async () => {
+  const p = await page({ fail: 'update' }); await p.fire(p.button(M, 'Edit'));
+  p.button(M, 'Save').focus(); await p.fire(p.button(M, 'Save'));
+  assert.equal(p.doc.activeElement, p.button(M, 'Save'));
+  let release;
+  const slow = await page({ reply: (m, next) => m.op === 'update' ? new Promise((resolve) => { release = () => resolve(next()); }) : next() });
+  await slow.fire(slow.button(M, 'Edit')); slow.button(M, 'Save').focus();
+  const saving = slow.fire(slow.button(M, 'Save')); await settle();
+  const elsewhere = slow.doc.createElement('button'); slow.doc.body.append(elsewhere); elsewhere.focus();
+  release(); await saving;
+  assert.equal(slow.doc.activeElement, elsewhere);
 });
 
 test('delete failure remains visible and keeps the record; successful delete is scoped to id/revision', async () => {
