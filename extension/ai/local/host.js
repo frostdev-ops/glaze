@@ -5,11 +5,20 @@
 // (ai/local/offscreen.js), Firefox from the background event page (ai/local/link.js); both pass messages to it as they are.
 //   in  { op: 'config', idle }  { op: 'detach' } (the worker's port went: runs and warm-ups stop, a download goes on)
 //       { id, op: 'prepare', tier?, part? }  { id, op: 'run', model, parts, stable, schema?, tools?, sources?, sampler,
-//       maxTokens, projector?, images?, think?, window? }  { id, op: 'warm', model, parts }  { id, op: 'remove', part? }  { id, op: 'release' }
-//       { id, op: 'cancel' }  { id, op: 'update', doc, model, glaze } (ai/local/updates.js update: a signed model list from the
+//       maxTokens, projector?, images?, think?, window?, priority? }  { id, op: 'warm', model, parts, stable? }  { id, op: 'remove', part? }
+//       { id, op: 'release' }  { id, op: 'cancel' }  { id, op: 'update', doc, model, glaze } (ai/local/updates.js update: a signed model list from the
 //       worker's daily check; the newer version of `model` downloads beside it, waiting while a run or warm-up is in
 //       flight, and swaps in at the next idle moment, the engine let go; a run on the model in its trial confirms it, or
 //       rolls it back on a load or engine failure and runs again on the old version when nothing of the answer was sent)
+//   One sequence stays on the GPU between requests (engine.js extend): a run or warm-up feeds only what follows the longest
+//   prefix the model already holds, from the latest mark inside it (marks at the system turn's end, a think prefill's
+//   start, every LIMIT.spacing tokens and the prompt's end). A warm-up with `stable` reads its parts past the system turn too
+//   (the history, while the student types); a run arriving stops a warm-up between steps and keeps what it read. After a
+//   think run, the host reads the answer back as the next request will hold it (the turn's empty think block, the answer,
+//   the end token) while nothing else waits. window: the engine's room grows to it, up to LIMIT.maxContext; without one,
+//   LIMIT.context. priority 'low' (and writer.complete's task token): the prompt uses adaptive steps, amortizing a learned
+//   launch floor with bulk batches when necessary, each finished and followed by a yield, and decode yields between tokens, so typing
+//   paints and a cancel lands within a step.
 //   tools [{ name, parameters }] (with schema; ai/tasks/agent-tools.js constraint()): the answer is either the schema's
 //   JSON or one native call to a listed tool, held by the grammar (grammar.js compile's tools). sources { [name]: text }
 //   (with schema; providers/local.js spans): the texts its span strings are held to (grammar.js compile's sources).
@@ -37,7 +46,7 @@
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
-  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, maxContext: 131072, rate: 16, answer: 256, spans: 2 };
+  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, maxContext: 131072, first: 8192, step: 8, bulk: 128, busy: 20, spacing: 2048, rate: 16, answer: 256, spans: 2 };
   // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
   const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js', 'updates.js']),
     optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
@@ -61,6 +70,13 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
   // post(message), setTimeout?, clearTimeout?, now? (ms) }.
   const create = (env) => {
     const later = env.setTimeout || setTimeout, cancelTimer = env.clearTimeout || clearTimeout, now = env.now || (() => performance.now());
+    // A task's yield without a timer's clamp (nested zero timeouts wait 4 ms): a message to ourselves; env.pause in tests.
+    const pause = env.pause || (typeof MessageChannel === 'function' ? (() => {
+      const ch = new MessageChannel(), waiting = [];
+      ch.port1.onmessage = () => waiting.shift()?.();
+      ch.port1.unref?.(); ch.port2.unref?.();
+      return () => new Promise((r) => { waiting.push(r); ch.port2.postMessage(0); });
+    })() : () => new Promise((r) => later(r, 0)));
     const ops = new Map(); // id → { control, kind }
     let idleMs = LIMIT.idle, idleTimer = null, tickTimer = null;
     let loaded = null; // { id, key, projector, control, ready, model, tok, eos, base, vision?, warm: [{ ids, snap }] }
@@ -110,7 +126,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         if (projector) { try { pfile = await env.store.open(projector); } catch { throw fail('provider-unavailable', 'pictures'); } }
         const { g, tok } = await tokenized(id, job.control.signal);
         let model;
-        try { model = await E.load(g, { context, signal: job.control.signal }); }
+        try { model = await E.load(g, { context: LIMIT.first, signal: job.control.signal }); }
         catch (e) { if (job.control.signal.aborted) throw e; throw fail('provider-unavailable', ENGINE[e?.reason] || 'engine'); }
         try {
           if (job.control.signal.aborted) throw aborted(job.control.signal);
@@ -140,20 +156,71 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       turn = run.catch(() => {});
       return run;
     };
+    let ahead = null; // the read-ahead after a think run: its AbortController
     const stopSequences = () => {
       for (const o of ops.values()) if (o.kind === 'run' || o.kind === 'warm') o.control.abort(new DOMException('Released', 'AbortError'));
+      ahead?.abort(new DOMException('Released', 'AbortError'));
     };
     // Retire requests immediately, but let their pending engine calls settle before freeing GPU resources.
     const release = () => { stopSequences(); return queued(unload); };
-    // The model at the end of `head` (the system turn): a kept snapshot of it, else read from the start and kept.
-    const prefix = async (job, head, signal) => {
+    // The model at the end of `head` (the system turn): already held (an engine that keeps its sequence), a kept snapshot
+    // of it, else read (from the latest mark it shares, or the start) and kept. → the tokens it fed.
+    const prefix = async (job, head, signal, pacing = {}, keepTail = true) => {
+      const keeps = typeof job.model.extend === 'function';
+      // Only a full-sequence extend can keep the old suffix. Picture prefills append and need the cursor at head's end.
+      if (keeps && keepTail && job.model.common(head) === head.length) return 0;
       const at = job.warm.findIndex((w) => same(w.ids, head));
-      if (at >= 0) { const [w] = job.warm.splice(at, 1); job.warm.push(w); await job.model.restore(w.snap); return; }
-      await job.model.restore(job.base);
-      const snap = await job.model.prefill(head, { snapshot: true, signal });
-      if (!snap) return;
-      job.warm.push({ ids: head, snap });
+      if (at >= 0) { const [w] = job.warm.splice(at, 1); job.warm.push(w); await job.model.restore(w.snap); return 0; }
+      let snap, fed = head.length;
+      if (keeps) {
+        fed = (await job.model.extend(head, { signal, ...pacing })).fed;
+        snap = await job.model.snapshot().catch((e) => { if (e?.reason === 'memory') return null; throw e; });
+      } else {
+        await job.model.restore(job.base);
+        snap = await job.model.prefill(head, { snapshot: true, signal });
+      }
+      if (snap) job.warm.push({ ids: head, snap });
       while (job.warm.length > LIMIT.warm) { try { job.warm.shift().snap.drop?.(); } catch { /* gone */ } }
+      return fed;
+    };
+    // Where a later request may part from this one, as marks: the system turn's end, a think prefill's start (the next turn
+    // holds an empty think block there; a block already closed needs none), and every LIMIT.spacing tokens of a long feed. Each mark splits the feed into
+    // another forward pass, which reads every weight again (about a 30-token prefill's time), so block edges get none.
+    const stops = (job, ids, from) => {
+      const out = [from], think = job.tok.id('<think>');
+      const open = Number.isInteger(think) ? ids.lastIndexOf(think) : -1;
+      if (open > from && ids[open + 1] !== job.tok.id('</think>')) out.push(open);
+      for (let p = from + LIMIT.spacing; p < ids.length; p += LIMIT.spacing) out.push(p);
+      return [...new Set(out)].sort((a, b) => a - b);
+    };
+    // Background work waits and yields between submissions. On a linear GPU, target busy ms. Some drivers have a
+    // GEMM launch floor above that target: shrinking to decode's fast single-token path then oscillates at 1/2 tokens.
+    // Compare two GEMM sizes before allowing single-token steps. A mostly fixed cost instead selects bulk prefill and
+    // targets busy ms of variable work above that floor (best effort latency; the driver can preempt a submission).
+    const paced = () => {
+      let steps = LIMIT.step, previous = null, launch = 0, linear = false;
+      return { step: () => steps, pace: async (ms, tokens) => {
+        // Checkpoint tails and chunk caps do not measure the batch we requested.
+        if (ms > 0 && tokens === steps) {
+          let learned = false;
+          if (!launch && previous && tokens > 1 && previous.tokens > 1) {
+            const [small, big] = tokens < previous.tokens ? [{ ms, tokens }, previous] : [previous, { ms, tokens }];
+            if (big.tokens >= 2 * small.tokens) {
+              const slope = Math.max(0, (big.ms - small.ms) / (big.tokens - small.tokens));
+              const fixed = Math.max(0, small.ms - slope * small.tokens);
+              if (fixed > LIMIT.busy && fixed >= 0.6 * small.ms) {
+                launch = fixed; steps = LIMIT.bulk; learned = true;
+              } else linear = true;
+            }
+          }
+          if (!learned) {
+            const minimum = launch ? 32 : linear ? 1 : 2;
+            steps = Math.max(minimum, Math.min(512, 2 * steps, Math.floor(LIMIT.busy * tokens / Math.max(1, ms - launch))));
+          }
+          previous = { ms, tokens };
+        }
+        await pause();
+      } };
     };
     // The JSON grammar's matcher for a schema (grammar.js), with tools a turn that may instead call one of them in LFM3's
     // own syntax: its vocabulary once per model (with the tool tags' ids, where the model has them), each schema compiled
@@ -275,7 +342,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     const feed = (job, parts, pictures) => {
       const ids = [], slots = [];
       let text = [];
-      const flush = () => { if (text.length) ids.push(...encode(job, text)); text = []; };
+      const flush = () => { if (text.length) for (const id of encode(job, text)) ids.push(id); text = []; };
       for (const p of parts) {
         if (p?.image === undefined) { text.push(p); continue; }
         const pic = Number.isSafeInteger(p.image) ? pictures[p.image] : undefined;
@@ -295,7 +362,10 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         const { model, tok } = job;
         const pictures = images.length ? await pixels(job, images, signal) : [];
         const head = encode(job, m.parts.slice(0, m.stable)), { rest, slots } = feed(job, m.parts.slice(m.stable), pictures);
-        const input = head.length + rest.length, room = Math.min(model.context || job.context, job.context);
+        // An engine that grows its session takes the window as its room (at least LIMIT.context, at most LIMIT.maxContext).
+        const grows = typeof model.reserve === 'function', keeps = grows && typeof model.extend === 'function' && !slots.length;
+        const input = head.length + rest.length, room = grows ? Math.min(Math.max(LIMIT.context, Number.isSafeInteger(m.window) && m.window > 0 ? m.window : 0), LIMIT.maxContext)
+          : Math.min(model.context || job.context, job.context);
         if (input + m.maxTokens > room) throw fail('request-rejected', 'context', { tokens: input, context: room });
         // Think mode: </think>'s id, the parts the host may feed, and the budget the window leaves.
         let think = null, close = null;
@@ -322,7 +392,14 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         if (think) think.budget = Math.min(think.budget, room - input - answer - think.close.length);
         if (m.tools !== undefined && !m.schema) throw fail('request-rejected', 'unsupported');
         const grammar = m.schema ? matcher(job, m.schema, m.tools, m.sources) : null;
-        await prefix(job, head, signal);
+        if (grows) await model.reserve(input + (close?.length || 0) + (think?.budget || 0) + answer, room).catch((e) => { throw e?.reason === 'memory' ? fail('provider-unavailable', 'hardware') : e; });
+        // Low priority: start small, then learn linear or launch-floor pacing; wait and yield after every GPU step.
+        const low = m.priority === 'low' || head.includes(tok.id('<|gz_task:writer.complete|>'));
+        const yieldNow = pause;
+        const pacing = low ? paced() : {};
+        const read = await prefix(job, head, signal, pacing, keeps);
+        const ids = keeps ? [...head, ...rest] : null;
+        let cached = 0;
         // Each picture encoded on the engine's device, fed in place of its placeholders, and its buffer freed at once.
         const encoded = [];
         try {
@@ -333,14 +410,17 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
             if (r.tokens !== s.pic.tokens) throw fail('provider-unavailable', 'engine');
             s.pic.data = null;
           }
-          if (rest.length) await model.prefill(rest, { signal, ...(slots.length && { embeds: slots.map((s, i) => ({ at: s.at, tokens: encoded[i].tokens, buffer: encoded[i].buffer })) }) });
+          if (keeps) cached = ids.length - read - (await model.extend(ids, { at: stops(job, ids, head.length), signal, ...pacing })).fed;
+          else if (rest.length) await model.prefill(rest, { signal, ...pacing, ...(slots.length && { embeds: slots.map((s, i) => ({ at: s.at, tokens: encoded[i].tokens, buffer: encoded[i].buffer })) }) });
         } finally { for (const r of encoded) { try { r.drop?.(); } catch { /* gone */ } } }
         const sampler = { ...SAMPLER, ...m.sampler };
         let spent = 0; // ms in decode, for the rate
         const step = async (mask) => {
           if (signal.aborted) throw aborted(signal);
-          const t = now(), id = await model.decode({ sampler, ...(mask && { mask }), signal });
+          // An engine that keeps its sequence takes the mask lazily: the grammar's work overlaps the GPU's.
+          const t = now(), id = await model.decode({ sampler, ...(mask && { mask: grows && typeof mask === 'function' ? mask : typeof mask === 'function' ? mask() : mask }), signal });
           spent += now() - t;
+          if (low) await yieldNow();
           if (signal.aborted) throw aborted(signal);
           return id;
         };
@@ -360,9 +440,11 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         // A tool turn's grammar admits its tag ids; keep their text even when the tokenizer calls them control tokens.
         const dec = tok.decoder({ specials: m.tools !== undefined });
         let text = '', n = 0, finish = 'length';
+        const said = [];
         while (n < answer) {
-          const id = await step(grammar ? grammar.mask() : null);
+          const id = await step(grammar ? () => grammar.mask() : null);
           n++;
+          said.push(id);
           if (id === job.eos) { finish = 'stop'; break; }
           grammar?.advance(id);
           const d = dec.push(id);
@@ -371,7 +453,12 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         const tail = dec.end();
         if (tail) { text += tail; post({ id: m.id, type: 'delta', text: tail }); }
         const rate = thought + n >= LIMIT.rate && spent > 0 ? Math.round((thought + n) / spent * 10000) / 10 : null;
-        return { text, finish, model: m.model, usage: { input, output: thought + n, thought }, ...(rate && { rate }) };
+        // A think run's answer, read back as the next request holds it: the turn's empty think block, the answer, the end.
+        if (keeps && think && finish === 'stop') {
+          const open = ids.lastIndexOf(tok.id('<think>'));
+          if (open >= 0) readAhead(job, [...ids.slice(0, open), ids[open], think.end, ...said], m.id);
+        }
+        return { text, finish, model: m.model, usage: { input, output: thought + n, thought, ...(keeps && { cached }) }, ...(rate && { rate }) };
     };
     // A run on the model in its trial (a swapped-in update): its first good answer keeps the new version; a load or engine
     // failure brings the old one back, and the run goes again on it unless part of its answer was already sent.
@@ -412,11 +499,32 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         between: (fn) => queued(async () => { await fn(); if (loaded?.id === m.model) await unload(); }) },
       { doc: m.doc, id: m.model, glaze: m.glaze }, signal);
     };
+    // After the run (queued behind it), while nothing else waits; the next request stops it between steps.
+    const readAhead = (job, ids, owner) => {
+      // A request may have arrived before this answer finished, when there was no read-ahead to cancel yet.
+      if ([...ops].some(([id, op]) => id !== owner && (op.kind === 'run' || op.kind === 'warm'))) return;
+      const control = new AbortController();
+      ahead?.abort(new DOMException('Replaced', 'AbortError'));
+      ahead = control;
+      queued(async () => {
+        if (loaded !== job) return;
+        await job.model.extend(ids, { at: [ids.length], signal: control.signal, ...paced() });
+      }, control.signal).catch(() => {}).finally(() => { if (ahead === control) ahead = null; });
+    };
+    // The system turn (parts, or its first `stable`), kept; with stable the rest is read on after it in the live sequence.
     const warm = async (m, signal) => {
       return queued(async () => {
         if ((await env.store.status(m.model)).state !== 'ready') return { ok: false };
         const job = await wait(load(m.model, null, m.window), signal);
-        await prefix(job, encode(job, m.parts), signal);
+        const stable = Number.isSafeInteger(m.stable) && m.stable > 0 && m.stable < m.parts.length ? m.stable : m.parts.length;
+        const head = encode(job, m.parts.slice(0, stable)), ids = [...head, ...encode(job, m.parts.slice(stable))], pacing = paced();
+        const room = typeof job.model.reserve === 'function' ? job.context : Math.min(job.model.context || job.context, job.context);
+        if (ids.length > room) throw fail('request-rejected', 'context', { tokens: ids.length, context: room });
+        if (typeof job.model.reserve === 'function') await job.model.reserve(ids.length, room).catch((e) => { throw e?.reason === 'memory' ? fail('provider-unavailable', 'hardware') : e; });
+        await prefix(job, head, signal, pacing);
+        if (stable < m.parts.length && typeof job.model.extend === 'function') {
+          await job.model.extend(ids, { at: stops(job, ids, head.length), signal, ...pacing });
+        }
         return { ok: true };
       }, signal);
     };
@@ -454,6 +562,11 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       if (m.op === 'cancel') { ops.get(m.id)?.control.abort(new DOMException('Cancelled', 'AbortError')); return; }
       const op = Object.hasOwn(OPS, m.op) ? OPS[m.op] : null;
       if (!op || ops.has(m.id) || m.id === undefined) return post({ id: m.id, type: 'error', error: { code: 'request' } });
+      // A run outranks a warm-up and a read-ahead: they stop between steps, keeping what they read.
+      if (m.op === 'run') {
+        for (const o of ops.values()) if (o.kind === 'warm') o.control.abort(new DOMException('Superseded', 'AbortError'));
+      }
+      if (m.op === 'run' || m.op === 'warm') ahead?.abort(new DOMException('Superseded', 'AbortError'));
       const control = new AbortController();
       ops.set(m.id, { control, kind: m.op, ...((m.part === 'pictures' || (m.op === 'run' && Array.isArray(m.images) && m.images.length)) && { part: 'pictures' }) });
       quiet();

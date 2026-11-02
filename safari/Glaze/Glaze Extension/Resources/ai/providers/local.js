@@ -28,11 +28,11 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const MODEL = 'glaze-local', NAME = 'Rime';
   // A stock model's window; TUNED, a Glaze-tuned model's (no `stock`): the one its training data was planned for
   // (glaze-plans/lfm-tune FORMAT.md, caps.context 4096), which a request then plans for exactly.
-  const CONTEXT = 16000, TUNED = 4096, MAX_TOKENS = 1024;
+  const CONTEXT = 131072, TUNED = 4096, MAX_TOKENS = 1024;
   const ID = /^[a-z0-9][a-z0-9._-]{0,63}$/;
   // A tuned model's window is the context size Settings' Advanced keeps on the connection (cfg.window: WINDOWS), else TUNED.
   const WINDOWS = Object.freeze([8192, 16384, 32768, 65536, 131072]);
-  const windowOf = (m, cfg = {}) => (m && !m.stock ? { window: cfg.window || TUNED, inputLimit: cfg.window || TUNED } : { window: CONTEXT, inputLimit: CONTEXT - CONTEXT / 10 });
+  const windowOf = (m, cfg = {}) => (m && !m.stock ? { window: cfg.window || TUNED, inputLimit: cfg.window || TUNED } : { window: CONTEXT, inputLimit: Math.floor(CONTEXT * 0.9) });
   const LIMIT = { prepare: 240000 };
   // Tokens a task's request may reason in before its answer; 0 answers directly. A task with calls (its requests'
   // task.call, ai/task.js ask) has a row per call, and a request without one answers directly. Each row is D4's p3dpo,
@@ -59,13 +59,14 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   // THINK_SIZED: the tasks that reason, per size; the rest answer directly. ANSWER: the answer's reserve per size; a request
   // asking less keeps its own. SCALE: the switches, all off until a round trained with the size tokens passes the gate, so
   // Rime r5 reads what it was gated on (no size token, THINK, the request's maxTokens): token sends the size token, answer
-  // takes ANSWER, think[task][size] lets that task reason at that size. The host caps both by the room left in the window.
+  // takes ANSWER, think[task][size] lets that task reason at that size, compact enables chat.compact's new task token.
+  // The host caps both budgets by the room left in the window.
   const SIZE = ['4k', '8k', '16k', '32k', '64k', '128k'];
   const bySize = (f) => Object.freeze(Object.fromEntries(SIZE.map((k, i) => [k, f(i)])));
   const REASONS = bySize((i) => [128, 256, 512, 1024, 1024, 1024][i]);
   const THINK_SIZED = Object.freeze({ 'agent.tools': REASONS, 'study.help': REASONS });
   const ANSWER = bySize((i) => [512, 768, 1024, 1536, 2048, 2048][i]);
-  const SCALE = Object.freeze({ token: false, answer: false, think: Object.freeze({ 'agent.tools': bySize(() => false), 'study.help': bySize(() => false) }) });
+  const SCALE = Object.freeze({ token: false, answer: false, compact: false, think: Object.freeze({ 'agent.tools': bySize(() => false), 'study.help': bySize(() => false) }) });
   // A Glaze-tuned model's run in a window: → { size (its token, when sent), think (the budget before the host's rate check
   // and cap), maxTokens }. scale: SCALE, or a test's own (_env's scale).
   const limits = (task, window, { maxTokens, scale = env?.scale || SCALE } = {}) => {
@@ -219,13 +220,15 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
       const pics = pictures(list);
       if (!pics) throw refuse('caps', 'Glaze\'s own model does not take pictures.');
       if (!pics.ready || preparing.pictures) throw fail('provider-unavailable', 'pictures');
-      return { m: pics.model, projector: pics.projector.id, ...FMT().format(req, { dialect: 'chatml', images: true }) };
+      return { m: pics.model, window: Math.min(cfg.context || CONTEXT, CONTEXT), projector: pics.projector.id, ...FMT().format(req, { dialect: 'chatml', images: true }) };
     }
     const m = cfg.weights ? tiers(list).find((x) => x.id === cfg.weights) : choose(list, cfg);
     if (!m || m.state !== 'ready') throw fail('provider-unavailable', 'assets');
     const window = Math.min(cfg.context || windowOf(m, cfg).window, windowOf(m, cfg).window);
     const think = await budget(req, m, window), sized = !m.stock && limits(req.task, window).size;
-    return { m, window, budget: think, ...FMT().format(req, { dialect: m.stock ? 'chatml' : 'glaze', think: think > 0, ...(sized && { window }) }) };
+    // r5 never trained chat.compact's task token. Use the native prompt until its independent training gate is enabled.
+    const native = m.stock || (req.task?.id === 'chat.compact' && (env?.scale || SCALE).compact !== true);
+    return { m, window, budget: think, ...FMT().format(req, { dialect: native ? 'chatml' : 'glaze', think: think > 0, ...(sized && { window }) }) };
   };
   const host = (e) => {
     if (e?.category === 'cancelled') return e;
@@ -263,7 +266,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
       // span to words of its source (spans).
       const held = plan.constraint ? { schema: plan.constraint.schema, tools: plan.constraint.tools } : req.schema && (spans(req) || { schema: req.schema });
       r = await own().link.call('run', { model: plan.m.id, parts: plan.parts, stable: plan.stable, ...(plan.images && { projector: plan.projector, images: plan.images }), ...held,
-        ...(plan.think && { think: { budget: plan.budget, ...plan.think } }), ...(!plan.m.stock && { window: plan.window }),
+        ...(plan.think && { think: { budget: plan.budget, ...plan.think } }), window: plan.window, ...(req.task?.id === 'writer.complete' && { priority: 'low' }),
         sampler: { ...(req.temperature !== undefined && { temperature: req.temperature }) }, maxTokens },
       { signal, onEvent: (e) => { if (e?.type === 'delta' && typeof e.text === 'string' && e.text) onDelta?.(e.text); } });
     } catch (e) { if (signal?.aborted) throw signal.reason; throw host(e); }
@@ -273,7 +276,8 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     const native = plan.constraint && AGENT().fromNative(r.text);
     if (plan.constraint && native === undefined) throw fail('invalid-response', 'native');
     return { text: plan.constraint ? JSON.stringify(native) : r.text, model: MODEL, finish: r.finish === 'stop' ? 'stop' : 'length',
-      ...(R.isObj(r.usage) && Number.isSafeInteger(r.usage.input) && { usage: { input: r.usage.input, ...(Number.isSafeInteger(r.usage.output) && { output: r.usage.output }) } }) };
+      ...(R.isObj(r.usage) && Number.isSafeInteger(r.usage.input) && { usage: { input: r.usage.input, ...(Number.isSafeInteger(r.usage.output) && { output: r.usage.output }),
+        ...(Number.isSafeInteger(r.usage.cached) && r.usage.cached >= 0 && r.usage.cached <= r.usage.input && { cached: r.usage.cached }) } }) };
   };
   // count(req, cfg) → the request's prompt tokens, counted by the host with the model's own tokenizer (host.js count).
   const count = async (req, cfg, { signal } = {}) => {
@@ -282,12 +286,12 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     const r = await own().link.call('count', { model: plan.m.id, parts: plan.parts }, { signal });
     return Number.isSafeInteger(r?.tokens) ? r.tokens : null;
   };
-  // A warm-up: the host loads the model and reads the system turn once, kept for the run that follows. Never downloads.
+  // A warm-up: the host keeps the system turn and reads the history while the student types. Never downloads.
   const warm = async (req, cfg, { signal } = {}) => {
     if (R.images(req) > 0) return false;
     let plan;
     try { plan = await ready(req, cfg); } catch { return false; }
-    try { return (await own().link.call('warm', { model: plan.m.id, parts: plan.parts.slice(0, plan.stable), ...(plan.window > CONTEXT && { window: plan.window }) }, { signal }))?.ok === true; } catch { return false; }
+    try { return (await own().link.call('warm', { model: plan.m.id, parts: plan.parts, stable: plan.stable, window: plan.window }, { signal }))?.ok === true; } catch { return false; }
   };
   // vision: whether the picture download is here (the broker sets cfg.images from it for a run). context: the window of the
   // text model this cfg runs, and weights its id (the broker sets cfg.context and cfg.weights from them); pictures.context,

@@ -644,7 +644,8 @@ words}]<|im_end|>\n<|im_start|>user\n<|gz_ctx|>label\ntext<|/gz_ctx|>\n…<|gz_d
 assistant\n` and the mode's prefill: direct `<think></think>`, think `<think>\n`), and `chatml` for a `stock: true` model,
 whose weights never learnt Glaze's tokens (the harness's messages as written, the schema in words, `<think></think>` after
 the assistant header; never think mode). A models.json entry without `stock` (Rime;
-`tools/vendor/model-manifest.js` without `--stock`) reads `glaze`. `test/ai/local-format-ids.test.js` holds `glaze` to
+`tools/vendor/model-manifest.js` without `--stock`) reads `glaze`, except for the separately gated compact task below.
+`test/ai/local-format-ids.test.js` holds `glaze` to
 `glaze-plans/lfm-tune/FORMAT-v2.md` id for id: for requests each trained task builds, the ids its `train/format.js`
 `promptV2` and LFM3's tokenizer give, direct and, for a think task, think (fixture: `tools/dev/local-format-fixture.js`).
 
@@ -653,7 +654,11 @@ is 125055; all `[PAD]` rows of LFM3's GGUFs, never produced by text) name the wi
 after the task token: the largest size at or under it. `SCALE` in `ai/providers/local.js` turns them on with the per-size
 think budget (`THINK_SIZED`: agent.tools and study.help 128/256/512/1024 at 4K/8K/16K/32K+) and answer reserve (`ANSWER`:
 512/768/1024/1536/2048 at 4K/8K/16K/32K/64K+), each capped by the room the window leaves; all off until a model trained
-with them ships, so Rime r5's requests are unchanged.
+with them ships, so Rime r5's trained requests are unchanged. The independent `SCALE.compact` switch also defaults to
+false: `chat.compact` uses native ChatML on tuned r5 weights, avoiding its untrained round 8 task token. Evaluation may
+explicitly set `scale.compact: true` to send the Glaze compact task token. This only selects that task's prompt dialect;
+the actual model, tuned window, budgets, sampler and count/run prompt agreement stay intact. Existing trained tasks keep
+their Glaze dialect; stock and picture models keep native ChatML.
 
 Think mode (FORMAT-v2): a Glaze-tuned model reasons before it answers for the requests `THINK` in `ai/providers/local.js`
 gives a budget (256 tokens: agent.tools only; D4 measured p3dpo thinking worse than answering directly on writer.review,
@@ -670,7 +675,7 @@ not: the reasoning keeps its budget while the answer is left at least 256 tokens
 answer is cut to the rest (a request asking 4,096 still thinks its 256); a prompt that leaves the answer less runs
 as planned in the engine's room (a request whose close that room can't hold is refused before prefill); `usage.output` counts both. `test/ai/local-think.test.js` holds it with a stub engine.
 The window a run plans for is its model's: 4,096 tokens for a model without `stock` (FORMAT.md's inference window; the
-training data was made at caps.context 4096), 14,400 (16,000 less a tenth) for a stock one, the picture model included.
+training data was made at caps.context 4096), 131,072 for a stock one (with an input limit of 90% of that), the picture model included.
 `catalog` says the window of the text model the connection runs (its tier's, else the one here) and that model's store id
 (`weights`), and, while pictures are here, `pictures.context`; the broker sets `cfg.context` from the first (from the
 second for a task that only reads pictures, `writer.image`) and `cfg.weights`, and a text request runs on that model
@@ -753,16 +758,29 @@ printed, committed or logged.
 
 `ai/local/engine.js` (`GZ_AI_ENGINE`), loaded in the host's Worker after `quant.js` and `reference.js`:
 
+Text RoPE follows canonical HF LFM3 (`ac2586a3`) f32 arithmetic: `inv = f32(1 / f32(base ** f32(2*i/n)))`,
+then `theta = f32(f32(position) * inv)` before f32 sin/cos. GGUF factors scale the inverse frequency in f32;
+only the converter's exact `f32(1e30)` sentinel represents an exact-zero partial-RoPE tail. Ordinary factors remain
+frequency divisors. Both the engine table and CPU reference are checked against the independent CPU PyTorch 2.4.1
+capture in `test/fixtures/ai/hf-rope-f32-cpu.json`, including 8K/32K/128K positions: frequency and phase bits must match
+exactly, trig within 1 ULP. This establishes canonical arithmetic; attribution of CUDA top-1 differences and the unchanged
+99% top-1 / mean KL ≤ 0.02 inference gates still require external all-size GPU measurements.
+
 ```js
 GZ_AI_ENGINE.load(gguf, { context, signal, onProgress? }) → Promise<model>
-  // gguf: GZ_AI_GGUF.open(store.open(id)); context: positions a sequence may hold (16000)
-model.context                                   // the positions it holds
-model.prefill(ids, { snapshot?, signal }) → Promise<snap | undefined>
+  // gguf: GZ_AI_GGUF.open(store.open(id)); context: positions allocated initially; reserve grows the live sequence.
+model.context                                   // the positions allocated now
+model.reserve(n, most) → Promise<number>         // grow without losing the sequence, up to most
+model.common(ids) → number                       // length of the common held prefix
+model.extend(ids, { at?, signal, step?, pace? }) → Promise<{ reused, fed }>
+  // Keep the common prefix, rewind to a light mark if needed, feed only the rest; at: token positions to mark.
+model.prefill(ids, { snapshot?, signal, step?, pace? }) → Promise<snap | undefined>
   // ids: Uint32Array fed at the next positions; afterwards the model holds the logits for the next one.
   // snapshot: true → resolves to a snapshot of the state after them.
 model.decode({ sampler: { temperature, topK, topP?, repetitionPenalty? }, mask?, signal }) → Promise<id>
-  // samples one id from the held logits (temperature 0: greedy), with mask: a Uint32Array, token i allowed when bit
-  // i & 31 of word i >> 5 is set, never written; then feeds that id (the engine may defer it to its next call).
+  // Samples one id (temperature 0: greedy); mask: a Uint32Array, or a function returning one once the previous
+  // token's forward is submitted. Token i allowed when bit i & 31 of word i >> 5 is set; never written.
+  // The selected id is fed by the next decode or prefill.
 model.snapshot() → Promise<snap>;  model.restore(snap) → Promise<void>  // positions after snap.pos are dropped
 snap: { pos, drop() }                           // drop frees what it holds; the host drops each one it lets go
 model.release()                                 // frees every GPU resource; the model is not used again
@@ -788,8 +806,36 @@ is `provider-unavailable`, reason `engine`, never a run in words only. The other
 `unavailable`, reason `engine`; no ladder, the smallest tier where there is an adapter.
 
 The host's messages (`host.js` header): `prepare { tier?, part? }`, `run { model, parts, stable, schema?, sources?, sampler, maxTokens,
-projector?, images?, think?: { budget, close, after }, window? }`, `warm { model, parts }`, `remove { part? }`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s
+projector?, images?, think?: { budget, close, after }, window?, priority?: 'low' }`, `warm { model, parts, stable?, window? }`, `remove { part? }`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s
 while anything is in flight, and `idle`.
+
+The host starts with 8,192 allocated positions and grows only when a request needs more, up to its requested window
+(at least 16,000 physical positions, at most 131,072). Text requests retain one sequence across runs: common history is
+kept, and a changed suffix rewinds to a light checkpoint of convolution state, sliding-window keys/values and logits.
+Checkpoints sit at the system turn, selected turn boundaries and sparse 2,048-token positions; a checkpoint splits a
+prefill, so the host avoids placing one at every conversation marker. `usage.cached` reports prompt positions already held.
+Warm-up may include history after its `stable` system turn; an incoming run cancels background reading before taking over.
+`writer.complete`, explicit low-priority runs, history warm-up and think-answer read-ahead use adaptive prefill submissions,
+wait for their GPU completion and yield between them. Linearly scaling adapters target about 20 ms per step. When two
+different GEMM batch sizes reveal a dominant fixed launch cost above that target, the controller probes a 128-token bulk
+batch, keeps at least 32 tokens per full step, and targets about 20 ms of variable work above the learned floor, up to 512
+tokens. It compares GEMM sizes before permitting single-token steps and ignores partial checkpoint tails when learning.
+This avoids repeatedly crossing the fast single-token GEMV / expensive small-GEMM boundary. The time target is best effort
+on these drivers; cancellation is checked between completed submissions, and decode also yields. Synthetic linear and
+launch-floor regressions verify this controller; actual GPU throughput, frame latency and cancellation remain external checks.
+The grammar mask is built after the preceding token's GPU forward is submitted, overlapping CPU grammar work with it.
+For the f32 engine's long-context numerical checks, the llama.cpp oracle uses the original quantized GGUF's exact
+**dequantized f32 weights**, f32 K/V and full-float matmuls. Before accepting that oracle, compare every tensor value
+bit for bit with the original model's dequantization and preserve all architecture/tokenizer metadata; only the GGUF's
+file-type declaration changes. Disable TF32 and record the backend dispatch used. Quantized CUDA MMQ/MMVQ instead
+quantizes activations to q8_1, while this engine keeps them f32: its logits are a separate backend diagnostic, not the
+same numerical program. Keep both results. Use identical fixed prompts and teacher-forced token histories at 8K, 32K and
+128K, with 200 steps per size; the gates stay top-1 agreement at least 99% and mean KL at most 0.02.
+
+Integer dot-product and experimental subgroup-matrix candidates are optional. On each engine/device load, they must
+match the normal matmul on the loaded model's representative matrices and run at least 10% faster, including activation
+packing, before that exact matrix/tile shape can use them. Unsupported, inaccurate, slower or failed candidates retain
+the normal f32/f16 path. No hardware speedup follows from feature support alone.
 
 What needs a real GPU or browser: the engine's numbers and speed, the ladder's tiers, Firefox's event page staying while its
 Worker works (measured nowhere yet), and Chrome closing an idle offscreen document. `checks/ai/local-provider-check.js`

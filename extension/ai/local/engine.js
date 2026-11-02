@@ -6,6 +6,8 @@
 // tensor at a 256-byte boundary; a tensor larger than the device's binding limit is split into runs of whole rows.
 // Paths: f16 (`shader-f16`): the key/value caches and the GEMM tiles in f16, sums in f32; f32 otherwise. Subgroups
 // (`subgroups`, checked on the device first) for the GEMV's row sums; workgroup memory otherwise (Firefox).
+// Optional dp4a and experimental i8 subgroup-matrix GEMMs use two residual activation planes. Each model/device
+// checks accuracy and complete-path speed at startup; only that exact matrix shape and 128-token batch can use them.
 // One token: GEMV per matrix (ffn_gate and ffn_up together, SwiGLU applied); several: tiled GEMM. Sliding layers keep
 // a ring of window + chunk positions; full layers every position up to the session's context.
 // Classic script; node exports (the pure parts run in Node: plan, preprocess, grid, splits, ropeTable).
@@ -17,10 +19,11 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   // Values and bytes per block of the types with kernels.
   const QUANT = { Q4_K: [256, 144], Q5_K: [256, 176], Q6_K: [256, 210], Q8_0: [32, 34] };
   const KERNELS = ['quant', 'matvec', 'matmul', 'embed', 'norm', 'swiglu', 'shortconv', 'rope', 'attention', 'argmax', 'topk', 'penalty', 'probe'];
-  const QUANTIZED = new Set(['matvec', 'matmul', 'embed']);
+  const QUANTIZED = new Set(['matvec', 'matmul', 'embed', 'imatmul', 'tensormul']);
   const SLOT = 256; // bytes per op's uniforms (minUniformBufferOffsetAlignment)
   const CAP = 2 ** 30; // bytes per weight buffer
   const up = (n, a) => Math.ceil(n / a) * a;
+  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
   // ---- pure parts --------------------------------------------------------------------------------------------------------
   // `//#if A || B && !C`, `//#else`, `//#endif` lines keep or drop the lines between them.
@@ -93,13 +96,31 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   // slower on a 3080 Ti), at most 8, whole sub-blocks of 32 each; rows a multiple of 4 (the sum reads vec4).
   const splits = (rows, cols, T) => (rows % 4 ? 1 : Math.max(1, Math.min(8, cols / 32, Math.floor(320 / (Math.ceil(rows / 128) * Math.ceil(T / 128))))));
 
-  // cos and sin of NeoX RoPE for positions from..from + count − 1, as the reference computes them (θ in double, then
-  // rounded to f32): rows of n / 2 (cos, sin) pairs.
+  // Admission is deliberately conservative: no zero-only/NaN corpus, cancellation-sensitive error scaled to the
+  // whole output, and all three complete-path timings must beat the fastest baseline by at least 10%.
+  const accelerationCheck = (expected, actual, baseline = [], candidate = []) => {
+    if (!expected.length || expected.length !== actual.length) return { ok: false, reason: 'shape' };
+    let norm = 0, error = 0, peak = 0, delta = 0;
+    for (let i = 0; i < expected.length; i++) {
+      const x = expected[i], y = actual[i];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return { ok: false, reason: 'nonfinite' };
+      norm += x * x; error += (x - y) ** 2; peak = Math.max(peak, Math.abs(x)); delta = Math.max(delta, Math.abs(x - y));
+    }
+    if (!(norm > 0) || !Number.isFinite(norm)) return { ok: false, reason: 'empty' };
+    const rms = Math.sqrt(error / norm), max = delta / peak;
+    if (rms > 5e-5 || max > 2e-4) return { ok: false, reason: 'accuracy', rms, max };
+    if (baseline.length < 3 || candidate.length < 3 || [...baseline, ...candidate].some((n) => !Number.isFinite(n) || n <= 0)) return { ok: false, reason: 'timing', rms, max };
+    const speedup = Math.min(...baseline) / Math.max(...candidate);
+    return { ok: speedup >= 1.1, reason: speedup >= 1.1 ? null : 'speed', rms, max, speedup };
+  };
+
+  // NeoX RoPE for positions from..from + count − 1: HF's f32 inverse frequencies and position phases before trig,
+  // stored as rows of n / 2 f32 (cos, sin) pairs. Both paths are held to independent HF captures in local-rope-f32.test.js.
   const ropeTable = (from, count, n, base, factors) => {
-    const half = n / 2, out = new Float32Array(count * half * 2);
+    const half = n / 2, freq = REF()._ops.ropeFreqs(n, base, factors), out = new Float32Array(count * half * 2);
     for (let t = 0; t < count; t++) {
       for (let i = 0; i < half; i++) {
-        const theta = ((from + t) * base ** (-2 * i / n)) / (factors ? factors[i] : 1);
+        const theta = Math.fround(Math.fround(from + t) * freq[i]);
         out[(t * half + i) * 2] = Math.cos(theta);
         out[(t * half + i) * 2 + 1] = Math.sin(theta);
       }
@@ -137,10 +158,11 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   };
 
   // A device for the engine: the adapter's limits, shader-f16 and subgroups when it has them.
-  const requestDevice = async (adapter, { f16, subgroups, profile }) => {
+  const requestDevice = async (adapter, { f16, subgroups, profile, tensor }) => {
     const L = adapter.limits, requiredFeatures = [];
     if (f16) requiredFeatures.push('shader-f16');
     if (subgroups) requiredFeatures.push('subgroups');
+    if (tensor) requiredFeatures.push('chromium-experimental-subgroup-matrix');
     if (profile && adapter.features.has('timestamp-query')) requiredFeatures.push('timestamp-query');
     return adapter.requestDevice({
       requiredFeatures,
@@ -154,7 +176,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
 
   // gguf: an open GGUF (ai/local/gguf.js). opts: { adapter, device (made from adapter if absent), precision 'auto' |
   // 'f32' | 'f16', subgroups 'auto' | false, kernels (name → source, or a base URL; the package's by default), onProgress,
-  // profile (timestamp-query, for forward's profile option) }.
+  // profile (timestamp-query, for forward's profile option), acceleration false (skip optional candidate selfchecks) }.
   const create = async (gguf, opts = {}) => {
     const halt = () => { if (opts.signal?.aborted) throw opts.signal.reason ?? new DOMException('Aborted', 'AbortError'); };
     halt();
@@ -173,8 +195,19 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     const f16 = precision === 'f16' || (precision === 'auto' && adapter.features.has('shader-f16'));
     if (f16 && !adapter.features.has('shader-f16')) fail('this adapter has no shader-f16', 'webgpu');
     let sg = opts.subgroups !== false && adapter.features.has('subgroups');
+    // Never enable unsafe browser flags here. An absent experimental API is an ordinary fallback.
+    const tensorConfig = sg && opts.acceleration !== false && adapter.features.has('chromium-experimental-subgroup-matrix')
+      && adapter.info?.subgroupMaxSize === 32 && adapter.info?.subgroupMinSize === 32
+      && adapter.info?.subgroupMatrixConfigs?.some((q) => q.componentType === 'i8' && q.resultComponentType === 'i32' && q.M === 16 && q.N === 16 && q.K === 32);
     let device;
-    try { device = opts.device || await requestDevice(adapter, { f16, subgroups: sg, profile: opts.profile }); } catch (e) { halt(); fail(`no device: ${e.message}`, 'webgpu'); }
+    let failedBuffers = [];
+    try {
+      if (opts.device) device = opts.device;
+      else {
+        try { device = await requestDevice(adapter, { f16, subgroups: sg, profile: opts.profile, tensor: tensorConfig }); }
+        catch (e) { if (!tensorConfig) throw e; halt(); device = await requestDevice(adapter, { f16, subgroups: sg, profile: opts.profile }); }
+      }
+    } catch (e) { halt(); fail(`no device: ${e.message}`, 'webgpu'); }
     // A device the engine made is the engine's to destroy (all its memory with it).
     const own = !opts.device;
     const bail = (e) => { if (own) device.destroy?.(); throw e; };
@@ -197,6 +230,9 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     // BLOCK attention keeps f32 queries, H keys/values and scalar scores in workgroup memory. Smaller devices use
     // the original one-query workgroups, which fit wherever the small GEMM does.
     const blockAttention = device.limits.maxComputeWorkgroupStorageSize >= 528 * 16 + 2 * 528 * (f16 ? 8 : 16) + (256 + 16) * 4;
+    // FLASH attention (64 rows of G = H / Hkv query heads sharing each tile of 32 keys, 2 × 1024 vec4 of H) needs subgroups
+    // (decided after the probe below); opts.attention 'block' keeps BLOCK.
+    const flashFits = device.limits.maxComputeWorkgroupStorageSize >= 2 * 1024 * (f16 ? 8 : 16) && opts.attention !== 'block';
     let lost = null;
     device.lost.then((info) => { lost = info; });
     try {
@@ -205,14 +241,23 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     const src = typeof opts.kernels === 'function' ? opts.kernels : typeof opts.kernels === 'object' && opts.kernels ? (n) => opts.kernels[n] : defaultSource(opts.kernels);
     const sources = {};
     for (const k of KERNELS) sources[k] = await src(k);
+    const acceleration = { dp4a: { enabled: false, types: {}, reason: 'unsupported' }, tensor: { enabled: false, types: {}, reason: 'unsupported' } };
+    const dp4a = opts.acceleration !== false && navigator.gpu.wgslLanguageFeatures?.has('packed_4x8_integer_dot_product');
+    const tensorAvailable = tensorConfig && device.features.has('chromium-experimental-subgroup-matrix');
+    if (dp4a || tensorAvailable) {
+      // Optional assets, like optional pipeline compilation, may fail without disabling the portable engine.
+      for (const k of ['quantx', 'iquant', 'imatmul', 'tensormul']) {
+        try { sources[k] = await src(k); } catch { sources[k] = ''; }
+      }
+    }
 
     // ---- pipelines ----
     const pipes = new Map();
     let tpr = 32;
     const code = (kernel, defines = {}) => {
       const d = { ...defines, F16: f16, SUBGROUPS: sg && kernel !== 'probe' ? true : defines.SUBGROUPS };
-      const head = [d.F16 && 'enable f16;', (d.SUBGROUPS || kernel === 'probe') && 'enable subgroups;', `alias H = ${d.F16 ? 'f16' : 'f32'};`, `const TPR: u32 = ${tpr}u;`];
-      return [...head.filter(Boolean), QUANTIZED.has(kernel) ? preprocess(sources.quant, d) : '', preprocess(sources[kernel], d)].join('\n');
+      const head = [kernel === 'tensormul' && 'enable chromium_experimental_subgroup_matrix;', d.F16 && 'enable f16;', (d.SUBGROUPS || kernel === 'probe') && 'enable subgroups;', `alias H = ${d.F16 ? 'f16' : 'f32'};`, `const TPR: u32 = ${tpr}u;`];
+      return [...head.filter(Boolean), QUANTIZED.has(kernel) ? preprocess(sources.quant, d) : '', (kernel === 'imatmul' || kernel === 'tensormul') ? preprocess(sources.iquant, d) : '', preprocess(sources[kernel], d)].join('\n');
     };
     const pipe = async (kernel, defines = {}) => {
       const key = `${kernel} ${JSON.stringify(defines)}`;
@@ -271,7 +316,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       device.queue.submit([enc.finish()]);
       u.destroy();
     };
-    const paramBinding = { matvec: 3, matmul: 3, embed: 3, norm: 5, swiglu: 2, shortconv: 4, rope: 8, attention: 5, argmax: 3, topk: 3, penalty: 2 };
+    const paramBinding = { matvec: 3, matmul: 3, embed: 3, norm: 5, swiglu: 2, shortconv: 4, rope: 8, attention: 5, argmax: 3, topk: 3, penalty: 2, quantx: 3, imatmul: 3, tensormul: 3 };
 
     // Subgroups: the kernels assume invocation li is lane li mod size, and need TPR ≤ the size; else the plain path.
     let sgWhy = null;
@@ -292,6 +337,8 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       } catch (e) { sg = false; sgWhy = e.message; }
       if (!sg) { tpr = 32; pipes.clear(); }
     }
+
+    const flash = (Hkv) => sg && flashFits && c.nHead % Hkv === 0 && 64 % (c.nHead / Hkv) === 0;
 
     // ---- weights ----
     const E = c.nEmbd, hd = c.headDim, F = c.nFf;
@@ -335,6 +382,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     const lim = device.limits;
     const layout = plan(infos, { maxBuffer: lim.maxBufferSize, maxBinding: lim.maxStorageBufferBindingSize });
     const wbufs = [];
+    failedBuffers = wbufs;
     const total = infos.reduce((n, t) => n + t.bytes, 0);
     let done = 0;
     const scope = () => device.pushErrorScope?.('out-of-memory');
@@ -373,6 +421,81 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       return { ...t, runs: layout.at[name].map((r) => ({ ...r, bind: { buffer: wbufs[r.buffer], offset: r.offset, size: r.size } })) };
     };
 
+    // Compile, compare and time candidates on this device and this model's real quantized weights. No persisted
+    // adapter verdict: a browser/driver/model change must pass again. Every buffer is temporary and freed on rejection.
+    const checkAcceleration = async (kind, available) => {
+      const verdict = acceleration[kind];
+      if (!available) return;
+      const kernel = kind === 'tensor' ? 'tensormul' : 'imatmul', tile = kind === 'tensor' ? 16 : 8;
+      verdict.reason = 'no compatible matrices';
+      for (const type of Object.keys(QUANT)) {
+        if (kind === 'tensor' && type === 'Q6_K') continue;
+        const t = infos.find((q) => q.type === type && q.rows >= 128 && q.rows <= 8192 && q.cols % 256 === 0 && !q.name.startsWith('token_embd'));
+        if (!t) continue;
+        halt();
+        const owned = [], own = (b) => (owned.push(b), b);
+        try {
+          if (!sources.quantx || !sources.iquant || !sources[kernel]) throw new Error('missing optional kernel');
+          const r = tensor(t.name).runs[0], rows = r.rows, K = t.cols, T = 128;
+          const x = new Float32Array(T * K);
+          // Ordinary normalized inputs, very uneven scales, alternating cancellation, zeros and outliers. Avoid
+          // quantization-friendly integer inputs (a broken approximate path could otherwise appear exact).
+          for (let j = 0; j < x.length; j++) {
+            const row = Math.floor(j / K), k = j % K;
+            x[j] = row % 8 === 0 ? 0 : (Math.sin(j * 0.173 + 0.1) + Math.cos(k * 0.317)) * (row % 7 === 0 ? 0.001 : 1);
+            if (row % 5 === 0 && k % 32 === 0) x[j] = 17.13 * (k % 64 ? -1 : 1);
+          }
+          const X = own(upload(x)), XQ = own(buffer(T * K * 2)), XD = own(buffer(T * K / 2));
+          const Y = own(buffer(T * rows * 4)), Z = own(buffer(T * rows * 4));
+          const words = PARAMS.matmul({ rows, K, rowBytes: t.rowBytes, T, xStride: K, ldy: rows });
+          const make = async (name, defines, entries, words, dims) => {
+            const p = await pipe(name, defines), u = own(uniform(words));
+            return { p, g: group(p, { ...entries, [paramBinding[name]]: u }), dims };
+          };
+          const big = bigTile && rows >= bigRows, z = big && split ? splits(rows, K, T) : 1;
+          const part = z > 1 ? own(buffer(z * T * rows * 4)) : Y;
+          const reference = [await make('matmul', { [type]: true, BIG: big, TF32: big && tf32 }, { 0: r.bind, 1: X, 2: part }, words, [Math.ceil(rows / (big ? 128 : 64)), Math.ceil(T / (big ? 128 : 64)), z])];
+          if (z > 1) reference.push(await make('matmul', { SUM: true }, { 1: part, 2: Y }, PARAMS.matmul({ rows, K: z, rowBytes: 0, T, xStride: 0, ldy: rows }), grid(Math.ceil(T * rows / 4 / 256))));
+          const quantize = await make('quantx', {}, { 0: X, 1: XQ, 2: XD }, u32(K, T, K, 0), grid(Math.ceil(T * K / 32 / 256)));
+          const multiply = await make(kernel, { [type]: true }, { 0: r.bind, 1: XQ, 2: Z, 4: XD }, words, [Math.ceil(rows / tile), Math.ceil(T / tile)]);
+          const run = async (ops, repeats = 1) => {
+            const enc = device.createCommandEncoder(), pass = enc.beginComputePass();
+            for (let i = 0; i < repeats; i++) for (const op of ops) { pass.setPipeline(op.p); pass.setBindGroup(0, op.g); pass.dispatchWorkgroups(...op.dims); }
+            pass.end();
+            const start = now(); device.queue.submit([enc.finish()]); await device.queue.onSubmittedWorkDone(); return now() - start;
+          };
+          // Capture asynchronous validation failures too; invalid commands must never produce a positive verdict.
+          device.pushErrorScope?.('validation');
+          let validation;
+          try { await run(reference); await run([quantize, multiply]); }
+          finally { validation = await device.popErrorScope?.(); }
+          if (validation) throw new Error(validation.message);
+          const expected = new Float32Array(await read(Y)), actual = new Float32Array(await read(Z));
+          let result = accelerationCheck(expected, actual);
+          if (result.reason !== 'timing') { verdict.types[type] = result; continue; }
+          const baseline = [], candidate = [];
+          // Alternating order and a conservative worst/best comparison avoid approving a path on one lucky sample.
+          for (let i = 0; i < 3; i++) {
+            halt();
+            if (i % 2) { candidate.push(await run([quantize, multiply], 4)); baseline.push(await run(reference, 4)); }
+            else { baseline.push(await run(reference, 4)); candidate.push(await run([quantize, multiply], 4)); }
+          }
+          result = accelerationCheck(expected, actual, baseline, candidate);
+          verdict.types[type] = { ...result, rows, K, T, baseline, candidate };
+          if (result.ok) verdict.enabled = true;
+        } catch (e) {
+          halt();
+          verdict.types[type] = { ok: false, reason: e.message };
+        } finally { for (const b of owned) b.destroy(); }
+      }
+      verdict.reason = verdict.enabled ? null : 'selfcheck';
+    };
+    await checkAcceleration('dp4a', dp4a);
+    await checkAcceleration('tensor', tensorAvailable && sg);
+    halt();
+    const freeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) freeze(x); Object.freeze(v); } return v; };
+    freeze(acceleration);
+
     // ---- a session -------------------------------------------------------------------------------------------------------
     let destroyed = false;
     const sessions = new Set();
@@ -383,6 +506,8 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       // destroy may be widened by the session (its snapshots); the engine calls whatever it is at the time.
       const life = {
         own: (b) => { if (closed) { b.destroy(); fail('session destroyed'); } owned.push(b); return b; },
+        // A buffer the session replaced (a grown cache) or let go (a mark's): destroyed now.
+        disown: (b) => { const i = owned.indexOf(b); if (i >= 0) owned.splice(i, 1); b.destroy(); },
         closed: () => closed,
         destroy: () => { closed = true; for (const b of owned) b.destroy(); owned.length = 0; sessions.delete(close); },
       };
@@ -399,7 +524,8 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         return s;
       } catch (e) { life.destroy(); throw e; }
     };
-    // ctx: positions it can hold; chunk: tokens per forward step (a longer feed goes in chunks).
+    // ctx: positions it holds now (grow() makes room for more, the sequence kept); chunk: tokens per forward step (a longer
+    // feed goes in chunks).
     const createSession = async ({ ctx = 4096, chunk = 128 } = {}, life) => {
       if (lost) fail(`device lost: ${lost.message}`);
       for (const [name, n] of Object.entries({ ctx, chunk })) {
@@ -413,11 +539,19 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       const mk = (n) => storage(n * 4);
       fits(ctx * c.nRot * 4, device.limits.maxStorageBufferBindingSize);
       fits(ctx * c.nRotSwa * 4, device.limits.maxStorageBufferBindingSize);
+      for (let i = 0; i < c.nLayer; i++) if (c.layers[i] !== 'conv') {
+        const slots = c.layers[i] === 'swa' ? Math.min(ctx, c.window + chunk) : ctx;
+        fits(slots * c.nHeadKv[i] * hd * kvb, device.limits.maxStorageBufferBindingSize);
+      }
       const B = {
         ids: mk(chunk), x: mk(chunk * E), n: mk(chunk * E), a: mk(chunk * E), y: mk(chunk * E),
         big: mk(chunk * hidden), up: mk(chunk * F), q: mk(chunk * H * hd), k: mk(chunk * kvHeads * hd), v: mk(chunk * kvHeads * hd), g: mk(chunk * H),
         last: mk(V), raw: mk(V), lastIds: mk(1), mask: mk(Math.ceil(V / 32)), pen: mk(64), apart: mk(H * Math.ceil(ctx / 128) * (hd + 2)), part: mk(Math.ceil(V / 4096) * 2 * chunk), cand: mk(Math.ceil(V / 2048) * 64 * 2), top: mk(64 * 2),
       };
+      if (acceleration.dp4a.enabled || acceleration.tensor.enabled) {
+        B.xq = storage(chunk * Math.max(E, F, H * hd) * 2);
+        B.xd = storage(chunk * Math.max(E, F, H * hd) / 2);
+      }
       // The splits' sums of a big-tile GEMM split along k.
       if (bigTile && chunk > 64 && split) {
         let most = 0;
@@ -431,12 +565,21 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         const slots = ring || ctx;
         return { ring, K: storage(slots * width * kvb), V: storage(slots * width * kvb) };
       });
-      const ropeFull = life.own(upload(ropeTable(0, ctx, c.nRot, c.ropeBase, ropeFreqs), S.STORAGE | S.COPY_DST));
-      const ropeSwa = life.own(upload(ropeTable(0, ctx, c.nRotSwa, c.ropeBaseSwa, null), S.STORAGE | S.COPY_DST));
+      // The RoPE tables' rows are written as positions come into use (ensureRope), so a long context costs nothing up front.
+      let ropeFull = storage(ctx * c.nRot * 4), ropeSwa = storage(ctx * c.nRotSwa * 4), ropeRows = 0;
+      const ensureRope = (upto) => {
+        if (upto <= ropeRows) return;
+        const to = Math.min(ctx, up(upto, 1024));
+        for (const [b, n, base, f] of [[ropeFull, c.nRot, c.ropeBase, ropeFreqs], [ropeSwa, c.nRotSwa, c.ropeBaseSwa, null]]) {
+          const rows = ropeTable(ropeRows, to - ropeRows, n, base, f);
+          device.queue.writeBuffer(b, ropeRows * n * 4, rows.buffer, rows.byteOffset, rows.byteLength);
+        }
+        ropeRows = to;
+      };
 
       // Every dispatch of a forward step owns a uniform slot; a step rewrites them all, then runs its list.
       const slots = [];
-      const P = { one: [], many: [], manyBig: [], lastOne: [], lastMany: [], allMany: [], argmax: [], topk: [] };
+      const P = { one: [], many: [], manyBig: [], fast: [], lastOne: [], lastMany: [], allMany: [], argmax: [], topk: [] };
       let params = null;
       const op = async (list, kernel, defines, entries, words, dims) => {
         const p = await pipe(kernel, defines), slot = slots.length;
@@ -449,9 +592,21 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       // y = W · x for each run of W's rows. GEMV (one token) or GEMM (T tokens, T filled per step).
       const mm = async (list, name, xOff, X, Y, yOff, { one, ldy, big: bigList = false }) => {
         const t = W(name);
+        // Only the tested prefill range is eligible. Decode, tiny matrices and Q6 tensor products retain their paths.
+        const checked = (kind) => {
+          const v = acceleration[kind].types[t.type];
+          return v?.ok && v.K === t.cols && t.runs.some((r) => r.rows === v.rows);
+        };
+        const selected = !one && bigList === 'fast' && chunk >= 128
+          ? checked('tensor') ? 'tensormul' : checked('dp4a') ? 'imatmul' : null : null;
+        const checkedRows = selected ? acceleration[selected === 'tensormul' ? 'tensor' : 'dp4a'].types[t.type].rows : 0;
+        if (selected) await op(list, 'quantx', {}, { 0: X, 1: B.xq, 2: B.xd }, (T) => u32(t.cols, T, t.cols, xOff()), (T) => grid(Math.ceil(T * t.cols / 32 / 256)));
         for (const r of t.runs) {
           if (one) await op(list, 'matvec', { [t.type]: true }, { 0: r.bind, 1: X, 2: Y }, () => PARAMS.matvec({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, xOff: xOff(), yOff: yOff + r.row }), () => grid(Math.ceil(r.rows / (256 / tpr))));
-          else {
+          else if (selected && r.rows === checkedRows) {
+            const tile = selected === 'tensormul' ? 16 : 8;
+            await op(list, selected, { [t.type]: true }, { 0: r.bind, 1: B.xq, 2: Y, 4: B.xd }, (T) => PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, ldy, yOff: yOff + r.row }), (T) => [Math.ceil(r.rows / tile), Math.ceil(T / tile)]);
+          } else {
             const big = bigList && bigTile && r.rows >= bigRows, tile = big ? 128 : 64, z = big && Y && split ? splits(r.rows, t.cols, chunk) : 1;
             const into = z > 1 ? B.split : Y;
             await op(list, 'matmul', { [t.type]: true, BIG: big, TF32: big && tf32 }, { 0: r.bind, 1: X, 2: into }, (T) => PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, xOff: xOff(), ldy: z > 1 ? r.rows : ldy, yOff: z > 1 ? 0 : yOff + r.row }), (T) => [Math.ceil(r.rows / tile), Math.ceil(T / tile), z]);
@@ -488,7 +643,8 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
               const tiles = (pos) => Math.ceil((swa ? Math.min(c.window, pos + 1) : pos + 1) / 128);
               await op(list, 'attention', { SPLIT: true }, { 0: B.q, 1: s.K, 2: s.V, 6: B.apart }, (T, pos) => att(T, pos, tiles(pos)), (T, pos) => [H, 1, tiles(pos)]);
               await op(list, 'attention', { COMBINE: true }, { 3: B.g, 4: B.y, 6: B.apart }, (T, pos) => att(T, pos, tiles(pos)), () => [H, 1]);
-            } else await op(list, 'attention', { BLOCK: blockAttention }, { 0: B.q, 1: s.K, 2: s.V, 3: B.g, 4: B.y }, (T, pos) => att(T, pos, 1), (T) => [H, blockAttention ? Math.ceil(T / 16) : T]);
+            } else if (flash(Hkv)) await op(list, 'attention', { FLASH: true }, { 0: B.q, 1: s.K, 2: s.V, 3: B.g, 4: B.y }, (T, pos) => att(T, pos, 1), (T) => [Hkv, Math.ceil(T / (64 / (H / Hkv)))]);
+            else await op(list, 'attention', { BLOCK: blockAttention }, { 0: B.q, 1: s.K, 2: s.V, 3: B.g, 4: B.y }, (T, pos) => att(T, pos, 1), (T) => [H, blockAttention ? Math.ceil(T / 16) : T]);
             await mm(list, blk(i, 'attn_output'), zero, B.y, B.a, 0, at(E));
           }
           const post = byName.has(blk(i, 'post_attention_norm'));
@@ -510,6 +666,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       await build(P.one, true);
       await build(P.many, false);
       if (bigTile && chunk > 64) await build(P.manyBig, false, true);
+      if (chunk >= 128 && (acceleration.dp4a.enabled || acceleration.tensor.enabled)) await build(P.fast, false, 'fast');
       let lastT = 1;
       await mm(P.lastOne, out, () => 0, B.n, B.last, 0, { one: true });
       await mm(P.lastMany, out, () => (lastT - 1) * E, B.n, B.last, 0, { one: true });
@@ -576,7 +733,10 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       // embeds: [{ at, tokens, buffer }]: the rows at positions at .. at + tokens − 1 of this feed come from buffer (a
       // GPUBuffer on this device with COPY_SRC, tokens × embedding_length f32, as a vision encoder writes them) instead of the
       // token embedding: one ordinary position each, causal.
-      const forward = async (tokens, { logits = 'last', argmax = false, topK: k = 0, onRows, profile = false, signal, embeds = [] } = {}) => {
+      // step: at most this many tokens a submission (≤ chunk), or a function giving it before each; pace(ms, tokens): after
+      // each submission's work is done (ms: from its submit until then, for that many tokens), awaited before the next (a low-priority feed lets the
+      // page paint and a cancel land between small steps, and sizes the next step from this one's time).
+      const forward = async (tokens, { logits = 'last', argmax = false, topK: k = 0, onRows, profile = false, signal, embeds = [], step = chunk, pace = null } = {}) => {
         if (life.closed()) fail('session destroyed');
         if (lost) fail(`device lost: ${lost.message}`);
         if (busy) fail('a forward step is running');
@@ -584,6 +744,9 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         if (pos + tokens.length > ctx) fail(`context of ${ctx} positions is full`);
         for (const id of tokens) if (!Number.isInteger(id) || id < 0 || id >= V) fail(`token ${id}`);
         if (!Number.isInteger(k) || k < 0 || k > 64) fail('topK: 0 or an integer from 1 to 64');
+        const size = () => { const n = typeof step === 'function' ? step() : step; if (!Number.isInteger(n) || n < 1) fail('step: a positive integer'); return Math.min(n, chunk); };
+        if (typeof step !== 'function') size();
+        if (pace !== null && typeof pace !== 'function') fail('pace: a function');
         for (const e of embeds) {
           if (!Number.isInteger(e?.at) || !Number.isInteger(e.tokens) || e.at < 0 || e.tokens < 1 || e.at + e.tokens > tokens.length) fail('embeds: at and tokens inside the feed');
           if (!(e.buffer instanceof GPUBuffer) || e.buffer.size < e.tokens * E * 4 || !(e.buffer.usage & S.COPY_SRC)) fail(`embeds: a GPUBuffer with COPY_SRC of at least ${E * 4} bytes a token`);
@@ -593,13 +756,14 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         try {
           const rows = logits === 'all' && !onRows ? new Float32Array(tokens.length * V) : null;
           let res = { logits: null, id: null, top: null };
-          for (let i = 0; i < tokens.length; i += chunk) {
+          for (let i = 0, per = size(); i < tokens.length; i += per, per = size()) {
             if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
             if (lost) fail(`device lost: ${lost.message}`, 'lost');
-            const part = tokens.slice(i, i + chunk), T = part.length, lastChunk = i + chunk >= tokens.length;
+            const part = tokens.slice(i, i + per), T = part.length, lastChunk = i + per >= tokens.length;
+            ensureRope(pos + T);
             device.queue.writeBuffer(B.ids, 0, Uint32Array.from(part));
             lastT = T; topK = k || 1;
-            const body = T === 1 ? P.one : T > 64 && P.manyBig.length ? P.manyBig : P.many;
+            const body = T === 1 ? P.one : T === 128 && P.fast.length ? P.fast : T > 64 && P.manyBig.length ? P.manyBig : P.many;
             const tail = [];
             if (lastChunk && (logits !== 'none' || argmax || k)) tail.push(T === 1 ? P.lastOne : P.lastMany);
             if (lastChunk && argmax) tail.push(P.argmax);
@@ -628,10 +792,13 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
               pass.end();
             }
             device.queue.submit([enc.finish()]);
+            const sent = now();
             pos += T;
             if (times) (res.profile ||= []).push(...await times());
             // With a signal, each chunk's work finishes before the next is checked: a cancel takes effect within a chunk.
-            if (signal && !lastChunk) await device.queue.onSubmittedWorkDone();
+            // A paced feed waits after its last chunk too: the next submission (a decode, the next feed) starts on an idle GPU.
+            if (pace || (signal && !lastChunk)) await device.queue.onSubmittedWorkDone();
+            if (pace) await pace(now() - sent, T);
             if (logits === 'all') {
               const got = new Float32Array(await read(all, 0, T * V * 4));
               if (onRows) onRows(i, got, T); else rows.set(got, i * V);
@@ -738,20 +905,119 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         device.queue.submit([enc.finish()]);
         pos = snap.pos;
       };
+
+      // Light marks: what a rewind to this position needs that later feeding overwrites. The full layers' keys and values
+      // below a position never change while the sequence keeps it, so a mark holds only the conv states, the last window
+      // positions of each sliding ring (those layers keep window + chunk slots), and (logits) B.last. The caller keeps the
+      // promise: rewind(mark) only while the sequence still holds the mark's positions unchanged (ai/local/engine.js load).
+      const rings = state.map((st, i) => (c.layers[i] === 'swa' && st.ring ? c.nHeadKv[i] * hd * kvb : 0));
+      // A mark's state and its logits are separate buffers from pools, made without an error scope (popErrorScope waits on
+      // the GPU process, which would cost every request several round trips); an allocation failure surfaces as a device
+      // error like any other.
+      const markBytes = Math.max(4, state.reduce((n, st, i) => n + (c.layers[i] === 'conv' ? st.conv.size : 2 * c.window * rings[i]), 0));
+      const marks = new Set(), spare = { state: [], logits: [] };
+      const take = (kind, size) => spare[kind].pop() || life.own(buffer(size));
+      const give = (kind, b) => { if (spare[kind].length < 8 && !life.closed()) spare[kind].push(b); else life.disown(b); };
+      const mark = async ({ logits = false } = {}) => {
+        if (life.closed()) fail('session destroyed');
+        if (lost) fail(`device lost: ${lost.message}`, 'lost');
+        if (busy) fail('a forward step is running');
+        const buf = take('state', markBytes), lbuf = logits ? take('logits', V * 4) : null;
+        const items = []; // [buffer, offset in it, mark buffer, offset there, bytes]
+        let at = 0;
+        state.forEach((st, i) => {
+          if (c.layers[i] === 'conv') { items.push([st.conv, 0, buf, at, st.conv.size]); at += st.conv.size; return; }
+          if (!rings[i]) return;
+          const w = Math.min(c.window, pos), slots = st.ring, from = (pos - w) % slots, first = Math.min(w, slots - from);
+          for (const kv of [st.K, st.V]) {
+            items.push([kv, from * rings[i], buf, at, first * rings[i]]);
+            if (w > first) items.push([kv, 0, buf, at + first * rings[i], (w - first) * rings[i]]);
+            at += c.window * rings[i];
+          }
+        });
+        if (lbuf) items.push([B.last, 0, lbuf, 0, V * 4]);
+        const enc = device.createCommandEncoder();
+        for (const [src, off, dst, to, size] of items) if (size) enc.copyBufferToBuffer(src, off, dst, to, size);
+        device.queue.submit([enc.finish()]);
+        const m = { pos, logits, items, drop() { if (!marks.delete(m)) return; give('state', buf); if (lbuf) give('logits', lbuf); } };
+        marks.add(m);
+        return m;
+      };
+      const rewind = async (m) => {
+        if (life.closed()) fail('session destroyed');
+        if (busy) fail('a forward step is running');
+        if (!marks.has(m)) fail('rewind: not a live mark of this session');
+        const enc = device.createCommandEncoder();
+        for (const [dst, off, src, from, size] of m.items) if (size) enc.copyBufferToBuffer(src, from, dst, off, size);
+        device.queue.submit([enc.finish()]);
+        pos = m.pos;
+      };
+
+      // Room for `next` positions, the sequence kept: the full layers' caches (and a sliding layer's without a ring), the
+      // RoPE tables and the decode's partial sums grow; every dispatch binds the new buffers.
+      const grow = async (next) => {
+        if (life.closed()) fail('session destroyed');
+        if (lost) fail(`device lost: ${lost.message}`, 'lost');
+        if (busy) fail('a forward step is running');
+        if (!Number.isInteger(next) || next > 0xffffffff) fail('grow: a u32 expected');
+        if (next <= ctx) return ctx;
+        const lim = device.limits.maxStorageBufferBindingSize;
+        fits(next * c.nRot * 4, lim); fits(next * c.nRotSwa * 4, lim);
+        state.forEach((st, i) => { if (c.layers[i] !== 'conv' && !st.ring) fits(next * c.nHeadKv[i] * hd * kvb, lim); });
+        busy = true;
+        const made = new Map(); // old buffer → [new buffer, bytes to keep]
+        try {
+          device.pushErrorScope?.('out-of-memory');
+          let oom;
+          try {
+            state.forEach((st, i) => {
+              if (c.layers[i] === 'conv' || st.ring) return;
+              const width = c.nHeadKv[i] * hd * kvb;
+              for (const kv of [st.K, st.V]) made.set(kv, [buffer(next * width), pos * width]);
+            });
+            made.set(ropeFull, [buffer(next * c.nRot * 4), ropeRows * c.nRot * 4]);
+            made.set(ropeSwa, [buffer(next * c.nRotSwa * 4), ropeRows * c.nRotSwa * 4]);
+            made.set(B.apart, [buffer(H * Math.ceil(next / 128) * (hd + 2) * 4), 0]);
+          } finally { oom = await device.popErrorScope?.(); }
+          if (oom) fail('out of memory for a longer context', 'memory');
+          if (life.closed()) fail('session destroyed');
+          const enc = device.createCommandEncoder();
+          for (const [old, [b, keep]] of made) if (keep) enc.copyBufferToBuffer(old, 0, b, 0, keep);
+          device.queue.submit([enc.finish()]);
+          const swap = (b) => (made.has(b) ? made.get(b)[0] : b);
+          for (const st of state) if (st.K) { st.K = swap(st.K); st.V = swap(st.V); }
+          ropeFull = swap(ropeFull); ropeSwa = swap(ropeSwa); B.apart = swap(B.apart);
+          for (const [name, list] of Object.entries(P)) {
+            for (const d of list) for (const key of Object.keys(d.entries)) d.entries[key] = swap(d.entries[key]);
+            if (name !== 'allMany' || all) bindAll(list);
+          }
+          // Snapshots keep their copied data, but restore must target the replacement live caches.
+          for (const snap of snaps) for (const item of snap.bufs) item[0] = swap(item[0]);
+          for (const [old, [b]] of made) { life.own(b); life.disown(old); }
+          made.clear();
+          ctx = next;
+          return ctx;
+        } finally {
+          for (const [, [b]] of made) b.destroy();
+          busy = false;
+        }
+      };
+
       const close = life.destroy;
-      life.destroy = () => { for (const snap of [...snaps]) snap.drop(); close(); };
+      life.destroy = () => { for (const snap of [...snaps]) snap.drop(); for (const m of [...marks]) m.drop(); spare.state.length = spare.logits.length = 0; close(); };
 
       return {
-        forward, pick, snapshot, restore,
+        forward, pick, snapshot, restore, mark, rewind, grow,
         // The greedy next token after feeding tokens.
         greedy: async (tokens) => (await forward(tokens, { logits: 'none', argmax: true })).id,
         get pos() { return pos; },
-        ctx, chunk, destroy: () => life.destroy(),
+        get ctx() { return ctx; },
+        chunk, destroy: () => life.destroy(),
       };
     };
 
     return {
-      config: c, device, adapter, f16, tf32, split, subgroups: sg, subgroupsOff: sgWhy, tpr, layout, session,
+      config: c, device, adapter, f16, tf32, split, features: { acceleration }, subgroups: sg, subgroupsOff: sgWhy, tpr, layout, session, flash: flash(Math.max(...c.nHeadKv)),
       get lost() { return lost; },
       destroy: () => { destroyed = true; for (const close of sessions) close(); for (const b of wbufs) b.destroy(); if (own) device.destroy?.(); },
       // For the checks: the kernels one dispatch at a time, on the engine's own pipelines and weights.
@@ -759,6 +1025,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     };
     } catch (e) {
       if (!e?.reason && !opts.signal?.aborted) e = Object.assign(e instanceof Error ? e : new Error(String(e)), { reason: lost ? 'lost' : /kernel /.test(e?.message) ? 'webgpu' : 'model' });
+      for (const b of failedBuffers) b.destroy();
       bail(e);
     }
   };
@@ -787,22 +1054,32 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   };
 
   // ---- the model a host drives (ai/local/host.js): one sequence on the GPU ------------------------------------------------
-  // load(gguf, { context, chunk, signal, onProgress, ...create's options }) → { context, prefill, decode, snapshot, restore,
-  // release }. Load errors carry .reason: 'webgpu', 'memory', 'lost' or 'model'; an abort rejects with the signal's reason.
-  //   prefill(ids, { snapshot, signal, embeds }): feeds ids (after the token decode last chose, which is part of the sequence);
-  //     embeds [{ at, tokens, buffer }]: ids[at .. at + tokens − 1] take their rows from buffer (on model.device, COPY_SRC,
-  //     tokens × embedding_length f32: a picture's embeddings) instead of the token embedding;
-  //     → a snapshot of the state after them when snapshot is set, else undefined. The signal is checked before each chunk.
+  // load(gguf, { context, chunk, signal, onProgress, ...create's options }) → { context, prefill, extend, common, reserve,
+  // decode, snapshot, restore, release }. Load errors carry .reason: 'webgpu', 'memory', 'lost' or 'model'; an abort rejects
+  // with the signal's reason.
+  //   prefill(ids, { snapshot, signal, embeds, step, pace }): feeds ids (after the token decode last chose, which is part of
+  //     the sequence); embeds [{ at, tokens, buffer }]: ids[at .. at + tokens − 1] take their rows from buffer (on
+  //     model.device, COPY_SRC, tokens × embedding_length f32: a picture's embeddings) instead of the token embedding;
+  //     → a snapshot of the state after them when snapshot is set, else undefined. The signal is checked before each chunk;
+  //     step and pace as forward's.
+  //   extend(ids, { at, signal, step, pace }): the sequence becomes ids from position 0 on: the longest prefix the model
+  //     already holds is kept (rewound to the latest mark inside it when the rest differs) and only the remainder is fed;
+  //     marks are left at each position of `at` inside the fed part and at the end. → { reused, fed }. common(ids): the
+  //     length of that held prefix. Rows fed from embeds never match. reserve(n, most): room for n positions (the session
+  //     grows, at most to `most`, the sequence kept).
   //   decode({ sampler: { temperature, topK, topP, repetitionPenalty }, mask, signal, random }) → the next token's id,
   //     from the last fed position's logits: penalty (the last 64 tokens), then mask (a Uint32Array of ceil(vocab / 32)
-  //     words, id i allowed when bit i & 31 of word i >> 5 is set), then temperature 0 or topK 1: the highest; else the
+  //     words, id i allowed when bit i & 31 of word i >> 5 is set; or a function giving one, called once the previous
+  //     token's forward is on the GPU), then temperature 0 or topK 1: the highest; else the
   //     topK (at most 64; 0: 64) highest, top-p, temperature, a draw. The id is fed by the next decode or prefill.
   //   snapshot() → snap (snap.drop() frees it); restore(snap): the sequence as it was. release(): all GPU memory goes.
+  const MARKS = 16;
   const load = async (gguf, { context = 4096, chunk = 512, signal, onProgress, ...opts } = {}) => {
     const engine = await create(gguf, { ...opts, onProgress, signal });
-    let s;
+    let s, base;
     try {
       s = await engine.session({ ctx: context, chunk });
+      base = await s.mark();
       if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
     } catch (e) {
       engine.destroy();
@@ -810,14 +1087,21 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       throw e;
     }
     let pending = null, ready = false, released = false, running = false, recent = [];
-    const snaps = new Map(); // model snap → { inner, pending, ready, recent }
+    // seq: the id at each fed position (−1 where an embed's row went); marks: light marks along it, the start's first.
+    let seq = [], clock = 0;
+    const marks = [{ pos: 0, inner: base, logits: false, used: 0 }];
+    const snaps = new Map(); // model snap → { inner, pending, ready, recent, seq }
     const live = () => {
       if (released) fail('the model was released');
       if (engine.lost) fail(`device lost: ${engine.lost.message}`, 'lost');
     };
     const remember = (ids) => { recent = recent.concat(ids).slice(-64); };
     const halt = (sig) => { if (sig?.aborted) throw sig.reason ?? new DOMException('Aborted', 'AbortError'); };
-    const feed = async (ids, opt) => {
+    const held = () => (pending === null ? seq : seq.concat(pending));
+    const lcp = (a, b) => { const n = Math.min(a.length, b.length); let i = 0; while (i < n && a[i] === b[i]) i++; return i; };
+    // Marks past position p no longer hold the sequence: dropped.
+    const cut = (p) => { for (let i = marks.length - 1; i > 0; i--) if (marks[i].pos > p) { marks[i].inner.drop(); marks.splice(i, 1); } };
+    const feed = async (ids, opt, rows = null) => {
       const t = pending === null ? ids : [pending, ...ids];
       if (!t.length) return;
       const start = s.pos;
@@ -827,9 +1111,33 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         // became part of the caches; retain the pending token and old logits when nothing was consumed.
         const consumed = s.pos - start;
         if (consumed) {
-          pending = null; ready = consumed === t.length;
+          const off = pending === null ? 0 : 1;
+          pending = null; ready = consumed === t.length && opt.logits !== 'none';
           remember(t.slice(0, consumed));
+          cut(start);
+          seq.length = start;
+          for (let i = 0; i < consumed; i++) seq.push(rows?.has(i - off) ? -1 : t[i]);
         }
+      }
+    };
+    const addMark = async (logits) => {
+      const pos = seq.length;
+      const old = marks.findIndex((m) => m.pos === pos);
+      if (old > 0 && (marks[old].logits || !logits)) { marks[old].used = ++clock; return; }
+      const inner = await s.mark({ logits: logits && ready });
+      if (old > 0) { marks[old].inner.drop(); marks.splice(old, 1); }
+      marks.push({ pos, inner, logits: logits && ready, used: ++clock });
+      marks.sort((a, b) => a.pos - b.pos);
+      // Over the cap: drop the mark closest to the one before it (the densest stretch loses one), never the start or the
+      // newest; ties go to the least recently used.
+      while (marks.length > MARKS) {
+        let drop = -1;
+        for (let i = 1; i < marks.length; i++) {
+          if (marks[i].used === clock) continue;
+          const gap = marks[i].pos - marks[i - 1].pos;
+          if (drop < 0 || gap < marks[drop].pos - marks[drop - 1].pos || (gap === marks[drop].pos - marks[drop - 1].pos && marks[i].used < marks[drop].used)) drop = i;
+        }
+        marks[drop].inner.drop(); marks.splice(drop, 1);
       }
     };
     const snapshot = async () => {
@@ -837,20 +1145,22 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       const inner = await s.snapshot({ logits: ready });
       if (released) { inner.drop(); live(); }
       const snap = { drop() { const v = snaps.get(snap); if (!v) return; snaps.delete(snap); v.inner.drop(); } };
-      snaps.set(snap, { inner, pending, ready, recent });
+      snaps.set(snap, { inner, pending, ready, recent, seq: seq.slice() });
       return snap;
     };
     const model = {
-      context,
+      get context() { return s.ctx; },
       engine,
       // The device embeds buffers must be made on.
       get device() { return engine.device; },
-      async prefill(ids, { snapshot: snap = false, signal: sig, onRows, embeds } = {}) {
+      async prefill(ids, { snapshot: snap = false, signal: sig, onRows, embeds, step, pace } = {}) {
         live(); halt(sig);
         if (!Array.isArray(ids) && !ArrayBuffer.isView(ids)) fail('prefill: token ids');
         // embeds index ids; the pending token, fed first, moves them one along.
-        const shifted = embeds?.length ? embeds.map((e) => ({ ...e, at: e.at + (pending === null ? 0 : 1) })) : undefined;
-        await feed(Array.from(ids), { ...(onRows ? { logits: 'all', onRows } : { logits: 'keep' }), signal: sig, embeds: shifted });
+        const shift = pending === null ? 0 : 1;
+        const shifted = embeds?.length ? embeds.map((e) => ({ ...e, at: e.at + shift })) : undefined;
+        const rows = embeds?.length ? new Set(embeds.flatMap((e) => Array.from({ length: e.tokens }, (_, i) => e.at + i))) : null;
+        await feed(Array.from(ids), { ...(onRows ? { logits: 'all', onRows } : { logits: 'keep' }), signal: sig, embeds: shifted, ...(step && { step }), ...(pace && { pace }) }, rows);
         halt(sig);
         if (!snap) return undefined;
         try {
@@ -859,14 +1169,58 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
           return result;
         } catch (e) { halt(sig); if (e?.reason === 'memory') return null; throw e; }
       },
+      common(ids) { return lcp(Array.from(ids), held()); },
+      async extend(ids, { at = [], signal: sig, step, pace } = {}) {
+        live(); halt(sig);
+        if (!Array.isArray(ids) && !ArrayBuffer.isView(ids)) fail('extend: token ids');
+        const want = Array.from(ids);
+        if (!want.length) fail('extend: no tokens');
+        const have = held(), L = lcp(want, have);
+        let from;
+        if (L === have.length && (L < want.length || pending !== null || ready)) from = seq.length;
+        else {
+          // The latest mark inside the shared prefix; at the very end only one with the logits there will do.
+          let best = marks[0];
+          for (const m of marks) if (m.pos <= L && (m.pos < want.length || m.logits) && m.pos >= best.pos) best = m;
+          await s.rewind(best.inner);
+          cut(best.pos);
+          seq.length = best.pos; pending = null; ready = best.logits; recent = seq.slice(-64);
+          best.used = ++clock;
+          from = best.pos;
+        }
+        const reused = from;
+        const opt = { signal: sig, ...(step && { step }), ...(pace && { pace }) };
+        const stops = [...new Set(at)].filter((p) => Number.isInteger(p) && p > from && p < want.length).sort((a, b) => a - b);
+        let p = from;
+        for (const stop of [...stops, want.length]) {
+          const last = stop === want.length;
+          // The pending token is want[seq.length] here, and feed() puts it first.
+          if (stop > p || (last && !ready)) await feed(want.slice(seq.length + (pending === null ? 0 : 1), stop), { ...opt, logits: last ? 'keep' : 'none' });
+          halt(sig);
+          p = stop;
+          await addMark(last);
+        }
+        return { reused, fed: want.length - reused };
+      },
+      async reserve(n, most = n) {
+        live();
+        if (!Number.isInteger(n) || n < 1) fail('reserve: a positive integer');
+        if (n <= s.ctx) return s.ctx;
+        if (n > most) fail(`context of ${most} positions is full`);
+        return s.grow(Math.min(most, Math.max(n, up(2 * s.ctx, 1024))));
+      },
       async decode({ sampler, mask = null, signal: sig, random = Math.random } = {}) {
         live(); halt(sig);
         const sp = checkSampler(sampler);
-        if (mask !== null && !(mask instanceof Uint32Array && mask.length === Math.ceil(engine.config.vocab / 32))) fail(`mask: a Uint32Array of ${Math.ceil(engine.config.vocab / 32)} words`);
-        if (model.pos >= context) fail(`context of ${context} positions is full`);
+        const words = Math.ceil(engine.config.vocab / 32);
+        const okMask = (x) => x === null || (x instanceof Uint32Array && x.length === words) || fail(`mask: a Uint32Array of ${words} words`);
+        if (typeof mask !== 'function') okMask(mask);
+        if (model.pos >= s.ctx) fail(`context of ${s.ctx} positions is full`);
         if (pending !== null) await feed([], { logits: 'keep', signal: sig });
         if (!ready) fail('decode: nothing fed to decode from');
         halt(sig);
+        // A mask function runs now, while the GPU computes the decoded token's logits.
+        if (typeof mask === 'function') { mask = mask(); okMask(mask); }
         const penalty = sp.repetitionPenalty !== 1 ? { ids: recent, r: sp.repetitionPenalty } : null;
         const k = sp.temperature === 0 || sp.topK === 1 ? 1 : Math.min(sp.topK || 64, 64);
         const r = await s.pick({ k, mask, penalty });
@@ -882,7 +1236,10 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         const v = snaps.get(snap);
         if (!v) fail('restore: not a live snapshot of this model');
         await s.restore(v.inner);
+        // Marks inside what the old and the restored sequence share still hold; the rest go.
+        cut(Math.min(lcp(seq, v.seq), v.seq.length));
         ({ pending, ready, recent } = v);
+        seq = v.seq.slice();
       },
       release() {
         if (released) return;
@@ -893,7 +1250,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       get pos() { return s.pos + (pending === null ? 0 : 1); },
     };
     // A model operation spans several session calls and awaits. Lock the whole transaction, including its host state.
-    for (const name of ['prefill', 'decode', 'snapshot', 'restore']) {
+    for (const name of ['prefill', 'extend', 'reserve', 'decode', 'snapshot', 'restore']) {
       const action = model[name];
       model[name] = async (...args) => {
         live();
@@ -906,6 +1263,6 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     return model;
   };
 
-  return { create, load, sample, plan, preprocess, grid, splits, ropeTable, PARAMS, QUANT, KERNELS };
+  return { create, load, sample, accelerationCheck, plan, preprocess, grid, splits, ropeTable, PARAMS, QUANT, KERNELS };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_ENGINE; else GZ_AI_ENGINE;

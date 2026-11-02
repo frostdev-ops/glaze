@@ -119,6 +119,7 @@ test('a big-tile GEMM splits along k only when its tiles cannot fill a GPU, in w
 });
 
 test('the RoPE table is the reference rope\'s own cos and sin', () => {
+  // Shape/indexing parity at a small rotary dimension; local-rope-f32.test.js independently checks canonical HF math.
   const n = 8, half = n / 2, factors = Float32Array.of(1, 1, 1e30, 1e30), pos = [0, 3, 1500];
   for (const [base, f] of [[1e6, factors], [1e4, null]]) {
     const tab = EN.ropeTable(0, 1501, n, base, f);

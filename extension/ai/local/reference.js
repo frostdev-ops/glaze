@@ -9,14 +9,14 @@
 //   conv: depthwise and causal, width shortconv.l_cache (7), w[c][6] on the current token; state: the last 6 B ⊙ x.
 // or attention (GQA, query head i reads KV head ⌊i / (heads / kv heads)⌋):
 //   q, k = rmsnorm per head (attn_q_norm, attn_k_norm), then NeoX RoPE: dims (i, i + n/2) for i < n/2, n =
-//   rope.dimension_count (128), θ = pos · base^(−2i/n) / factor_i. Sliding layers (sliding_window_pattern): base
+//   rope.dimension_count (128), with HF's f32 inverse frequencies and position phases (ropeFreqs below). Sliding layers: base
 //   freq_base_swa (1e4), no factors, and a query at p sees keys at p − window < j ≤ p. Full layers: base freq_base
-//   (1e6), factors rope_freqs (32 × 1, 32 × 1e30: only the first 32 pairs turn, HF's partial_rotary_factor 0.5 with
+//   (1e6), factors rope_freqs (32 × 1, 32 × f32(1e30) zero-tail sentinels: only the first 32 pairs turn, HF's partial_rotary_factor 0.5 with
 //   the full head's frequency progression). Softmax(q·k / √head_dim); each head's output × sigmoid(attn_gate·n)_head,
 //   before attn_output.
 // Then rmsnorm·output_norm and the output matrix (token_embd when there is no output.weight). RMSNorm: x / √(mean x² + ε).
-// Numerics: every value an op stores is a float32 (Float32Array); inside an op, sums and products are JavaScript doubles
-// (dot products, norms, softmax, RoPE angles), so the reference is at least as exact as an f32-accumulating kernel.
+// Numerics: every value an op stores is a float32 (Float32Array); dot products, norms and softmax use JavaScript doubles.
+// RoPE frequency, phase and trig results round to f32 as canonical HF LFM3 does, before rotating each pair.
 // Weights stay quantized in memory and are dequantized a row at a time (ai/local/quant.js), bit for bit as ggml.
 // Classic script; node exports.
 var GZ_AI_REFERENCE = globalThis.GZ_AI_REFERENCE || (() => {
@@ -138,12 +138,19 @@ var GZ_AI_REFERENCE = globalThis.GZ_AI_REFERENCE || (() => {
   const silu = (x) => x / (1 + Math.exp(-x));
   const sigmoid = (x) => 1 / (1 + Math.exp(-x));
 
+  // HF LFM3 ac2586a3: reciprocal of a rounded positive power, then f32 frequency and position multiplication.
+  // GGUF factors scale inverse frequencies in f32. Only the converter's exact f32(1e30) sentinel means HF's zero tail.
+  const ropeFreqs = (n, base, factors) => Float32Array.from({ length: n / 2 }, (_, i) => {
+    const factor = factors ? factors[i] : 1;
+    return factor === fr(1e30) ? 0 : fr(fr(1 / fr(base ** fr(2 * i / n))) / factor);
+  });
+
   // NeoX RoPE on `heads` vectors of hd at X[t] for each token t at pos[t]: pairs (i, i + n/2), i < n/2.
   const rope = (X, T, heads, hd, pos, n, base, factors) => {
-    const half = n / 2, cos = new Float64Array(half), sin = new Float64Array(half);
+    const half = n / 2, freq = ropeFreqs(n, base, factors), cos = new Float64Array(half), sin = new Float64Array(half);
     for (let t = 0; t < T; t++) {
       for (let i = 0; i < half; i++) {
-        const theta = (pos[t] * base ** (-2 * i / n)) / (factors ? factors[i] : 1);
+        const theta = fr(fr(pos[t]) * freq[i]);
         cos[i] = fr(Math.cos(theta)); sin[i] = fr(Math.sin(theta));
       }
       for (let h = 0; h < heads; h++) {
@@ -317,6 +324,6 @@ var GZ_AI_REFERENCE = globalThis.GZ_AI_REFERENCE || (() => {
     return best[best.length - 1].id;
   };
 
-  return { config, load, session, greedy, top, topK, _ops: { matmul, rmsnorm, rope, row, shortconv, attend, silu, sigmoid } };
+  return { config, load, session, greedy, top, topK, _ops: { matmul, rmsnorm, ropeFreqs, rope, row, shortconv, attend, silu, sigmoid } };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_REFERENCE; else GZ_AI_REFERENCE;
