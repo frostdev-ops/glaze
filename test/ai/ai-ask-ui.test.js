@@ -868,3 +868,36 @@ test('an answer Glaze built itself renders as any answer, with the same detail u
   await settle();
   assert.equal(P.box().querySelectorAll('.gz-ask-a')[1].querySelector('details.gz-ask-why'), null, 'built, nothing more to show: no detail');
 });
+
+test('the chat carries its worker tool union across fresh ports and clears it with New chat', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('What is due?'); await settle();
+  answer(P, { type: 'tools', tools: ['todo_list', 'accounts_list'] });
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text: 'Nothing due.' } });
+  await settle();
+  P.ask('Any announcements?'); await settle();
+  const sent = P.posted.filter((m) => m.op === 'ask');
+  assert.deepEqual(Array.from(sent[1].tools), ['todo_list', 'accounts_list']);
+  assert.ok(P.ports.at(-2).hungUp, 'each question uses a new port');
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text: 'Nothing new.' } }); await settle();
+  P.doc.fire(P.box().querySelector('.gz-ask-new'), 'click');
+  P.ask('What is my grade?'); await settle();
+  assert.equal(P.posted.filter((m) => m.op === 'ask').at(-1).tools, undefined);
+  P.ui.close();
+});
+
+test('a built answer shows diagnostics from the worker end envelope, excluded from the next turn', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  P.ask('What is due?'); await settle();
+  answer(P, { type: 'end', task: 'agent.tools', answer: { text: '- Lab report', built: true }, why: 'number', raw: '<b>42 tasks</b>' });
+  await settle();
+  const detail = P.box().querySelector('.gz-ask-a details.gz-ask-why');
+  assert.ok(detail);
+  assert.equal(detail.querySelector('pre').textContent, '<b>42 tasks</b>');
+  assert.equal(detail.querySelector('b'), null);
+  P.ask('And next week?'); await settle();
+  assert.equal(P.posted.filter((m) => m.op === 'ask').at(-1).history[0].answer, '- Lab report');
+  P.ui.close();
+});

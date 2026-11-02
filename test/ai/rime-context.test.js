@@ -385,3 +385,33 @@ test('study-help readers share and extend the chat tool union, and New chat clea
     assert.deepEqual([...runs[3].input.tools].sort(), [...routes[3].tools].sort(), 'New chat forgets every earlier tool');
   }
 });
+
+// The page deliberately recreates its port between questions (Safari can retire the idle worker).
+test('a recreated port restores the bounded tool union, even after its topic was folded away', async () => {
+  const first = harness({ count: () => ({ used: 900, window: 16384, reserve: 768 }), script: { 'agent.tools': [said('Done.')] } });
+  first.say({ id: 1, op: 'ask', question: "What's due this week?" });
+  await settle();
+  const carried = first.got.find((m) => m.type === 'tools');
+  assert.ok(carried?.tools.includes('todo_list'), 'the page receives the union before the answer');
+  const next = harness({ count: () => ({ used: 900, window: 16384, reserve: 768 }), script: { 'agent.tools': [said('Done.')] } });
+  next.say({ id: 2, op: 'ask', question: 'Any new announcements in BIO 1100?', history: H3.slice(0, 1), summary: '- Earlier due dates', tools: carried.tools });
+  await settle();
+  const input = next.seen.runs.find((m) => m.task === 'agent.tools').input;
+  assert.ok(input.tools.includes('todo_list'));
+  assert.ok(input.tools.includes('announcements_list'));
+  assert.ok(next.got.findIndex((m) => m.type === 'tools') < next.got.findIndex((m) => m.type === 'end'));
+  next.say({ id: 3, op: 'ask', question: 'What is my grade in BIO 1100?', tools: carried.tools });
+  await settle();
+  assert.ok(!next.seen.runs.filter((m) => m.task === 'agent.tools').at(-1).input.tools.includes('todo_list'), 'New chat ignores carried tools');
+});
+
+test('carried tools reject unknown, repeated, oversized and non-list values before changing the chat', async () => {
+  const h = harness();
+  const expensive = A.NAMES.filter((n) => n !== 'accounts_list');
+  assert.ok(K.unionCost(expensive) > K.UNION.budget);
+  const bad = [['not_a_tool'], ['todo_list', 'todo_list'], expensive, 'todo_list', null];
+  for (const [i, tools] of bad.entries()) h.say({ id: i, op: 'ask', question: 'What is due?', history: H3, tools });
+  await settle();
+  assert.deepEqual(h.got.filter((m) => m.type === 'error').map((m) => m.error), bad.map(() => 'request'));
+  assert.equal(h.seen.runs.length, 0);
+});
