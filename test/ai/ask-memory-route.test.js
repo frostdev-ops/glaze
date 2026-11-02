@@ -67,7 +67,7 @@ const front = ({ mode = 'read', evidence = '', category = 'preference', query = 
 for (const [locale, question, evidence] of SAVES) test(`${locale}: direct preference storage uses explicit memory UX with real save receipts`, async (t) => {
   const h = front({ mode: 'save', evidence }); t.after(h.close);
   const result = await h.ask(question, locale);
-  assert.equal(result.type, 'end');
+  assert.equal(result.type, 'end', JSON.stringify(result));
   assert.equal(result.task, 'agent.tools', question);
   assert.deepEqual(h.runs[0].input.tools, ['memory_search', 'memory_read', 'memory_save', 'memory_forget']);
   assert.equal(h.runs.some((m) => m.task === 'study.help'), false);
@@ -417,7 +417,7 @@ for (const c of REPLAY_READS) test(`peer front door: ${c.id}`, async (t) => {
   const h = front({ account: c.account, otherAccount: c.otherAccount, current: c.current, records: c.records,
     query: c.records[0]?.markdown || c.question.split('\n')[0] }); t.after(h.close);
   const result = await h.ask(c.question, c.locale);
-  assert.equal(result.type, 'end');
+  assert.equal(result.type, 'end', JSON.stringify(result));
   assert.equal(result.task, 'agent.tools');
   assert.deepEqual(h.runs[0].input.tools, ['memory_search', 'memory_read', 'memory_save', 'memory_forget']);
   assert.equal(h.runs.some((m) => m.task === 'study.help'), false);
@@ -431,7 +431,7 @@ for (const c of REPLAY_READS) test(`peer front door: ${c.id}`, async (t) => {
 for (const c of REPLAY_SAVES) test(`peer non-benchmark save front door: ${c.locale}`, async (t) => {
   const h = front({ mode: 'save', evidence: c.evidence, category: 'fact', account: c.account, current: c.current }); t.after(h.close);
   const result = await h.ask(c.question, c.locale);
-  assert.equal(result.type, 'end');
+  assert.equal(result.type, 'end', JSON.stringify(result));
   assert.equal(result.task, 'agent.tools', 'an automatic prelude effect alone is insufficient');
   assert.equal(h.runs.some((m) => m.task === 'study.help'), false);
   const receipt = h.events.find((m) => m.type === 'memory')?.receipt;
