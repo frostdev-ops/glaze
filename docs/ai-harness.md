@@ -775,8 +775,14 @@ kept, and a changed suffix rewinds to a light checkpoint of convolution state, s
 Checkpoints sit at the system turn, selected turn boundaries and sparse 2,048-token positions; a checkpoint splits a
 prefill, so the host avoids placing one at every conversation marker. `usage.cached` reports prompt positions already held.
 Warm-up may include history after its `stable` system turn; an incoming run cancels background reading before taking over.
-`writer.complete` and explicit low-priority runs use small adaptive prefill submissions, wait for their GPU completion and
-yield between them, aiming for about 20 ms each. Decode also yields, and cancellation is observed between submissions.
+`writer.complete`, explicit low-priority runs, history warm-up and think-answer read-ahead use adaptive prefill submissions,
+wait for their GPU completion and yield between them. Linearly scaling adapters target about 20 ms per step. When two
+different GEMM batch sizes reveal a dominant fixed launch cost above that target, the controller probes a 128-token bulk
+batch, keeps at least 32 tokens per full step, and targets about 20 ms of variable work above the learned floor, up to 512
+tokens. It compares GEMM sizes before permitting single-token steps and ignores partial checkpoint tails when learning.
+This avoids repeatedly crossing the fast single-token GEMV / expensive small-GEMM boundary. The time target is best effort
+on these drivers; cancellation is checked between completed submissions, and decode also yields. Synthetic linear and
+launch-floor regressions verify this controller; actual GPU throughput, frame latency and cancellation remain external checks.
 The grammar mask is built after the preceding token's GPU forward is submitted, overlapping CPU grammar work with it.
 Integer dot-product and experimental subgroup-matrix candidates are optional. On each engine/device load, they must
 match the normal matmul on the loaded model's representative matrices and run at least 10% faster, including activation

@@ -16,8 +16,8 @@
 //   (the history, while the student types); a run arriving stops a warm-up between steps and keeps what it read. After a
 //   think run, the host reads the answer back as the next request will hold it (the turn's empty think block, the answer,
 //   the end token) while nothing else waits. window: the engine's room grows to it, up to LIMIT.maxContext; without one,
-//   LIMIT.context. priority 'low' (and writer.complete's task token): the prompt goes in steps of about LIMIT.busy ms of GPU
-//   work each (sized from the last), each finished and followed by a yield, and decode yields between tokens, so typing
+//   LIMIT.context. priority 'low' (and writer.complete's task token): the prompt uses adaptive steps, amortizing a learned
+//   launch floor with bulk batches when necessary, each finished and followed by a yield, and decode yields between tokens, so typing
 //   paints and a cancel lands within a step.
 //   tools [{ name, parameters }] (with schema; ai/tasks/agent-tools.js constraint()): the answer is either the schema's
 //   JSON or one native call to a listed tool, held by the grammar (grammar.js compile's tools). sources { [name]: text }
@@ -46,7 +46,7 @@
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
-  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, maxContext: 131072, first: 8192, step: 8, busy: 20, spacing: 2048, rate: 16, answer: 256, spans: 2 };
+  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, maxContext: 131072, first: 8192, step: 8, bulk: 128, busy: 20, spacing: 2048, rate: 16, answer: 256, spans: 2 };
   // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
   const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js', 'updates.js']),
     optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
@@ -193,11 +193,32 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       for (let p = from + LIMIT.spacing; p < ids.length; p += LIMIT.spacing) out.push(p);
       return [...new Set(out)].sort((a, b) => a - b);
     };
-    // Background work leaves room for painting and cancellation between finished GPU submissions.
+    // Background work waits and yields between submissions. On a linear GPU, target busy ms. Some drivers have a
+    // GEMM launch floor above that target: shrinking to decode's fast single-token path then oscillates at 1/2 tokens.
+    // Compare two GEMM sizes before allowing single-token steps. A mostly fixed cost instead selects bulk prefill and
+    // targets busy ms of variable work above that floor (best effort latency; the driver can preempt a submission).
     const paced = () => {
-      let steps = LIMIT.step;
+      let steps = LIMIT.step, previous = null, launch = 0, linear = false;
       return { step: () => steps, pace: async (ms, tokens) => {
-        if (ms > 0 && tokens > 0) steps = Math.max(1, Math.min(512, 2 * steps, Math.floor(LIMIT.busy * tokens / ms)));
+        // Checkpoint tails and chunk caps do not measure the batch we requested.
+        if (ms > 0 && tokens === steps) {
+          let learned = false;
+          if (!launch && previous && tokens > 1 && previous.tokens > 1) {
+            const [small, big] = tokens < previous.tokens ? [{ ms, tokens }, previous] : [previous, { ms, tokens }];
+            if (big.tokens >= 2 * small.tokens) {
+              const slope = Math.max(0, (big.ms - small.ms) / (big.tokens - small.tokens));
+              const fixed = Math.max(0, small.ms - slope * small.tokens);
+              if (fixed > LIMIT.busy && fixed >= 0.6 * small.ms) {
+                launch = fixed; steps = LIMIT.bulk; learned = true;
+              } else linear = true;
+            }
+          }
+          if (!learned) {
+            const minimum = launch ? 32 : linear ? 1 : 2;
+            steps = Math.max(minimum, Math.min(512, 2 * steps, Math.floor(LIMIT.busy * tokens / Math.max(1, ms - launch))));
+          }
+          previous = { ms, tokens };
+        }
         await pause();
       } };
     };
@@ -372,8 +393,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         if (m.tools !== undefined && !m.schema) throw fail('request-rejected', 'unsupported');
         const grammar = m.schema ? matcher(job, m.schema, m.tools, m.sources) : null;
         if (grows) await model.reserve(input + (close?.length || 0) + (think?.budget || 0) + answer, room).catch((e) => { throw e?.reason === 'memory' ? fail('provider-unavailable', 'hardware') : e; });
-        // Low priority (writer.complete, or the request says so): small steps, each done on the GPU and followed by a yield,
-        // the first LIMIT.step tokens and each next sized to take about LIMIT.busy ms from the last one's time.
+        // Low priority: start small, then learn linear or launch-floor pacing; wait and yield after every GPU step.
         const low = m.priority === 'low' || head.includes(tok.id('<|gz_task:writer.complete|>'));
         const yieldNow = pause;
         const pacing = low ? paced() : {};
