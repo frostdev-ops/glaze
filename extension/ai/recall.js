@@ -38,7 +38,7 @@ var GZ_AI_RECALL = globalThis.GZ_AI_RECALL || (() => {
   };
   const envelope = (raw) => {
     if (!keys(raw, ['records', 'truncated']) || !Array.isArray(raw.records) || raw.records.length > LIMIT.records || typeof raw.truncated !== 'boolean') return null;
-    const records = raw.records.map(record);
+    const records = Array.from(raw.records, record);
     return records.includes(null) || new Set(records.map((r) => r.id)).size !== records.length ? null : { records, truncated: raw.truncated };
   };
   const clean = (raw, { caps } = {}) => { const value = envelope(raw); return value && fits(value, caps) ? value : null; };
