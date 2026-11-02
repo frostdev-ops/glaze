@@ -128,11 +128,26 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
   // Only direct current user words select memory management. A quotation, supplied document or earlier turn cannot.
   const memoryQuestion = (question) => {
-    const q = MEMORY().userText(question).normalize('NFKC').toLowerCase();
     if (MEMORY().forgetRequested(question)) return true;
-    const target = /\b(?:memor(?:y|ies)|saved (?:facts?|preferences?)|about (?:me|my preferences)|my (?:facts?|preferences?)|memorias?|recuerdos?|mis preferencias|sobre m[ií]|lembran[çc]as?|minhas prefer[eê]ncias|sobre mim|m[ée]moires?|souvenirs?|mes pr[ée]f[ée]rences|sur moi|erinnerungen?|meine vorlieben|[üu]ber mich|herinneringen|mijn voorkeuren|over mij)\b/u;
-    const action = /\b(?:remember|recall|show|list|read|search|save|update|edit|correct|change|recuerda|recuerdas|recordar|muestra|guarda|actualiza|corrige|lembrar|lembra|lembre|mostre|salve|atualize|corrija|rappelle|souviens|souvenez|montre|affiche|enregistre|corrige|modifie|erinnere|erinnerst|zeige|speichere|korrigiere|[äa]ndere|onthoud|herinner|toon|bewaar|corrigeer|wijzig)\b/u;
-    return target.test(q) && action.test(q) || /\b(?:remember (?:that )?(?:i|my)|recuerda (?:que )?(?:yo|mi)|lembre (?:que )?(?:eu|minha?)|(?:rappelle-toi|souviens-toi) que je|merke dir[,]? (?:dass ich|meine?)|onthoud (?:dat ik|mijn))\b/u.test(q);
+    // JavaScript's \b is ASCII: an accented personal pronoun must keep its boundary too. Inflected verbs and nouns
+    // describe the operation; ownership/"about me" supplies personal scope, rather than any mention of memory in schoolwork.
+    const word = (source) => new RegExp(String.raw`(?<![\p{L}\p{N}_])(?:${source})(?![\p{L}\p{N}_])`, 'u');
+    const record = '(?:memor(?:y|ies)|preferences?|facts?|mem[oó]rias?|recuerdos?|lembran[çc]as?|prefer[eê]ncias?|preferencias?|fatos?|datos?|m[ée]moires?|souvenirs?|pr[ée]f[ée]rences?|faits?|erinnerung(?:en)?|vorlieben?|pr[äa]ferenz(?:en)?|fakten|tatsachen?|herinnering(?:en)?|voorkeur(?:en)?|feit(?:en)?)';
+    const modifiers = String.raw`(?:[\p{L}-]+\s+){0,2}`;
+    const owned = word(String.raw`(?:my|mi|mis|minha?s?|meus?|mes|ma|mon|meine[nmrs]?|mijn)\s+${modifiers}${record}`);
+    const about = word(String.raw`about\s+(?:me|myself)|(?:sobre|de)\s+m[ií]|sobre\s+mim|sur\s+moi|[àa]\s+mon\s+sujet|(?:von|[üu]ber|ueber)\s+(?:mir|mich)|over\s+mij`);
+    const remembered = word(String.raw`(?:saved|stored|personal|guardad[oa]s?|salv[oa]s?|pessoais|enregistr[ée]s?|personnels?|gespeicherte[nmrs]?|pers[öo]nliche[nmrs]?|opgeslagen|persoonlijke)\s+${record}`);
+    const recall = word(String.raw`remember|recall|know|recuerd(?:a|as|an|e|en)|record(?:ar|as|a|am|o|e|em)|lembr(?:a|as|am|ar|o|ou|e|em|ei)|souviens|souvenez|rappell\p{L}*|erinner(?:e|st|t|n)|wei(?:ß|ss)t?|herinner(?:t|en|de|den)?|weet`);
+    const read = word(String.raw`show|list|read|search|find|look\s+up|busc\p{L}*|muestr\p{L}*|procur\p{L}*|pesquis\p{L}*|mostr\p{L}*|cherch\p{L}*|recherch\p{L}*|montr\p{L}*|affich\p{L}*|lis|lisez|such\p{L}*|zeig\p{L}*|lies|lesen|zoek\p{L}*|toon\p{L}*|lees`);
+    const save = word(String.raw`save|store|keep|note|guarda\p{L}*|apunt\p{L}*|salv\p{L}*|anot\p{L}*|enregistr\p{L}*|conserv\p{L}*|retiens|speicher\p{L}*|notier\p{L}*|bewaar\p{L}*|noteer\p{L}*|onthoud`);
+    const change = word(String.raw`update|edit|correct|change|actualiz\p{L}*|corrig\p{L}*|atualiz\p{L}*|modifi\p{L}*|korrigier\p{L}*|[äa]nder\p{L}*|corrigeer\p{L}*|wijzig\p{L}*`);
+    const stated = word(String.raw`(?:this|that|these|a|an|este|esta|estos|estas|un|una|esse|essa|estes|estas|um|uma|ce|cet|cette|ces|une|diese[nmrs]?|eine[nmrs]?|dit|deze|een)\s+${modifiers}${record}`);
+    const self = word(String.raw`remember\s+(?:that\s+)?i|recuerda\s+(?:que\s+)?yo|lembre\s+(?:que\s+)?eu|(?:rappelle-toi|souviens-toi)\s+que\s+je|merke\s+dir[,]?\s+dass\s+ich|onthoud\s+(?:dat\s+)?ik`);
+    return MEMORY().userText(question).normalize('NFKC').toLowerCase().split(/[\u0000\n.!?;]+/u).some((q) => {
+      const personal = owned.test(q) || remembered.test(q) || about.test(q) && word(record).test(q);
+      return personal && (recall.test(q) || read.test(q) || save.test(q) || change.test(q))
+        || about.test(q) && recall.test(q) || stated.test(q) && save.test(q) || self.test(q);
+    });
   };
   // Reuse the affirmative request grammar, including its negation/conditional checks. A correction verb elsewhere in
   // a school question is no permission to replace a preference the student edited themselves.
@@ -266,7 +281,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   });
   const TOOLS3 = { compute: ['run_js'], navigate: ['places_list', 'place_open', 'page_highlight'], remind: ['wake_create', 'wakes_list', 'wake_cancel'],
     watch: ['monitor_create', 'wakes_list', 'todo_list', 'grades_list'], announcements: ['announcements_list', 'announcement_read', 'courses_list'],
-    content: ['content_list', 'content_read', 'courses_list'], syllabus: ['syllabus_read', 'courses_list'], discussions: ['discussions_list', 'discussion_read', 'courses_list'] };
+    content: ['content_list', 'content_read', 'courses_list'], syllabus: ['syllabus_read', 'courses_list'], discussions: ['discussions_list', 'discussion_read', 'courses_list'], courses: ['courses_list'] };
   // A help question naming a piece of the student's work or a course (a course code, a lab report, an essay…): its reads are
   // the assignments' (route's read).
   const NAMED = { en: ['lab reports?', 'projects?', 'papers?', 'essays?', 'homework', 'worksheets?', 'problem sets?', 'assignments?'], es: ['informes?', 'proyectos?', 'ensayos?', 'tareas?'],
@@ -274,7 +289,24 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     de: ['berichte?', 'projekte?', 'hausarbeit\\p{L}*', 'aufs[äa]tze?', 'hausaufgaben?'], nl: ['verslag\\p{L}*', 'projecten', 'project', 'opdracht\\p{L}*', 'essays?', 'huiswerk'] };
   const CODE = /(?<![\p{L}\p{N}])[A-Z]{2,5}[ -]?\d{3,4}[A-Z]?(?![\p{L}\p{N}])/u;
   // The topics that read the student's records, which a help question naming one reads first (route's read).
-  const READS = ['todo', 'grades', 'assignments', 'documents', 'announcements', 'content', 'syllabus', 'discussions'];
+  const READS = ['todo', 'grades', 'assignments', 'documents', 'announcements', 'content', 'syllabus', 'discussions', 'courses'];
+  // Direct course-record requests need discovery even without an active page. Keep the request at the start of its
+  // clause: a lesson about a course or writing code that lists courses does not ask to read the student's records.
+  const RECORD_REQUEST = {
+    en: ['(?:please[,]? )?(?:(?:can|could|would) you (?:please )?)?(?:show|list|read|fetch|get)(?: me)?'],
+    es: ['(?:por favor[,]? )?(?:muestra|mu[eé]strame|enumera|lista|lee)'],
+    'pt-BR': ['(?:por favor[,]? )?(?:mostr[ae]|liste|enumere|exiba|leia)'],
+    fr: ['(?:s.il te pla[iî]t[,]? )?(?:montre|affiche|liste|lis)(?:-moi)?'],
+    de: ['(?:bitte )?(?:zeige?|liste|lies)(?: mir)?'],
+    nl: ['(?:alsjeblieft[,]? )?(?:toon|geef|lees)'],
+  };
+  const COURSE_RECORD = { en: ['courses?', 'classes?'], es: ['cursos?', 'clases?'], 'pt-BR': ['cursos?', 'disciplinas?'],
+    fr: ['cours'], de: ['kurse?n?'], nl: ['cursus', 'cursussen', 'vakken', 'vak'] };
+  const COURSE_WORK = { en: ['work', 'assignments?', 'coursework', 'tasks?'], es: ['trabajo', 'tareas?', 'actividades?'], 'pt-BR': ['trabalhos?', 'tarefas?', 'atividades?'],
+    fr: ['travail', 'travaux', 'devoirs?'], de: ['arbeiten?', 'aufgaben?', 'hausaufgaben?'], nl: ['werk', 'opdrachten?', 'taken'] };
+  const GENERIC_COURSE = { en: ['an? (?:[\\p{L}-]+ ){0,2}(?:course|class)'], es: ['un[ao]? (?:[\\p{L}-]+ ){0,2}(?:curso|clase)'],
+    'pt-BR': ['uma? (?:[\\p{L}-]+ ){0,2}(?:curso|disciplina)'], fr: ['une? (?:[\\p{L}-]+ ){0,2}cours'],
+    de: ['ein(?:e[nsrm]?)? (?:[\\p{L}-]+ ){0,2}kurs'], nl: ['een (?:[\\p{L}-]+ ){0,2}(?:cursus|vak)'] };
   const PARTICULAR = /\b(?:my|our|the|this|that|mi|mis|nuestro|este|minha?|meus?|esse|este|mon|ma|mes|ce|cet|cette|mein\p{L}*|unser\p{L}*|dies\p{L}*|mijn|ons|onze|deze|dit)\b/iu;
   const SCHOOL_WORDS = /\b(?:course|class|lecture|school|cours|curso|aula|kurs|les|college)\b/iu;
   const DEFINITION = /\b(?:what (?:is|are) (?:an? )|define (?:an? )?)/iu;
@@ -291,27 +323,36 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     'dat klopt niet|dat is (?:niet waar|fout)|je bent [\\p{L} ]{0,30}vergeten|weet je het zeker|hoe zit het met|en (?:volgende|morgen|maandag|voor)|fout',
   ].join('|')})(?![\\p{L}])`, 'iu');
   const route = (question, { attempt = '', locale = 'en', level = 1, history, current } = {}) => {
+    const q = String(question).replace(/[‘’]/g, "'");
+    // Quoted titles can identify a record, but quoted requests cannot select a current reference or course discovery.
+    const direct = level >= 3 ? MEMORY().userText(q) : q;
     const last = level >= 3 && Array.isArray(history) && history.length ? history[history.length - 1] : null;
-    if (last && !String(attempt).trim() && FOLLOW.test(String(question).replace(/[‘’]/g, "'"))) {
+    if (last && !String(attempt).trim() && FOLLOW.test(direct)) {
       // Follow-up-only questions carry no topic themselves. Walk back to the question that supplied their tools.
       let previous = last, i = history.length - 1;
       while (i > 0 && FOLLOW.test(previous.question) && route(previous.question, { locale, level }).task !== 'agent.tools') previous = history[--i];
       const again = route(`${previous.question}\n${question}`, { locale, level });
       if (again.task === 'agent.tools') return again;
     }
-    const q = String(question).replace(/[‘’]/g, "'"), work = typeof attempt === 'string' ? attempt : '';
+    const work = typeof attempt === 'string' ? attempt : '';
     const has = (table) => words(lists(table, locale)).test(q);
     const on = Object.keys(TOPICS).filter((k) => has(TOPICS[k]));
     const school = CODE.test(q) || SCHOOL_WORDS.test(q) || /\b(?:my|our)\b/iu.test(q);
     const own = level >= 3 ? Object.keys(TOPICS3).filter((k) => has(own3(k))
       && (!READS.includes(k) || school || !DEFINITION.test(q))
       && (k !== 'content' || school || subjectOf(q) !== 'code')) : [];
+    const courseRequests = level >= 3 ? direct.split(/[\n.!?;]+/u).map((c) => c.trim()).filter((c) =>
+      words(lists(RECORD_REQUEST, locale)).exec(c)?.index === 0 && words(lists(COURSE_RECORD, locale)).test(c)
+      && !words(lists(GENERIC_COURSE, locale)).test(c)) : [];
+    if (courseRequests.some((c) => words(lists(COURSE_WORK, locale)).test(c))) { if (!on.includes('assignments')) on.push('assignments'); }
+    else if (courseRequests.length) own.push('courses');
     // A compute question's own computing verb is no help request, unless it would work out graded work.
     const computing = own.includes('compute') && !AT().gradedWork(AT().fold(q));
     const working = computing ? words(lists(WORK, locale).filter((w) => !COMPUTING.includes(w))).test(q) : has(WORK);
     const subject = () => subjectOf(`${q}\n${work}`);
     // A deictic question names the active resource only when the worker independently captured one.
-    const deictic = level >= 3 && /\b(?:this|here|it|este|esta|esto|aqui|isso|isto|ici|ceci|dies|hier|dit|deze)\b/iu.test(q);
+    const deictic = level >= 3 && words(['this', 'that', 'these', 'those', 'here', 'it', 'est[ea]s?', 'estos?', 'es[ea]s?', 'esos?', 'aqu[ií]', 'isso', 'isto', 'essa', 'esse',
+      'ici', 'ceci', 'cela', 'ça', 'ce', 'cet(?:te)?', 'dies(?:e[nsrm]?)?', 'das', 'hier', 'dit', 'dat', 'deze']).test(direct);
     const active = deictic && current?.document?.id ? TOOLS.documents : deictic && current?.course?.id ? current.assignment?.id ? TOOLS.assignments : current.content?.id
       ? (current.view === 'discussion' ? TOOLS3.discussions : TOOLS3.content) : current.view === 'course' ? TOOLS.assignments : [] : [];
     const contextualWork = deictic && /\b(?:what (?:do|should|can) i do|explain|help)\b/iu.test(q);
@@ -329,7 +370,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     // Rime's own topics first: their tools must fit the window before records' ones fill it.
     const tools = [...Object.keys(TOOLS3).filter((k) => own.includes(k) && (k !== 'compute' || computing)).flatMap((k) => TOOLS3[k]),
       ...active, ...Object.keys(TOOLS).filter((k) => on.includes(k)).flatMap((k) => TOOLS[k])];
-    if (!tools.length) return { task: 'study.help', subject: subjectOf(`${q}\n${work}`) };
+    if (!tools.length) return { task: 'study.help', subject: subject() };
     const accounts = active.length > 0 || on.some((k) => ACCOUNTS.includes(k)) || own.some((k) => k === 'watch' || READS.includes(k));
     // Multiple topics may fill the window. Keep discovery available so a student with two accounts can still choose one.
     return { task: 'agent.tools', tools: [...new Set(tools)].slice(0, LIMIT.tools - (accounts ? 1 : 0)).concat(accounts ? ['accounts_list'] : []) };
