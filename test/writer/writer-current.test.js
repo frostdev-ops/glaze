@@ -3,21 +3,81 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const source = () => fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer/frame/writer-current.js'), 'utf8');
-const setup = (kind = 'assignment') => {
+const setup = (kind = 'assignment', options = {}) => {
   const events = {}, messages = [], parent = [], hooks = {}, listeners = {};
   let key = 'school.test|_2_1|_7_1|_21_1';
+  let mode = options.mode || 'paper', frameContext = options.context || {};
   const doc = (text) => ({ textContent: text, content: { size: text.length }, textBetween: (from, to) => text.slice(from, to) });
   const editor = { view: { state: { doc: doc('Draft body'), selection: { from: 0, to: 5 } } } };
   const port = { onMessage: { addListener: (f) => { port.answer = f; } }, onDisconnect: { addListener() {} }, postMessage: (m) => messages.push(m), disconnect() {} };
   const context = vm.createContext({ crypto: require('node:crypto').webcrypto, document: { visibilityState: 'visible', hasFocus: () => true, addEventListener: (e, f) => { listeners[e] = f; } },
     addEventListener: (e, f) => { events[e] = f; },
     chrome: { runtime: { connect: ({ name }) => { assert.equal(name, 'glaze:ask-writer'); return port; }, onMessage: { addListener() {} }, id: 'glaze' } },
-    GZ_WRITER_FRAME: { on: (e, f) => { hooks[e] = f; }, say: (m) => parent.push(m), kind: () => kind, mode: () => 'paper', context: () => ({ kind, paper: { course: '_7_1' } }), editor: () => editor },
-    GZ_WRITER_PAPER: { current: () => ({ key: () => key, kind: () => 'paper', paper: () => ({ title: 'Title' }) }) } });
+    GZ_WRITER_FRAME: { on: (e, f) => { hooks[e] = f; }, say: (m) => parent.push(m), kind: () => kind, mode: () => mode, context: () => frameContext, editor: () => editor },
+    GZ_WRITER_PAPER: { current: () => options.noPaper ? null : ({ key: () => key, kind: () => 'paper', paper: () => ({ title: 'Title' }) }) } });
   vm.runInContext(source(), context);
-  hooks.ready();
-  return { context, port, parent, messages, events, hooks, editor, listeners, setKey: (v) => { key = v; }, setKind: (v) => { kind = v; hooks.context(); }, update: () => { editor.view.state.doc = doc('Changed body'); hooks.change(); } };
+  hooks.ready(editor, { askOwner: Object.hasOwn(options, 'owner') ? options.owner : 'https://school.test/_2_1' });
+  return { context, port, parent, messages, events, hooks, editor, listeners, setKey: (v) => { key = v; }, setKind: (v) => { kind = v; hooks.context(); }, setMode: (v) => { mode = v; hooks.context(); }, setContext: (v) => { frameContext = v; hooks.context(); }, update: () => { editor.view.state.doc = doc('Changed body'); hooks.change(); } };
 };
+
+test('compose drafts use exact editor bindings and their original owner without a persistent document key', () => {
+  for (const kind of ['post', 'reply', 'message', 'journal']) {
+    const p = setup(kind, { mode: 'compose', noPaper: true });
+    const b = p.parent.at(-1);
+    assert.ok(b?.token, kind);
+    p.port.answer({ id: 1, op: 'current', token: b.token, revision: b.revision });
+    const value = p.messages.at(-1).value;
+    assert.equal(value.key, null); assert.equal(value.kind, kind); assert.equal(value.mode, 'compose');
+    assert.equal(value.owner, 'https://school.test/_2_1'); assert.equal(value.id, undefined);
+    assert.match(value.text, /Selected text:\nDraft\n\nDraft:\nDraft body/);
+    p.setContext({ askOwner: 'https://school.test/_99_1' });
+    p.port.answer({ id: 2, op: 'current', token: b.token, revision: b.revision });
+    assert.equal(p.messages.at(-1).value.owner, 'https://school.test/_2_1', 'context updates cannot reassign the original editor owner');
+  }
+});
+
+test('missing owner, unknown kinds and test evidence exclude compose material', () => {
+  for (const kind of ['test', 'unknown', 'comment', 'assignment']) {
+    const p = setup(kind, { mode: 'compose', noPaper: true });
+    assert.ok(!p.parent.some((m) => m.token), kind);
+  }
+  for (const owner of [null, '', 'invalid']) {
+    const p = setup('post', { mode: 'compose', noPaper: true, owner });
+    assert.ok(!p.parent.some((m) => m.token));
+  }
+  const p = setup('reply', { mode: 'compose', noPaper: true });
+  const b = p.parent.at(-1);
+  p.setContext({ kind: 'test' });
+  p.port.answer({ id: 1, op: 'current', token: b.token, revision: b.revision });
+  assert.equal(p.messages.at(-1).value, undefined);
+});
+
+test('compose reply targets and kind transitions revoke the earlier revision even without text changes', () => {
+  const p = setup('reply', { mode: 'compose', noPaper: true, context: { post: { id: '_10_1' } } });
+  const first = p.parent.at(-1);
+  assert.ok(first?.token);
+  p.setContext({ post: { id: '_11_1' } });
+  p.port.answer({ id: 1, op: 'current', token: first.token, revision: first.revision });
+  assert.equal(p.messages.at(-1).value, undefined);
+  const second = p.parent.at(-1);
+  p.setKind('journal');
+  p.port.answer({ id: 2, op: 'current', token: second.token, revision: second.revision });
+  assert.equal(p.messages.at(-1).value, undefined);
+});
+
+test('the parent captures one bounded account owner at box creation and transmits it only on private init', async () => {
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer/page/writer.js'), 'utf8');
+  const start = source.indexOf('  const askOwnerOf ='), end = source.indexOf('  const paperOf =', start);
+  assert.ok(start > 0 && end > start);
+  let calls = 0, account = '_2_1';
+  const context = vm.createContext({ X: { account: () => { calls++; return Promise.resolve(account); } }, location: { origin: 'https://school.test' }, setTimeout, clearTimeout });
+  vm.runInContext(source.slice(start, end) + '\nglobalThis.owner = askOwnerOf;', context);
+  assert.equal(await context.owner(), 'https://school.test/_2_1'); assert.equal(calls, 1);
+  account = 'unknown'; assert.equal(await context.owner(), null);
+  assert.match(source, /askOwner: box\.askOwner/);
+  assert.match(source, /box\.askOwner = await owner/);
+  assert.equal((source.match(/askOwnerOf\(\)/g) || []).length, 1, 'the owner is acquired only while mounting the box');
+});
 test('dedicated Ask binding is read-only, independent of MCP settings, and contains bounded editor material', () => {
   const p = setup();
   const binding = p.parent.at(-1);
