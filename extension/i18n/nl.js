@@ -3922,5 +3922,10 @@
   "Export Markdown": "Markdown exporteren",
   "Course cache": "Cursuscache",
   "Clear cache": "Cache wissen",
-  "No course material cached": "Geen cursusmateriaal in de cache"
+  "No course material cached": "Geen cursusmateriaal in de cache",
+  "Memory used": "Gebruikte herinneringen",
+  "Memory saved on this device": "Herinnering opgeslagen op dit apparaat",
+  "Memory updated on this device": "Herinnering bijgewerkt op dit apparaat",
+  "Memory deleted": "Herinnering verwijderd",
+  "Memory is off": "Geheugen staat uit"
 };

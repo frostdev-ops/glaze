@@ -3922,5 +3922,10 @@
   "Export Markdown": "Markdown exportieren",
   "Course cache": "Kurscache",
   "Clear cache": "Cache leeren",
-  "No course material cached": "Kein Kursmaterial im Cache"
+  "No course material cached": "Kein Kursmaterial im Cache",
+  "Memory used": "Verwendete Erinnerungen",
+  "Memory saved on this device": "Erinnerung auf diesem Gerät gespeichert",
+  "Memory updated on this device": "Erinnerung auf diesem Gerät aktualisiert",
+  "Memory deleted": "Erinnerung gelöscht",
+  "Memory is off": "Erinnerungen sind ausgeschaltet"
 };

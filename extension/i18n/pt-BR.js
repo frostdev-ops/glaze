@@ -3922,5 +3922,10 @@
   "Export Markdown": "Exportar Markdown",
   "Course cache": "Cache dos cursos",
   "Clear cache": "Limpar cache",
-  "No course material cached": "Nenhum material de curso em cache"
+  "No course material cached": "Nenhum material de curso em cache",
+  "Memory used": "Memória usada",
+  "Memory saved on this device": "Memória salva neste dispositivo",
+  "Memory updated on this device": "Memória atualizada neste dispositivo",
+  "Memory deleted": "Memória excluída",
+  "Memory is off": "A memória está desativada"
 };
