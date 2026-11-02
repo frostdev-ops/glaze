@@ -9,7 +9,7 @@ const Study = require('../../extension/ai/tasks/study-help.js');
 const Tools = require('../../extension/ai/tools.js');
 const ACCOUNT = 'https://memory.example.test/17', OTHER = 'https://memory.example.test/18', NOW = 1793653200000;
 const answer = (text, quotes = []) => ({ call: null, answer: { text, quotes } });
-const call = (name, args) => ({ call: { name, arguments: args, kind: name === 'memory_save' || name === 'memory_forget' ? 'write' : 'read' }, answer: null });
+const call = (name, args) => ({ call: { name, arguments: args }, answer: null });
 const settle = async (done) => { for (let i = 0; i < 1000; i++) { if (done()) return; await new Promise((r) => setTimeout(r, 0)); } assert.fail('Ask did not settle'); };
 const SAVES = [
   ['en', 'Please store this preference: I learn best from diagrams.', 'I learn best from diagrams.'],
