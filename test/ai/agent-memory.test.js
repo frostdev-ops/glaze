@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const S = require('../../extension/ai/schema.js');
 const TL = require('../../extension/ai/tools.js');
 const M = require('../../extension/ai/agent/memory.js');
+const CORE = require('../../extension/ai/memory.js');
 
 const ACCOUNT = 'https://campus.example/5', OTHER = 'https://campus.example/6';
 const ID = `m-${'1'.repeat(32)}`, SOURCE = `s-${'2'.repeat(32)}`, REV = 'a'.repeat(32);
@@ -240,4 +241,64 @@ test('ingest uses the same enabled/verified account and forwards only canonical 
   f.on(false);
   assert.deepEqual(await M.ingest(f.env, content(), {}), { ok: false, error: 'off' });
   assert.equal(f.calls.length, 1);
+});
+
+const persistent = () => {
+  const data = {}; let n = 1;
+  const local = { async get(keys) { return structuredClone(keys === null ? data : Object.fromEntries([].concat(keys).filter((k) => Object.hasOwn(data, k)).map((k) => [k, data[k]]))); },
+    async set(patch) { Object.assign(data, structuredClone(patch)); return true; } };
+  const store = CORE.open({ local, now: () => AT, random: () => (++n).toString(16).padStart(32, '0') });
+  const current = { account: ACCOUNT, question: 'I prefer short answers.', lease: store.lease(ACCOUNT) };
+  const env = { store, on: async () => true, context: async () => current, now: () => AT };
+  const defs = M.tools(env);
+  return { store, data, current, env, run: (name, args) => defs.find((d) => d.name === name).run(args, {}) };
+};
+
+test('real core round trip preserves category/provenance, protects edits and gives committed forget receipts', async () => {
+  const f = persistent();
+  const first = await f.run('memory_save', { text: 'Prefers short answers.', evidence: 'I prefer short answers.', category: 'preference' });
+  assert.equal(first.receipt.operation, 'created');
+  const read = await f.run('memory_read', { id: first.receipt.id });
+  assert.equal(read.text, 'Prefers short answers.');
+  assert.equal(read.category, 'preference');
+  assert.deepEqual(read.source, { type: 'user-message', evidence: 'I prefer short answers.' });
+  assert.equal((await f.run('memory_search', { query: 'short' })).items[0].id, first.receipt.id);
+  const edited = await f.store.edit(ACCOUNT, { id: read.id, revision: read.revision, markdown: 'Use short paragraphs.' });
+  f.current.question = 'Use short sentences.';
+  f.current.lease = f.store.lease(ACCOUNT);
+  const correcting = { id: read.id, revision: edited.receipt.revision, text: f.current.question, evidence: f.current.question };
+  assert.equal((await f.run('memory_save', correcting)).error, 'conflict');
+  f.current.explicitCorrection = true;
+  const corrected = await f.run('memory_save', correcting);
+  assert.equal(corrected.receipt.operation, 'updated');
+  assert.equal((await f.run('memory_forget', { id: read.id, revision: corrected.receipt.revision })).receipt.operation, 'forgotten');
+  const tombstone = Object.values(f.data)[0];
+  assert.equal(tombstone.deleted, true);
+  assert.equal(Object.hasOwn(tombstone, 'markdown'), false);
+  assert.equal(Object.hasOwn(tombstone, 'source'), false);
+  assert.equal((await f.run('memory_forget', { id: read.id, revision: tombstone.revision })).receipt.operation, 'unchanged');
+  assert.equal((await f.run('memory_read', { id: read.id })).error, 'not-found');
+});
+
+test('real core ingests canonical material, preserves its age and suppresses forgotten source identities', async () => {
+  const f = persistent();
+  const first = await M.ingest(f.env, content(), {});
+  assert.equal(first.ok, true);
+  const read = await f.run('memory_read', { id: first.receipt.id });
+  assert.equal(read.kind, 'course');
+  assert.equal(read.source.observedAt, AT);
+  assert.match(read.text, /selectively permeable/);
+  assert.equal((await f.run('memory_search', { query: 'membranes', kind: 'course' })).items[0].id, read.id);
+  const gone = await f.run('memory_forget', { id: read.id, revision: read.revision });
+  assert.equal(gone.receipt.operation, 'forgotten');
+  f.current.lease = f.store.lease(ACCOUNT);
+  assert.equal((await M.ingest(f.env, content(), {})).error, 'not-found');
+});
+
+test('real core invalidation rejects in-flight turn authority forwarded by the wrapper', async () => {
+  const f = persistent();
+  f.store.invalidate(ACCOUNT);
+  assert.deepEqual(await f.run('memory_save', { text: 'Prefers short answers.', evidence: 'I prefer short answers.' }), { ok: false, error: 'scope' });
+  assert.deepEqual(await M.ingest(f.env, content(), {}), { ok: false, error: 'scope' });
+  assert.deepEqual(Object.keys(f.data), []);
 });
