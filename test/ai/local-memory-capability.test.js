@@ -6,6 +6,10 @@ const crypto = require('node:crypto');
 const LOCAL = require('../../extension/ai/providers/local.js');
 const S = require('../../extension/ai/local/store.js');
 const U = require('../../extension/ai/local/updates.js');
+const T = require('../../extension/ai/task.js');
+const X = require('../../extension/ai/text.js');
+const A = require('../../extension/ai/tasks/agent-tools.js');
+const Q = require('../../extension/ai/request.js');
 const { fakeFs, fakeHf, fakeLocks, entry, bytes } = require('../helpers/model-store-fakes.cjs');
 
 const OLD = bytes(1300, 7), NEW = bytes(1500, 9);
@@ -95,5 +99,34 @@ test('memoryVersion follows downloaded pins, trial swaps and rollback rather tha
     await store.edit(U.rollback);
     assert.equal(await LOCAL.memoryVersion({ weights: old.id }), 0);
     assert.equal(await LOCAL.toolsLevel({ weights: old.id }), 3);
+  } finally { LOCAL._env(null); }
+});
+
+test('actual local model selection refuses memory after a same-ID capability rollback before count, warm or run', async () => {
+  let model = { ...fresh, state: 'ready' };
+  const seen = [], cfg = LOCAL.config({ weights: fresh.id });
+  LOCAL._env({ store: { list: async () => [model] }, gpu: () => ({}), link: { kind: 'worker', call: async (op) => {
+    seen.push(op);
+    return op === 'count' ? { tokens: 20 } : op === 'warm' ? { ok: true } : { text: '{"text":"Checked.","quotes":[]}', finish: 'stop' };
+  } } });
+  const agent = (input) => Q.clean({ ...T.prepare(A.task, { question: 'What do you remember?', tools: ['run_js'], now: Date.UTC(2026, 10, 2), zone: 'UTC', ...input }, { provider: LOCAL, cfg }), task: { id: 'agent.tools', version: 1 } });
+  const recalled = { records: [], truncated: false };
+  const study = Q.clean({ ...X.request({ system: 'Give a study hint.', data: [{ label: 'recall', text: JSON.stringify(recalled) }, { label: 'question', text: 'What should I consider?' }] }), task: { id: 'study.help', version: 1 } });
+  try {
+    assert.equal(await LOCAL.memoryVersion(cfg), 1, 'the earlier broker check saw the capable version');
+    model = { ...old, state: 'ready' };
+    for (const req of [agent({ recall: recalled }), agent({ tools: ['memory_search'] }), study]) {
+      await assert.rejects(LOCAL.run(req, cfg), (error) => error.code === 'caps');
+      await assert.rejects(LOCAL.count(req, cfg), (error) => error.code === 'caps');
+      assert.equal(await LOCAL.warm(req, cfg), false);
+    }
+    assert.deepEqual(seen, [], 'no unsupported memory request reaches the host');
+    await LOCAL.run(agent({}), cfg);
+    assert.deepEqual(seen, ['run'], 'the existing no-memory request still runs on legacy weights');
+    model = { ...fresh, state: 'ready' };
+    assert.equal(await LOCAL.count(agent({ recall: recalled }), cfg), 20);
+    assert.equal(await LOCAL.warm(agent({ tools: ['memory_search'] }), cfg), true);
+    await LOCAL.run(agent({ recall: recalled }), cfg);
+    assert.deepEqual(seen, ['run', 'count', 'warm', 'run']);
   } finally { LOCAL._env(null); }
 });
