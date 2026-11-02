@@ -310,8 +310,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     if (!on.length && !own.length && !active.length) return { task: 'study.help', subject: subject() };
     if (on.includes('mark') && !on.includes('todo')) on.push('todo');
     // Rime's own topics first: their tools must fit the window before records' ones fill it.
-    const tools = [...active, ...Object.keys(TOOLS3).filter((k) => own.includes(k) && (k !== 'compute' || computing)).flatMap((k) => TOOLS3[k]),
-      ...Object.keys(TOOLS).filter((k) => on.includes(k)).flatMap((k) => TOOLS[k])];
+    const tools = [...Object.keys(TOOLS3).filter((k) => own.includes(k) && (k !== 'compute' || computing)).flatMap((k) => TOOLS3[k]),
+      ...active, ...Object.keys(TOOLS).filter((k) => on.includes(k)).flatMap((k) => TOOLS[k])];
     if (!tools.length) return { task: 'study.help', subject: subjectOf(`${q}\n${work}`) };
     const accounts = active.length > 0 || on.some((k) => ACCOUNTS.includes(k)) || own.some((k) => k === 'watch' || READS.includes(k));
     // Multiple topics may fill the window. Keep discovery available so a student with two accounts can still choose one.
@@ -450,8 +450,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     // clears it. A compaction still running when the next question comes gives way to its fallback, so asking never waits.
     const CHAT = { summary: '', covered: new Set(), gen: 0, pending: null, tools: [] };
     // The tools a level-3 run offers: the question's own; from UNION.from up, the chat's union with them.
-    const offer = async (routed, input, signal) => {
-      const fit = await measure('agent.tools', input, signal);
+    const offer = async (routed, input, signal, count) => {
+      const fit = await count('agent.tools', input);
       if (signal.aborted) throw cancelled();
       let keep = [...CHAT.tools.filter((t) => !routed.includes(t)), ...routed];
       while (unionCost(keep) > UNION.budget && keep.length > routed.length) keep = keep.slice(1);
@@ -639,12 +639,28 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const keep = (a) => { if (a.type === 'keepalive') post({ id, type: 'keepalive' }); };
       let level = 1;
       let active;
-      const validate = async () => { if (active?.valid && !await active.valid()) throw R().error('changed'); if (signal.aborted) throw cancelled(); };
+      const validate = async () => {
+        if (signal.aborted) throw cancelled();
+        if (active?.valid && !await F().wait(() => active.valid(), signal)) throw R().error('changed');
+        if (signal.aborted) throw cancelled();
+      };
+      const count = async (task, input) => {
+        await validate();
+        const fit = await measure(task, input, signal);
+        await validate();
+        return fit;
+      };
+      const call = async (c, input) => {
+        await validate();
+        const out = await tool(active?.bind ? active.bind(c, AT().task.input(input, { caps: contextCaps })) : c, signal);
+        await validate();
+        return out;
+      };
       const run = async (task, input) => {
         await validate();
         if (level >= 3 && (await env.level?.().catch(() => 1) ?? 1) < 3) throw R().error('changed');
         // { id, type: 'context', task, used, window, reserve, exact }: the request about to go, against the model's window.
-        const fit = await measure(task, input, signal);
+        const fit = await count(task, input);
         if (fit && !signal.aborted) post({ id, type: 'context', task, ...fit });
         await validate();
         const output = (await broker({ op: 'run', feature: FEATURE, task, input }, signal, keep)).output;
@@ -652,8 +668,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         return output;
       };
       try {
-        active = await env.current?.(m);
-        current.fresh = active?.valid;
+        active = await F().wait(() => env.current?.(m), signal);
+        current.fresh = async () => { await validate(); return true; };
         if (active?.page) current.page = active.page;
         const context = active?.current;
         const inCurrent = context ? { current: context } : {};
@@ -673,17 +689,17 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           // was read as its material, under its own rules. Its reader's answer is never shown.
           let material = context?.material?.text || '', tools = ['accounts_list'];
           if (r.read) {
-            tools = await offer(r.read, { question, tools: r.read, steps: [], now: env.now(), zone, locale, first: true, help: r.subject, ...inCurrent }, signal);
+            tools = await offer(r.read, { question, tools: r.read, steps: [], now: env.now(), zone, locale, first: true, help: r.subject, ...inCurrent }, signal, count);
             // A reader that can't finish (its turn refused, too many steps) leaves study help to answer without it.
             let seen = null;
-            try { seen = await episode({ question, tools, locale, now: env.now(), zone, run, call: async (c, inp) => { await validate(); const out = await tool(active?.bind ? active.bind(c, AT().task.input(inp, { caps: contextCaps })) : c, signal); await validate(); return out; }, signal, first: true, help: r.subject, ...inCurrent, caps: contextCaps }); }
+            try { seen = await episode({ question, tools, locale, now: env.now(), zone, run, call, signal, first: true, help: r.subject, ...inCurrent, caps: contextCaps }); }
             catch (e) { if (signal.aborted || !['check', 'steps', 'refusal', 'invalid-response'].includes(R().code(e))) throw e; }
             if (seen?.declined) return post({ id, type: 'end', task: r.task, declined: true });
             if (seen) material = [material, materialOf(seen.steps, zone)].filter(Boolean).join('\n').slice(0, Math.floor(LIMIT.material * scale()));
           }
           // The page renews this port between questions. Discover the provider's current window before cutting history;
           // record-reading help already did so through offer(), but a study-only follow-up has no reader.
-          if (level >= 3 && !r.read) await measure('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...studyContext, ...(material && { material }) }, signal);
+          if (level >= 3 && !r.read) await count('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...studyContext, ...(material && { material }) });
           // Level 3: the summary as the conversation's first turn, then the turns it doesn't cover (a model reads them).
           const past = level >= 3 ? [...(CHAT.summary ? [{ question: 'Earlier in this chat', answer: CHAT.summary }] : []), ...retained(open)].slice(-Math.floor(LIMIT.turns * scale())) : history;
           const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...studyContext, ...(past.length && { history: past }), ...(material && { material }) });
@@ -691,9 +707,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           post({ id, type: 'end', task: r.task, output });
           return;
         }
-        const tools = level >= 3 ? await offer(r.tools, { question, tools: r.tools, steps: [], now: env.now(), zone, locale, first: true, ...inCurrent }, signal) : r.tools;
+        const tools = level >= 3 ? await offer(r.tools, { question, tools: r.tools, steps: [], now: env.now(), zone, locale, first: true, ...inCurrent }, signal, count) : r.tools;
         if (signal.aborted) throw cancelled();
-        const res = await episode({ question, tools, locale, now: env.now(), zone, run, call: async (c, inp) => { await validate(); const out = await tool(active?.bind ? active.bind(c, AT().task.input(inp, { caps: contextCaps })) : c, signal); await validate(); return out; }, signal, ...inCurrent, caps: contextCaps, ...(level >= 3 && { first: true, ...(open.length && { history: retained(open) }), ...(CHAT.summary && { summary: CHAT.summary }), measure: (task, input) => measure(task, input, signal) }),
+        const res = await episode({ question, tools, locale, now: env.now(), zone, run, call, signal, ...inCurrent, caps: contextCaps, ...(level >= 3 && { first: true, ...(open.length && { history: retained(open) }), ...(CHAT.summary && { summary: CHAT.summary }), measure: count }),
           ...(record && { fired: { what: record.what, ...(record.watch && { watch: record.watch }), say: question, at: record.at, ...(record.fact && { fact: record.fact }) } }) });
         await validate();
         if (res.declined) return post({ id, type: 'end', task: r.task, declined: true });

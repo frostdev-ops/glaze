@@ -2769,16 +2769,17 @@ const aiSender = async (s, what = {}) => {
   return safe({ ...s, url: page.href, origin: page.origin, attemptKind: page.attemptKind || '', tab }, tab.url);
 };
 // A separate read-only channel from Writer. It grants no agent-app tools and does not depend on mcp.on.
-const rimeWriters = new Set();
-let rimeWriterSeq = 0, rimeDocHandles;
+const rimeWriters = new Set(), rimeWriterArrivals = new Set();
+let rimeWriterSeq = 0, rimeDocHandles, rimeWriterWoken = false;
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'glaze:ask-writer') return;
   const sender = port.sender || {}, seat = { sender, port, waits: new Map(), gone: false };
   const end = () => { seat.gone = true; rimeWriters.delete(seat); for (const done of [...seat.waits.values()]) done(null); };
   port.onDisconnect.addListener(end);
   port.onMessage.addListener((m) => { if (Number.isSafeInteger(m?.id)) seat.waits.get(m.id)?.(m.value || null); });
-  Promise.resolve().then(() => aiWriter(sender, { op: 'run', feature: 'writing' })).then((ok) => {
-    if (ok === true && !seat.gone) rimeWriters.add(seat); else { end(); try { port.disconnect(); } catch { /* gone */ } }
+  Promise.resolve().then(() => fromGlaze(sender) && sender.frameId > 0 && aiSender(sender, { op: 'run', feature: 'writing' })).then((ok) => {
+    if (ok === true && !seat.gone) { rimeWriters.add(seat); for (const arrived of rimeWriterArrivals) arrived(seat); }
+    else { end(); try { port.disconnect(); } catch { /* gone */ } }
   }, () => { end(); try { port.disconnect(); } catch { /* gone */ } });
 });
 const rimeWriterAsk = (seat, binding) => new Promise((resolve) => {
@@ -2792,10 +2793,11 @@ const rimeWriterAsk = (seat, binding) => new Promise((resolve) => {
 const rimeWriterCurrent = async (s, at, binding) => {
   if (!at?.href || !at.account || !binding || !/^[a-f0-9]{32}$/.test(binding.token) || !Number.isSafeInteger(binding.revision) || binding.revision < 0) return null;
   const seats = [...rimeWriters].filter((seat) => seat.sender.tab?.id === s.tab.id && !seat.gone);
-  const found = (await Promise.all(seats.map(async (seat) => {
+  const readSeat = async (seat) => {
+    if (seat.gone || seat.sender.tab?.id !== s.tab.id) return null;
     await aiKept();
     const host = aiHosts.get(`${s.tab.id}|${seat.sender.frameId}`);
-    if (!host || host.documentId !== s.documentId || host.frameId !== s.frameId || await aiWriter(seat.sender, { op: 'run', feature: 'writing' }) !== true) return null;
+    if (!host || host.documentId !== s.documentId || host.frameId !== s.frameId || await aiSender(seat.sender, { op: 'run', feature: 'writing' }) !== true) return null;
     const value = await rimeWriterAsk(seat, binding);
     if (!value || value.token !== binding.token || value.revision !== binding.revision || typeof value.key !== 'string') return null;
     const key = value.key, parts = key.split('|');
@@ -2806,7 +2808,26 @@ const rimeWriterCurrent = async (s, at, binding) => {
       || parts[2] !== at.capture?.current?.course?.id || parts[3] !== at.capture?.current?.assignment?.id)) return null;
     if (value.context?.kind === 'test' || typeof value.text !== 'string' || value.text.length > 3072) return null;
     return { seat, value };
-  }))).filter(Boolean);
+  };
+  let found = (await Promise.all(seats.map(readSeat))).filter(Boolean);
+  // A restarted worker has lost its ports; Safari may leave the editor believing its old port is still open.
+  // Wake once, without private bindings or agent access, and wait for the exact authenticated editor to answer.
+  // Never broadcast over live seats: that would revoke another Ask turn's pinned port.
+  if (!seats.length && ((!rimeWriterWoken && !rimeWriters.size) || rimeWriterArrivals.size) && typeof chrome.runtime.sendMessage === 'function') {
+    const match = await new Promise((resolve) => {
+      let finished = false;
+      const done = (value) => { if (finished) return; finished = true; clearTimeout(timer); rimeWriterArrivals.delete(arrived); resolve(value); };
+      const arrived = (seat) => { readSeat(seat).then((value) => { if (value) done(value); }, () => {}); };
+      const timer = setTimeout(done, 2000, null);
+      rimeWriterArrivals.add(arrived);
+      for (const seat of rimeWriters) arrived(seat);
+      if (!rimeWriterWoken && !rimeWriters.size) {
+        rimeWriterWoken = true;
+        try { Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:ask-writer', op: 'wake' })).catch(() => {}); } catch { /* wait for a reconnect */ }
+      }
+    });
+    if (match) found = [match];
+  }
   if (found.length !== 1) return null;
   const match = found[0];
   if (!rimeDocHandles) { mcpCore(); rimeDocHandles = GZ_MCP_WRITER.handles(chrome.storage.session); }
@@ -2849,11 +2870,19 @@ const rimeCurrent = async (s, m = {}) => {
     value = GZ_AI_CURRENT.clean(at.capture.current, { caps: { context: 131072 } });
     if (value) {
       value = { ...value }; delete value.document; if (value.material?.source === 'writer') delete value.material;
-      if (m.writer && JSON.stringify(m.writer) === JSON.stringify(at.capture.writer)) writer = await rimeWriterCurrent(s, at, m.writer);
+      if (m.writer !== undefined) {
+        const pin = m.writer, live = at.capture.writer;
+        if (!pin || Object.keys(pin).sort().join() !== 'revision,token' || pin.token !== live?.token || pin.revision !== live?.revision) return null;
+        writer = await rimeWriterCurrent(s, at, pin);
+      }
       if (writer) value = { ...value, view: 'document', document: { id: writer.id, title: writer.value.title || '', kind: 'paper', revision: writer.value.revision }, material: { text: writer.value.text, source: 'writer', truncated: writer.value.truncated === true } };
     }
   }
+  // A requested draft is never silently replaced with the surrounding page when its editor pin cannot be resolved.
+  if (m.writer !== undefined && !writer) return null;
   return { ...(value && { current: value }), page: { url: at.href, ...(value && { site: value.site }) }, bind: (call, input) => {
+    // Document tools already name their exact opaque key and do not accept an account argument.
+    if (!value || !GZ_AI_TASK_AGENT_TOOLS.SPECS.find((s) => s.name === call.name)?.parameters.properties.account) return call;
     const args = call.arguments || {}, pinned = value && GZ_AI_TASK_AGENT_TOOLS.currentBound?.(call, input);
     if (!pinned || !at.account) return call;
     const account = `${new URL(at.href).origin}/${at.account}`;
