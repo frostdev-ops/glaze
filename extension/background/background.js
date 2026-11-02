@@ -16,6 +16,7 @@ globalThis.addEventListener?.('install', () => importScripts('../planner/gradeca
 // queue. Page-origin locks wouldn't do: two schools' Canvas sites and the editor page share this storage. Each kind
 // of write ('glaze:<name>') names who may ask for it and what it does, given { sync, local }; each area's get gives
 // what is stored, and set and remove say whether they worked.
+const keysOf = async (a) => (typeof chrome.storage[a].getKeys === 'function' ? chrome.storage[a].getKeys() : Object.keys(await chrome.storage[a].get(null)));
 const brokerArea = (area) => ({
   get: (keys) => chrome.storage[area].get(keys),
   set: (patch) => chrome.storage[area].set(patch).then(() => true, () => false),
@@ -693,8 +694,8 @@ BROKER.notesapp = {
 };
 // Only Settings' own top frame can stage or commit a backup. Uploads live in a scratch database and carry a
 // document-bound token; each commit replays against current storage inside the broker's write queue.
-BROKER_FILES.backup = ['../planner/gradecalc.js', '../planner/insights.js', '../planner/gpa.js', '../planner/classes.js', '../sharing/relay.js', '../sharing/sharing.js', '../sharing/sessions.js', 'backup.js'];
-globalThis.addEventListener?.('install', () => importScripts('backup.js'));
+BROKER_FILES.backup = ['../ai/memory.js', '../planner/gradecalc.js', '../planner/insights.js', '../planner/gpa.js', '../planner/classes.js', '../sharing/relay.js', '../sharing/sharing.js', '../sharing/sessions.js', 'backup.js'];
+globalThis.addEventListener?.('install', () => importScripts('../ai/memory.js', 'backup.js'));
 BROKER.backup = (() => {
   let pending = null;
   const ownerOf = (s) => `${s.tab?.id}:${s.documentId || s.url}`;
@@ -1953,6 +1954,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // the Not nows. Pages open on a site removed keep Glaze until they reload, refused by every check above meanwhile.
 const forget = async (origin) => {
   await mcpClearReads(origin);
+  if (!(await (brokerTurn ||= GZ_CARDS.queue())(() => rimeMemory().purgeCourses({ origin }))).ok) return false;
   const used = await ultraUsed(origin);
   const u = new URL(origin);
   const got = await chrome.storage.local.get([...LMS, 'seenCourses', 'courseSlots', 'todoCache']);
@@ -1980,6 +1982,7 @@ const forget = async (origin) => {
 };
 const forgetAll = async () => {
   await mcpClearReads();
+  if (!(await (brokerTurn ||= GZ_CARDS.queue())(() => rimeMemory().purgeCourses())).ok) return false;
   const used = await ultraUsed();
   const all = await chrome.storage.local.get(null), origins = new Set();
   for (const kind of LMS) for (const value of Array.isArray(all[kind]) ? all[kind] : []) {
@@ -2536,11 +2539,54 @@ const loadInto = (m, sender, files, reply) => {
 // tab's own Glaze has said the attempt is an assignment (aiWriter). The connections live in the worker's own store; only
 // Settings' top frame reads and writes them ('glaze:ai-config'), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
 // worker's importScripts calls name (scripts/package-firefox.sh). A task (ai/tasks/<id>.js) goes in this list too.
-const aiFiles = () => importScripts('../writer/writer-sources.js', '../writer/writer-cite.js', '../ai/schema.js', '../ai/request.js', '../ai/stream.js', '../ai/failure.js', '../ai/endpoint.js', '../ai/text.js', '../ai/visual-cache.js', '../ai/models.js', '../ai/providers.js', '../ai/providers/openai.js', '../ai/providers/device.js', '../ai/providers/apple.js', '../ai/local/store.js', '../ai/local/updates.js', '../ai/local/format.js', '../ai/local/link.js', '../ai/providers/local.js', '../ai/tools.js', '../ai/loop.js', '../ai/task.js', '../ai/tasks/syllabus-read.js', '../ai/tasks/writer-context.js', '../ai/tasks/writer-complete.js', '../ai/tasks/writer-review.js', '../ai/tasks/writer-image.js', '../ai/tasks/writer-feedback.js', '../ai/tasks/writer-outline.js', '../ai/tasks/writer-requirements.js', '../ai/tasks/writer-cite.js', '../ai/tasks/writer-decide.js', '../ai/tasks/wording.js', '../ai/tasks/study-help.js', '../ai/current.js', '../ai/tasks/agent-tools.js', '../ai/tasks/chat-compact.js', '../ai/agent/js.js', '../ai/agent/places.js', '../ai/agent/wakes.js', '../ai/agent/school.js', '../ai/settings.js', '../ai/broker.js', '../ai/ask.js');
+const aiFiles = () => importScripts('../writer/writer-sources.js', '../writer/writer-cite.js', '../ai/schema.js', '../ai/request.js', '../ai/stream.js', '../ai/failure.js', '../ai/endpoint.js', '../ai/text.js', '../ai/visual-cache.js', '../ai/models.js', '../ai/providers.js', '../ai/providers/openai.js', '../ai/providers/device.js', '../ai/providers/apple.js', '../ai/local/store.js', '../ai/local/updates.js', '../ai/local/format.js', '../ai/local/link.js', '../ai/providers/local.js', '../ai/tools.js', '../ai/loop.js', '../ai/task.js', '../ai/memory.js', '../ai/agent/memory.js', '../ai/recall.js', '../ai/tasks/syllabus-read.js', '../ai/tasks/writer-context.js', '../ai/tasks/writer-complete.js', '../ai/tasks/writer-review.js', '../ai/tasks/writer-image.js', '../ai/tasks/writer-feedback.js', '../ai/tasks/writer-outline.js', '../ai/tasks/writer-requirements.js', '../ai/tasks/writer-cite.js', '../ai/tasks/writer-decide.js', '../ai/tasks/wording.js', '../ai/tasks/study-help.js', '../ai/current.js', '../ai/tasks/agent-tools.js', '../ai/tasks/chat-compact.js', '../ai/agent/js.js', '../ai/agent/places.js', '../ai/agent/wakes.js', '../ai/agent/school.js', '../ai/settings.js', '../ai/broker.js', '../ai/ask.js');
 globalThis.addEventListener?.('install', aiFiles);
 // run_js's engine (ai/agent/js.js), cached here so the worker may import it on its first run; its WebAssembly loads then.
 globalThis.addEventListener?.('install', () => importScripts('../vendor/quickjs/quickjs.js'));
 const ai = () => { if (typeof GZ_AI_BROKER === 'undefined') aiFiles(); return GZ_AI_BROKER; };
+// One canonical store for Ask, receipt controls, Drive and backup. Storage's native object is stable across adapters.
+let memoryStore = null;
+const rimeMemory = () => {
+  if (typeof GZ_MEMORY === 'undefined') importScripts('../ai/memory.js');
+  return (memoryStore ||= GZ_MEMORY.open({ local: chrome.storage.local, keys: () => keysOf('local') }));
+};
+const rimeMemoryOn = async () => {
+  if (!await glazeOn()) return false;
+  const raw = (await chrome.storage.local.get('ai')).ai;
+  return raw?.memory !== false && GZ_AI_SETTINGS.allowed(GZ_AI_SETTINGS.clean(raw), 'ask');
+};
+// The outer check selects the same local catalog as Ask. The broker separately checks its final pinned weights.
+const rimeMemoryCapable = async () => {
+  const sel = GZ_AI_SETTINGS.resolve(GZ_AI_SETTINGS.clean((await chrome.storage.local.get('ai')).ai), 'ask');
+  const all = (await aiEnv().vault.get('connections')) || {};
+  const rec = all[sel?.use] || (sel?.use === 'local' ? { provider: 'local' } : null);
+  if (rec?.provider !== 'local' || !GZ_AI_SETTINGS.PROVIDERS.includes('local')) return true;
+  const { provider: _p, name: _n, ...raw } = rec, cfg = GZ_AI_LOCAL.config(raw);
+  if (!cfg || typeof GZ_AI_LOCAL.memoryVersion !== 'function') return false;
+  const catalog = await GZ_AI_LOCAL.catalog(cfg), model = catalog?.models?.find((m) => m.id === cfg.model);
+  return typeof model?.weights === 'string' && await GZ_AI_LOCAL.memoryVersion({ ...cfg, weights: model.weights }) === 1;
+};
+// Settings controls are local even with AI off or no school login. A school receipt reuses Ask's fresh account lease.
+chrome.runtime.onMessage.addListener((m, s, reply) => {
+  if (m?.type !== 'glaze:memory') return;
+  (async () => {
+    if (typeof GZ_MEMORY_MANAGER === 'undefined') importScripts('../ai/memory-manager.js');
+    if (!GZ_MEMORY_MANAGER.valid(m)) return { ok: false, error: 'request' };
+    const all = fromEditor(s) && s.frameId === 0 && extensionOrigin(s);
+    const scope = all ? null : await rimeCurrent(s, {});
+    if (!all && (!scope?.account || !await scope.valid())) return { ok: false, error: 'scope' };
+    return GZ_MEMORY_MANAGER.run(m, { store: rimeMemory(), all, ...(scope && { account: scope.account, valid: scope.valid }),
+      state: async () => (await chrome.storage.local.get('ai')).ai?.memory !== false,
+      setEnabled: (enabled) => (brokerTurn ||= GZ_CARDS.queue())(async () => {
+        const raw = (await chrome.storage.local.get('ai')).ai;
+        await chrome.storage.local.set({ ai: { ...(raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}), memory: enabled } });
+        await rimeMemory().invalidate();
+        return true;
+      }),
+    });
+  })().then(reply, () => reply({ ok: false, error: 'write' }));
+  return true;
+});
 // Ask Rime (ai/ask.js): its panel's port, from the AI port's senders. Its model runs go through the broker as this sender's;
 // its tool calls through agents/calls.js with Agents' tools and approval window (mcpCore: the native link stays off).
 chrome.runtime.onConnect.addListener((p) => {
@@ -2549,6 +2595,7 @@ chrome.runtime.onConnect.addListener((p) => {
   ai(); GZ_AI_ASK.connect(p, { allowed, broker: (q) => ai().connect(q, { ...aiEnv(), who: String(s.tab?.id ?? 'none'), allowed }), settings: aiEnv().settings, enabled: glazeOn,
     registry: GZ_MCP_REGISTRY, state: mcpRead, approve: core.approve, refresh: mcpRefresh, accounts: async () => (await GZ_AI_TOOLS.get('accounts_list').run({}, mcpCtx(null))).items,
     local: chrome.storage.local, keys: mcpKeys, now: Date.now, turn: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
+    memory: { store: rimeMemory(), on: rimeMemoryOn, capable: rimeMemoryCapable },
     ...pageEnv, current: async (m) => { const out = await rimeCurrent(s, m); if (!out) throw GZ_AI_REQUEST.error('changed'); if (out.page) pageEnv.setPage(out.page); return out; }, scope: `${s.tab?.id}|${s.documentId || `${s.frameId}|${s.url}`}`, level: rimeLevel, counts: true, own: { read: rimeWakesEnv().read, tab: (account, op, args, options) => { mcpCore(); return mcpTabs().run(account, op, args, options); }, writer: async () => GZ_SANITIZE(await chrome.storage.sync.get(null)).enhance.writer !== false, wakes: rimeWakesEnv() } });
 });
 // The tools level of Ask Rime's model (ai/ask.js route): Glaze's own model's, as models.json says it was trained (1 for Rime r5,
@@ -3063,6 +3110,10 @@ const rimeWakesSync = () => { ai(); return GZ_AI_RIME_WAKES.tick(rimeWakesEnv())
 chrome.runtime.onStartup.addListener(rimeWakesSync);
 chrome.runtime.onInstalled.addListener(rimeWakesSync);
 chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.ai) {
+    const withoutMemory = (raw) => { const { memory: _memory, ...rest } = raw || {}; return JSON.stringify(rest); };
+    if (withoutMemory(changes.ai.oldValue) === withoutMemory(changes.ai.newValue)) return;
+  }
   if ((area === 'local' && changes.ai) || (area === 'sync' && changes.enabled)) return rimeWakesSync();
 });
 // The registry's state (agents/registry.js), read afresh for each call; mcpState is the last one read, for the list, which
@@ -3855,7 +3906,7 @@ chrome.runtime.onConnect.addListener((p) => {
 // connected (at most every 30 s), and 5 s after the last of a run of saves. Its requests use the token above without ever
 // asking the student to sign in. A document's file is built here: a paper's .docx (writer/writer-docx.js), a spreadsheet's
 // .xlsx (documents/sheets/sheet-xlsx.js), a PDF's or deck's own bytes from the file store; each loaded the first time a push needs it.
-globalThis.addEventListener?.('install', () => importScripts('../documents/drive-sync.js', 'drive-store.js', '../writer/writer-color.js', '../core/zip.js', '../core/doctext.js', '../writer/writer-docx.js', '../writer/writer-objects-docx.js', '../writer/writer-format.js', '../writer/writer-submit.js',
+globalThis.addEventListener?.('install', () => importScripts('../ai/memory.js', '../documents/drive-sync.js', 'drive-store.js', '../writer/writer-color.js', '../core/zip.js', '../core/doctext.js', '../writer/writer-docx.js', '../writer/writer-objects-docx.js', '../writer/writer-format.js', '../writer/writer-submit.js',
   '../documents/sheets/sheet-model.js', '../documents/sheets/sheet-numfmt.js', '../documents/sheets/sheet-formula.js', '../documents/sheets/sheet-xlsx.js', '../documents/sheets/sheet-data.js'));
 let driveSync = null, driveStore = null;
 const driveSyncDocx = () => { if (!globalThis.GZ_WRITER_DOCX) importScripts('../writer/writer-styles.js', '../vendor/pm.js', '../writer/writer-schema.js', '../writer/writer-color.js', '../core/zip.js', '../core/doctext.js', '../writer/writer-docx.js', '../writer/writer-objects-docx.js', '../writer/writer-format.js', '../writer/writer-submit.js'); };
@@ -3865,15 +3916,16 @@ const openDriveSync = () => {
   if (driveSync) return driveSync;
   driveLib();
   if (!globalThis.GZ_DRIVE_SYNC) importScripts('../documents/drive-sync.js');
+  rimeMemory();
   if (!globalThis.GZ_DRIVE_STORE) importScripts('drive-store.js');
   brokerIn('backup'); // A restarted worker needs every record's validator before its first download, not after it.
   openPapers(); // and the paper store's library, which documents/drive-sync.js reads before any paper is asked for
   const turn = (f) => (brokerTurn ||= GZ_CARDS.queue())(f);
   // Everything else Glaze keeps (background/drive-store.js): its writes in the broker's queue, as every other store's are.
-  const keysOf = async (a) => (typeof chrome.storage[a].getKeys === 'function' ? chrome.storage[a].getKeys() : Object.keys(await chrome.storage[a].get(null)));
   const areaOf = (a) => ({ get: (k) => chrome.storage[a].get(k), keys: () => keysOf(a),
     set: (o) => turn(() => chrome.storage[a].set(o)), remove: (k) => turn(() => chrome.storage[a].remove(k)),
     replace: (key, expected, value) => turn(async () => {
+      if (a === 'local' && GZ_MEMORY.parseKey(key)?.kind === 'memory') return GZ_MEMORY.replace({ local: chrome.storage.local }, key, expected, value);
       const here = (await chrome.storage[a].get(key))[key];
       if (GZ_DRIVE_STORE.canon(here) !== GZ_DRIVE_STORE.canon(expected)) return false;
       if (value === undefined) await chrome.storage[a].remove(key); else await chrome.storage[a].set({ [key]: value });
