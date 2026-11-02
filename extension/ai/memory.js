@@ -285,7 +285,8 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
           found = found.filter((v) => v !== preference && (v.r.category !== 'preference' || ++preferences < 2)).slice(0, limit - 1).concat(preference);
         }
       }
-      return { ok: true, items: found.slice(0, limit).map((h) => hitOf(h.r, h.text, h.score)), truncated: available > Math.min(limit, found.length) };
+      const hits = found.slice(0, limit);
+      return { ok: true, items: hits.map((h) => hitOf(h.r, h.text, h.score)), truncated: available > hits.length || hits.some((h) => h.text !== h.r.markdown) };
     };
     // Forget suppresses one source id. Explicit cache clearing/site removal releases that suppression so a later fresh
     // verified read can populate the cache again. Snapshot revisions protect active reads that arrived after the UI list.
