@@ -384,15 +384,16 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
           close = Uint32Array.from(encode(job, m.think.close));
           // Even no reasoning feeds the close: the engine must hold it, refused before the sequence is touched as any prompt
           // over the room.
-          if (input + m.maxTokens + close.length > room) throw fail('request-rejected', 'context', { tokens: input + close.length, context: room });
-          think = { end, close, after: Uint32Array.from(encode(job, m.think.after)), budget: m.think.budget };
+          if (input + m.maxTokens + close.length > (m.think.preserveAnswer === true ? Math.min(m.window || room, room) : room)) throw fail('request-rejected', 'context', { tokens: input + close.length, context: room });
+          think = { end, close, after: Uint32Array.from(encode(job, m.think.after)), budget: m.think.budget, preserveAnswer: m.think.preserveAnswer === true,
+            until: m.think.until, rate: m.think.rate };
         }
         // The trained window (a Glaze-tuned model's): the prompt, the close, the reasoning and the answer share it. The
         // reasoning keeps its budget while the answer is left at least LIMIT.answer (or its maxTokens, if fewer), and the
         // answer takes the rest, up to maxTokens. A prompt that leaves the answer less runs as planned in the engine's room.
         let answer = m.maxTokens;
         if (Number.isSafeInteger(m.window) && m.window > 0) {
-          const space = Math.min(m.window, room) - input - (close?.length || 0), floor = Math.min(m.maxTokens, LIMIT.answer);
+          const space = Math.min(m.window, room) - input - (close?.length || 0), floor = think?.preserveAnswer ? m.maxTokens : Math.min(m.maxTokens, LIMIT.answer);
           if (think) think.budget = Math.max(0, Math.min(think.budget, space - floor));
           const left = space - (think?.budget || 0);
           if (left >= floor) answer = Math.min(m.maxTokens, left);
@@ -438,6 +439,12 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         if (think) {
           let closed = false;
           while (thought < think.budget) {
+            // Prefill/queue time counts too. Keep time for the full answer at the slower of the saved rate and
+            // this run's actual pace; close thought before another decode would spend that reserve.
+            if (think.preserveAnswer) {
+              const rate = Math.min(think.rate || 15, thought && spent > 0 ? thought / spent * 1000 : Infinity);
+              if (now() + (answer + 1) / rate * 1000 + 2000 >= think.until) break;
+            }
             const id = await step(reasoning(job, think.end));
             thought++;
             if (id === think.end) { closed = true; break; }
@@ -582,6 +589,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         for (const o of ops.values()) if (o.kind === 'warm') o.control.abort(new DOMException('Superseded', 'AbortError'));
       }
       if (m.op === 'run' || m.op === 'warm') ahead?.abort(new DOMException('Superseded', 'AbortError'));
+      if (m.op === 'run' && m.think?.preserveAnswer === true) m = { ...m, think: { ...m.think, until: now() + Math.max(0, Math.min(300000, Number.isFinite(m.think.ms) ? m.think.ms : 0)) } };
       const control = new AbortController();
       ops.set(m.id, { control, kind: m.op, ...((m.part === 'pictures' || (m.op === 'run' && Array.isArray(m.images) && m.images.length)) && { part: 'pictures' }) });
       quiet();

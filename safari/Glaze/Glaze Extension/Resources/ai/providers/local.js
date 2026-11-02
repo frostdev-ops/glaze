@@ -13,8 +13,8 @@
 // vision say so, and a request with pictures runs on that model (LFM3-VL, stock: its own chat template) in the host, which
 // lets the text model go first; the text model's runs bring it back.
 // Reasoning: a Glaze-tuned model (no `stock`) thinks before it answers (format.js's think mode, the host's think phase) for the
-// tasks THINK gives a budget, once this computer decodes that model at THINK_TPS or faster (RATES: the host's measure of its
-// last runs, else the ladder's estimate at download); every other run, and every stock model's, answers directly.
+// tasks and windows limits() permits. Adaptive thought keeps the configured answer and remaining deadline intact;
+// its model can end thought early. The 4K direct profile and stock models remain direct.
 // cfg: { model: MODEL, tier?, context?, images?, weights?, generation? }; images, what the catalog said, and weights, the store id
 // of the text model whose window it gave (the broker sets both): a text request runs on that model only. Classic script;
 // module.exports for node.
@@ -33,7 +33,10 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   // A tuned model's window is the context size Settings' Advanced keeps on the connection (cfg.window: WINDOWS), else TUNED.
   const WINDOWS = Object.freeze([8192, 16384, 32768, 65536, 131072]);
   const windowOf = (m, cfg = {}) => (m && !m.stock ? { window: cfg.window || TUNED, inputLimit: cfg.window || TUNED } : { window: CONTEXT, inputLimit: Math.floor(CONTEXT * 0.9) });
-  const LIMIT = { prepare: 240000 };
+  // Admission has the catalog's trusted stock marker, while inference also checks the actual model. A context
+  // override can narrow the selected window, but cannot enlarge it; stock models retain their own window.
+  const profileWindow = (window, cfg = {}) => Math.min(window, cfg.context || window, cfg.reasoning === false ? CONTEXT : cfg.window || TUNED);
+  const LIMIT = { prepare: 240000, reasoning: 300000 };
   // Tokens a task's request may reason in before its answer; 0 answers directly. A task with calls (its requests'
   // task.call, ai/task.js ask) has a row per call, and a request without one answers directly. Each row is D4's p3dpo,
   // think against direct at Q4_K_M / Q5_K_M / Q6_K / Q8_0 (glaze-plans/lfm-tune/reports/d4-p3dpo.md "Think versus direct"):
@@ -67,14 +70,21 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const THINK_SIZED = Object.freeze({ 'agent.tools': REASONS, 'study.help': REASONS });
   const ANSWER = bySize((i) => [512, 768, 1024, 1536, 2048, 2048][i]);
   const SCALE = Object.freeze({ token: false, answer: false, compact: false, think: Object.freeze({ 'agent.tools': bySize(() => false), 'study.help': bySize(() => false) }) });
-  // A Glaze-tuned model's run in a window: → { size (its token, when sent), think (the budget before the host's rate check
-  // and cap), maxTokens }. scale: SCALE, or a test's own (_env's scale).
-  const limits = (task, window, { maxTokens, scale = env?.scale || SCALE } = {}) => {
+  // Adaptive reasoning is independent of the experimental size-token/answer tables. The selected window is a
+  // ceiling, never a target: the model may close thought immediately. Keep the gated 4K direct profile intact.
+  const EFFORT = Object.freeze({ none: 0, minimal: 0.125, low: 0.25, medium: 0.5, high: 1 });
+  const adaptive = (task, window, { effort, reasoning = true } = {}) => reasoning !== false && window > TUNED &&
+    ['agent.tools', 'study.help'].includes(task?.id) ? Math.floor(Math.min(32768, window / 4) * (EFFORT[effort] ?? 1)) : 0;
+  const limits = (task, window, { maxTokens, effort, reasoning, promptTokens, scale = env?.scale || SCALE } = {}) => {
     const token = FMT().sizeOf(window), key = token && token.slice(9, -2);
-    const think = key && scale.think?.[task?.id]?.[key] === true && Object.hasOwn(THINK_SIZED, task.id) ? THINK_SIZED[task.id][key] : thinkFor(task);
-    return { size: scale.token === true ? token : null, think,
-      maxTokens: key && scale.answer === true ? Math.min(maxTokens || ANSWER[key], ANSWER[key]) : Math.min(maxTokens || MAX_TOKENS, CONTEXT) };
+    const legacy = key && scale.think?.[task?.id]?.[key] === true && Object.hasOwn(THINK_SIZED, task.id) ? THINK_SIZED[task.id][key] : thinkFor(task);
+    const think = effort === 'none' || reasoning === false ? 0 : Math.max(legacy, adaptive(task, window, { effort, reasoning }));
+    const answer = key && scale.answer === true ? Math.min(maxTokens || ANSWER[key], ANSWER[key]) : Math.min(maxTokens || MAX_TOKENS, CONTEXT);
+    return { size: scale.token === true ? token : null, think: Number.isSafeInteger(promptTokens) ? Math.max(0, Math.min(think, window - promptTokens - answer - (think ? CLOSE : 0))) : think, maxTokens: answer };
   };
+  // Unknown hardware gets a conservative allowance; the host rechecks its measured decode pace after prefill and
+  // every thought token. The configured answer is reserved in full, both in tokens and in the remaining wall time.
+  const FALLBACK_TPS = 15, CLOSE = 2, TIME_GUARD = 2000;
   // Decode tokens a second below which every task answers directly: a full budget then costs at most 256 / 40 = 6.4 s. The
   // ladder's measured machines decode 79 to 133 (ai/local/ladder.js: M5 Pro Q8_0 78.9 to RTX 3080 Ti Q4_K_M 133.2), so each
   // thinks at every tier, with room for a busier GPU; a computer near the ladder's floor (MIN_TPS 15) would wait 17 s.
@@ -98,7 +108,9 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const accept = (port) => own().link.accept(port);
 
   const config = (raw) => {
-    if (!R.isObj(raw) || Object.keys(raw).some((k) => !['model', 'tier', 'context', 'images', 'weights', 'generation', 'window'].includes(k))) return null;
+    if (!R.isObj(raw) || Object.keys(raw).some((k) => !['model', 'tier', 'context', 'images', 'weights', 'generation', 'window', 'effort', 'reasoning'].includes(k))) return null;
+    if (raw.effort !== undefined && !Object.hasOwn(EFFORT, raw.effort)) return null;
+    if (raw.reasoning !== undefined && typeof raw.reasoning !== 'boolean') return null;
     if (raw.window !== undefined && raw.window !== TUNED && !WINDOWS.includes(raw.window)) return null;
     if (raw.model !== undefined && raw.model !== MODEL) return null;
     if (raw.tier !== undefined && !(Number.isSafeInteger(raw.tier) && raw.tier >= 1 && raw.tier <= 9)) return null;
@@ -106,7 +118,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (raw.images !== undefined && typeof raw.images !== 'boolean') return null;
     if (raw.weights !== undefined && !(typeof raw.weights === 'string' && ID.test(raw.weights))) return null;
     if (raw.generation !== undefined && (typeof raw.generation !== 'string' || !/^[\w-]{1,64}$/.test(raw.generation))) return null;
-    return { model: MODEL, ...(raw.tier && { tier: raw.tier }), ...(raw.context && { context: raw.context }), ...(raw.images !== undefined && { images: raw.images }), ...(raw.weights && { weights: raw.weights }), ...(raw.generation && { generation: raw.generation }), ...(WINDOWS.includes(raw.window) && { window: raw.window }) };
+    return { model: MODEL, ...(raw.effort !== undefined && { effort: raw.effort }), ...(raw.reasoning !== undefined && { reasoning: raw.reasoning }), ...(raw.tier && { tier: raw.tier }), ...(raw.context && { context: raw.context }), ...(raw.images !== undefined && { images: raw.images }), ...(raw.weights && { weights: raw.weights }), ...(raw.generation && { generation: raw.generation }), ...(WINDOWS.includes(raw.window) && { window: raw.window }) };
   };
   const caps = (cfg) => ({ text: true, json: true, stream: true, tools: false, images: cfg.images === true, local: true, context: Math.min(cfg.context || CONTEXT, Math.max(CONTEXT, cfg.window || 0)) });
 
@@ -131,10 +143,15 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (!estimate) measured.add(id);
     try { await own().session?.set({ [RATES]: Object.fromEntries(r), [MEASURED]: [...measured] }); } catch { /* kept in memory */ }
   };
-  // The tokens this request reasons in on model m: its task's budget, for a Glaze-tuned model this computer runs fast enough.
-  const budget = async (req, m, window) => {
-    const b = m.stock ? 0 : limits(req.task, window).think;
-    return b && (await known()).get(m.id) >= THINK_TPS ? b : 0;
+  // The same context profile is used by admission, counting and inference; only wall time can reduce its allowance.
+  const budget = async (req, m, window, cfg) => {
+    const profile = limits(req.task, window, { maxTokens: req.maxTokens, ...cfg });
+    if (m.stock || !profile.think) return { budget: 0 };
+    const rate = (await known()).get(m.id);
+    if (!adaptive(req.task, window, cfg)) return { budget: rate >= THINK_TPS ? profile.think : 0 };
+    const tps = rate || FALLBACK_TPS, ms = req.timeoutMs || 120000;
+    return { budget: Math.max(0, Math.min(profile.think, Math.floor(Math.max(0, ms - TIME_GUARD) / 1000 * tps) - profile.maxTokens)),
+      rate: tps, ms, preserveAnswer: true };
   };
 
   const preparing = { text: null, pictures: null }; // a download in the host: { call, listeners, last }
@@ -241,10 +258,10 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (!m || m.state !== 'ready') throw fail('provider-unavailable', 'assets');
     const memory = memoryReady(req, m);
     const window = Math.min(cfg.context || windowOf(m, cfg).window, windowOf(m, cfg).window);
-    const think = await budget(req, m, window), sized = !m.stock && limits(req.task, window).size;
+    const reasoning = await budget(req, m, window, cfg), think = reasoning.budget, sized = !m.stock && limits(req.task, window).size;
     // r5 never trained chat.compact's task token. Use the native prompt until its independent training gate is enabled.
     const native = m.stock || (req.task?.id === 'chat.compact' && (env?.scale || SCALE).compact !== true);
-    return { m, ...(memory && { memory: 1 }), window, budget: think, ...FMT().format(req, { dialect: native ? 'chatml' : 'glaze', think: think > 0, ...(sized && { window }) }) };
+    return { m, ...(memory && { memory: 1 }), window, reasoning, budget: think, ...FMT().format(req, { dialect: native ? 'chatml' : 'glaze', think: !m.stock && (adaptive(req.task, window, cfg) > 0 || think > 0), ...(sized && { window }) }) };
   };
   const host = (e) => {
     if (e?.category === 'cancelled') return e;
@@ -272,17 +289,18 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   };
   const run = async (req, cfg, { signal, onDelta } = {}) => {
     if (req.tools || req.messages.some((m) => m.role === 'tool' || m.toolCalls)) throw refuse('caps', 'Glaze\'s own model does not take tool calls.');
+    const started = Date.now();
     let plan;
     try { plan = await ready(req, cfg); } catch (e) { if (e?.code) throw refuse(e.code, e.message); throw e; }
     if (signal?.aborted) throw signal.reason;
-    const maxTokens = plan.projector || plan.m.stock ? Math.min(req.maxTokens || MAX_TOKENS, CONTEXT) : limits(req.task, plan.window, { maxTokens: req.maxTokens }).maxTokens;
+    const maxTokens = plan.projector || plan.m.stock ? Math.min(req.maxTokens || MAX_TOKENS, CONTEXT) : limits(req.task, plan.window, { maxTokens: req.maxTokens, ...cfg }).maxTokens;
     let r;
     try {
       // A task in its own turns (agent.tools) is held to its answer's schema or one offered call (format.js constraint); a
       // span to words of its source (spans).
       const held = plan.constraint ? { schema: plan.constraint.schema, tools: plan.constraint.tools } : req.schema && (spans(req) || { schema: req.schema });
       r = await own().link.call('run', { model: plan.m.id, ...(plan.memory && { memory: plan.memory }), parts: plan.parts, stable: plan.stable, ...(plan.images && { projector: plan.projector, images: plan.images }), ...held,
-        ...(plan.think && { think: { budget: plan.budget, ...plan.think } }), window: plan.window, ...(req.task?.id === 'writer.complete' && { priority: 'low' }),
+        ...(plan.think && { think: { budget: plan.budget, ...plan.think, ...(plan.reasoning.preserveAnswer && { preserveAnswer: true, rate: plan.reasoning.rate, ms: Math.max(0, plan.reasoning.ms - (Date.now() - started)) }) } }), window: plan.window, ...(req.task?.id === 'writer.complete' && { priority: 'low' }),
         sampler: { ...(req.temperature !== undefined && { temperature: req.temperature }) }, maxTokens },
       { signal, onEvent: (e) => { if (e?.type === 'delta' && typeof e.text === 'string' && e.text) onDelta?.(e.text); } });
     } catch (e) { if (signal?.aborted) throw signal.reason; throw host(e); }
@@ -316,7 +334,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     let list = [];
     try { list = await models(); } catch { /* none */ }
     const m = choose(list, cfg), pics = pictures(list), vision = !preparing.pictures && !!pics?.ready;
-    return { models: [{ id: MODEL, name: NAME, json: true, tools: false, vision, context: windowOf(m, cfg), ...(m && { weights: m.id }),
+    return { models: [{ id: MODEL, name: NAME, json: true, tools: false, vision, context: windowOf(m, cfg), ...(m && { weights: m.id, reasoning: !m.stock }),
       ...(vision && { pictures: { context: windowOf(pics.model) } }) }], source: 'live', at: Date.now() };
   };
   // A connection changed: the host lets the model go (it loads again at the next run). Starts no host.
@@ -335,7 +353,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   // The engine host's link, for the background model updates (ai/local/updates.js check).
   const link = () => own().link;
   const provider = { id: 'local', config, caps, status, prepare, run, warm, count, catalog, release, remove, accept, levelOf, toolsLevel, memoryOf, memoryVersion, link, windowOf, WINDOWS, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
-    THINK_SIZED, ANSWER, SCALE, limits,
+    THINK_SIZED, ANSWER, SCALE, limits, adaptive, profileWindow, CLOSE,
     _env: (e) => { env = e; preparing.text = preparing.pictures = null; broken = null; rates = null; measured.clear(); } };
   return P.add(provider);
 })();

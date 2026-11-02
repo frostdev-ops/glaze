@@ -175,7 +175,8 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     const ceiling = use.p.id === 'local' ? (pics ? known.pictures.context : known.context)?.window : undefined;
     const context = use.cfg.context ? (Number.isSafeInteger(ceiling) && ceiling > 0 ? Math.min(use.cfg.context, ceiling) : use.cfg.context) : planned;
     const cfg = { ...use.cfg, ...(context && { context }), ...(chosen.caps.images !== undefined && use.cfg.images === undefined && { images: chosen.caps.images }),
-      ...(typeof known?.weights === 'string' && { weights: known.weights }) };
+      ...(typeof known?.weights === 'string' && { weights: known.weights }),
+      ...(use.p.id === 'local' && { ...(use.sel.effort !== undefined && { effort: use.sel.effort }), ...(typeof known?.reasoning === 'boolean' && { reasoning: known.reasoning }) }) };
     return { chosen, cfg };
   };
   // Ask's earlier capability check can precede a model change or use a different catalog. Memory-bearing requests must
@@ -334,7 +335,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         const req = T().prepare(task, m.input, { provider: use.p, cfg, over: over(use) });
         const n = req && !both.signal.aborted ? await P().count(use.p, req, cfg, { signal: both.signal }) : null;
         const window = P().caps(use.p, use.p.config(cfg)).context;
-        done(n && window ? { used: n.tokens, exact: n.exact, window, reserve: T().reserved(use.p, req, window) } : null);
+        done(n && window ? { used: n.tokens, exact: n.exact, window, reserve: T().reserved(use.p, req, window, cfg, n.tokens) } : null);
       } catch { done(); } finally { mine.delete(m.id); admitted.delete(control); deadline.done(); both.done(); }
     };
     // Admission: → { s, task, use } or throws a code.

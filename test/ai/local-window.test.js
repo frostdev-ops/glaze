@@ -71,7 +71,7 @@ const pictures = [{ id: 'lfm3-vl', role: 'pictures', projector: 'lfm3-vl-mmproj'
 const at = async (context, task, input, here, answers) => {
   const s = setup(here, answers);
   const provider = { ...LOCAL, caps: (cfg) => ({ ...LOCAL.caps(cfg), local: true, context }) };
-  try { await T.run(T.get(task), input, { provider, cfg: {} }); } finally { s.done(); }
+  try { await T.run(T.get(task), input, { provider, cfg: { context, reasoning: !here[0].stock } }); } finally { s.done(); }
   return s.runs;
 };
 

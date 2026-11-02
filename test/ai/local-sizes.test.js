@@ -104,29 +104,41 @@ test('the think table per task and size, and the answer reserve per size', () =>
   const on = { token: true, answer: true, think: { 'agent.tools': Object.fromEntries(Object.keys(think).map((s) => [s, true])), 'study.help': Object.fromEntries(Object.keys(think).map((s) => [s, true])) } };
   const at = (id, window, extra = {}) => LOCAL.limits({ id }, window, { scale: on, ...extra });
   assert.deepEqual(at('agent.tools', 4096), { size: '<|gz_ctx:4k|>', think: 128, maxTokens: 512 });
-  assert.deepEqual(at('agent.tools', 8192), { size: '<|gz_ctx:8k|>', think: 256, maxTokens: 768 });
-  assert.deepEqual(at('study.help', 16384), { size: '<|gz_ctx:16k|>', think: 512, maxTokens: 1024 });
-  assert.deepEqual(at('study.help', 32768), { size: '<|gz_ctx:32k|>', think: 1024, maxTokens: 1536 });
-  assert.deepEqual(at('agent.tools', 131072), { size: '<|gz_ctx:128k|>', think: 1024, maxTokens: 2048 });
+  assert.deepEqual(at('agent.tools', 8192), { size: '<|gz_ctx:8k|>', think: 2048, maxTokens: 768 });
+  assert.deepEqual(at('study.help', 16384), { size: '<|gz_ctx:16k|>', think: 4096, maxTokens: 1024 });
+  assert.deepEqual(at('study.help', 32768), { size: '<|gz_ctx:32k|>', think: 8192, maxTokens: 1536 });
+  assert.deepEqual(at('agent.tools', 131072), { size: '<|gz_ctx:128k|>', think: 32768, maxTokens: 2048 });
   // JSON tasks answer directly at every size.
   for (const w of [4096, 16384, 131072]) assert.equal(at('writer.requirements', w).think, 0);
   // A request asking less keeps its own; one asking more is held to the size's reserve.
   assert.equal(at('agent.tools', 4096, { maxTokens: 300 }).maxTokens, 300);
   assert.equal(at('writer.review', 4096, { maxTokens: 4096 }).maxTokens, 512);
-  // The per-task gate turns thinking off for one task at one size.
+  // Experimental size gates cannot disable the independent adaptive allowance.
   const gated = { ...on, think: { ...on.think, 'study.help': { ...on.think['study.help'], '16k': false } } };
-  assert.equal(LOCAL.limits({ id: 'study.help' }, 16384, { scale: gated }).think, 0);
-  assert.equal(LOCAL.limits({ id: 'study.help' }, 8192, { scale: gated }).think, 256);
+  assert.equal(LOCAL.limits({ id: 'study.help' }, 16384, { scale: gated }).think, 4096);
+  assert.equal(LOCAL.limits({ id: 'study.help' }, 8192, { scale: gated }).think, 2048);
 });
 
-test('the default switch keeps today\'s values: no size token, the legacy THINK row, the request\'s own maxTokens', () => {
+test('adaptive reasoning grows independently of the size switches, with explicit effort and full answer reserves', () => {
   assert.equal(LOCAL.SCALE.token, false);
   assert.equal(LOCAL.SCALE.answer, false);
+  assert.equal(LOCAL.profileWindow(16000, { context: 16000, window: 8192 }), 8192);
+  assert.equal(LOCAL.profileWindow(16000, { context: 16000 }), 4096);
+  assert.equal(LOCAL.profileWindow(16000, { context: 16000, window: 8192, reasoning: false }), 16000);
+  assert.equal(T.reserved(LOCAL, agentReq(A.task.input(raw())), 16000, { context: 16000, window: 4096 }, 100), 768, 'admission keeps the selected direct window and its direct prelude');
+  assert.equal(T.reserved(LOCAL, agentReq(A.task.input(raw())), 16000, { context: 16000, window: 8192 }, 100), 768 + 2048 + 2, 'context cannot enlarge the selected adaptive profile');
   for (const t of ['agent.tools', 'study.help']) assert.ok(Object.values(LOCAL.SCALE.think[t]).every((v) => v === false), t);
-  for (const w of [4096, 16384]) {
+  for (const w of [4096, 8192, 16384, 32768, 65536, 131072]) {
     for (const id of ['agent.tools', 'study.help', 'writer.review']) {
-      assert.deepEqual(LOCAL.limits({ id }, w), { size: null, think: LOCAL.thinkFor({ id }), maxTokens: 1024 }, `${id} ${w}`);
-      assert.deepEqual(LOCAL.limits({ id }, w, { maxTokens: 768 }), { size: null, think: LOCAL.thinkFor({ id }), maxTokens: 768 });
+      const think = id !== 'writer.review' && w > 4096 ? Math.min(32768, w / 4) : 0;
+      assert.deepEqual(LOCAL.limits({ id }, w), { size: null, think, maxTokens: 1024 }, `${id} ${w}`);
+      assert.deepEqual(LOCAL.limits({ id }, w, { maxTokens: 768 }), { size: null, think, maxTokens: 768 });
+      assert.equal(LOCAL.limits({ id }, w, { effort: 'none' }).think, 0);
+      assert.equal(LOCAL.limits({ id }, w, { reasoning: false }).think, 0);
+      assert.equal(LOCAL.limits({ id }, w, { effort: 'medium' }).think, think / 2);
+      const promptTokens = w - 800;
+      assert.deepEqual(LOCAL.limits({ id }, w, { maxTokens: 768, promptTokens }), { size: null, think: Math.min(think, think ? 30 : 0), maxTokens: 768 });
+      assert.equal(T.reserved(LOCAL, agentReq(A.task.input(raw())), w, { context: w, effort: 'none' }, 100), 768);
     }
   }
 });
@@ -152,6 +164,14 @@ test('as shipped, the provider sends Rime r5\'s requests unchanged: no size toke
   assert.equal(sent.think, undefined);
   assert.equal(sent.maxTokens, 768);
   assert.equal(sent.window, LOCAL.TUNED);
+  await T.run(A.task, raw(), { provider: LOCAL, cfg: { weights: 'glaze-q4', window: 65536 } });
+  assert.equal(runs.at(-1).think.budget, 16384, 'the task uses the selected adaptive profile');
+  assert.ok(runs.at(-1).think.ms > 299000 && runs.at(-1).think.ms <= 300000, 'the whole task and provider get the larger deadline');
+  await T.run(A.task, raw(), { provider: LOCAL, cfg: { weights: 'glaze-q4', window: 65536 }, over: { effort: 'high', maxTokens: 900, timeoutMs: 1000 } });
+  assert.equal(runs.at(-1).think.budget, 0, 'the explicit shorter deadline remains authoritative');
+  assert.equal(runs.at(-1).maxTokens, 900, 'local effort does not inflate or consume the configured answer reserve');
+  await T.run(A.task, raw(), { provider: LOCAL, cfg: { weights: 'glaze-q4', window: 65536 }, over: { effort: 'none' } });
+  assert.equal(runs.at(-1).think, undefined, 'a task override can explicitly disable local reasoning');
 });
 
 test('switched on, a tuned model gets its window\'s size token (TUNED: 4k), the 4k think budget and answer reserve; a stock model none', async () => {

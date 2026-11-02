@@ -368,7 +368,7 @@ test('the policy: a task the table names thinks on a fast enough tier; other tas
   assert.equal(mode(s), 'think');
 });
 
-test('as D4 gated r5, every task answers directly: agent.tools, writer.review, study.help and each writer.feedback call', async () => {
+test('the 4K direct profile stays intact; larger selected windows reason with unknown and measured rates', async () => {
   const FEEDBACK = task('writer.feedback'), HELP = task('study.help');
   const s = setup({ rates: FAST, think: null });
   const asked = async (t, call) => {
@@ -383,6 +383,47 @@ test('as D4 gated r5, every task answers directly: agent.tools, writer.review, s
   assert.equal(LOCAL.thinkFor({ id: 'agent.tools', call: 'decide' }), 0, 'a task without calls keeps its own row');
   assert.deepEqual(LOCAL.THINK['writer.feedback'], { decide: 0, explain: 0, summary: 0, scan: 0 });
   assert.deepEqual(Object.entries(LOCAL.THINK).filter(([, b]) => (typeof b === 'number' ? b : Math.max(...Object.values(b))) > 0).map(([t]) => t), []);
+  // A selected larger window enables automatic thought independently of the experimental size switches and the
+  // task's own default effort. Unknown/manual tiers get a conservative nonzero allowance, then learn their rate.
+  for (const rate of [undefined, 10, 100]) {
+    const larger = setup({ rates: rate && { 'glaze-q4': rate }, think: null, context: 131072, closes: 12 });
+    const req = { ...request(HELP, { text: 'x', maxTokens: 600 }), effort: 'none', timeoutMs: 300000 };
+    const cfg = LOCAL.config({ window: 65536 });
+    const before = await P.count(LOCAL, req, cfg);
+    const result = await P.run(LOCAL, req, cfg);
+    assert.equal(result.finish, 'stop');
+    assert.ok(larger.runs[0].think.budget > 0, `${rate}: positive allowance`);
+    assert.equal(larger.runs[0].think.budget, Math.min(16384, Math.floor(298 * (rate || 15)) - 600));
+    assert.equal(larger.runs[0].think.preserveAnswer, true);
+    assert.equal(larger.runs[0].maxTokens, 600, 'the full configured answer stays separate');
+    assert.equal(larger.runs[0].window, 65536, 'no silent window growth');
+    assert.equal(larger.eng.log.decodes.filter((d) => d.phase === 'think').length, 13, 'the model can end early');
+    assert.equal(before.tokens, larger.eng.log.prefills.flat().length, 'count and run use the same prefill');
+    await P.run(LOCAL, req, LOCAL.config({ window: 65536, effort: 'none' }));
+    assert.equal(larger.runs.at(-1).think, undefined, 'only the explicit stored override disables automatic thought');
+    await P.run(LOCAL, { ...req, timeoutMs: 1000 }, cfg);
+    assert.equal(larger.runs.at(-1).think.budget, 0, 'a shorter explicit deadline leaves the answer first');
+  }
+  // The host measures actual decode pace after every token and gives a slower run time for its entire answer.
+  const slow = setup({ rates: { 'glaze-q4': 100 }, think: null, context: 131072, ms: 100 });
+  await P.run(LOCAL, { ...request(HELP, { text: 'x', maxTokens: 600 }), timeoutMs: 30000 }, LOCAL.config({ window: 65536 }));
+  assert.equal(slow.runs[0].think.budget, 2200);
+  const actual = slow.eng.log.decodes.filter((d) => d.phase === 'think').length;
+  assert.ok(actual > 0 && actual < 2200, 'actual speed cuts thought before it consumes answer time');
+  assert.ok(slow.eng.log.prefills.at(-1).includes(ID.thought), 'the host closes thought before answering');
+  const TEXT = T.define({ id: 'study.help', version: 9, input: (raw) => raw, check: (out) => out, output: 'text',
+    build: (input, { text }) => text.request({ system: 'Answer.', data: [{ label: 'text', text: input.text }], maxTokens: 2048 }) });
+  const tight = setup({ rates: { 'glaze-q4': 100 }, think: null, context: 131072, reply: 'a'.repeat(3000) });
+  const tightReq = { ...request(TEXT, { text: 'x'.repeat(5700) }), timeoutMs: 300000 }, cfg = LOCAL.config({ window: 8192 });
+  const counted = await P.count(LOCAL, tightReq, cfg);
+  const full = await P.run(LOCAL, tightReq, cfg);
+  const thought = tight.eng.log.decodes.filter((d) => d.phase === 'think').length;
+  assert.equal(full.text.length, 2048, 'the entire configured answer survives a long prompt');
+  assert.equal(thought, 8192 - counted.tokens - 2048 - 2, 'only thought gives way to the exact prompt and close');
+  assert.equal(T.reserved(LOCAL, tightReq, 8192, cfg, counted.tokens), thought + 2048 + 2, 'admission and host use the same token accounting');
+  assert.equal(tight.eng.log.prefills.flat().length + tight.eng.log.decodes.length, 8192, 'the selected window is a hard cap');
+
+
 });
 
 test('a per-call table thinks per call: a call with a budget thinks, another call and a request without one answer directly', async () => {
