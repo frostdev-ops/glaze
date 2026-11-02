@@ -99,6 +99,67 @@ const timeOf = async (d, area, key) => {
 };
 const noDeletes = (drive) => assert.equal(drive.log.filter((x) => x.method === 'DELETE').length, 0, 'nothing deleted for good');
 
+const memoryAccount = 'https://school.instructure.com/42';
+const memoryId = (n) => `m-${String(n).padStart(32, '0')}`;
+const memoryKey = (n, account = memoryAccount) => `rimeMemory:${account}|${memoryId(n)}`;
+const memory = (n, text, at = 1000, account = memoryAccount) => ({ v: 1, id: memoryId(n), account, kind: 'memory', markdown: text,
+  createdAt: 1000, updatedAt: at, revision: sha(`${text}:${at}`).slice(0, 32), source: { type: 'user-message', evidence: text } });
+const forgotten = (rec, at = 2000) => ({ v: 1, id: rec.id, account: rec.account, kind: 'memory', createdAt: rec.createdAt,
+  updatedAt: at, revision: sha(`forgotten:${rec.id}:${at}`).slice(0, 32), deleted: true });
+
+test('rime saved memories sync per account while course material stays on its device', async () => {
+  const drive = standin(), a = device(drive), b = device(drive), key = memoryKey(1), other = memoryKey(1, 'https://other.instructure.com/42');
+  const local = memory(1, 'Prefer worked examples'), foreign = memory(1, 'Study in the morning', 1000, 'https://other.instructure.com/42');
+  const cache = `rimeMaterial:${memoryAccount}|s-${'a'.repeat(32)}`;
+  await a.local.set({ [key]: local, [other]: foreign, [cache]: { markdown: 'Private course material' } });
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  assert.deepEqual((await b.local.get(key))[key], local);
+  assert.deepEqual((await b.local.get(other))[other], foreign, 'account identity remains in separate keys');
+  assert.equal((await b.local.get(cache))[cache], undefined);
+  assert.equal(recFile(drive, 'local', cache), undefined);
+  assert.equal(ST.catOf('local', cache), null);
+  assert.equal(ST.clean('memories', other, local), undefined, 'key and envelope account must agree');
+  noDeletes(drive);
+});
+
+test('rime forgotten memories defeat first meetings and later offline edits in either direction', async () => {
+  for (const remoteDeleted of [true, false]) {
+    const drive = standin(), a = device(drive), b = device(drive), key = memoryKey(2), live = memory(2, 'Use short answers');
+    const deleted = forgotten(live), stale = memory(2, 'Offline replacement', 9000);
+    await a.local.set({ [key]: remoteDeleted ? deleted : stale }); await a.on();
+    await b.local.set({ [key]: remoteDeleted ? stale : deleted }); await b.on(); await a.run(); await b.run();
+    for (const d of [a, b]) assert.deepEqual((await d.local.get(key))[key], deleted, 'deleted IDs cannot revive at first meeting');
+    assert.deepEqual(body(recFile(drive, 'local', key)).value, deleted);
+    b.clock.t += 10000; await b.local.set({ [key]: memory(2, 'Obsolete device edit', 20000) });
+    await b.run({ push: true }); await a.run();
+    assert.deepEqual((await b.local.get(key))[key], deleted, 'an unchanged remote tombstone also defeats a dirty local edit');
+    assert.deepEqual(body(recFile(drive, 'local', key)).value, deleted);
+    assert.equal(Object.hasOwn(deleted, 'markdown'), false);
+  }
+});
+
+test('rime simultaneous memory edits converge by envelope instead of device stamps', async () => {
+  const drive = standin(), a = device(drive), b = device(drive), key = memoryKey(3), initial = memory(3, 'Initial');
+  await a.local.set({ [key]: initial }); await a.on(); await b.on();
+  const left = memory(3, 'Alpha', 5000), right = memory(3, 'Beta', 5000);
+  const expected = ST.canon(left) > ST.canon(right) ? left : right;
+  a.clock.t += 100000; await a.local.set({ [key]: left });
+  b.clock.t -= 100000; await b.local.set({ [key]: right });
+  await a.run(); await b.run(); await a.run(); await b.run();
+  for (const d of [a, b]) assert.deepEqual((await d.local.get(key))[key], expected);
+  const uploads = drive.log.filter((x) => x.upload).length;
+  await a.run(); await b.run();
+  assert.equal(drive.log.filter((x) => x.upload).length, uploads, 'settled memory writes do not echo');
+});
+
+test('rime malformed or oversized memories never upload', async () => {
+  const drive = standin(), a = device(drive), key = memoryKey(4);
+  for (const value of [{ ...memory(4, 'Valid'), extra: true }, memory(4, 'x'.repeat(20000)), { ...forgotten(memory(4, 'Secret')), markdown: 'Secret' }]) {
+    await a.local.set({ [key]: value }); await a.on(); await a.run();
+    assert.equal(recFile(drive, 'local', key), undefined);
+  }
+});
+
 test('a local change syncs when its timestamp equals or precedes the last agreed stamp', async () => {
   const drive = standin(), a = device(drive);
   await a.local.set({ writerWords: ['First'] });

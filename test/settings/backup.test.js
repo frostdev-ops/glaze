@@ -107,6 +107,55 @@ const restore = async (dev, file, ticked, account) => {
 };
 const reasonOf = (p) => p.then(() => 'read', (e) => e.why);
 
+const memoryAccount = `${SITE}/5`, memoryId = `m-${'1'.repeat(32)}`, memoryKey = `rimeMemory:${memoryAccount}|${memoryId}`;
+const memory = (markdown, updatedAt = 1000) => ({ v: 1, id: memoryId, account: memoryAccount, kind: 'memory', markdown,
+  createdAt: 1000, updatedAt, revision: String(updatedAt).padStart(32, '0'), source: { type: 'user-message', evidence: markdown } });
+const forgotten = { v: 1, id: memoryId, account: memoryAccount, kind: 'memory', createdAt: 1000, updatedAt: 2000,
+  revision: 'f'.repeat(32), deleted: true };
+
+test('rime memories round trip in a versioned backup and course caches stay local', async () => {
+  const cache = `rimeMaterial:${memoryAccount}|s-${'2'.repeat(32)}`, saved = memory('Prefer examples');
+  const a = device({ [memoryKey]: saved, [cache]: { markdown: 'Course cache' } }), b = device();
+  try {
+    const file = await backUp(a), raw = JSON.parse(await (await unzipped(file)).text(B.MANIFEST));
+    assert.equal(raw.version, 3, 'older readers must ask for an update rather than silently omit memories');
+    assert.ok(B.CATS.includes('memories'));
+    const { plan, out } = await restore(b, file, ['memories']);
+    assert.deepEqual(plan.cats.memories, { [memoryKey]: saved });
+    assert.deepEqual(out.failed, []);
+    assert.deepEqual(b.store[memoryKey], saved);
+    assert.equal(b.store[cache], undefined);
+    assert.equal(JSON.stringify(raw).includes('Course cache'), false);
+    const plain = JSON.parse(await (await unzipped(await backUp(device()))).text(B.MANIFEST));
+    assert.equal(plain.version, 1, 'backups without new categories keep their older compatible version');
+  } finally { a.stop(); b.stop(); }
+});
+
+test('rime backup restore never revives deleted memory IDs and deterministically joins active edits', async () => {
+  for (const [here, there, expected] of [[forgotten, memory('Stale', 9000), forgotten], [memory('Stale', 9000), forgotten, forgotten],
+    [memory('Older'), memory('Newer', 5000), memory('Newer', 5000)]]) {
+    const a = device({ [memoryKey]: there }), b = device({ [memoryKey]: here });
+    try {
+      const { out } = await restore(b, await backUp(a), ['memories']);
+      assert.deepEqual(out.failed, []); assert.deepEqual(b.store[memoryKey], expected);
+    } finally { a.stop(); b.stop(); }
+  }
+});
+
+test('rime backup refuses mismatched identities, unknown fields and memory content above its cap', async () => {
+  for (const value of [{ ...memory('Good'), account: `${SITE}/6` }, { ...memory('Good'), extra: true }, memory('x'.repeat(20000)), { ...forgotten, markdown: 'Removed' }]) {
+    const a = device({ [memoryKey]: value });
+    try {
+      assert.throws(() => B.pack({ settings: SETTINGS, tasks: {}, local: a.store }), /bad/);
+      const b = device(), before = structuredClone(b.store);
+      try {
+        assert.equal((await B.apply({ memories: { [memoryKey]: value } }, { local: b.local })).ok, false);
+        assert.deepEqual(b.store, before);
+      } finally { b.stop(); }
+    } finally { a.stop(); }
+  }
+});
+
 test('Papers, their JSON documents, versions and presets survive a backup restore', async () => {
   const PA = require('../../extension/writer/writer-papers.js'), key = 'bb.school.test|_900_1|_101_1|_7_1';
   const doc = { type: 'doc', content: [{ type: 'paragraph', attrs: { first: 0 }, content: [{ type: 'text', text: 'Paper before backup.' }] }] };
