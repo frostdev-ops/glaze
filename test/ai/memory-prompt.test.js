@@ -113,6 +113,19 @@ test('memory completion claims require operation-specific committed receipts; fa
   assert.equal(A.why(answer('I saved that memory.', ['forgotten']), forgot), 'ground');
 });
 
+test('each coordinated memory completion needs its own operation receipt', () => {
+  const saving = { text: 'Short paragraphs', evidence: 'I prefer short paragraphs.' };
+  const saved = A.task.input(raw({ question: saving.evidence, steps: [step('memory_save', saving, receipt('created'))] }));
+  for (const text of ['I saved Short paragraphs and deleted that memory.', 'I saved Short paragraphs and I deleted that memory.',
+    'Your preference is saved and that memory is deleted: Short paragraphs.']) {
+    assert.equal(A.why(answer(text, ['Short paragraphs']), saved), 'ground', text);
+  }
+  const both = A.task.input(raw({ question: 'Forget this memory.', steps: [step('memory_save', saving, receipt('created')),
+    step('memory_forget', { id: ID, revision: NEXT }, receipt('forgotten', ID, REV))] }));
+  assert.equal(A.why(answer('I saved Short paragraphs, then forgot that memory.', ['Short paragraphs']), both), '', 'accurate historical actions retain their receipts');
+  assert.equal(A.why(answer('Your preference is saved: Short paragraphs.', ['Short paragraphs']), both), 'ground', 'a later forget invalidates a present persistence claim');
+});
+
 test('quoted and negated memory success phrases do not claim a mutation; device receipts never prove Drive sync', () => {
   const failed = A.task.input(raw({ steps: [step('memory_save', { text: 'Short paragraphs', evidence: 'x' }, { ok: false, error: 'write' })] }));
   assert.equal(A.why(answer('I could not save your preference.'), failed), '');
@@ -128,7 +141,8 @@ test('an unchanged save receipt proves an existing durable preference without a 
   assert.equal(A.why(answer('I updated your preference for Short paragraphs.', ['Short paragraphs']), inp), 'ground');
 });
 
-const cached = () => ({ ok: true, record: { id: SOURCE, revision: REV, kind: 'course', text: 'Lab report is due Sunday. Current grade: 92%. Submitted: false.', source: { type: 'course-read', tool: 'assignment_read', course: '52', id: '70', observedAt: NOW - 864e5, complete: true } }, page: 1, pages: 1 });
+const course = (over = {}) => ({ id: SOURCE, revision: REV, kind: 'course', text: 'Lab report is due Sunday. Current grade: 92%. Submitted: false.', source: { type: 'course-read', tool: 'assignment_read', course: '52', id: '70', observedAt: NOW - 864e5, complete: true }, ...over });
+const cached = () => ({ ok: true, ...course(), page: 1, pages: 1 });
 test('cached course material cannot prove current due, grade or submission status; each topic needs its own fresh tool', () => {
   const cases = [
     ['When is my assignment due?', 'Lab report is due Sunday.', ['Lab report', 'Sunday'], 'assignment_read', { course: '52', assignment: '70' }, { title: 'Lab report', due: 'Sunday' }],
@@ -157,6 +171,30 @@ test('historical cached course questions remain grounded, and honest missing-fre
   assert.equal(A.why(answer('I cannot verify the current due date of Lab report from saved material.', ['Lab report']), current), '');
 });
 
+test('historical wording never exempts a separate current-state question from fresh tools', () => {
+  const steps = [step('memory_read', { id: SOURCE }, cached())];
+  for (const question of ['What did the saved material say, and what is my current grade?', 'I saved my preference. When is my assignment due?',
+    'What was my previous grade, and have I submitted my Lab report?']) {
+    const inp = A.task.input(raw({ question, steps }));
+    assert.equal(A.why(answer('Lab report is due Sunday and your current grade is 92%.', ['Lab report', 'Sunday', '92']), inp), 'ground', question);
+  }
+  const historical = A.task.input(raw({ question: 'What was my previous grade in the saved course material?', steps }));
+  assert.equal(A.why(answer('The saved material reports a grade of 92%.', ['92']), historical), '');
+});
+
+test('recalled course problems retain the calculator tutoring guard through recall, read and search', () => {
+  const problem = course({ text: 'Solve 2x + 3 = 7.' }), solve = call('run_js', { code: '(7 - 3) / 2' });
+  const cases = [{ recall: recall([problem]) }, { steps: [step('memory_read', { id: SOURCE }, { ok: true, ...problem, page: 1, pages: 1 })] },
+    { steps: [step('memory_search', { query: 'algebra', kind: 'course' }, { ok: true, items: [problem], truncated: false })] }];
+  for (const over of cases) {
+    const inp = A.task.input(raw({ question: 'Work that out.', tools: ['run_js', 'memory_read', 'memory_search'], ...over }));
+    assert.ok(inp);
+    assert.equal(A.why(solve, inp), 'work');
+    const unrelated = A.task.input(raw({ question: 'Calculate the tip for a restaurant bill.', tools: ['run_js', 'memory_read', 'memory_search'], ...over }));
+    assert.equal(A.why(call('run_js', { code: '25 * 0.2' }), unrelated), '', 'unrelated calculator uses remain available');
+  }
+});
+
 test('study help conditionally carries recall as untrusted data and preserves its tutoring boundary', () => {
   const given = { question: 'Help me reason about this exercise.', subject: 'math' };
   const plain = H.task.input(given);
@@ -170,8 +208,7 @@ test('study help conditionally carries recall as untrusted data and preserves it
   const reply = { kind: 'hint', step: null, reply: 'Think about which quantity stays constant.', followUp: null };
   assert.equal(H.why(reply, inp), '');
   assert.equal(H.why({ ...reply, reply: 'The answer is 8.' }, inp), 'answer');
-  const course = { ...cached().record, text: 'Solve 2x + 3 = 7.' };
-  const recalledProblem = H.task.input({ ...given, recall: recall([course]) });
+  const recalledProblem = H.task.input({ ...given, recall: recall([course({ text: 'Solve 2x + 3 = 7.' })]) });
   assert.ok(recalledProblem);
   assert.equal(H.why({ ...reply, reply: 'Your next step is x = 2.' }, recalledProblem), 'solves');
   assert.equal(H.task.input({ ...given, recall: { ...recall(), account: 'untrusted' } }), null);
