@@ -467,6 +467,7 @@ test('PDF timeouts under a minute are reviewed and retain their clear', () => {
 
 // Reading styles or every element: each site is bounded (one element, its ancestors, or the documented first pass).
 const STYLE_READS = [
+  ['ai/page/current-view.js', 'getComputedStyle(el)', 1], // One recognized instruction root per Ask turn; reject hidden material before reading innerText.
   ['core/page/widgets.js', 'getComputedStyle(x.el)', 1], // only the requested tile, once per palette command, before deciding whether it can take focus
   ['navigation/nav.js', "querySelectorAll('*')", 1], // Only the parsed copy of Glaze's own bar, once at first paint, inside a template, not the page.
   ['writer/writer-ultra.js', "querySelectorAll('*')", 1], // Only the recognized Quill body at takeover or after a foreign edit; mounted boxes are skipped on observer passes.

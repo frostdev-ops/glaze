@@ -268,6 +268,9 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
   // model's access gone (the dialog closes); onShow(): before Show on the page scrolls there (the dialog closes).
   const mount = (host, { variant = 'tile', onClose, onOff, onShow } = {}) => {
     const dialog = variant === 'dialog';
+    globalThis.GZ_WRITER?.pinCurrent?.();
+    globalThis.GZ_ASK_CURRENT?.pin?.();
+    host.addEventListener('pointerdown', (e) => { if (e.isTrusted) globalThis.GZ_ASK_CURRENT?.pin?.(); }, true);
     const turns = []; // [{ question, answer, li }] of this chat, for follow-ups; gone when it stops or starts anew
     const afterReveal = new Map(), reveals = new Map(), copyTimers = new Map();
     let actionEpoch = 0, current = 0, pending = null, follow = true, frame = 0, written = -1, sizes = null, moved = 0, alive_ = true;
@@ -529,6 +532,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       if (current || pending || !alive_ || !accepting) return;
       const mine = pending = {};
       actionEpoch++; afterReveal.clear();
+      if (!globalThis.GZ_ASK_CURRENT && ctx.need) await ctx.need('ai/page/current-view.js', () => globalThis.GZ_ASK_CURRENT).catch(() => {});
       const allowed = await alive();
       if (pending !== mine || !alive_) return;
       pending = null;
@@ -540,8 +544,10 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       busy(true);
       const run = { line: null, cards: null }, past = history(), queued = [], first = !past.length && !memo.summary;
       const site = ['canvas', 'ultra', 'moodle'].includes(ctx.site) ? ctx.site : undefined, words = pageText();
+      // Capture after asynchronous admission, on every send and retry. A still-open chat may span SPA routes.
+      const active = globalThis.GZ_ASK_CURRENT?.capture?.() || {};
       const go = port.send({ op: 'ask', question: q, ...(attempt && { attempt }), locale: lang(), ...(past.length && { history: past }), ...(past.length && memo.summary && { summary: memo.summary }), ...(past.length && memo.tools.length && { tools: memo.tools }),
-        ...(site && { site }), ...(words && { text: words }), ...(typeof fired === 'string' && { fired }) }, (ev) => {
+        ...(site && { site }), ...active, ...(words && { text: words }), ...(typeof fired === 'string' && { fired }) }, (ev) => {
         if (current !== go.id) return;
         if (ev.type === 'step') {
           card(run, ev.step);

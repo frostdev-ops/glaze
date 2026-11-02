@@ -1968,6 +1968,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     view.setProps({ editable: editable || (() => true) });
 
     current = parked ? (typeof parked.kind === 'function' ? parked : null) : api;
+    globalThis.GZ_WRITER_CURRENT?.refresh?.();
     hooks();
     return api;
   };

@@ -14,6 +14,25 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const U = () => globalThis.GZ_WRITER_ULTRA;
   const html = document.documentElement;
   const boxes = new Map(); // Ultra's editor → its box
+  let activeCurrent = null, pinnedCurrent = null;
+  // Keep the exact box selected before Ask takes focus. A later editor update invalidates the pin, including a
+  // same-frame document replacement; no visibility/focus ranking across all open documents is used.
+  const current = () => {
+    const p = pinnedCurrent;
+    return p && boxes.get(p.box.editor) === p.box && sameBox(p.box) && p.box.frame === p.frame && p.box.frame?.isConnected &&
+      p.box.askBinding?.token === p.token && p.box.askBinding?.revision === p.revision ? { token: p.token, revision: p.revision } : null;
+  };
+  const pinCurrent = () => {
+    const focused = [...boxes.values()].filter((b) => b.frame === document.activeElement);
+    const b = focused.length === 1 ? focused[0] : null;
+    if (b && b.askBinding && sameBox(b) && b.frame?.isConnected && boxes.get(b.editor) === b) pinnedCurrent = { box: b, frame: b.frame, ...b.askBinding };
+    else pinnedCurrent = activeCurrent;
+    return current();
+  };
+  for (const event of ['pointerdown', 'focusin']) document.addEventListener(event, (e) => {
+    if (!e.isTrusted || e.target?.closest?.('#gz-ask, .gz-ask-chat, #gz-cmd')) return;
+    if (![...boxes.values()].some((b) => b.frame === e.target)) { activeCurrent = null; pinnedCurrent = null; }
+  }, true);
   const declined = new WeakSet(); // editors given back to Blackboard's editor: Ultra's from then on, on this page
   const failed = new WeakMap(); // editor → when its frame last failed to open; tried again a minute later
   const SENDS = new Set(['post', 'reply', 'message', 'journal']);
@@ -239,6 +258,12 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.observer.observe(ed, { childList: true, subtree: true, characterData: true });
   };
   const hear = (box, m) => {
+    if (m.type === 'ask:binding') {
+      if (typeof m.token !== 'string' || !/^[a-f0-9]{32}$/.test(m.token) || !Number.isSafeInteger(m.revision) || m.revision < 0) { box.askBinding = null; return; }
+      box.askBinding = { token: m.token, revision: m.revision };
+      if (m.focused === true && box.frame === document.activeElement) activeCurrent = { box, frame: box.frame, ...box.askBinding };
+      return;
+    }
     if (m.type === 'ready' && !box.ready) swap(box);
     else if (m.type.startsWith('submit:')) { if (box.mode === 'paper') X.need('writer/writer-submit.js', () => globalThis.GZ_WRITER_SUBMIT_LIB).then(() => X.need('writer/page/writer-submit.js', () => globalThis.GZ_WRITER_SUBMIT)).then(() => boxes.get(box.editor) === box && GZ_WRITER_SUBMIT.hear(box, m, X, () => boxes.get(box.editor) === box && sameBox(box)), () => {}); }
     else if (m.type === 'attachments') { if (box.mode === 'paper') X.need('writer/writer-context-assignment.js', () => globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT).then(() => GZ_WRITER_CONTEXT_ASSIGNMENT.attachments(X, box, m, () => boxes.get(box.editor) === box && sameBox(box)), () => {}); }
@@ -555,7 +580,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       mount(b);
     }
   };
-  return { pass, drop: dropAll };
+  return { pass, drop: dropAll, pinCurrent, current };
 })();
 
 GZ_WRITER;
