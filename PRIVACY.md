@@ -192,13 +192,15 @@ replies and only the number of your classmates' replies: never their names or po
 omitted, and participant names supplied by Blackboard are redacted from returned text. On Canvas a discussion's prompt is read
 only when a teacher or TA of the course wrote it (checked against the course's teacher and TA list, read once per page). For a file a page embeds it sends
 the file's name and type, never its address. Ask Rime's switch is that tool access:
-it needs no Agents pairing and doesn't turn agent access on. Its one change, marking a to-do done, waits for your OK in
+it needs no Agents pairing and doesn't turn agent access on. Marking a to-do done waits for your OK in
 Glaze's window, worded by Glaze, never by the model. The conversation itself goes when the page or panel closes.
 With **Memory** on (the default once Ask Rime is enabled), Rime can save useful preferences and facts from your messages
 as short Markdown records with a supporting excerpt, timestamps and a revision. These records stay on this device,
 separated by school account, until you edit or delete them in **Settings → AI → Memory** or the chat's memory controls.
 Glaze also retains bounded excerpts from successful course reads, with the source, when it was read and whether it was
 partial. This course cache stays on this device; it has no timed expiry and can be cleared in Memory settings.
+Forgetting a specific course source suppresses it until the course cache is cleared; new verified reads can then refill
+the cache. Removing a school clears its course cache. Saved memories remain available for you to delete in Settings.
 Relevant memories and cached excerpts may be included in later Ask Rime requests to the model you chose. Memory is
 used only by Ask Rime, not Writer's AI features. Turning Memory off stops recall, automatic saving and course indexing;
 it does not erase existing records. You can still view, edit, delete, clear or export them while AI is off.
