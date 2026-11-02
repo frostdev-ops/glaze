@@ -183,6 +183,7 @@ test('after a think run the host reads the answer back as the next request holds
   const ids = TOK.encodeWith(parts), open = ids.lastIndexOf(TOK.id('<think>'));
   const back = s.extends.at(-1).ids;
   assert.deepEqual(back, [...ids.slice(0, open), TOK.id('<think>'), thought, ...answer, TOK.eos]);
+  assert.equal(s.extends.at(-1).paced, true, 'read-ahead waits and yields with the background prefill controller');
   // The next turn holds it: only what follows is fed.
   const next = [...parts.slice(0, -2), { special: '<think>' }, { special: '</think>' }, { text: '{"text":"hi"}' }, { special: '<|im_end|>' }, { text: '\n' }, ...user(['question\nthanks!'])];
   const r = await s.call({ op: 'run', model: 'm', parts: next, stable: SYS.length, sampler: { temperature: 0 }, maxTokens: 2 });
