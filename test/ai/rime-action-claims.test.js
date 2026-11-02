@@ -67,6 +67,14 @@ test('a course subpage claim uses the most specific listed destination, not the 
     { call: { name: 'place_open', arguments: { place: 'course:25/grades' } }, result: { opened: 'course:25/grades', title: 'BIO 1100 grades' } },
   ] });
   for (const name of ['BIO 1100 grades', 'course:25/grades']) assert.equal(A.why({ call: null, answer: { text: `I opened ${name}.`, quotes: [name] } }, input), '');
+  for (const title of ['**BIO 1100** grades', '__BIO 1100__ grades', '*BIO 1100* grades', '_BIO 1100_ grades']) {
+    assert.equal(A.why({ call: null, answer: { text: `I opened ${title}.`, quotes: ['BIO 1100'] } }, input), '', title);
+    const homeOnly = A.task.input({ question: 'Open BIO 1100', tools: ['places_list', 'place_open'], now: 1793577600000, zone: 'UTC', first: true, steps: [
+      { call: { name: 'places_list', arguments: {} }, result: { places } },
+      { call: { name: 'place_open', arguments: { place: 'course:25' } }, result: { opened: 'course:25', title: 'BIO 1100' } },
+    ] });
+    assert.equal(A.why({ call: null, answer: { text: `I opened ${title}.`, quotes: ['BIO 1100'] } }, homeOnly), 'ground', `${title}: home success cannot prove subpage success`);
+  }
 });
 
 test('coordinated completions and failures each use their own destination', async () => {
