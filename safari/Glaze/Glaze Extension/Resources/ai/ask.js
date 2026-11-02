@@ -340,7 +340,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (failed && !fixed && AT().FIXES.includes(e.why)) { fixed = true; fix = e.why; continue; }
         if (failed && fixed) {
           const shown = AT().task.input(inputOf())?.steps, text = shown && AT().listAnswer(shown, { locale });
-          if (text) return { answer: { text, quotes: [] }, steps, built: true };
+          if (text) return { answer: { text, quotes: [] }, steps, built: true, ...(typeof e.why === 'string' && { why: e.why }), ...(typeof e.raw === 'string' && { raw: e.raw }) };
         }
         throw Object.assign(e, { steps: steps.length });
       }
@@ -671,7 +671,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         await carry(env, current.actions).catch(() => {});
         if (signal.aborted) throw cancelled();
         for (const a of current.actions) { const { action, ...rest } = a; post({ id, type: 'action', action: { kind: action, ...rest } }); }
-        post({ id, type: 'end', task: r.task, answer: { text: res.answer.text, ...(res.built && { built: true }) } });
+        // A built answer also carries the failed answer it replaced and its code, to this panel only (never Activity).
+        post({ id, type: 'end', task: r.task, answer: { text: res.answer.text, ...(res.built && { built: true }) }, ...(res.built && { ...(res.why && { why: res.why }), ...(res.raw && { raw: res.raw.slice(0, 2000) }) }) });
         if (level >= 3) void compact({ id, open, turn: { question, answer: res.answer.text }, locale, tools, zone }).catch(() => {});
       } catch (e) {
         // { id, type: 'error', error, why?, steps?, raw? }: the check's code, the tool steps run, and the model's raw answer

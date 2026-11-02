@@ -300,6 +300,10 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   the question before it with fresh calls; the system text asks for glaze-plans' MARKDOWN.md answer format, which the
   panel renders. Reminder, notice, watch and cancel phrasings are one table (agent-tools.js `PHRASES`) the router and the
   check share. Level 1 is byte-identical.
+- **Known limit, Canvas announcements and discussion prompts:** both are read only when a teacher or TA of the course wrote
+  them (the course's enrollments). A course that hides its People list from students shows Glaze no teachers, so there
+  `announcement_read` and `discussion_read` refuse ("Glaze can't verify…") until a probe of a real Canvas shows a field that
+  marks an announcement on its own.
 - **The context window** (ai/ask.js; the owner, 2026-11-01): before each request Ask Rime asks the broker to `count` it
   (Glaze's own model: its tokenizer in the engine host, exactly; a cloud model: text.js's estimate) against the window the
   provider runs with (the configured context, never an assumed 4,096), and posts `{ id, type: 'context', task, used,
@@ -689,7 +693,7 @@ Frostdev publishes a signed list beside the weights, `https://huggingface.co/fro
     { "id": "rime-1.7b-q4_k_m", "name": "Rime 1.7B Q4_K_M", "repo": "frostdev-ops/Rime-1.7B-GGUF", "commit": "<40-hex>",
       "file": "Rime-1.7B-Q4_K_M.gguf", "url": "https://huggingface.co/frostdev-ops/Rime-1.7B-GGUF/resolve/<commit>/Rime-1.7B-Q4_K_M.gguf",
       "size": 1099627200, "chunk": 67108864, "sha256": ["<64-hex per 64 MB chunk>"], "total": "<64-hex>", "license": "lfm1.0",
-      "quant": "Q4_K_M", "tier": 1, "tools": 3, "minGlaze": "4.0.2", "version": "r6" } ] },
+      "quant": "Q4_K_M", "tier": 1, "tools": 3, "minGlaze": "4.0.3", "version": "r6" } ] },
   "sig": "<Ed25519 over utf8('glaze-models-1|' + canon(list)), base64url>" }
 ```
 
@@ -727,7 +731,7 @@ Every publish happens only after the owner's go.
 
 1. Upload the GGUFs to `frostdev-ops/Rime-1.7B-GGUF` and note the commit.
 2. Build each size's entry: `node tools/vendor/model-manifest.js --repo frostdev-ops/Rime-1.7B-GGUF --commit <sha> --file
-   Rime-1.7B-Q4_K_M.gguf --tier 1 --tools 3 --version r6 --min-glaze 4.0.2 --out ~/glaze-models/entries.json` (once per
+   Rime-1.7B-Q4_K_M.gguf --tier 1 --tools 3 --version r6 --min-glaze 4.0.3 --out ~/glaze-models/entries.json` (once per
    quant, into the same file; keep each size's id).
 3. Sign: `node tools/vendor/model-manifest.js --sign --entries ~/glaze-models/entries.json --key ~/.glaze-signing/models.key
    --out ~/glaze-models/glaze-models.json`. The serial is one above the published list's (`--serial` to set it, `--offline`
