@@ -165,9 +165,10 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     const release = () => { stopSequences(); return queued(unload); };
     // The model at the end of `head` (the system turn): already held (an engine that keeps its sequence), a kept snapshot
     // of it, else read (from the latest mark it shares, or the start) and kept. → the tokens it fed.
-    const prefix = async (job, head, signal, pacing = {}) => {
+    const prefix = async (job, head, signal, pacing = {}, keepTail = true) => {
       const keeps = typeof job.model.extend === 'function';
-      if (keeps && job.model.common(head) === head.length) return 0;
+      // Only a full-sequence extend can keep the old suffix. Picture prefills append and need the cursor at head's end.
+      if (keeps && keepTail && job.model.common(head) === head.length) return 0;
       const at = job.warm.findIndex((w) => same(w.ids, head));
       if (at >= 0) { const [w] = job.warm.splice(at, 1); job.warm.push(w); await job.model.restore(w.snap); return 0; }
       let snap, fed = head.length;
@@ -376,7 +377,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         const low = m.priority === 'low' || head.includes(tok.id('<|gz_task:writer.complete|>'));
         const yieldNow = pause;
         const pacing = low ? paced() : {};
-        const read = await prefix(job, head, signal, pacing);
+        const read = await prefix(job, head, signal, pacing, keeps);
         const ids = keeps ? [...head, ...rest] : null;
         let cached = 0;
         // Each picture encoded on the engine's device, fed in place of its placeholders, and its buffer freed at once.
