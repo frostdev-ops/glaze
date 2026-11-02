@@ -88,6 +88,12 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
   };
   const epoch = (_local) => generations;
   const invalidateNow = (local, account) => { const e = epoch(local); if (account === undefined) e.all++; else e.accounts.set(account, (e.accounts.get(account) || 0) + 1); };
+  // Restore calls this after publishing while it already holds queued(). It changes no data and must not reenter the
+  // queue; ordinary callers use their store's queued invalidate() instead. All adapters share these account epochs.
+  const invalidateHeld = (env, account) => {
+    if (!env?.local || (account !== undefined && !accountOf(account))) return false;
+    invalidateNow(env.local, account); return true;
+  };
   const keysOf = async (env) => typeof env.keys === 'function' ? env.keys() : typeof env.local.getKeys === 'function' ? env.local.getKeys() : Object.keys(await env.local.get(null));
   const rowsOf = async (env, account) => {
     const keys = (await keysOf(env)).filter((k) => { const p = parseKey(k); return p && (account === undefined || p.account === account); });
@@ -306,6 +312,6 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
       clear: (account, options) => accountOf(account) ? clearRecords(account, options) : Promise.resolve(fail('scope')), clearAll: (options) => clearRecords(undefined, options),
       invalidate: (account) => account !== undefined && !accountOf(account) ? Promise.resolve(false) : queued(env, () => { invalidateNow(env.local, account); return true; }) };
   };
-  return { LIMIT, keyOf, parseKey, clean, merge, fits, queued, apply, replace, create, open: create };
+  return { LIMIT, keyOf, parseKey, clean, merge, fits, queued, apply, replace, invalidateHeld, create, open: create };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_MEMORY; else GZ_MEMORY;
