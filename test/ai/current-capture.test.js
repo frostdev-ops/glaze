@@ -58,6 +58,27 @@ test('transparent ancestors and excluded descendants never contribute instructio
   assert.equal(p.get().current.material, undefined);
 });
 
+test('collapsed and unrendered descendants stay excluded when reading visible instruction text', () => {
+  const unrendered = visible('UNRENDERED ANSWERS'); unrendered.getClientRects = () => [];
+  const collapsed = visible('COLLAPSED ANSWERS'); collapsed.tagName = 'DETAILS';
+  const root = visible('Visible directions', [unrendered, collapsed]);
+  root.innerText = 'Visible directions';
+  const p = page('https://school.test/courses/7/assignments/21', 'canvas', { '#assignment_show .description': root });
+  assert.equal(p.get().current.material.text, 'Visible directions');
+});
+
+test('instruction traversal is bounded even for many small elements', () => {
+  let reads = 0;
+  const root = visible('Directions', Array.from({ length: 2000 }, () => visible('x')));
+  const p = page('https://school.test/courses/7/assignments/21', 'canvas', { '#assignment_show .description': root }, {
+    getComputedStyle: () => { reads++; return { display: 'inline', visibility: 'visible' }; },
+  });
+  const material = p.get().current.material;
+  assert.ok(reads <= 256);
+  assert.equal(material.truncated, true);
+  assert.ok(material.text.length <= 3072);
+});
+
 test('live test evidence excludes a pinned Writer as well as instruction material', () => {
   const writer = { current: () => ({ token: 'a'.repeat(32), revision: 1 }) };
   const canvas = page('https://school.test/courses/7/assignments/21', 'canvas', {
