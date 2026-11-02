@@ -98,7 +98,7 @@ test('route: the student\'s own records go to agent.tools with the tools their t
     }
   }
   for (const question of ['"the earlier one please"', '> the earlier one please', '```text\nthe earlier one please\n```',
-    'draft my response', 'implement my solution', 'do my homework', '2x + 3 = 7', 'my essay thesis', 'photosynthesis']) {
+    'finish it for me', 'implement it', 'do my homework', '2x + 3 = 7', 'my essay thesis', 'photosynthesis']) {
     assert.equal(K.route(question, { level: 3, history: natural }).task, 'study.help', question);
   }
   assert.equal(K.route('the earlier one please', { level: 3, history: natural, attempt: 'My answer is x = 4.' }).task, 'study.help');
