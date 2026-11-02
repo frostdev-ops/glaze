@@ -258,7 +258,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // null: 'missing' instead).
     const send = async (o, bytes, keep = null, gone = async () => {}) => {
       if (o.id) {
-        try { return await D((c) => c.put({ id: o.id, meta: o.meta, mime: o.mime, bytes, keep })); } catch (e) { if (e.why !== 'missing' || !gone) throw e; }
+        try { return await D((c) => c.put({ id: o.id, meta: o.meta, mime: o.mime, bytes, keep, match: o.match ?? null })); } catch (e) { if (e.why !== 'missing' || !gone) throw e; }
         await keep?.drop(); await gone();
       }
       return D((c) => c.put({ meta: o.create, mime: o.mime, bytes, keep }));
@@ -290,7 +290,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // Keep the owed owner until setMove replaces it, including a stop before the new bytes have been staged.
       if (t?.due) await unstage(slot);
       await setMove(slot, { dir: 'up', tag, aim: target === undefined ? m.id ?? null : target ?? null, size: m.bytes.length, b: await bytesSum(m.bytes), id: m.id ?? null, rev: m.rev ?? null,
-        sum: m.sum ?? null, meta: m.meta, create: m.create, mime: m.mime, info: m.info ?? null, owner, since: now(), session: null, file: null, commit });
+        sum: m.sum ?? null, match: m.match ?? null, meta: m.meta, create: m.create, mime: m.mime, info: m.info ?? null, owner, since: now(), session: null, file: null, commit });
       await staged(slot, m.bytes);
       throw new Fail('pending');
     };

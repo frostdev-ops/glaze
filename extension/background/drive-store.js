@@ -450,7 +450,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (ctx.up) return ctx.up(slot, tag, target, make, owner, commit);
       const m = await make();
       let file = null;
-      if (m.id) { try { file = await ctx.D((c) => c.put({ id: m.id, meta: m.meta, mime: m.mime, bytes: m.bytes })); } catch (e) { if (e.why !== 'missing') throw e; } }
+      if (m.id) { try { file = await ctx.D((c) => c.put({ id: m.id, meta: m.meta, mime: m.mime, bytes: m.bytes, match: m.match ?? null })); } catch (e) { if (e.why !== 'missing') throw e; } }
       file ||= await ctx.D((c) => c.put({ meta: m.create, mime: m.mime, bytes: m.bytes }));
       return { file, info: m.info ?? null };
     };
@@ -490,6 +490,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         const bytes = new TextEncoder().encode(JSON.stringify({ glaze: 'record', v: 1, cat, area, key, at, ...(value === undefined ? { deleted: true } : { value }) }));
         if (bytes.length > MAX) throw new Fail('large');
         return { bytes, id: was?.id ?? null, rev: was?.id && aim?.id === was.id ? aim.headRevisionId ?? null : null,
+          match: cat === 'memories' && was?.id ? aim?.headRevisionId || '' : null,
           sum: was?.id && SUM.test(expect || '') ? expect : null, meta, create: { ...meta, name: `${cat}-${h.slice(0, 12)}.json`, mimeType: JSON_TYPE, parents: [ctx.data],
             ...(cat === 'memories' && value.deleted && { appProperties: { ...meta.appProperties, forgotten: 'true' } }) }, mime: JSON_TYPE };
       }, { rec: h, area, key }, { rec: h, link });
@@ -673,7 +674,16 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     const idOf = async (h, x) => { const r = await recOf(h); return x.area && x.key ? `${x.area}:${x.key}` : r ? `${r.area}:${r.key}` : null; };
     const each = async (ctx, h, x) => {
       try {
-        await one(ctx, h, x);
+        for (let retry = 0; ; retry++) {
+          try { await one(ctx, h, x); break; }
+          catch (e) {
+            const rec = await recOf(h);
+            if (e?.why !== 'stale' || retry >= 2 || (catOf(x.area, x.key) || rec?.cat) !== 'memories') throw e;
+            // Another device won the conditional write. Merge its actual current record before trying again, rather
+            // than reusing a stale change-list snapshot. Further contention stays dirty for the next ordinary run.
+            x = { ...x, R: undefined };
+          }
+        }
         { const id = await idOf(h, x); if (id) await ctx.large?.(id, false); }
         // A note's pictures and attachments go up with it (each once).
         const r = await recOf(h);

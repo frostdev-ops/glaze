@@ -48,7 +48,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
   // Every reason a request ends with: the sign-in's (background/google.js), the Picker's, Drive's, the port's.
   // export: a Google file larger than Drive exports (its 10 MB).
   const WHY = ['off', 'connect', 'setup', 'account', 'auth', 'permission', 'cancel', 'scope', 'browser', 'unsupported', 'state', 'picker', 'offline',
-    'network', 'missing', 'denied', 'busy', 'quota', 'size', 'export', 'type', 'bad', 'sender'];
+    'network', 'missing', 'denied', 'busy', 'quota', 'size', 'export', 'type', 'bad', 'sender', 'stale'];
   const ID = /^[\w-]{1,256}$/, MIME = /^[\w.+-]{1,127}\/[\w.+-]{1,127}$/;
   class Fail extends Error { constructor(why) { super(why); this.why = why; } }
   const kinds = () => globalThis.GZ_DOC_KINDS || require('./doc-kinds.js');
@@ -123,6 +123,7 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       if ((r.status === 400 || r.status === 403) && errs.some((e) => e?.location === 'export.size' || e?.reason === 'exportSizeLimitExceeded')) return 'export';
       if (r.status === 401) return 'auth';
       if (r.status === 404) return 'missing';
+      if (r.status === 412) return 'stale';
       if (r.status === 429 || r.status >= 500) return 'busy';
       if (r.status === 403) return why.some((x) => BUSY.has(x)) ? 'busy' : why.some((x) => FULL.has(x)) ? 'quota' : 'denied';
       return 'bad';
@@ -306,8 +307,25 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     // { get, set, drop } where the session waits between workers (Sync's, documents/drive-sync.js): { uri, id, size, sum
     // (the bytes' SHA-256), at (what Drive confirmed), step, sending (a chunk under way) }. A session kept for these same
     // bytes and file goes on from what Drive says it has (Content-Range bytes */N); one expired (404) starts over.
-    const put = async ({ id = null, meta = {}, mime, bytes, fields = SYNC, all = false, keep = null }) => {
+    const put = async ({ id = null, meta = {}, mime, bytes, fields = SYNC, all = false, keep = null, match = null }) => {
       if ((id !== null && (typeof id !== 'string' || !ID.test(id))) || typeof mime !== 'string' || !MIME.test(mime) || !(bytes instanceof Uint8Array) || bytes.length > kinds().FILE * 4) throw new Fail('bad');
+      // Saved-memory updates alone opt in. v3 has no File.etag; v2 retains it and the conditional upload contract.
+      // Fence the exact head that was merged, then use that File ETag at the write itself. Never fall back to an
+      // unconditional update when the ETag is absent or the endpoint refuses it. No new history files are created.
+      if (match !== null) {
+        if (!id || typeof match !== 'string' || !ID.test(match) || bytes.length > SMALL || Object.keys(meta).some((k) => k !== 'appProperties')
+          || !meta.appProperties || meta.appProperties.cat !== 'memories') throw new Fail('bad');
+        const api = 'https://www.googleapis.com/drive/v2/files', upload = 'https://www.googleapis.com/upload/drive/v2/files';
+        const old = await json(await call(`${api}/${id}?${q({ fields: 'id,etag,headRevisionId' })}`));
+        if (old.id !== id || typeof old.etag !== 'string' || !/^"[^"\r\n]{1,1000}"$/.test(old.etag)) throw new Fail('bad');
+        if (old.headRevisionId !== match) throw new Fail('stale');
+        const properties = Object.entries(meta.appProperties).map(([key, value]) => ({ key, value, visibility: 'PRIVATE' }));
+        const { type, body } = multipart({ properties }, mime, bytes);
+        const saved = await json(await call(`${upload}/${id}?${q({ uploadType: 'multipart', fields: 'id' })}`,
+          { method: 'PUT', headers: { 'content-type': type, 'if-match': old.etag }, body }));
+        if (saved.id !== id) throw new Fail('bad');
+        return file(id, fields);
+      }
       const more = all ? { supportsAllDrives: 'true' } : {};
       if (bytes.length <= SMALL) {
         const { type, body } = multipart(meta, mime, bytes);
