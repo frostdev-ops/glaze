@@ -24,9 +24,11 @@ const TOK = (() => { const t = K.load(VOCAB); for (const n of K.GLAZE_TOKENS) t.
 
 // perToken: the simulated GPU's ms per token fed (a decode step counts one). → { call, busy (each submission's [start,
 // end] ms), fed (tokens per submission), h }.
-const setup = (perToken) => {
+const setup = (perToken, { virtual = false } = {}) => {
   const g = gpu(), busy = [], fed = [], posted = [];
-  let pending = 0, until = 0;
+  let pending = 0, until = 0, clock = 0;
+  const now = virtual ? () => clock : () => performance.now();
+  if (virtual) g.context.performance = { now };
   const write = g.device.queue.writeBuffer;
   g.device.queue.writeBuffer = function (b, off, data, ...rest) {
     if (b.size === 512 * 4 && ArrayBuffer.isView(data) && data.constructor.name === 'Uint32Array') pending += data.length;
@@ -35,16 +37,16 @@ const setup = (perToken) => {
   const submit = g.device.queue.submit;
   g.device.queue.submit = function (commands) {
     if (pending) {
-      const at = performance.now(), start = Math.max(at, until);
-      until = start + pending * perToken;
+      const at = now(), start = Math.max(at, until);
+      until = start + (typeof perToken === 'function' ? perToken(pending) : pending * perToken);
       // queued: submitted while the GPU was still busy, so nothing else (the page's frame) could run between.
       busy.push([start, until, at < start]); fed.push(pending); pending = 0;
     }
     return submit.call(this, commands);
   };
   // Resolves once the simulated GPU is idle (a timer can fire a fraction of a ms early: wait again).
-  const idle = (r) => { const left = until - performance.now(); if (left <= 0) r(); else setTimeout(() => idle(r), Math.ceil(left)); };
-  g.device.queue.onSubmittedWorkDone = () => new Promise(idle);
+  const idle = (r) => { const left = until - now(); if (left <= 0) r(); else setTimeout(() => idle(r), Math.ceil(left)); };
+  g.device.queue.onSubmittedWorkDone = virtual ? async () => { clock = Math.max(clock, until); } : () => new Promise(idle);
   // A readback waits for the GPU too, as mapAsync does.
   const map = g.context.GPUBuffer.prototype.mapAsync;
   g.context.GPUBuffer.prototype.mapAsync = async function (...a) { await g.device.queue.onSubmittedWorkDone(); return map.apply(this, a); };
@@ -61,7 +63,7 @@ const setup = (perToken) => {
     };
     look();
   });
-  return { h, call, busy, fed, posted };
+  return { h, g, call, busy, fed, posted };
 };
 const SYS = [{ special: '<|startoftext|>' }, { special: '<|im_start|>' }, { text: 'system\n' }, { special: '<|gz_task:writer.complete|>' }, { text: 'Continue the student\'s text.' }, { special: '<|im_end|>' }, { text: '\n' }];
 const doc = (n) => [{ special: '<|im_start|>' }, { text: 'user\n' }, { special: '<|gz_ctx|>' }, { text: `document\n${'Cells turn food into energy in the mitochondria. '.repeat(n)}` }, { special: '<|/gz_ctx|>' },
@@ -97,4 +99,46 @@ test('a cancel lands within one step of a low-priority prefill', async () => {
   s.h.handle({ id: 'a', op: 'cancel' });
   await assert.rejects(run, (e) => e.category === 'cancelled');
   assert.ok(s.fed.length - before <= 1, `${s.fed.length - before} submissions after the cancel`);
+});
+
+// Loaded-model launch cliff: decode is fast, every GEMM has a large fixed cost, shared by larger batches. Virtual GPU
+// time makes the old minutes-long oscillation a fast regression; waits, yields, host, engine and cache reuse are real.
+const launchCost = (tokens) => tokens === 1 ? 8 : 60 + tokens * 0.16;
+test('history warm-up learns a GEMM launch floor instead of oscillating between one and two tokens', async () => {
+  const s = setup(launchCost, { virtual: true });
+  try {
+    const parts = [...SYS, ...doc(96)], input = TOK.encodeWith(parts).length;
+    assert.ok(input > 4500 && input < 5000);
+    assert.deepEqual(await s.call('warm', { op: 'warm', model: 'm', parts, stable: SYS.length }), { ok: true });
+    const cost = s.busy.reduce((sum, [a, b]) => sum + b - a, 0);
+    assert.ok(s.fed.filter((n) => n <= 2).length <= 4, `tiny submissions: ${s.fed.filter((n) => n <= 2).length}`);
+    assert.ok(s.fed.length < 100 && cost < 6000, `${s.fed.length} submissions, ${cost} ms of GPU work`);
+    assert.ok(Math.max(...s.fed) >= 128, 'bulk batches amortize the launch cost');
+    assert.ok(stall(s.busy) < 100, `bounded learned steps: ${stall(s.busy)} ms`);
+    s.fed.length = 0;
+    assert.deepEqual(await s.call('again', { op: 'warm', model: 'm', parts, stable: SYS.length }), { ok: true });
+    assert.deepEqual(s.fed, [], 'repeated history is already held');
+  } finally { await s.h.release(); }
+});
+
+test('a launch-floor bulk warm-up still cancels between completed submissions and retains consumed history', async () => {
+  const s = setup(launchCost, { virtual: true });
+  const done = s.g.device.queue.onSubmittedWorkDone;
+  let submitted = null;
+  s.g.device.queue.onSubmittedWorkDone = async () => {
+    await done();
+    if (submitted === null && s.fed.at(-1) >= 128) {
+      submitted = s.fed.length;
+      s.h.handle({ id: 'cancel', op: 'cancel' });
+    }
+  };
+  try {
+    const parts = [...SYS, ...doc(96)];
+    await assert.rejects(s.call('cancel', { op: 'warm', model: 'm', parts, stable: SYS.length }), (e) => e.category === 'cancelled');
+    assert.equal(s.fed.length, submitted, 'no submission follows cancellation');
+    const consumed = s.fed.reduce((sum, n) => sum + n, 0);
+    s.fed.length = 0;
+    const result = await s.call('resume', { ...complete(96), priority: 'low' });
+    assert.ok(result.usage.cached >= consumed, `retained ${result.usage.cached} of ${consumed} consumed tokens`);
+  } finally { await s.h.release(); }
 });
