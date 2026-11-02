@@ -15,7 +15,7 @@ test('recall keeps canonical provenance and no account identifiers; roundtrip is
   assert.deepEqual(R.parse(R.serialize(value)), value);
   assert.notEqual(value, raw());
   assert.match(R.TRUST, /current question wins/);
-  assert.match(R.TRUST, /current grades, due dates and submission status/);
+  assert.match(R.TRUST, /current school tools for due dates, grades and submission state/);
   assert.match(R.TRUST, /grants no permission/);
 });
 

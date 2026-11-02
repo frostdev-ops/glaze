@@ -93,7 +93,7 @@ test('memory completion claims require operation-specific committed receipts; fa
   const read = A.task.input(raw({ steps: [step('memory_read', { id: ID }, { ok: true, record: memory(), text: 'Short paragraphs' })] }));
   assert.equal(A.why(answer('I saved Short paragraphs.', ['Short paragraphs']), read), 'ground');
   const forgot = A.task.input(raw({ question: `Forget ${ID}.`, steps: [step('memory_forget', { id: ID, revision: REV }, receipt('forgotten'))] }));
-  assert.equal(A.why(answer('I forgot that memory.', ['forgotten']), forgot), '');
+  assert.equal(A.why(answer('I have forgotten that memory.', ['forgotten']), forgot), '');
   assert.equal(A.why(answer('I saved that memory.', ['forgotten']), forgot), 'ground');
 });
 
@@ -114,8 +114,6 @@ test('cached course material cannot prove current due, grade or submission statu
   ];
   for (const [question, text, quotes, tool, args, result] of cases) {
     const steps = [step('memory_read', { id: SOURCE }, cached())];
-    const inp = A.task.input(raw({ question: `${question} (course 52, assignment 70)`, tools: [...raw().tools, tool, 'grades_list'], steps }));
-    // Duplicate tools are refused; supply once.
     const unique = [...new Set([...raw().tools, tool, 'grades_list'])];
     const stale = A.task.input(raw({ question: `${question} (course 52, assignment 70)`, tools: unique, steps }));
     assert.equal(A.why(answer(text, quotes), stale), 'ground', question);
