@@ -59,13 +59,14 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   // THINK_SIZED: the tasks that reason, per size; the rest answer directly. ANSWER: the answer's reserve per size; a request
   // asking less keeps its own. SCALE: the switches, all off until a round trained with the size tokens passes the gate, so
   // Rime r5 reads what it was gated on (no size token, THINK, the request's maxTokens): token sends the size token, answer
-  // takes ANSWER, think[task][size] lets that task reason at that size. The host caps both by the room left in the window.
+  // takes ANSWER, think[task][size] lets that task reason at that size, compact enables chat.compact's new task token.
+  // The host caps both budgets by the room left in the window.
   const SIZE = ['4k', '8k', '16k', '32k', '64k', '128k'];
   const bySize = (f) => Object.freeze(Object.fromEntries(SIZE.map((k, i) => [k, f(i)])));
   const REASONS = bySize((i) => [128, 256, 512, 1024, 1024, 1024][i]);
   const THINK_SIZED = Object.freeze({ 'agent.tools': REASONS, 'study.help': REASONS });
   const ANSWER = bySize((i) => [512, 768, 1024, 1536, 2048, 2048][i]);
-  const SCALE = Object.freeze({ token: false, answer: false, think: Object.freeze({ 'agent.tools': bySize(() => false), 'study.help': bySize(() => false) }) });
+  const SCALE = Object.freeze({ token: false, answer: false, compact: false, think: Object.freeze({ 'agent.tools': bySize(() => false), 'study.help': bySize(() => false) }) });
   // A Glaze-tuned model's run in a window: → { size (its token, when sent), think (the budget before the host's rate check
   // and cap), maxTokens }. scale: SCALE, or a test's own (_env's scale).
   const limits = (task, window, { maxTokens, scale = env?.scale || SCALE } = {}) => {
@@ -225,7 +226,9 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (!m || m.state !== 'ready') throw fail('provider-unavailable', 'assets');
     const window = Math.min(cfg.context || windowOf(m, cfg).window, windowOf(m, cfg).window);
     const think = await budget(req, m, window), sized = !m.stock && limits(req.task, window).size;
-    return { m, window, budget: think, ...FMT().format(req, { dialect: m.stock ? 'chatml' : 'glaze', think: think > 0, ...(sized && { window }) }) };
+    // r5 never trained chat.compact's task token. Use the native prompt until its independent training gate is enabled.
+    const native = m.stock || (req.task?.id === 'chat.compact' && (env?.scale || SCALE).compact !== true);
+    return { m, window, budget: think, ...FMT().format(req, { dialect: native ? 'chatml' : 'glaze', think: think > 0, ...(sized && { window }) }) };
   };
   const host = (e) => {
     if (e?.category === 'cancelled') return e;

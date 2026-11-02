@@ -617,7 +617,8 @@ words}]<|im_end|>\n<|im_start|>user\n<|gz_ctx|>label\ntext<|/gz_ctx|>\n…<|gz_d
 assistant\n` and the mode's prefill: direct `<think></think>`, think `<think>\n`), and `chatml` for a `stock: true` model,
 whose weights never learnt Glaze's tokens (the harness's messages as written, the schema in words, `<think></think>` after
 the assistant header; never think mode). A models.json entry without `stock` (Rime;
-`tools/vendor/model-manifest.js` without `--stock`) reads `glaze`. `test/ai/local-format-ids.test.js` holds `glaze` to
+`tools/vendor/model-manifest.js` without `--stock`) reads `glaze`, except for the separately gated compact task below.
+`test/ai/local-format-ids.test.js` holds `glaze` to
 `glaze-plans/lfm-tune/FORMAT-v2.md` id for id: for requests each trained task builds, the ids its `train/format.js`
 `promptV2` and LFM3's tokenizer give, direct and, for a think task, think (fixture: `tools/dev/local-format-fixture.js`).
 
@@ -626,7 +627,11 @@ is 125055; all `[PAD]` rows of LFM3's GGUFs, never produced by text) name the wi
 after the task token: the largest size at or under it. `SCALE` in `ai/providers/local.js` turns them on with the per-size
 think budget (`THINK_SIZED`: agent.tools and study.help 128/256/512/1024 at 4K/8K/16K/32K+) and answer reserve (`ANSWER`:
 512/768/1024/1536/2048 at 4K/8K/16K/32K/64K+), each capped by the room the window leaves; all off until a model trained
-with them ships, so Rime r5's requests are unchanged.
+with them ships, so Rime r5's trained requests are unchanged. The independent `SCALE.compact` switch also defaults to
+false: `chat.compact` uses native ChatML on tuned r5 weights, avoiding its untrained round 8 task token. Evaluation may
+explicitly set `scale.compact: true` to send the Glaze compact task token. This only selects that task's prompt dialect;
+the actual model, tuned window, budgets, sampler and count/run prompt agreement stay intact. Existing trained tasks keep
+their Glaze dialect; stock and picture models keep native ChatML.
 
 Think mode (FORMAT-v2): a Glaze-tuned model reasons before it answers for the requests `THINK` in `ai/providers/local.js`
 gives a budget (256 tokens: agent.tools only; D4 measured p3dpo thinking worse than answering directly on writer.review,
