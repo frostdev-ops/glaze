@@ -33,7 +33,7 @@
 // native): either the JSON as above, or one call to a listed tool,
 //   <tool_call>\n<function=NAME>\n(<parameter=KEY>\nVALUE\n</parameter>\n)*</function>\n</tool_call>
 // its parameters in their schema's order, required ones always, each at most once, a string VALUE one line of raw text
-// (no escapes) held to its length and pattern, an integer to its bounds. The tags are the model's own tokens: V needs
+// (no escapes) held to its length, pattern and enum, an integer to its bounds. The tags are the model's own tokens: V needs
 // their ids (vocab()'s marks, TOOL_MARKS), each read as a byte no text has (0xF8 on).
 // Speed: a trie over the vocabulary's bytes is walked against the state. Inside a string, where most steps are, the
 // tokens that stay in it come from a table per string state, shared by every schema on the vocabulary, and only those
@@ -745,13 +745,18 @@ var GZ_AI_GRAMMAR = globalThis.GZ_AI_GRAMMAR || (() => {
       for (const k of req) if (!Object.hasOwn(own, k)) fail(`${t.name}: required ${k} has no schema`);
       const params = [];
       for (const [k, p] of Object.entries(own)) {
-        if (!/^[a-z][a-z0-9_]*$/.test(k) || p.enum !== undefined || p.const !== undefined || p.anyOf !== undefined) fail(`${t.name}: parameter ${k}`);
+        if (!/^[a-z][a-z0-9_]*$/.test(k) || p.const !== undefined || p.anyOf !== undefined) fail(`${t.name}: parameter ${k}`);
         const types = [].concat(p.type || []);
+        if (p.enum !== undefined && (types.length !== 1 || types[0] !== 'string')) fail(`${t.name}: parameter ${k}`);
         let value, close;
         if (types.length === 1 && types[0] === 'string') {
           const min = p.minLength ?? 0, max = p.maxLength ?? Infinity;
-          value = p.pattern !== undefined ? pat(p.pattern, min, max, true) : undefined;
-          if (value === undefined) { if (p.pattern !== undefined) exact = false; value = str(min, max, true); }
+          if (p.enum !== undefined) {
+            value = lit(p.enum.filter((v) => typeof v === 'string' && !/[\u0000-\u001f\u007f]/u.test(v) && !S.validate(v, p).length).map((v) => enc.encode(`${v}\n`)));
+          } else {
+            value = p.pattern !== undefined ? pat(p.pattern, min, max, true) : undefined;
+            if (value === undefined) { if (p.pattern !== undefined) exact = false; value = str(min, max, true); }
+          }
           close = bytesOf({ mark: '</parameter>' }, '\n');
         } else if (types.length === 1 && types[0] === 'integer') { value = num(true, p.minimum, p.maximum); close = bytesOf('\n', { mark: '</parameter>' }, '\n'); }
         else fail(`${t.name}: parameter ${k} is neither a string nor an integer`);

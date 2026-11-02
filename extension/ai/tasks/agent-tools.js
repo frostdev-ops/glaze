@@ -544,6 +544,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   };
   const ownWhy = (name, args, inp) => {
     if (name === 'memory_save') return typeof args.evidence === 'string' && args.evidence.trim() && inp.question.includes(args.evidence) && M().userText(inp.question).includes(args.evidence) ? '' : 'text';
+    if (name === 'memory_forget') return M().forgetRequested(inp.question) ? '' : 'asked';
     if (name === 'run_js') return gradedWork(fold(inp.question)) || currentWork(inp) || inp.steps.some((s) => ['assignment_read', 'document_read', 'announcement_read', 'content_read', 'discussion_read'].includes(s.call.name)) ? 'work' : '';
     if (name === 'place_open') return under(inp, 'places_list', ['place', 'here']).includes(args.place) ? '' : 'place';
     if (name === 'page_highlight') {
@@ -674,30 +675,16 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       && typeof r.id === 'string' && R().ID.test(r.id) && typeof r.revision === 'string' && R().REVISION.test(r.revision)
       && (stamp(r.at) || typeof r.at === 'string' && !!r.at.trim() && r.at.length <= 120) && r.persistence === 'device'
       && (r.text === undefined || typeof r.text === 'string' && r.text.length <= 600)
-      && (r.operation !== 'unchanged' || r.revision === args.revision)
-      && (saving ? r.id.startsWith('m-') && (args.id ? ['updated', 'unchanged'].includes(r.operation) && r.id === args.id : r.operation === 'created')
+      && (r.operation !== 'unchanged' || saving && !args.id || r.revision === args.revision)
+      && (saving ? r.id.startsWith('m-') && (args.id ? ['updated', 'unchanged'].includes(r.operation) && r.id === args.id : ['created', 'unchanged'].includes(r.operation))
         : r.id === args.id && ['forgotten', 'unchanged'].includes(r.operation));
     return { ...step, id: args.id || r?.id, receipt: r, ok };
   };
-  // Only explicit assistant completions count. Quoted/code phrases and negated, conditional or future requests are data.
-  const memoryClaims = (text) => actionWords(destinationWords(text)).split(/[.!?;\n]+|\b(?:but|pero|mais|aber|maar)\b/u).flatMap((clause) => {
-    if (/^\s*(?:if|si|se|wenn|als)\b/u.test(clause)) return [];
-    const active = /\b(?:i(?:'ve| have)?|we(?:'ve| have)?|rime|glaze) (?:already |just |successfully |now )?(saved|stored|remembered|updated|changed|replaced|forgot|forgotten|deleted|removed|cleared)\b/u.exec(clause);
-    const passive = /\b(?:memory|memories|preference|preferences|fact|facts|it|that) (?:is |are |was |were |has been |have been |is now |are now )?(saved|stored|updated|changed|replaced|forgotten|deleted|removed|cleared)\b/u.exec(clause);
-    const foreign = /\b(?:he|hemos) (guardado|actualizado|olvidado|eliminado)|\b(?:yo )?(guardé|actualicé|olvidé|eliminé)|\b(?:eu )?(salvei|guardei|atualizei|esqueci|apaguei)|\bj'ai (enregistré|mémorisé|mis à jour|oublié|supprimé)|\bich habe[^.!?;]{0,80} (gespeichert|aktualisiert|vergessen|gelöscht)|\bik heb[^.!?;]{0,80} (opgeslagen|bijgewerkt|vergeten|verwijderd)/u.exec(clause);
-    const match = active || passive || foreign;
-    if (!match || /\b(?:not|never|no|não|nunca|pas|jamais|nicht|nie|niet|nooit)\b/u.test(match[0]) || /\bforgot to\b/u.test(match[0] + clause.slice(match.index + match[0].length, match.index + match[0].length + 5))) return [];
-    const verb = match.slice(1).find(Boolean), operation = /^(?:updated|changed|replaced|actualizado|actualicé|atualizei|mis à jour|aktualisiert|bijgewerkt)$/u.test(verb) ? 'updated'
-      : /^(?:forgot|forgotten|deleted|removed|cleared|olvidado|eliminado|olvidé|eliminé|esqueci|apaguei|oublié|supprimé|vergessen|gelöscht|vergeten|verwijderd)$/u.test(verb) ? 'forgotten' : 'saved';
-    return [{ clause, operation }];
-  });
   const memoryGrounded = (text, inp) => {
     if (!memoryOn(inp) && !inp.steps.some((s) => s.call.name.startsWith('memory_'))) return true;
-    const prose = actionWords(destinationWords(text));
-    if (/\b(?:synced|synchronized|synchronised|sincronizado|synchronisé|synchronisiert|gesynchroniseerd)\b[^.!?;]{0,60}\b(?:drive|cloud|nube|nuage|nuvem|wolke)\b/u.test(prose)
-      && !/\b(?:not|never|no|não|pas|nicht|niet)\b[^.!?;]{0,30}\b(?:synced|synchronized|synchronised|sincronizado|synchronisé|synchronisiert|gesynchroniseerd)\b/u.test(prose)) return false;
+    if (R().synced(text)) return false;
     const attempts = inp.steps.filter((s) => M().isWrite(s.call.name)).map(memoryAttempt);
-    return memoryClaims(text).every(({ clause, operation }) => {
+    return R().claims(text).every(({ clause, operation }) => {
       const saving = operation !== 'forgotten', ids = clause.match(/[ms]-[0-9a-f]{32}/g) || [];
       const relevant = attempts.filter((a) => (a.call.name === 'memory_save') === saving);
       const valid = (a) => a?.ok && (operation !== 'updated' || a.call.arguments.id && ['updated', 'unchanged'].includes(a.receipt.operation));

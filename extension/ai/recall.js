@@ -55,6 +55,27 @@ var GZ_AI_RECALL = globalThis.GZ_AI_RECALL || (() => {
     if (typeof raw !== 'string' || raw.length > LIMIT.chars) return null;
     try { const value = clean(JSON.parse(raw), options); return value && JSON.stringify(value) === raw ? value : null; } catch { return null; }
   };
-  return { LIMIT, ID, REVISION, TOOLS, TRUST, source, record, budget, clean, bound, serialize, parse };
+  const prose = (text) => String(text).replace(/(?<![\p{L}\p{N}])(\*\*|__|\*|_)(?=\S)([^\n]*?\S)\1(?![\p{L}\p{N}])/gu, '$2')
+    .normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim()
+    .replace(/```[\s\S]*?```|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|„[^“\n]*“|«[^»\n]*»|‘[^’\n]*’|(?<![\p{L}])'[^'\n]*'/gu, (match) => ' '.repeat(match.length));
+  // Shared by tool answers and tutoring, which has no mutation receipts. Quoted/code phrases and negated,
+  // conditional or future requests are data, not an explicit assistant completion.
+  const claims = (text) => prose(text).split(/[.!?;\n]+|\b(?:but|pero|mais|aber|maar)\b/u).flatMap((clause) => {
+    if (/^\s*(?:if|si|se|wenn|als)\b/u.test(clause)) return [];
+    const active = /\b(?:i(?:'ve| have)?|we(?:'ve| have)?|rime|glaze) (?:already |just |successfully |now )?(saved|stored|remembered|updated|changed|replaced|forgot|forgotten|deleted|removed|cleared)\b/u.exec(clause);
+    const passive = /\b(?:memory|memories|preference|preferences|fact|facts|it|that) (?:is |are |was |were |has been |have been |is now |are now )?(saved|stored|updated|changed|replaced|forgotten|deleted|removed|cleared)\b/u.exec(clause);
+    const foreign = /\b(?:he|hemos) (guardado|actualizado|olvidado|eliminado)|\b(?:yo )?(guardé|actualicé|olvidé|eliminé)|\b(?:eu )?(salvei|guardei|atualizei|esqueci|apaguei)|\bj'ai (enregistré|mémorisé|mis à jour|oublié|supprimé)|\bich habe[^.!?;]{0,80} (gespeichert|aktualisiert|vergessen|gelöscht)|\bik heb[^.!?;]{0,80} (opgeslagen|bijgewerkt|vergeten|verwijderd)/u.exec(clause);
+    const match = active || passive || foreign;
+    if (!match || /\b(?:not|never|no|não|nunca|pas|jamais|nicht|nie|niet|nooit)\b/u.test(match[0]) || /\bforgot to\b/u.test(match[0] + clause.slice(match.index + match[0].length, match.index + match[0].length + 5))) return [];
+    const verb = match.slice(1).find(Boolean), operation = /^(?:updated|changed|replaced|actualizado|actualicé|atualizei|mis à jour|aktualisiert|bijgewerkt)$/u.test(verb) ? 'updated'
+      : /^(?:forgot|forgotten|deleted|removed|cleared|olvidado|eliminado|olvidé|eliminé|esqueci|apaguei|oublié|supprimé|vergessen|gelöscht|vergeten|verwijderd)$/u.test(verb) ? 'forgotten' : 'saved';
+    return [{ clause, operation }];
+  });
+  const synced = (text) => {
+    const words = prose(text);
+    return /\b(?:synced|synchronized|synchronised|sincronizado|synchronisé|synchronisiert|gesynchroniseerd)\b[^.!?;]{0,60}\b(?:drive|cloud|nube|nuage|nuvem|wolke)\b/u.test(words)
+      && !/\b(?:not|never|no|não|pas|nicht|niet)\b[^.!?;]{0,30}\b(?:synced|synchronized|synchronised|sincronizado|synchronisé|synchronisiert|gesynchroniseerd)\b/u.test(words);
+  };
+  return { LIMIT, ID, REVISION, TOOLS, TRUST, source, record, budget, clean, bound, serialize, parse, claims, synced };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_RECALL; else GZ_AI_RECALL;
