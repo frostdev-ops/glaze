@@ -12,9 +12,20 @@ const receipt = (operation = 'created', extra = {}) => ({ operation, id: ID, rev
 const record = (extra = {}) => ({ id: ID, revision: REV, kind: 'memory', markdown: 'Use short explanations.', ...extra });
 const page = () => {
   const doc = { activeElement: null };
-  doc.root = new El('html', doc); doc.body = new El('body', doc); doc.root.append(doc.body);
+  // Native disabled or removed controls blur to body; the shared stand-in intentionally leaves that to each UI harness.
+  class FocusEl extends El {
+    get disabled() { return this._disabled === true; }
+    set disabled(value) { this._disabled = !!value; if (value && doc.activeElement === this) doc.activeElement = doc.body; }
+    focus() { if (!this.disabled && this.isConnected) super.focus(); }
+    remove() { if (this.contains(doc.activeElement)) doc.activeElement = doc.body; super.remove(); }
+    replaceChildren(...children) {
+      if (this.children.some((child) => child === doc.activeElement || child.contains?.(doc.activeElement))) doc.activeElement = doc.body;
+      super.replaceChildren(...children);
+    }
+  }
+  doc.root = new FocusEl('html', doc); doc.body = new FocusEl('body', doc); doc.root.append(doc.body); doc.activeElement = doc.body;
   doc.documentElement = doc.root;
-  doc.createElement = (tag) => new El(tag, doc); doc.createElementNS = (_, tag) => new El(tag, doc);
+  doc.createElement = (tag) => new FocusEl(tag, doc); doc.createElementNS = (_, tag) => new FocusEl(tag, doc);
   doc.fire = (target, type, { trusted = true, ...extra } = {}) => {
     const ev = { target, type, isTrusted: trusted, ...extra, preventDefault() {} };
     for (let p = target; p; p = p.parentNode) for (const l of p.listeners.filter((x) => x.type === type)) l.f(ev);
@@ -184,6 +195,33 @@ test('a late read or save keeps focus that moved back to the composer', async ()
   release({ ok: true, receipt: receipt('updated', { revision: NEXT, text: input.value }) }); await settle();
   assert.equal(P.doc.activeElement, composer);
   assert.equal(P.find('.gz-ask-memory summary').textContent, 'Memory updated on this device');
+});
+
+test('failed memory requests restore keyboard focus and a conflict focuses Reload', async () => {
+  for (const action of ['edit', 'delete']) {
+    const P = page(); await P.ask(); P.emit({ type: 'memory', receipt: receipt() });
+    P.response = async () => ({ ok: false, error: 'write' });
+    const trigger = P.find(`.gz-ask-memory-${action}`); trigger.focus(); P.click(trigger); await settle();
+    assert.equal(P.doc.activeElement, trigger, action + ' remains keyboard reachable after failure');
+  }
+  const P = page(); await P.ask(); P.emit({ type: 'memory', receipt: receipt() });
+  P.click('.gz-ask-memory-edit'); await settle();
+  const save = P.find('.gz-ask-memory-save'); save.focus();
+  P.response = async () => ({ ok: false, error: 'write' });
+  P.click(save); await settle(); assert.equal(P.doc.activeElement, save);
+  P.response = async () => ({ ok: false, error: 'conflict' });
+  P.click(save); await settle();
+  const reload = P.find('.gz-ask-memory-reload');
+  assert.equal(save.disabled, true); assert.equal(P.doc.activeElement, reload);
+  P.response = async () => ({ ok: false, error: 'write' });
+  P.click(reload); await settle(); assert.equal(P.doc.activeElement, reload);
+});
+
+test('a deletion receipt replaces the focused editor with its surviving summary', async () => {
+  const P = page(); await P.ask(); P.emit({ type: 'memory', receipt: receipt() });
+  P.click('.gz-ask-memory-edit'); await settle(); P.find('.gz-ask-memory-input').focus();
+  P.emit({ type: 'memory', receipt: receipt('forgotten', { revision: NEXT, text: undefined }) });
+  assert.equal(P.doc.activeElement, P.find('.gz-ask-memory summary'));
 });
 
 test('an edit stays intact when a broker response is malformed or exceeds the memory limit', async () => {
