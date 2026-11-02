@@ -114,13 +114,13 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     return { ok: speedup >= 1.1, reason: speedup >= 1.1 ? null : 'speed', rms, max, speedup };
   };
 
-  // cos and sin of NeoX RoPE for positions from..from + count − 1, as the reference computes them (θ in double, then
-  // rounded to f32): rows of n / 2 (cos, sin) pairs.
+  // NeoX RoPE for positions from..from + count − 1: HF's f32 inverse frequencies and position phases before trig,
+  // stored as rows of n / 2 f32 (cos, sin) pairs. Both paths are held to independent HF captures in local-rope-f32.test.js.
   const ropeTable = (from, count, n, base, factors) => {
-    const half = n / 2, out = new Float32Array(count * half * 2);
+    const half = n / 2, freq = REF()._ops.ropeFreqs(n, base, factors), out = new Float32Array(count * half * 2);
     for (let t = 0; t < count; t++) {
       for (let i = 0; i < half; i++) {
-        const theta = ((from + t) * base ** (-2 * i / n)) / (factors ? factors[i] : 1);
+        const theta = Math.fround(Math.fround(from + t) * freq[i]);
         out[(t * half + i) * 2] = Math.cos(theta);
         out[(t * half + i) * 2 + 1] = Math.sin(theta);
       }

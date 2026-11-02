@@ -731,6 +731,14 @@ printed, committed or logged.
 
 `ai/local/engine.js` (`GZ_AI_ENGINE`), loaded in the host's Worker after `quant.js` and `reference.js`:
 
+Text RoPE follows canonical HF LFM3 (`ac2586a3`) f32 arithmetic: `inv = f32(1 / f32(base ** f32(2*i/n)))`,
+then `theta = f32(f32(position) * inv)` before f32 sin/cos. GGUF factors scale the inverse frequency in f32;
+only the converter's exact `f32(1e30)` sentinel represents an exact-zero partial-RoPE tail. Ordinary factors remain
+frequency divisors. Both the engine table and CPU reference are checked against the independent CPU PyTorch 2.4.1
+capture in `test/fixtures/ai/hf-rope-f32-cpu.json`, including 8K/32K/128K positions: frequency and phase bits must match
+exactly, trig within 1 ULP. This establishes canonical arithmetic; attribution of CUDA top-1 differences and the unchanged
+99% top-1 / mean KL ≤ 0.02 inference gates still require external all-size GPU measurements.
+
 ```js
 GZ_AI_ENGINE.load(gguf, { context, signal, onProgress? }) → Promise<model>
   // gguf: GZ_AI_GGUF.open(store.open(id)); context: positions allocated initially; reserve grows the live sequence.

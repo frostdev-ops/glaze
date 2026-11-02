@@ -61,7 +61,7 @@ const gguf = () => {
   return out;
 };
 
-// ---- the graph again, plainly: all of it in doubles, every position from scratch --------------------------------------
+// ---- the graph again, plainly: double accumulations, canonical f32 RoPE, every position from scratch ------------------
 const W = (n) => model[n][1];
 const mv = (w, rows, cols, x) => Array.from({ length: rows }, (_, r) => { let s = 0; for (let i = 0; i < cols; i++) s += w[r * cols + i] * x[i]; return s; });
 const norm = (x, w) => { const s = 1 / Math.sqrt(x.reduce((a, v) => a + v * v, 0) / x.length + C.eps); return x.map((v, i) => v * s * w[i]); };
@@ -83,8 +83,18 @@ const plain = (tokens) => {
         return mv(b('shortconv.out_proj'), C.E, C.E, y);
       });
     } else {
-      const base = kind === 'swa' ? 1e4 : 1e6, ff = kind === 'swa' ? [1, 1, 1, 1] : [1, 1, 1e30, 1e30];
-      const ropeV = (v, p) => { const o = v.slice(); for (let i = 0; i < C.hd / 2; i++) { const th = (p * base ** (-2 * i / C.hd)) / ff[i]; o[i] = v[i] * Math.cos(th) - v[i + C.hd / 2] * Math.sin(th); o[i + C.hd / 2] = v[i] * Math.sin(th) + v[i + C.hd / 2] * Math.cos(th); } return o; };
+      const base = kind === 'swa' ? 1e4 : 1e6, ff = kind === 'swa' ? null : W('rope_freqs.weight');
+      // Frequency and phase accuracy are independently anchored by local-rope-f32.test.js's external HF capture.
+      const freq = R._ops.ropeFreqs(C.hd, base, ff), fr = Math.fround;
+      const ropeV = (v, p) => {
+        const o = v.slice();
+        for (let i = 0; i < C.hd / 2; i++) {
+          const th = fr(fr(p) * freq[i]), cs = fr(Math.cos(th)), sn = fr(Math.sin(th));
+          o[i] = v[i] * cs - v[i + C.hd / 2] * sn;
+          o[i + C.hd / 2] = v[i] * sn + v[i + C.hd / 2] * cs;
+        }
+        return o;
+      };
       const heads = (v, nh, w) => Array.from({ length: nh }, (_, hh) => norm(v.slice(hh * C.hd, (hh + 1) * C.hd), w));
       const q = n.map((x, p) => heads(mv(b('attn_q'), C.H * C.hd, C.E, x), C.H, b('attn_q_norm')).map((v) => ropeV(v, p)));
       const k = n.map((x, p) => heads(mv(b('attn_k'), C.Hkv * C.hd, C.E, x), C.Hkv, b('attn_k_norm')).map((v) => ropeV(v, p)));
