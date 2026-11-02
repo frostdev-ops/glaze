@@ -436,7 +436,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         // A think run's answer, read back as the next request holds it: the turn's empty think block, the answer, the end.
         if (keeps && think && finish === 'stop') {
           const open = ids.lastIndexOf(tok.id('<think>'));
-          if (open >= 0) readAhead(job, [...ids.slice(0, open), ids[open], think.end, ...said]);
+          if (open >= 0) readAhead(job, [...ids.slice(0, open), ids[open], think.end, ...said], m.id);
         }
         return { text, finish, model: m.model, usage: { input, output: thought + n, thought, ...(keeps && { cached }) }, ...(rate && { rate }) };
     };
@@ -480,7 +480,9 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       { doc: m.doc, id: m.model, glaze: m.glaze }, signal);
     };
     // After the run (queued behind it), while nothing else waits; the next request stops it between steps.
-    const readAhead = (job, ids) => {
+    const readAhead = (job, ids, owner) => {
+      // A request may have arrived before this answer finished, when there was no read-ahead to cancel yet.
+      if ([...ops].some(([id, op]) => id !== owner && (op.kind === 'run' || op.kind === 'warm'))) return;
       const control = new AbortController();
       ahead?.abort(new DOMException('Replaced', 'AbortError'));
       ahead = control;
@@ -543,8 +545,8 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       // A run outranks a warm-up and a read-ahead: they stop between steps, keeping what they read.
       if (m.op === 'run') {
         for (const o of ops.values()) if (o.kind === 'warm') o.control.abort(new DOMException('Superseded', 'AbortError'));
-        ahead?.abort(new DOMException('Superseded', 'AbortError'));
       }
+      if (m.op === 'run' || m.op === 'warm') ahead?.abort(new DOMException('Superseded', 'AbortError'));
       const control = new AbortController();
       ops.set(m.id, { control, kind: m.op, ...((m.part === 'pictures' || (m.op === 'run' && Array.isArray(m.images) && m.images.length)) && { part: 'pictures' }) });
       quiet();
