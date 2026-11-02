@@ -7,8 +7,9 @@ const setup = async () => {
   const values = {}, local = { get: async (k) => Object.fromEntries((k == null ? Object.keys(values) : [].concat(k)).filter((x) => x in values).map((x) => [x, structuredClone(values[x])])), set: async (o) => Object.assign(values, structuredClone(o)) };
   let time = 1000, serial = 0, enabled = false;
   const store = M.open({ local, now: () => ++time, random: () => (++serial).toString(16).padStart(32, '0') });
-  const a = await store.save(A, { text: 'Use short paragraphs.', evidence: 'Use short paragraphs.', category: 'preference' });
-  const b = await store.save(B, { text: 'I study biology.', evidence: 'I study biology.' });
+  const a = await store.save(A, { text: 'Use short paragraphs.', evidence: 'Use short paragraphs.', category: 'preference' }, { question: 'Use short paragraphs.' });
+  const b = await store.save(B, { text: 'I study biology.', evidence: 'I study biology.' }, { question: 'I study biology.' });
+  assert.equal(a.ok, true); assert.equal(b.ok, true);
   const env = { store, state: async () => enabled, setEnabled: async (v) => { enabled = v; return true; } };
   return { env, store, a: a.receipt, b: b.receipt, values };
 };
@@ -40,7 +41,7 @@ test('editor updates use current revisions and return conflicts without replacin
 });
 test('snapshot clear preserves newly created memories and export omits forgotten text', async () => {
   const { env, store, a, b } = await setup(), scope = { ...env, all: true };
-  await store.save(A, { text: 'I take chemistry.', evidence: 'I take chemistry.' });
+  await store.save(A, { text: 'I take chemistry.', evidence: 'I take chemistry.' }, { question: 'I take chemistry.' });
   const cleared = await UI.run(request('clear', { kind: 'memory', records: [a, b].map(({ id, revision }) => ({ id, revision })) }), scope);
   assert.equal(cleared.ok, true); assert.equal(cleared.receipts.length, 2);
   const out = await UI.run(request('export'), scope);
