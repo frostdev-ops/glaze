@@ -11,7 +11,7 @@ const call = (name, arguments_ = {}, kind = 'read') => ({ call: { name, argument
 const study = { kind: 'concept', step: null, reply: 'Think about how each part depends on the whole.', followUp: null };
 const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
 const settled = async (done) => { for (let i = 0; i < 500; i++) { if (done()) return; await pause(); } assert.fail('Ask did not settle'); };
-const harness = ({ script = {}, counts, verified = true, active, assignment } = {}) => {
+const harness = ({ script = {}, counts, verified = true, active, assignment, document } = {}) => {
   const data = {}, local = { get: async (keys) => structuredClone(Object.fromEntries((keys === null ? Object.keys(data) : [].concat(keys)).filter((k) => Object.hasOwn(data, k)).map((k) => [k, data[k]]))),
     set: async (patch) => { Object.assign(data, structuredClone(patch)); } };
   let random = 0;
@@ -24,6 +24,8 @@ const harness = ({ script = {}, counts, verified = true, active, assignment } = 
     run: async (_, ctx) => ({ account: ctx.account, at: NOW, items: [] }) });
   registry.add({ name: 'assignment_read', kind: 'read', group: 'assignments', scope: 'account', title: 'Assignment', description: 'Assignment', parameters: A.SPECS.find((s) => s.name === 'assignment_read').parameters,
     run: async (_, ctx) => assignment || ({ account: ctx.account, title: 'Invented lab', instructions: 'Compare two invented samples.', at: NOW }) });
+  registry.add({ name: 'document_read', kind: 'read', group: 'writer', scope: 'document', title: 'Document', description: 'Saved document', parameters: A.SPECS.find((s) => s.name === 'document_read').parameters,
+    run: async (_, ctx) => typeof document === 'function' ? document(ctx.document) : document || ({ title: 'Saved draft', text: 'Earlier saved text.', at: NOW, page: 1, pages: 1 }) });
   const broker = (port) => port.onMessage.addListener(async (m) => {
     if (m.op === 'count') { state.counts.push(m); const fit = counts ? await counts(m.input, m.task) : { used: 1000, window: 4096, reserve: 768, exact: true }; return port.postMessage({ id: m.id, type: 'end', ...fit }); }
     if (m.op !== 'run') return;
@@ -316,5 +318,57 @@ test('queued memory producers recheck scope and switches after awaited storage r
     assert.equal(h.got.some((m) => m.type === 'memory'), false, `${operation}/${change} did not publish a receipt`);
     const records = (await h.store.list(ACC)).items;
     assert.equal(records.length, operation === 'forget' ? 1 : 0, `${operation}/${change} did not commit`);
+  }
+});
+
+const DRAFT = `document:${'c'.repeat(32)}`, OTHER_DRAFT = `document:${'d'.repeat(32)}`;
+const draft = (truncated = false) => ({ site: 'canvas', view: 'document', title: 'Live draft', course: { id: '25', name: 'Active course' },
+  document: { id: DRAFT, title: 'Live draft', kind: 'paper', revision: 17, saved: false },
+  material: { source: 'writer', text: 'Live unsaved draft excerpt.', truncated } });
+const roomy = () => ({ used: 1000, window: 4096, reserve: 768, exact: true });
+
+test('study material preserves live draft provenance and never fills a partial excerpt with its saved version', async (t) => {
+  for (const truncated of [false, true]) {
+    const h = harness({ counts: roomy, active: draft(truncated), document: { title: 'Old stored draft', text: 'CONFLICTING SAVED BODY', at: NOW, page: 1, pages: 2 },
+      script: { 'agent.tools': [call('document_read', { document: DRAFT }), said('Consider the structure of your draft.')], 'study.help': [study] } }); t.after(h.close); h.state.on = false;
+    assert.equal((await h.ask('Help me with this draft.')).type, 'end');
+    const help = h.state.runs.find((r) => r.task === 'study.help');
+    assert.match(help.input.material, /Live unsaved draft excerpt/);
+    assert.match(help.input.material, /"source":"writer"/);
+    assert.match(help.input.material, /"saved":false/);
+    assert.match(help.input.material, /"revision":17/);
+    assert.match(help.input.material, new RegExp(`"truncated":${truncated}`));
+    assert.doesNotMatch(help.input.material, /CONFLICTING SAVED BODY|Old stored draft/);
+    assert.ok(h.state.counts.some((m) => m.task === 'study.help' && m.input.material === help.input.material), 'the complete labelled material is counted');
+    const SH = require('../../extension/ai/tasks/study-help.js'), X = require('../../extension/ai/text.js');
+    const input = SH.task.input(help.input);
+    assert.ok(input, 'the existing study schema accepts the material');
+    const request = SH.task.build(input, { text: X });
+    assert.ok(request.fenced.data >= 2, 'material and question retain the existing data fences');
+    assert.doesNotMatch(request.messages[0].content, /Live unsaved draft excerpt/);
+  }
+});
+
+test('partial page instructions keep their source and partial flag in study material', async (t) => {
+  const h = harness({ active: { site: 'canvas', view: 'assignment', course: { id: '25' }, assignment: { id: '41' }, material: { source: 'instructions', text: 'Only the visible instructions.', truncated: true } },
+    script: { 'study.help': [study] } }); t.after(h.close); h.state.on = false;
+  assert.equal((await h.ask('Explain the concept.')).type, 'end');
+  const help = h.state.runs.find((r) => r.task === 'study.help');
+  assert.match(help.input.material, /"source":"instructions"/);
+  assert.match(help.input.material, /"truncated":true/);
+  assert.match(help.input.material, /Only the visible instructions/);
+});
+
+test('independently targeted saved documents do not inherit the active draft or its context', async (t) => {
+  for (const target of [OTHER_DRAFT, DRAFT]) {
+    const h = harness({ counts: roomy, active: draft(true), document: { title: 'Requested saved document', text: 'EXPLICIT SAVED BODY', at: NOW, page: 1, pages: 2 },
+      script: { 'agent.tools': [call('document_read', { document: target }), said('Consider the requested document structure.')], 'study.help': [study] } }); t.after(h.close); h.state.on = false;
+    assert.equal((await h.ask(`Help me with the saved document ${target}.`)).type, 'end');
+    const help = h.state.runs.find((r) => r.task === 'study.help');
+    assert.match(help.input.material, /EXPLICIT SAVED BODY/);
+    assert.match(help.input.material, /"source":"document_read"/);
+    assert.match(help.input.material, /"saved":true/);
+    assert.match(help.input.material, /"truncated":true/);
+    assert.doesNotMatch(JSON.stringify(help.input), /Live unsaved draft excerpt|Live draft|Active course/);
   }
 });
