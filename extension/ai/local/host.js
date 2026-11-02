@@ -5,7 +5,7 @@
 // (ai/local/offscreen.js), Firefox from the background event page (ai/local/link.js); both pass messages to it as they are.
 //   in  { op: 'config', idle }  { op: 'detach' } (the worker's port went: runs and warm-ups stop, a download goes on)
 //       { id, op: 'prepare', tier?, part? }  { id, op: 'run', model, parts, stable, schema?, tools?, sources?, sampler,
-//       maxTokens, projector?, images?, think?, window?, priority? }  { id, op: 'warm', model, parts, stable? }  { id, op: 'remove', part? }
+//       maxTokens, projector?, images?, think?, window?, priority?, memory? }  { id, op: 'warm', model, parts, stable?, memory? }  { id, op: 'remove', part? }
 //       { id, op: 'release' }  { id, op: 'cancel' }  { id, op: 'update', doc, model, glaze } (ai/local/updates.js update: a signed model list from the
 //       worker's daily check; the newer version of `model` downloads beside it, waiting while a run or warm-up is in
 //       flight, and swaps in at the next idle moment, the engine let go; a run on the model in its trial confirms it, or
@@ -354,7 +354,16 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       flush();
       return { rest: Uint32Array.from(ids), slots };
     };
+    // The provider marks only requests that carry memory. Check the weights in use when the queued work actually runs,
+    // and again if a trial failure rolls back inside this host; admission in the background cannot authorize old weights.
+    const memoryReady = async (m) => {
+      if (m.memory === undefined) return;
+      let model;
+      try { model = (await env.store.catalog?.())?.entries.get(m.model); } catch { /* unavailable is unsupported */ }
+      if (m.memory !== 1 || model?.memory !== 1) throw Object.assign(new Error('This model does not support memory.'), { code: 'caps' });
+    };
     const answer = async (m, signal) => {
+        await memoryReady(m);
         const images = Array.isArray(m.images) ? m.images : [];
         if (images.length && typeof m.projector !== 'string') throw fail('request-rejected', 'unsupported');
         if (images.length && typeof env.decode !== 'function') throw fail('provider-unavailable', 'engine');
@@ -514,6 +523,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     // The system turn (parts, or its first `stable`), kept; with stable the rest is read on after it in the live sequence.
     const warm = async (m, signal) => {
       return queued(async () => {
+        await memoryReady(m);
         if ((await env.store.status(m.model)).state !== 'ready') return { ok: false };
         const job = await wait(load(m.model, null, m.window), signal);
         const stable = Number.isSafeInteger(m.stable) && m.stable > 0 && m.stable < m.parts.length ? m.stable : m.parts.length;
@@ -549,9 +559,14 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     // count: a request's prompt tokens as run would feed them (encodeWith over its parts), for Ask Rime's window accounting.
     const count = async (m, signal) => {
       if (!Array.isArray(m.parts)) throw fail('request-rejected', 'unsupported');
-      // Counting must not replace or release a GPU model another feature is using.
-      const tok = loaded?.id === m.model && loaded.tok || (await tokenized(m.model, signal)).tok;
-      return { tokens: encode({ tok }, m.parts).length };
+      const read = async () => {
+        await memoryReady(m);
+        // Counting must not replace or release a GPU model another feature is using.
+        const tok = loaded?.id === m.model && loaded.tok || (await tokenized(m.model, signal)).tok;
+        return { tokens: encode({ tok }, m.parts).length };
+      };
+      // A memory prompt waits for trial settlement/swaps before its capability check; ordinary counting stays independent.
+      return m.memory === undefined ? read() : queued(read, signal);
     };
     const OPS = { prepare, run, warm, count, remove, update, release: async () => { await release(); return {}; } };
 

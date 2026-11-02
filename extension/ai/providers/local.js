@@ -156,10 +156,11 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   // Check the request again on the model selected for this operation: an update may have rolled the same id back since
   // broker admission. These are the two tasks that can carry memory; all other tasks retain their existing formatter.
   const memoryReady = (req, m) => {
-    if (m.memory === 1 || !['agent.tools', 'study.help'].includes(req.task?.id)) return;
+    if (!['agent.tools', 'study.help'].includes(req.task?.id)) return false;
     const recall = FMT().parse(req, { images: true }).blocks.some((block) => block.kind === 'data' && block.label === 'recall');
     const tools = !recall && req.task.id === 'agent.tools' && AGENT().fromRequest(req).tools.some((name) => name.startsWith('memory_'));
-    if (recall || tools) throw refuse('caps', 'This model does not support memory.');
+    if ((recall || tools) && m.memory !== 1) throw refuse('caps', 'This model does not support memory.');
+    return recall || tools;
   };
   // The picture download: { model, projector, size, ready } when models.json offers it, else null.
   const pictures = (list) => {
@@ -233,17 +234,17 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
       const pics = pictures(list);
       if (!pics) throw refuse('caps', 'Glaze\'s own model does not take pictures.');
       if (!pics.ready || preparing.pictures) throw fail('provider-unavailable', 'pictures');
-      memoryReady(req, pics.model);
-      return { m: pics.model, window: Math.min(cfg.context || CONTEXT, CONTEXT), projector: pics.projector.id, ...FMT().format(req, { dialect: 'chatml', images: true }) };
+      const memory = memoryReady(req, pics.model);
+      return { m: pics.model, ...(memory && { memory: 1 }), window: Math.min(cfg.context || CONTEXT, CONTEXT), projector: pics.projector.id, ...FMT().format(req, { dialect: 'chatml', images: true }) };
     }
     const m = modelOf(list, cfg);
     if (!m || m.state !== 'ready') throw fail('provider-unavailable', 'assets');
-    memoryReady(req, m);
+    const memory = memoryReady(req, m);
     const window = Math.min(cfg.context || windowOf(m, cfg).window, windowOf(m, cfg).window);
     const think = await budget(req, m, window), sized = !m.stock && limits(req.task, window).size;
     // r5 never trained chat.compact's task token. Use the native prompt until its independent training gate is enabled.
     const native = m.stock || (req.task?.id === 'chat.compact' && (env?.scale || SCALE).compact !== true);
-    return { m, window, budget: think, ...FMT().format(req, { dialect: native ? 'chatml' : 'glaze', think: think > 0, ...(sized && { window }) }) };
+    return { m, ...(memory && { memory: 1 }), window, budget: think, ...FMT().format(req, { dialect: native ? 'chatml' : 'glaze', think: think > 0, ...(sized && { window }) }) };
   };
   const host = (e) => {
     if (e?.category === 'cancelled') return e;
@@ -280,7 +281,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
       // A task in its own turns (agent.tools) is held to its answer's schema or one offered call (format.js constraint); a
       // span to words of its source (spans).
       const held = plan.constraint ? { schema: plan.constraint.schema, tools: plan.constraint.tools } : req.schema && (spans(req) || { schema: req.schema });
-      r = await own().link.call('run', { model: plan.m.id, parts: plan.parts, stable: plan.stable, ...(plan.images && { projector: plan.projector, images: plan.images }), ...held,
+      r = await own().link.call('run', { model: plan.m.id, ...(plan.memory && { memory: plan.memory }), parts: plan.parts, stable: plan.stable, ...(plan.images && { projector: plan.projector, images: plan.images }), ...held,
         ...(plan.think && { think: { budget: plan.budget, ...plan.think } }), window: plan.window, ...(req.task?.id === 'writer.complete' && { priority: 'low' }),
         sampler: { ...(req.temperature !== undefined && { temperature: req.temperature }) }, maxTokens },
       { signal, onEvent: (e) => { if (e?.type === 'delta' && typeof e.text === 'string' && e.text) onDelta?.(e.text); } });
@@ -298,7 +299,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const count = async (req, cfg, { signal } = {}) => {
     if (R.images(req) > 0) return null;
     const plan = await ready(req, cfg);
-    const r = await own().link.call('count', { model: plan.m.id, parts: plan.parts }, { signal });
+    const r = await own().link.call('count', { model: plan.m.id, ...(plan.memory && { memory: plan.memory }), parts: plan.parts }, { signal });
     return Number.isSafeInteger(r?.tokens) ? r.tokens : null;
   };
   // A warm-up: the host keeps the system turn and reads the history while the student types. Never downloads.
@@ -306,7 +307,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (R.images(req) > 0) return false;
     let plan;
     try { plan = await ready(req, cfg); } catch { return false; }
-    try { return (await own().link.call('warm', { model: plan.m.id, parts: plan.parts, stable: plan.stable, window: plan.window }, { signal }))?.ok === true; } catch { return false; }
+    try { return (await own().link.call('warm', { model: plan.m.id, ...(plan.memory && { memory: plan.memory }), parts: plan.parts, stable: plan.stable, window: plan.window }, { signal }))?.ok === true; } catch { return false; }
   };
   // vision: whether the picture download is here (the broker sets cfg.images from it for a run). context: the window of the
   // text model this cfg runs, and weights its id (the broker sets cfg.context and cfg.weights from them); pictures.context,
