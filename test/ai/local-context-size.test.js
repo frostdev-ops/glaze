@@ -52,7 +52,7 @@ test('the size is kept on the local connection: 8K to 128K, 4K or none the defau
   for (const bad of [5000, 262144, '8192', 0]) assert.equal(LOCAL.config({ window: bad }), null, String(bad));
   assert.equal(LOCAL.windowOf(MODEL, { window: 65536 }).window, 65536);
   assert.deepEqual(LOCAL.windowOf(MODEL, {}), { window: 4096, inputLimit: 4096 });
-  assert.deepEqual(LOCAL.windowOf({ ...MODEL, stock: true }, { window: 65536 }), { window: 16000, inputLimit: 14400 }, 'a stock model keeps its own');
+  assert.deepEqual(LOCAL.windowOf({ ...MODEL, stock: true }, { window: 65536 }), { window: 131072, inputLimit: 117964 }, 'a stock model keeps its own');
 });
 
 test('the catalog\'s window and input limit follow the size, and caps hold it', async () => {
@@ -64,7 +64,7 @@ test('the catalog\'s window and input limit follow the size, and caps hold it', 
     assert.equal(LOCAL.caps({ ...cfg, context: size }).context, size);
   }
   assert.deepEqual((await LOCAL.catalog(LOCAL.config({}))).models[0].context, { window: 4096, inputLimit: 4096 });
-  assert.equal(LOCAL.caps(LOCAL.config({})).context, 16000);
+  assert.equal(LOCAL.caps(LOCAL.config({})).context, 131072);
 });
 
 test('a run sends the chosen size as its window; 4K sends exactly what it sent before', async () => {
@@ -85,27 +85,32 @@ test('a warm-up sends the chosen window so the following large-context run reuse
   assert.equal(calls.at(-1).args.window, 32768);
 });
 
-test('the host allocates and enforces the selected large window, reloading when its size changes', async () => {
-  const H = require('../../extension/ai/local/host.js'), loads = [], posted = [];
-  const tok = { eos: 0, encodeWith: (parts) => new Uint32Array(parts.reduce((n, p) => n + (p.text?.length || 1), 0)), decoder: () => ({ push: () => '', end: () => '' }) };
+test('the host starts small and reserves the selected large room, reloading when its size changes', async () => {
+  const H = require('../../extension/ai/local/host.js'), loads = [], reserves = [], posted = [];
+  const tok = { eos: 0, id: () => undefined, encodeWith: (parts) => new Uint32Array(parts.reduce((n, p) => n + (p.text?.length || 1), 0)), decoder: () => ({ push: () => '', end: () => '' }) };
   const host = H.create({ store: { open: async () => ({}), status: async () => ({ state: 'ready' }) }, gguf: { open: async () => ({ kv: {} }) },
     tokenizer: { GLAZE_TOKENS: [], fromGGUF: () => tok }, grammar: () => null, gpu: () => ({}), ladder: () => null,
     setTimeout: (f, ms) => { const timer = setTimeout(f, ms); timer.unref(); return timer; }, post: (m) => posted.push(m),
     engine: () => ({ load: async (_g, { context }) => {
       loads.push(context);
-      return { context, snapshot: async () => ({}), restore: async () => {}, prefill: async () => ({}), decode: async () => 0, release: () => {} };
+      return { context, reserve: async (n, room) => { reserves.push({ n, room }); }, snapshot: async () => ({}), restore: async () => {}, prefill: async () => ({}), decode: async () => 0, release: () => {} };
     } }) });
   const run = (id, window, length) => host.handle({ id, op: 'run', model: 'rime-q4', parts: [{ text: 'x'.repeat(length) }], stable: 0, maxTokens: 32, sampler: {}, ...(window && { window }) });
   try {
     await host.handle({ id: 1, op: 'warm', model: 'rime-q4', parts: [{ text: 'system' }], window: 32768 });
     await run(2, 32768, 20000);
     assert.equal(posted.find((m) => m.id === 2 && ['done', 'error'].includes(m.type))?.type, 'done', JSON.stringify(posted));
-    assert.deepEqual(loads, [32768], 'the warm-up and run share the correctly sized engine');
+    assert.deepEqual(loads, [H.LIMIT.first], 'the warm-up and run share the small initial allocation');
+    assert.deepEqual(reserves, [{ n: 6, room: 32768 }, { n: 20032, room: 32768 }]);
     await run(3, 65536, 50000);
     assert.equal(posted.find((m) => m.id === 3 && ['done', 'error'].includes(m.type))?.type, 'done');
-    assert.deepEqual(loads, [32768, 65536]);
+    assert.deepEqual(loads, [H.LIMIT.first, H.LIMIT.first]);
+    assert.deepEqual(reserves.at(-1), { n: 50032, room: 65536 });
     await run(4, undefined, 100);
-    assert.deepEqual(loads, [32768, 65536, H.LIMIT.context], 'returning to the default releases the larger session');
+    assert.deepEqual(loads, [H.LIMIT.first, H.LIMIT.first, H.LIMIT.first], 'returning to the default releases the larger session');
+    await run(5, 131072, 130000);
+    assert.equal(posted.find((m) => m.id === 5 && ['done', 'error'].includes(m.type))?.type, 'done', 'a single 130K-token block fits the largest room');
+    assert.deepEqual(reserves.at(-1), { n: 130032, room: 131072 });
   } finally { await host.release(); }
 });
 
