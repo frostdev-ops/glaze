@@ -108,10 +108,11 @@ test('Ask receives the same singleton memory store with separate switch and mode
   assert.equal(await env.memory.on(), true);
   assert.equal(await env.memory.capable(), true, 'cloud models use the normal tools capability');
   w.store.local.ai.model = { use: 'local', model: '' };
-  w.context.GZ_AI_LOCAL.config = () => ({ model: 'rime', tier: 1 });
-  w.context.GZ_AI_LOCAL.catalog = async () => ({ models: [{ id: 'rime', weights: 'downloaded-rime' }] });
   let checked;
-  w.context.GZ_AI_LOCAL.memoryVersion = async (cfg) => { checked = cfg; return 1; };
+  w.context.GZ_AI_LOCAL = { ...w.context.GZ_AI_LOCAL,
+    config: () => ({ model: 'rime', tier: 1 }), catalog: async () => ({ models: [{ id: 'rime', weights: 'downloaded-rime' }] }),
+    memoryVersion: async (cfg) => { checked = cfg; return 1; },
+  };
   assert.equal(await env.memory.capable(), true);
   assert.equal(checked.weights, 'downloaded-rime', 'capability is checked against the selected catalog weights');
   w.context.GZ_AI_LOCAL.memoryVersion = async () => 2;
