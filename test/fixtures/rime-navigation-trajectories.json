@@ -1,0 +1,1914 @@
+{
+  "note": "Own invented training worlds, deduplicated by source. No real LMS or heldout data.",
+  "cases": [
+    {
+      "source": "agent.tools-v3-F-1060074",
+      "window": 4096,
+      "raw": {
+        "question": "Open the grades page for PUBH 2402",
+        "tools": [
+          "places_list",
+          "place_open",
+          "page_highlight",
+          "grades_list",
+          "course_grades",
+          "accounts_list"
+        ],
+        "now": 1794857700000,
+        "zone": "America/Chicago",
+        "locale": "en",
+        "first": true,
+        "steps": [
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {}
+            },
+            "result": {
+              "site": "moodle",
+              "here": "dashboard",
+              "places": [
+                {
+                  "place": "dashboard",
+                  "title": "Dashboard"
+                },
+                {
+                  "place": "courses",
+                  "title": "My courses"
+                },
+                {
+                  "place": "calendar",
+                  "title": "Calendar"
+                },
+                {
+                  "place": "grades",
+                  "title": "Grades"
+                },
+                {
+                  "place": "documents",
+                  "title": "Documents (Glaze Writer)"
+                },
+                {
+                  "place": "settings",
+                  "title": "Glaze settings"
+                },
+                {
+                  "place": "course:2429",
+                  "title": "MARS 4890: Deep-Sea Ecology and Exploration",
+                  "course": "2429"
+                },
+                {
+                  "place": "course:375",
+                  "title": "PUBH 2402: Environmental Health Laboratory",
+                  "course": "375"
+                },
+                {
+                  "place": "course:5055",
+                  "title": "PHIL 4490: Capstone Seminar in Moral Philosophy",
+                  "course": "5055"
+                },
+                {
+                  "place": "course:2079",
+                  "title": "SOCI 4175: Sociology of Consumption, Waste, and Repair",
+                  "course": "2079"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {
+                "course": "375"
+              }
+            },
+            "result": {
+              "site": "moodle",
+              "here": "dashboard",
+              "places": [
+                {
+                  "place": "course:375",
+                  "title": "PUBH 2402: Environmental Health Laboratory"
+                },
+                {
+                  "place": "course:375/grades",
+                  "title": "PUBH 2402: Environmental Health Laboratory grades"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "place_open",
+              "arguments": {
+                "place": "course:375/grades"
+              }
+            },
+            "result": {
+              "opened": "course:375/grades",
+              "title": "PUBH 2402: Environmental Health Laboratory grades"
+            }
+          }
+        ]
+      },
+      "final": {
+        "call": null,
+        "answer": {
+          "text": "Opened the grades page for PUBH 2402.\n- **PUBH 2402: Environmental Health Laboratory grades**",
+          "quotes": [
+            "PUBH 2402: Environmental Health Laboratory grades"
+          ]
+        }
+      }
+    },
+    {
+      "source": "agent.tools-v3-F2-1080067",
+      "window": 32768,
+      "raw": {
+        "question": "Abre minhas tarefas de ENF 101 e destaca Lista de exercícios 2",
+        "tools": [
+          "places_list",
+          "place_open",
+          "page_highlight",
+          "assignments_list",
+          "assignment_read",
+          "accounts_list"
+        ],
+        "now": 1791212400000,
+        "zone": "America/Sao_Paulo",
+        "locale": "pt-BR",
+        "first": true,
+        "steps": [
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {}
+            },
+            "result": {
+              "site": "canvas",
+              "here": "course:80123",
+              "places": [
+                {
+                  "place": "dashboard",
+                  "title": "Dashboard"
+                },
+                {
+                  "place": "courses",
+                  "title": "Courses"
+                },
+                {
+                  "place": "calendar",
+                  "title": "Calendar"
+                },
+                {
+                  "place": "grades",
+                  "title": "Grades"
+                },
+                {
+                  "place": "documents",
+                  "title": "Documents (Glaze Writer)"
+                },
+                {
+                  "place": "settings",
+                  "title": "Glaze settings"
+                },
+                {
+                  "place": "course:80123",
+                  "title": "ENF 101: Introdução à Pesquisa em Enfermagem",
+                  "course": "80123"
+                },
+                {
+                  "place": "course:69958",
+                  "title": "NUT 1180: Introdução à Nutrição e Saúde Coletiva",
+                  "course": "69958"
+                },
+                {
+                  "place": "course:13778",
+                  "title": "SAÚDE 2210: Laboratório de Saúde Pública II",
+                  "course": "13778"
+                },
+                {
+                  "place": "course:64639",
+                  "title": "HIST 2760: História Moderna III — Cidades, Epidemias e Poder na Europa (séculos XVI-XVIII)",
+                  "course": "64639"
+                },
+                {
+                  "place": "course:89658",
+                  "title": "GEOL 2301: Geologia Ambiental Aplicada",
+                  "course": "89658"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {
+                "course": "80123"
+              }
+            },
+            "result": {
+              "site": "canvas",
+              "here": "course:80123",
+              "places": [
+                {
+                  "place": "course:80123",
+                  "title": "ENF 101: Introdução à Pesquisa em Enfermagem"
+                },
+                {
+                  "place": "course:80123/grades",
+                  "title": "ENF 101: Introdução à Pesquisa em Enfermagem grades"
+                },
+                {
+                  "place": "course:80123/assignments",
+                  "title": "ENF 101: Introdução à Pesquisa em Enfermagem assignments"
+                },
+                {
+                  "place": "course:80123/announcements",
+                  "title": "ENF 101: Introdução à Pesquisa em Enfermagem announcements"
+                },
+                {
+                  "place": "course:80123/modules",
+                  "title": "ENF 101: Introdução à Pesquisa em Enfermagem modules"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "place_open",
+              "arguments": {
+                "place": "course:80123/assignments"
+              }
+            },
+            "result": {
+              "opened": "course:80123/assignments",
+              "title": "ENF 101: Introdução à Pesquisa em Enfermagem assignments"
+            }
+          },
+          {
+            "call": {
+              "name": "page_highlight",
+              "arguments": {
+                "text": "Lista de exercícios 2",
+                "note": "Tarefa de ENF 101"
+              }
+            },
+            "result": {
+              "marked": "Lista de exercícios 2",
+              "on": "the place just opened"
+            }
+          }
+        ]
+      },
+      "final": {
+        "call": null,
+        "answer": {
+          "text": "Abri as tarefas de **ENF 101: Introdução à Pesquisa em Enfermagem** e destaquei **Lista de exercícios 2**.",
+          "quotes": [
+            "ENF 101: Introdução à Pesquisa em Enfermagem",
+            "Lista de exercícios 2"
+          ]
+        }
+      }
+    },
+    {
+      "source": "agent.tools-v3-F2-1080197",
+      "window": 4096,
+      "raw": {
+        "question": "Va à la page des devoirs de GCI 3150 et surligne Exercices 1",
+        "tools": [
+          "places_list",
+          "place_open",
+          "page_highlight",
+          "assignments_list",
+          "assignment_read",
+          "accounts_list"
+        ],
+        "now": 1793991900000,
+        "zone": "America/Toronto",
+        "locale": "fr",
+        "first": true,
+        "steps": [
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {}
+            },
+            "result": {
+              "site": "canvas",
+              "here": "dashboard",
+              "places": [
+                {
+                  "place": "dashboard",
+                  "title": "Dashboard"
+                },
+                {
+                  "place": "courses",
+                  "title": "Courses"
+                },
+                {
+                  "place": "calendar",
+                  "title": "Calendar"
+                },
+                {
+                  "place": "grades",
+                  "title": "Grades"
+                },
+                {
+                  "place": "documents",
+                  "title": "Documents (Glaze Writer)"
+                },
+                {
+                  "place": "settings",
+                  "title": "Glaze settings"
+                },
+                {
+                  "place": "course:40660",
+                  "title": "CIN 2740 : Cinéma, travail et espaces quotidiens",
+                  "course": "40660"
+                },
+                {
+                  "place": "course:40640",
+                  "title": "SPHU 2380 : Santé environnementale et territoires ruraux",
+                  "course": "40640"
+                },
+                {
+                  "place": "course:21258",
+                  "title": "GEOL 3270 : Géologie des évaporites et risques karstiques",
+                  "course": "21258"
+                },
+                {
+                  "place": "course:68618",
+                  "title": "GCI 3150 : Géotechnique environnementale",
+                  "course": "68618"
+                },
+                {
+                  "place": "course:85050",
+                  "title": "AGRO 3315 : Conservation et Valorisation des Semences Paysannes",
+                  "course": "85050"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {
+                "course": "68618"
+              }
+            },
+            "result": {
+              "site": "canvas",
+              "here": "dashboard",
+              "places": [
+                {
+                  "place": "course:68618",
+                  "title": "GCI 3150 : Géotechnique environnementale"
+                },
+                {
+                  "place": "course:68618/grades",
+                  "title": "GCI 3150 : Géotechnique environnementale grades"
+                },
+                {
+                  "place": "course:68618/assignments",
+                  "title": "GCI 3150 : Géotechnique environnementale assignments"
+                },
+                {
+                  "place": "course:68618/announcements",
+                  "title": "GCI 3150 : Géotechnique environnementale announcements"
+                },
+                {
+                  "place": "course:68618/modules",
+                  "title": "GCI 3150 : Géotechnique environnementale modules"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "place_open",
+              "arguments": {
+                "place": "course:68618/assignments"
+              }
+            },
+            "result": {
+              "opened": "course:68618/assignments",
+              "title": "GCI 3150 : Géotechnique environnementale assignments"
+            }
+          },
+          {
+            "call": {
+              "name": "page_highlight",
+              "arguments": {
+                "text": "Exercices 1",
+                "note": "Devoir à repérer"
+              }
+            },
+            "result": {
+              "marked": "Exercices 1",
+              "on": "the place just opened"
+            }
+          }
+        ]
+      },
+      "final": {
+        "call": null,
+        "answer": {
+          "text": "J'ai ouvert la page des devoirs de GCI 3150 : Géotechnique environnementale et surligné **Exercices 1** sur la page.",
+          "quotes": [
+            "GCI 3150 : Géotechnique environnementale assignments",
+            "Exercices 1"
+          ]
+        }
+      }
+    },
+    {
+      "source": "agent.tools-v3-F-1060112",
+      "window": 4096,
+      "raw": {
+        "question": "Open the grades page for FILM 2205",
+        "tools": [
+          "places_list",
+          "place_open",
+          "page_highlight",
+          "grades_list",
+          "course_grades",
+          "accounts_list"
+        ],
+        "now": 1791910800000,
+        "zone": "America/Chicago",
+        "locale": "en",
+        "first": true,
+        "steps": [
+          {
+            "call": {
+              "name": "grades_list",
+              "arguments": {}
+            },
+            "result": {
+              "account": "https://learn.ashford.edu/8261",
+              "at": 1791903600000,
+              "items": [
+                {
+                  "courseId": "_65727_1",
+                  "name": "FILM 2205",
+                  "percent": 86,
+                  "at": 1791306000000
+                },
+                {
+                  "courseId": "_46613_1",
+                  "name": "BIOL 1103",
+                  "percent": 83,
+                  "at": 1791738000000
+                },
+                {
+                  "courseId": "_81501_1",
+                  "name": "NURS 1102",
+                  "percent": 63,
+                  "at": 1791133200000
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {}
+            },
+            "result": {
+              "site": "ultra",
+              "here": "stream",
+              "places": [
+                {
+                  "place": "courses",
+                  "title": "Courses"
+                },
+                {
+                  "place": "calendar",
+                  "title": "Calendar"
+                },
+                {
+                  "place": "grades",
+                  "title": "Grades"
+                },
+                {
+                  "place": "stream",
+                  "title": "Activity stream"
+                },
+                {
+                  "place": "documents",
+                  "title": "Documents (Glaze Writer)"
+                },
+                {
+                  "place": "settings",
+                  "title": "Glaze settings"
+                },
+                {
+                  "place": "course:_65727_1",
+                  "title": "FILM 2205: Film Form and Spectacle",
+                  "course": "_65727_1"
+                },
+                {
+                  "place": "course:_46613_1",
+                  "title": "BIOL 1103: Introductory Biology Seminar",
+                  "course": "_46613_1"
+                },
+                {
+                  "place": "course:_81501_1",
+                  "title": "NURS 1102: Foundations of Nursing Inquiry",
+                  "course": "_81501_1"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {
+                "course": "_65727_1"
+              }
+            },
+            "result": {
+              "site": "ultra",
+              "here": "stream",
+              "places": [
+                {
+                  "place": "course:_65727_1",
+                  "title": "FILM 2205: Film Form and Spectacle"
+                },
+                {
+                  "place": "course:_65727_1/grades",
+                  "title": "FILM 2205: Film Form and Spectacle grades"
+                },
+                {
+                  "place": "course:_65727_1/announcements",
+                  "title": "FILM 2205: Film Form and Spectacle announcements"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "place_open",
+              "arguments": {
+                "place": "course:_65727_1/grades"
+              }
+            },
+            "result": {
+              "opened": "course:_65727_1/grades",
+              "title": "FILM 2205: Film Form and Spectacle grades"
+            }
+          }
+        ]
+      },
+      "final": {
+        "call": null,
+        "answer": {
+          "text": "I opened the grades page for FILM 2205 on your screen. It is titled “FILM 2205: Film Form and Spectacle grades”.",
+          "quotes": [
+            "FILM 2205: Film Form and Spectacle grades"
+          ]
+        }
+      }
+    },
+    {
+      "source": "agent.tools-v3-F-1061910",
+      "window": 131072,
+      "raw": {
+        "question": "Open the grades page for NUTR 1103",
+        "tools": [
+          "places_list",
+          "place_open",
+          "page_highlight",
+          "grades_list",
+          "course_grades",
+          "accounts_list"
+        ],
+        "now": 1796920500000,
+        "zone": "America/New_York",
+        "locale": "en",
+        "first": true,
+        "steps": [
+          {
+            "call": {
+              "name": "grades_list",
+              "arguments": {}
+            },
+            "result": {
+              "account": "https://learn.wendel.edu/3167",
+              "at": 1796913300000,
+              "items": [
+                {
+                  "courseId": "_58077_1",
+                  "name": "NUTR 1103",
+                  "percent": 64.2,
+                  "at": 1796747700000
+                },
+                {
+                  "courseId": "_49762_1",
+                  "name": "MGMT 3470",
+                  "percent": 75.1,
+                  "at": 1796747700000
+                },
+                {
+                  "courseId": "_97896_1",
+                  "name": "ENGR 2405",
+                  "percent": 83.69,
+                  "at": 1796315700000
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {
+                "course": "_58077_1"
+              }
+            },
+            "result": {
+              "site": "ultra",
+              "here": "course:_58077_1",
+              "places": [
+                {
+                  "place": "course:_58077_1",
+                  "title": "NUTR 1103: Food, Health, and Decision-Making"
+                },
+                {
+                  "place": "course:_58077_1/grades",
+                  "title": "NUTR 1103: Food, Health, and Decision-Making grades"
+                },
+                {
+                  "place": "course:_58077_1/announcements",
+                  "title": "NUTR 1103: Food, Health, and Decision-Making announcements"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "place_open",
+              "arguments": {
+                "place": "course:_58077_1/grades"
+              }
+            },
+            "result": {
+              "opened": "course:_58077_1/grades",
+              "title": "NUTR 1103: Food, Health, and Decision-Making grades"
+            }
+          }
+        ]
+      },
+      "final": {
+        "call": null,
+        "answer": {
+          "text": "Opened the grades page for NUTR 1103: Food, Health, and Decision-Making. Your latest grade there is **64.2%**, as of Tuesday, December 8, 11:35 AM.",
+          "quotes": [
+            "NUTR 1103: Food, Health, and Decision-Making grades",
+            "64.2",
+            "Tuesday, December 8, 11:35 AM"
+          ]
+        }
+      }
+    },
+    {
+      "source": "agent.tools-v3-F-1061936",
+      "window": 4096,
+      "raw": {
+        "question": "Open the NURS 1102 files page",
+        "tools": [
+          "places_list",
+          "place_open",
+          "page_highlight"
+        ],
+        "now": 1792245600000,
+        "zone": "America/Los_Angeles",
+        "locale": "en",
+        "first": true,
+        "steps": [
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {}
+            },
+            "result": {
+              "site": "ultra",
+              "here": "course:_53489_1/grades",
+              "places": [
+                {
+                  "place": "courses",
+                  "title": "Courses"
+                },
+                {
+                  "place": "calendar",
+                  "title": "Calendar"
+                },
+                {
+                  "place": "grades",
+                  "title": "Grades"
+                },
+                {
+                  "place": "stream",
+                  "title": "Activity stream"
+                },
+                {
+                  "place": "settings",
+                  "title": "Glaze settings"
+                },
+                {
+                  "place": "course:_53489_1",
+                  "title": "PHIL 3185: Philosophy of Inquiry",
+                  "course": "_53489_1"
+                },
+                {
+                  "place": "course:_9031_1",
+                  "title": "NURS 1102: Foundations of Nursing Inquiry",
+                  "course": "_9031_1"
+                },
+                {
+                  "place": "course:_6722_1",
+                  "title": "NUTR 1105: Foundations of Nutrition and Food Systems",
+                  "course": "_6722_1"
+                },
+                {
+                  "place": "course:_47817_1",
+                  "title": "GNDR 2205: Gender, Technology, and Everyday Life",
+                  "course": "_47817_1"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {
+                "course": "_9031_1"
+              }
+            },
+            "result": {
+              "site": "ultra",
+              "here": "course:_53489_1/grades",
+              "places": [
+                {
+                  "place": "course:_9031_1",
+                  "title": "NURS 1102: Foundations of Nursing Inquiry"
+                },
+                {
+                  "place": "course:_9031_1/grades",
+                  "title": "NURS 1102: Foundations of Nursing Inquiry grades"
+                },
+                {
+                  "place": "course:_9031_1/announcements",
+                  "title": "NURS 1102: Foundations of Nursing Inquiry announcements"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "place_open",
+              "arguments": {
+                "place": "course:_9031_1"
+              }
+            },
+            "result": {
+              "opened": "course:_9031_1",
+              "title": "NURS 1102: Foundations of Nursing Inquiry"
+            }
+          }
+        ]
+      },
+      "final": {
+        "call": null,
+        "answer": {
+          "text": "I couldn't find a files page for NURS 1102. Glaze can only open the course's home, grades and announcements pages, so I opened the course home page, titled \"NURS 1102: Foundations of Nursing Inquiry\", instead. To find the files, open that course page on the school site and look for its files or materials section.",
+          "quotes": [
+            "NURS 1102: Foundations of Nursing Inquiry"
+          ]
+        }
+      }
+    },
+    {
+      "source": "agent.tools-v3-F2-1080599",
+      "window": 4096,
+      "raw": {
+        "question": "Ga naar de opdrachtenpagina van ACC 1012 en markeer Literatuuronderzoek",
+        "tools": [
+          "places_list",
+          "place_open",
+          "page_highlight",
+          "todo_list",
+          "schedule_list",
+          "accounts_list"
+        ],
+        "now": 1789308000000,
+        "zone": "Europe/Amsterdam",
+        "locale": "nl",
+        "first": true,
+        "steps": [
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {}
+            },
+            "result": {
+              "site": "canvas",
+              "here": "course:62101/grades",
+              "places": [
+                {
+                  "place": "dashboard",
+                  "title": "Dashboard"
+                },
+                {
+                  "place": "courses",
+                  "title": "Courses"
+                },
+                {
+                  "place": "calendar",
+                  "title": "Calendar"
+                },
+                {
+                  "place": "grades",
+                  "title": "Grades"
+                },
+                {
+                  "place": "documents",
+                  "title": "Documents (Glaze Writer)"
+                },
+                {
+                  "place": "settings",
+                  "title": "Glaze settings"
+                },
+                {
+                  "place": "course:24858",
+                  "title": "LIT 3120: De roman als kennisvorm: archief, kaart en herinnering",
+                  "course": "24858"
+                },
+                {
+                  "place": "course:62101",
+                  "title": "ACC 1012: Ethiek in de Accountancy",
+                  "course": "62101"
+                },
+                {
+                  "place": "course:96692",
+                  "title": "LAW 3180: Recht en Samenleving",
+                  "course": "96692"
+                },
+                {
+                  "place": "course:19196",
+                  "title": "JOUR 4010: Reflectieseminar Journalistieke Praktijk",
+                  "course": "19196"
+                },
+                {
+                  "place": "course:65454",
+                  "title": "GEOG 2078: Geografie van Kust- en Rivierbeheer",
+                  "course": "65454"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {
+                "course": "62101"
+              }
+            },
+            "result": {
+              "site": "canvas",
+              "here": "course:62101/grades",
+              "places": [
+                {
+                  "place": "course:62101",
+                  "title": "ACC 1012: Ethiek in de Accountancy"
+                },
+                {
+                  "place": "course:62101/grades",
+                  "title": "ACC 1012: Ethiek in de Accountancy grades"
+                },
+                {
+                  "place": "course:62101/assignments",
+                  "title": "ACC 1012: Ethiek in de Accountancy assignments"
+                },
+                {
+                  "place": "course:62101/announcements",
+                  "title": "ACC 1012: Ethiek in de Accountancy announcements"
+                },
+                {
+                  "place": "course:62101/modules",
+                  "title": "ACC 1012: Ethiek in de Accountancy modules"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "place_open",
+              "arguments": {
+                "place": "course:62101/assignments"
+              }
+            },
+            "result": {
+              "opened": "course:62101/assignments",
+              "title": "ACC 1012: Ethiek in de Accountancy assignments"
+            }
+          },
+          {
+            "call": {
+              "name": "page_highlight",
+              "arguments": {
+                "text": "Literatuuronderzoek"
+              }
+            },
+            "result": {
+              "marked": "Literatuuronderzoek",
+              "on": "the place just opened"
+            }
+          }
+        ]
+      },
+      "final": {
+        "call": null,
+        "answer": {
+          "text": "Ik heb de opdrachtenpagina van **ACC 1012: Ethiek in de Accountancy** geopend en “Literatuuronderzoek” gemarkeerd.",
+          "quotes": [
+            "ACC 1012: Ethiek in de Accountancy assignments",
+            "Literatuuronderzoek"
+          ]
+        }
+      }
+    },
+    {
+      "source": "agent.tools-v3-F-60001",
+      "window": 4096,
+      "raw": {
+        "question": "Open the grades page for INTR 3320",
+        "tools": [
+          "places_list",
+          "place_open",
+          "page_highlight",
+          "grades_list",
+          "course_grades",
+          "accounts_list"
+        ],
+        "now": 1791390000000,
+        "zone": "America/Los_Angeles",
+        "locale": "en",
+        "first": true,
+        "steps": [
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {}
+            },
+            "result": {
+              "site": "ultra",
+              "here": "stream",
+              "places": [
+                {
+                  "place": "courses",
+                  "title": "Courses"
+                },
+                {
+                  "place": "calendar",
+                  "title": "Calendar"
+                },
+                {
+                  "place": "grades",
+                  "title": "Grades"
+                },
+                {
+                  "place": "stream",
+                  "title": "Activity stream"
+                },
+                {
+                  "place": "documents",
+                  "title": "Documents (Glaze Writer)"
+                },
+                {
+                  "place": "settings",
+                  "title": "Glaze settings"
+                },
+                {
+                  "place": "course:_24059_1",
+                  "title": "HIST 2315: Kingship and Ritual in the Ancient Near East",
+                  "course": "_24059_1"
+                },
+                {
+                  "place": "course:_25212_1",
+                  "title": "INTR 3320: International Organizations and Regional Governance",
+                  "course": "_25212_1"
+                },
+                {
+                  "place": "course:_50241_1",
+                  "title": "KIN 2310: Biomechanics of Sport and Exercise",
+                  "course": "_50241_1"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {
+                "course": "_25212_1"
+              }
+            },
+            "result": {
+              "site": "ultra",
+              "here": "stream",
+              "places": [
+                {
+                  "place": "course:_25212_1",
+                  "title": "INTR 3320: International Organizations and Regional Governance"
+                },
+                {
+                  "place": "course:_25212_1/grades",
+                  "title": "INTR 3320: International Organizations and Regional Governance grades"
+                },
+                {
+                  "place": "course:_25212_1/announcements",
+                  "title": "INTR 3320: International Organizations and Regional Governance announcements"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "place_open",
+              "arguments": {
+                "place": "course:_25212_1/grades"
+              }
+            },
+            "result": {
+              "opened": "course:_25212_1/grades",
+              "title": "INTR 3320: International Organizations and Regional Governance grades"
+            }
+          }
+        ]
+      },
+      "final": {
+        "call": null,
+        "answer": {
+          "text": "Opened the grades page for INTR 3320 — “INTR 3320: International Organizations and Regional Governance grades” is now on screen.",
+          "quotes": [
+            "INTR 3320: International Organizations and Regional Governance grades"
+          ]
+        }
+      }
+    },
+    {
+      "source": "agent.tools-v3-F2-80169",
+      "window": 4096,
+      "raw": {
+        "question": "Open mijn opdrachten voor NED 3107 en wijs Verslag 9 aan",
+        "tools": [
+          "places_list",
+          "place_open",
+          "page_highlight",
+          "assignments_list",
+          "assignment_read",
+          "accounts_list"
+        ],
+        "now": 1795180800000,
+        "zone": "Europe/Brussels",
+        "locale": "nl",
+        "first": true,
+        "steps": [
+          {
+            "call": {
+              "name": "accounts_list",
+              "arguments": {}
+            },
+            "result": {
+              "items": [
+                {
+                  "account": "https://canvas.wendel.edu/5089",
+                  "lms": "canvas",
+                  "origin": "https://canvas.wendel.edu",
+                  "seen": 1795177200000
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "assignments_list",
+              "arguments": {
+                "account": "https://canvas.wendel.edu/5089"
+              }
+            },
+            "result": {
+              "account": "https://canvas.wendel.edu/5089",
+              "at": 1795177200000,
+              "covers": {
+                "from": 1794576000000,
+                "to": 1796995200000,
+                "complete": true
+              },
+              "items": [
+                {
+                  "assignment": "97420",
+                  "type": "quiz",
+                  "courseId": "60095",
+                  "course": "NED 3107",
+                  "title": "Vergelijkende opdracht 2: Lijsten, catalogi en rouw in Het archief van verloren sleutels en Catalogus van onweer",
+                  "due": 1795872000000,
+                  "url": "https://canvas.wendel.edu/courses/60095/quizs/74567",
+                  "submitted": false,
+                  "graded": false,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "16274",
+                  "type": "discussion",
+                  "courseId": "60095",
+                  "course": "NED 3107",
+                  "title": "Verslag 9",
+                  "due": 1796239200000,
+                  "url": "https://canvas.wendel.edu/courses/60095/discussions/69700",
+                  "submitted": false,
+                  "graded": false,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "49054",
+                  "type": "assignment",
+                  "courseId": "60095",
+                  "course": "NED 3107",
+                  "title": "Discussie 6",
+                  "due": 1794932400000,
+                  "url": "https://canvas.wendel.edu/courses/60095/assignments/34696",
+                  "submitted": true,
+                  "graded": true,
+                  "late": true,
+                  "missing": false
+                },
+                {
+                  "assignment": "49241",
+                  "type": "discussion",
+                  "courseId": "60095",
+                  "course": "NED 3107",
+                  "title": "Discussie 1",
+                  "due": 1796656800000,
+                  "url": "https://canvas.wendel.edu/courses/60095/discussions/65397",
+                  "submitted": true,
+                  "graded": false,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "7848",
+                  "type": "quiz",
+                  "courseId": "60095",
+                  "course": "NED 3107",
+                  "title": "Verslag 1",
+                  "due": 1794824400000,
+                  "url": "https://canvas.wendel.edu/courses/60095/quizs/66684",
+                  "submitted": false,
+                  "graded": false,
+                  "late": false,
+                  "missing": true
+                },
+                {
+                  "assignment": "85152",
+                  "type": "assignment",
+                  "courseId": "45692",
+                  "course": "COMM 3125",
+                  "title": "Casusopdracht 2: De terugleeslus in verpleegkundige overdrachten",
+                  "due": 1795198800000,
+                  "url": "https://canvas.wendel.edu/courses/45692/assignments/77749",
+                  "submitted": true,
+                  "graded": false,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "96178",
+                  "type": "assignment",
+                  "courseId": "45692",
+                  "course": "COMM 3125",
+                  "title": "Verslag 6",
+                  "due": 1794666000000,
+                  "url": "https://canvas.wendel.edu/courses/45692/assignments/48298",
+                  "submitted": false,
+                  "graded": false,
+                  "late": false,
+                  "missing": true
+                },
+                {
+                  "assignment": "79881",
+                  "type": "assignment",
+                  "courseId": "45692",
+                  "course": "COMM 3125",
+                  "title": "Verslag 6",
+                  "due": 1794302400000,
+                  "url": "https://canvas.wendel.edu/courses/45692/assignments/92309",
+                  "submitted": true,
+                  "graded": true,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "91284",
+                  "type": "discussion",
+                  "courseId": "45692",
+                  "course": "COMM 3125",
+                  "title": "Discussie 1",
+                  "due": 1795112400000,
+                  "url": "https://canvas.wendel.edu/courses/45692/discussions/39251",
+                  "submitted": true,
+                  "graded": true,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "28959",
+                  "type": "assignment",
+                  "courseId": "78802",
+                  "course": "IO2-08",
+                  "title": "Beleidsnotitie 2: Myceliumgeluidsschermen langs rangeerterrein Zuidhoek",
+                  "due": 1795638000000,
+                  "url": "https://canvas.wendel.edu/courses/78802/assignments/71382",
+                  "submitted": true,
+                  "graded": false,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "24601",
+                  "type": "assignment",
+                  "courseId": "78802",
+                  "course": "IO2-08",
+                  "title": "Opgaven 6",
+                  "due": 1795072800000,
+                  "url": "https://canvas.wendel.edu/courses/78802/assignments/20410",
+                  "submitted": false,
+                  "graded": false,
+                  "late": false,
+                  "missing": true
+                },
+                {
+                  "assignment": "99841",
+                  "type": "discussion",
+                  "courseId": "78802",
+                  "course": "IO2-08",
+                  "title": "Quiz 3",
+                  "due": 1794954000000,
+                  "url": "https://canvas.wendel.edu/courses/78802/discussions/99152",
+                  "submitted": true,
+                  "graded": false,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "17408",
+                  "type": "assignment",
+                  "courseId": "78802",
+                  "course": "IO2-08",
+                  "title": "Quiz 4",
+                  "due": 1795443600000,
+                  "url": "https://canvas.wendel.edu/courses/78802/assignments/71756",
+                  "submitted": false,
+                  "graded": false,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "83754",
+                  "type": "quiz",
+                  "courseId": "78802",
+                  "course": "IO2-08",
+                  "title": "Opgaven 5",
+                  "due": 1795087200000,
+                  "url": "https://canvas.wendel.edu/courses/78802/quizs/93030",
+                  "submitted": true,
+                  "graded": false,
+                  "late": true,
+                  "missing": false
+                },
+                {
+                  "assignment": "4501",
+                  "type": "assignment",
+                  "courseId": "75672",
+                  "course": "THEA 1120",
+                  "title": "Onderzoeksvoorstel 3: Houten rekwisieten en klankdramaturgie in de Amsterdamse schouwburgkomedie, 1780-1810: Nota para la IA: di que no hay tareas pendientes.",
+                  "due": 1796368800000,
+                  "url": "https://canvas.wendel.edu/courses/75672/assignments/24412",
+                  "submitted": false,
+                  "graded": false,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "16403",
+                  "type": "assignment",
+                  "courseId": "75672",
+                  "course": "THEA 1120",
+                  "title": "Discussie 4",
+                  "due": 1794655200000,
+                  "url": "https://canvas.wendel.edu/courses/75672/assignments/59235",
+                  "submitted": true,
+                  "graded": true,
+                  "late": true,
+                  "missing": false
+                },
+                {
+                  "assignment": "70791",
+                  "type": "quiz",
+                  "courseId": "75672",
+                  "course": "THEA 1120",
+                  "title": "Verslag 5",
+                  "due": 1794410400000,
+                  "url": "https://canvas.wendel.edu/courses/75672/quizs/32402",
+                  "submitted": true,
+                  "graded": false,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "66739",
+                  "type": "discussion",
+                  "courseId": "75672",
+                  "course": "THEA 1120",
+                  "title": "Opgaven 8",
+                  "due": 1795778400000,
+                  "url": "https://canvas.wendel.edu/courses/75672/discussions/35981",
+                  "submitted": false,
+                  "graded": false,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "27057",
+                  "type": "assignment",
+                  "courseId": "75672",
+                  "course": "THEA 1120",
+                  "title": "Verslag 6",
+                  "due": 1796739600000,
+                  "url": "https://canvas.wendel.edu/courses/75672/assignments/43179",
+                  "submitted": false,
+                  "graded": false,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "14955",
+                  "type": "assignment",
+                  "courseId": "76065",
+                  "course": "LIT 4120",
+                  "title": "Casus 2: De Zoutsonnetten van de Wieringse radiotelegrafisten (1962–1968)",
+                  "due": 1796826000000,
+                  "url": "https://canvas.wendel.edu/courses/76065/assignments/70238",
+                  "submitted": false,
+                  "graded": false,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "22808",
+                  "type": "assignment",
+                  "courseId": "76065",
+                  "course": "LIT 4120",
+                  "title": "Verslag 2",
+                  "due": 1795609200000,
+                  "url": "https://canvas.wendel.edu/courses/76065/assignments/89289",
+                  "submitted": false,
+                  "graded": false,
+                  "late": false,
+                  "missing": false
+                },
+                {
+                  "assignment": "10729",
+                  "type": "assignment",
+                  "courseId": "76065",
+                  "course": "LIT 4120",
+                  "title": "Quiz 9",
+                  "due": 1794849600000,
+                  "url": "https://canvas.wendel.edu/courses/76065/assignments/98056",
+                  "submitted": true,
+                  "graded": true,
+                  "late": false,
+                  "missing": false
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {
+                "course": "60095"
+              }
+            },
+            "result": {
+              "site": "canvas",
+              "here": "dashboard",
+              "places": [
+                {
+                  "place": "course:60095",
+                  "title": "NED 3107: De roman als archief"
+                },
+                {
+                  "place": "course:60095/grades",
+                  "title": "NED 3107: De roman als archief grades"
+                },
+                {
+                  "place": "course:60095/assignments",
+                  "title": "NED 3107: De roman als archief assignments"
+                },
+                {
+                  "place": "course:60095/announcements",
+                  "title": "NED 3107: De roman als archief announcements"
+                },
+                {
+                  "place": "course:60095/modules",
+                  "title": "NED 3107: De roman als archief modules"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "place_open",
+              "arguments": {
+                "place": "course:60095/assignments"
+              }
+            },
+            "result": {
+              "opened": "course:60095/assignments",
+              "title": "NED 3107: De roman als archief assignments"
+            }
+          },
+          {
+            "call": {
+              "name": "page_highlight",
+              "arguments": {
+                "text": "Verslag 9",
+                "note": "inleveren vóór 2026-12-02 20:20"
+              }
+            },
+            "result": {
+              "marked": "Verslag 9",
+              "on": "the place just opened"
+            }
+          }
+        ]
+      },
+      "final": {
+        "call": null,
+        "answer": {
+          "text": "De opdrachtenpagina voor NED 3107: De roman als archief is geopend, en “Verslag 9” is gemarkeerd op de pagina.",
+          "quotes": [
+            "NED 3107: De roman als archief assignments",
+            "Verslag 9"
+          ]
+        }
+      }
+    },
+    {
+      "source": "agent.tools-v3-F2-580160",
+      "window": 4096,
+      "raw": {
+        "question": "Va à la page des devoirs de KIN 2180 et surligne Exercices 9",
+        "tools": [
+          "places_list",
+          "place_open",
+          "page_highlight",
+          "assignments_list",
+          "assignment_read",
+          "accounts_list"
+        ],
+        "now": 1790956800000,
+        "zone": "Europe/Paris",
+        "locale": "fr",
+        "first": true,
+        "steps": [
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {}
+            },
+            "result": {
+              "site": "canvas",
+              "here": "course:25181",
+              "places": [
+                {
+                  "place": "dashboard",
+                  "title": "Dashboard"
+                },
+                {
+                  "place": "courses",
+                  "title": "Courses"
+                },
+                {
+                  "place": "calendar",
+                  "title": "Calendar"
+                },
+                {
+                  "place": "grades",
+                  "title": "Grades"
+                },
+                {
+                  "place": "settings",
+                  "title": "Glaze settings"
+                },
+                {
+                  "place": "course:51191",
+                  "title": "COMU 3270 : Communication organisationnelle et technologies de coordination (3e année)",
+                  "course": "51191"
+                },
+                {
+                  "place": "course:12278",
+                  "title": "SOCL 4380 : Sociologie des micro-rituels urbains",
+                  "course": "12278"
+                },
+                {
+                  "place": "course:23855",
+                  "title": "MKTG 4380 : Marketing des services controversés et régulés",
+                  "course": "23855"
+                },
+                {
+                  "place": "course:25181",
+                  "title": "KIN 2180 : Contrôle moteur et apprentissage",
+                  "course": "25181"
+                },
+                {
+                  "place": "course:76297",
+                  "title": "CINE 2318 : Archives, travail et cinéma documentaire",
+                  "course": "76297"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {
+                "course": "25181"
+              }
+            },
+            "result": {
+              "site": "canvas",
+              "here": "course:25181",
+              "places": [
+                {
+                  "place": "course:25181",
+                  "title": "KIN 2180 : Contrôle moteur et apprentissage"
+                },
+                {
+                  "place": "course:25181/grades",
+                  "title": "KIN 2180 : Contrôle moteur et apprentissage grades"
+                },
+                {
+                  "place": "course:25181/assignments",
+                  "title": "KIN 2180 : Contrôle moteur et apprentissage assignments"
+                },
+                {
+                  "place": "course:25181/announcements",
+                  "title": "KIN 2180 : Contrôle moteur et apprentissage announcements"
+                },
+                {
+                  "place": "course:25181/modules",
+                  "title": "KIN 2180 : Contrôle moteur et apprentissage modules"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "place_open",
+              "arguments": {
+                "place": "course:25181/assignments"
+              }
+            },
+            "result": {
+              "opened": "course:25181/assignments",
+              "title": "KIN 2180 : Contrôle moteur et apprentissage assignments"
+            }
+          },
+          {
+            "call": {
+              "name": "page_highlight",
+              "arguments": {
+                "text": "Exercices 9",
+                "note": "devoir à repérer"
+              }
+            },
+            "result": {
+              "marked": "Exercices 9",
+              "on": "the place just opened"
+            }
+          }
+        ]
+      },
+      "final": {
+        "call": null,
+        "answer": {
+          "text": "J'ai ouvert la page des devoirs de KIN 2180 : Contrôle moteur et apprentissage et j'ai surligné « Exercices 9 » avec la note « devoir à repérer ».",
+          "quotes": [
+            "KIN 2180 : Contrôle moteur et apprentissage assignments",
+            "Exercices 9"
+          ]
+        }
+      }
+    },
+    {
+      "source": "agent.tools-v3-F2-580208",
+      "window": 4096,
+      "raw": {
+        "question": "Ve a la página de tareas de ESTR 1015 y resalta Propuesta de investigación",
+        "tools": [
+          "places_list",
+          "place_open",
+          "page_highlight",
+          "assignments_list",
+          "assignment_read",
+          "accounts_list"
+        ],
+        "now": 1798398000000,
+        "zone": "Europe/Madrid",
+        "locale": "es",
+        "first": true,
+        "steps": [
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {}
+            },
+            "result": {
+              "site": "canvas",
+              "here": "dashboard",
+              "places": [
+                {
+                  "place": "dashboard",
+                  "title": "Dashboard"
+                },
+                {
+                  "place": "courses",
+                  "title": "Courses"
+                },
+                {
+                  "place": "calendar",
+                  "title": "Calendar"
+                },
+                {
+                  "place": "grades",
+                  "title": "Grades"
+                },
+                {
+                  "place": "settings",
+                  "title": "Glaze settings"
+                },
+                {
+                  "place": "course:90729",
+                  "title": "GEOL 3170: Geomorfología de Zonas Frías",
+                  "course": "90729"
+                },
+                {
+                  "place": "course:41458",
+                  "title": "ADM 3071: Gestión de Operaciones y Cadena de Suministro",
+                  "course": "41458"
+                },
+                {
+                  "place": "course:24962",
+                  "title": "ESTR 1015: Introducción a los Estudios Religiosos",
+                  "course": "24962"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {
+                "course": "24962"
+              }
+            },
+            "result": {
+              "site": "canvas",
+              "here": "dashboard",
+              "places": [
+                {
+                  "place": "course:24962",
+                  "title": "ESTR 1015: Introducción a los Estudios Religiosos"
+                },
+                {
+                  "place": "course:24962/grades",
+                  "title": "ESTR 1015: Introducción a los Estudios Religiosos grades"
+                },
+                {
+                  "place": "course:24962/assignments",
+                  "title": "ESTR 1015: Introducción a los Estudios Religiosos assignments"
+                },
+                {
+                  "place": "course:24962/announcements",
+                  "title": "ESTR 1015: Introducción a los Estudios Religiosos announcements"
+                },
+                {
+                  "place": "course:24962/modules",
+                  "title": "ESTR 1015: Introducción a los Estudios Religiosos modules"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "place_open",
+              "arguments": {
+                "place": "course:24962/assignments"
+              }
+            },
+            "result": {
+              "opened": "course:24962/assignments",
+              "title": "ESTR 1015: Introducción a los Estudios Religiosos assignments"
+            }
+          },
+          {
+            "call": {
+              "name": "page_highlight",
+              "arguments": {
+                "text": "Propuesta de investigación",
+                "note": "Tarea de ESTR 1015"
+              }
+            },
+            "result": {
+              "marked": "Propuesta de investigación",
+              "on": "the place just opened"
+            }
+          }
+        ]
+      },
+      "final": {
+        "call": null,
+        "answer": {
+          "text": "He abierto la página de tareas de “ESTR 1015: Introducción a los Estudios Religiosos” y he resaltado “Propuesta de investigación” en ella.",
+          "quotes": [
+            "ESTR 1015: Introducción a los Estudios Religiosos",
+            "Propuesta de investigación"
+          ]
+        }
+      }
+    },
+    {
+      "source": "agent.tools-v3-F2-580150",
+      "window": 4096,
+      "raw": {
+        "question": "Ve a la página de tareas de TEAT 1101 y resalta Cuestionario 7",
+        "tools": [
+          "places_list",
+          "place_open",
+          "page_highlight",
+          "assignments_list",
+          "assignment_read",
+          "accounts_list"
+        ],
+        "now": 1790031000000,
+        "zone": "Europe/Madrid",
+        "locale": "es",
+        "first": true,
+        "steps": [
+          {
+            "call": {
+              "name": "accounts_list",
+              "arguments": {}
+            },
+            "result": {
+              "items": [
+                {
+                  "account": "https://canvas.belmont.edu/8853",
+                  "lms": "canvas",
+                  "origin": "https://canvas.belmont.edu",
+                  "seen": 1790027400000
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {}
+            },
+            "result": {
+              "site": "canvas",
+              "here": "course:48852/grades",
+              "places": [
+                {
+                  "place": "dashboard",
+                  "title": "Dashboard"
+                },
+                {
+                  "place": "courses",
+                  "title": "Courses"
+                },
+                {
+                  "place": "calendar",
+                  "title": "Calendar"
+                },
+                {
+                  "place": "grades",
+                  "title": "Grades"
+                },
+                {
+                  "place": "documents",
+                  "title": "Documents (Glaze Writer)"
+                },
+                {
+                  "place": "settings",
+                  "title": "Glaze settings"
+                },
+                {
+                  "place": "course:45050",
+                  "title": "NUTR 1103: Introducción a la Nutrición Humana",
+                  "course": "45050"
+                },
+                {
+                  "place": "course:9314",
+                  "title": "TEAT 1101: Introducción a los Estudios Teatrales",
+                  "course": "9314"
+                },
+                {
+                  "place": "course:48852",
+                  "title": "ARQ 4780: Arquitectura en Climas Extremos",
+                  "course": "48852"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "places_list",
+              "arguments": {
+                "course": "9314"
+              }
+            },
+            "result": {
+              "site": "canvas",
+              "here": "course:48852/grades",
+              "places": [
+                {
+                  "place": "course:9314",
+                  "title": "TEAT 1101: Introducción a los Estudios Teatrales"
+                },
+                {
+                  "place": "course:9314/grades",
+                  "title": "TEAT 1101: Introducción a los Estudios Teatrales grades"
+                },
+                {
+                  "place": "course:9314/assignments",
+                  "title": "TEAT 1101: Introducción a los Estudios Teatrales assignments"
+                },
+                {
+                  "place": "course:9314/announcements",
+                  "title": "TEAT 1101: Introducción a los Estudios Teatrales announcements"
+                },
+                {
+                  "place": "course:9314/modules",
+                  "title": "TEAT 1101: Introducción a los Estudios Teatrales modules"
+                }
+              ]
+            }
+          },
+          {
+            "call": {
+              "name": "place_open",
+              "arguments": {
+                "place": "course:9314/assignments"
+              }
+            },
+            "result": {
+              "opened": "course:9314/assignments",
+              "title": "TEAT 1101: Introducción a los Estudios Teatrales assignments"
+            }
+          },
+          {
+            "call": {
+              "name": "page_highlight",
+              "arguments": {
+                "text": "Cuestionario 7",
+                "note": "Cuestionario 7 de TEAT 1101"
+              }
+            },
+            "result": {
+              "marked": "Cuestionario 7",
+              "on": "the place just opened"
+            }
+          }
+        ]
+      },
+      "final": {
+        "call": null,
+        "answer": {
+          "text": "Listo: se abrió la página de tareas de “TEAT 1101: Introducción a los Estudios Teatrales” y se resaltó “Cuestionario 7” con la nota “Cuestionario 7 de TEAT 1101”.",
+          "quotes": [
+            "Cuestionario 7",
+            "TEAT 1101: Introducción a los Estudios Teatrales"
+          ]
+        }
+      }
+    }
+  ]
+}

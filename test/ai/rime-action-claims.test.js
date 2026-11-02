@@ -24,6 +24,17 @@ const fixture = async (locale, state = 'failed') => {
   return { input, steps, actions };
 };
 const answer = (value) => ({ call: null, answer: { text: `${value} Calendar`, quotes: ['Calendar'] } });
+for (const { source, raw, final, window } of require('../fixtures/rime-navigation-trajectories.json').cases) {
+  test(`${source}: scoped and localized navigation claims match their successful receipt`, () => {
+    const caps = { context: window };
+    const input = A.task.input(raw, { caps });
+    assert.ok(input);
+    assert.equal(A.why(final, input), '', final.answer.text);
+    const missing = A.task.input({ ...raw, steps: raw.steps.filter((step) => step.call.name !== 'place_open') }, { caps });
+    assert.ok(missing);
+    assert.equal(A.why(final, missing), 'ground', 'a course name and highlighted text cannot replace the open receipt');
+  });
+}
 for (const [locale, words] of Object.entries(PHRASES)) {
   test(`${locale}: failed or unperformed navigation cannot support an assistant completion claim`, async () => {
     for (const state of ['failed', 'unperformed']) {
