@@ -420,6 +420,20 @@ test('a large selected window carries more than six complete turns without prema
   assert.equal(h.seen.runs.some((r) => r.task === 'chat.compact'), false, 'available context retains those turns verbatim');
 });
 
+test('study-only follow-ups discover the current window before trimming history on a renewed port', async () => {
+  const history = Array.from({ length: 12 }, (_, i) => turn(`Reading topic ${i}: ${'source '.repeat(400)}`, 'Consider the repeated imagery. '.repeat(100)));
+  for (const window of [4096, 32768]) {
+    const h = harness({ count: () => ({ used: 900, window, reserve: 600, exact: true }),
+      script: { 'study.help': [{ reply: 'Which image recurs?', followUp: null }] } });
+    h.say({ id: 1, op: 'ask', question: 'Explain metaphor', history });
+    await settle();
+    const run = h.seen.runs.find((r) => r.task === 'study.help');
+    assert.ok(run, JSON.stringify(h.got));
+    assert.deepEqual(run.input.history, window === 4096 ? history.slice(-6).map((h) => ({ question: h.question.slice(0, 2000), answer: h.answer.slice(0, 2000) })) : history);
+    assert.equal(h.seen.runs.some((r) => r.task === 'agent.tools'), false, 'a study-only turn needs no tool request');
+  }
+});
+
 // The page deliberately recreates its port between questions (Safari can retire the idle worker).
 test('a recreated port restores the bounded tool union, even after its topic was folded away', async () => {
   const first = harness({ count: () => ({ used: 900, window: 16384, reserve: 768 }), script: { 'agent.tools': [said('Done.')] } });
