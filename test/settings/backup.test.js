@@ -60,6 +60,7 @@ const seeded = async () => {
     [ACCOUNT]: N.clean({}),
     writerWords: ['Glazeword', 'MARK-WORD'],
     [SOURCES]: { sources: [source('MARK-SOURCE', 's-mark-1')], at: NOW },
+    [memoryKey]: memory('MARK-MEMORY'),
   });
   await a.send('notesFile', { key: ACCOUNT, file: { id: id(9), note: id(1), kind: 'image', name: 'pic.png', data: N.b64(PNG) } });
   assert.equal((await a.notes({ op: 'save', id: id(1), base: 0, sid: 'a', title: 'MARK-NOTE', html: `<p>MARK-NOTE-BODY</p><p><img data-gz-file="${id(9)}" alt=""></p>` })).ok, true);
@@ -115,7 +116,7 @@ const forgotten = { v: 1, id: memoryId, account: memoryAccount, kind: 'memory', 
 
 test('rime memories round trip in a versioned backup and course caches stay local', async () => {
   const cache = `rimeMaterial:${memoryAccount}|s-${'2'.repeat(32)}`, saved = memory('Prefer examples');
-  const a = device({ [memoryKey]: saved, [cache]: { markdown: 'Course cache' } }), b = device();
+  const a = device({ [memoryKey]: saved, [cache]: { markdown: 'Course cache' } }), b = device(), plainDevice = device();
   try {
     const file = await backUp(a), raw = JSON.parse(await (await unzipped(file)).text(B.MANIFEST));
     assert.equal(raw.version, 3, 'older readers must ask for an update rather than silently omit memories');
@@ -126,9 +127,9 @@ test('rime memories round trip in a versioned backup and course caches stay loca
     assert.deepEqual(b.store[memoryKey], saved);
     assert.equal(b.store[cache], undefined);
     assert.equal(JSON.stringify(raw).includes('Course cache'), false);
-    const plain = JSON.parse(await (await unzipped(await backUp(device()))).text(B.MANIFEST));
+    const plain = JSON.parse(await (await unzipped(await backUp(plainDevice))).text(B.MANIFEST));
     assert.equal(plain.version, 1, 'backups without new categories keep their older compatible version');
-  } finally { a.stop(); b.stop(); }
+  } finally { a.stop(); b.stop(); plainDevice.stop(); }
 });
 
 test('rime backup restore never revives deleted memory IDs and deterministically joins active edits', async () => {
@@ -154,6 +155,45 @@ test('rime backup refuses mismatched identities, unknown fields and memory conte
       } finally { b.stop(); }
     } finally { a.stop(); }
   }
+});
+
+test('rime restore refuses aggregate memory overflow without publishing other categories', async () => {
+  const M = require('../../extension/ai/memory.js'), values = {};
+  for (let n = 0; n < M.LIMIT.memories; n++) {
+    const id = `m-${n.toString(16).padStart(32, '0')}`, value = { ...memory(`Preference ${n}`), id };
+    values[M.keyOf(memoryAccount, id)] = value;
+  }
+  const a = device({ [memoryKey]: memory('One more') }), b = device(values);
+  try {
+    const before = structuredClone(b.store), { out } = await restore(b, await backUp(a), ['memories']);
+    assert.deepEqual(out.failed, ['memories']);
+    assert.deepEqual(b.store, before);
+  } finally { a.stop(); b.stop(); }
+});
+
+test('rime atomic backup publication shares the memory mutation queue', { timeout: 3000 }, async () => {
+  const M = require('../../extension/ai/memory.js'), b = device({ [memoryKey]: memory('Before') });
+  let release, reached, paused = false, editDone = false;
+  const gate = new Promise((resolve) => { release = resolve; }), started = new Promise((resolve) => { reached = resolve; });
+  const local = { ...b.local, set: async (patch) => {
+    if (Object.hasOwn(patch, memoryKey) && !paused) { paused = true; reached(); await gate; }
+    return b.local.set(patch);
+  } };
+  const io = { local, sync: b.local };
+  const restoring = B.atomic([{ action: 'own', value: { memories: { [memoryKey]: memory('From backup', 5000) } } }], io);
+  let editing;
+  try {
+    await started;
+    editing = M.apply({ local }, memoryKey, forgotten).then((r) => { editDone = true; return r; });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(editDone, false, 'a tool/UI write waits until backup publication finishes');
+  } finally {
+    release();
+    assert.equal((await restoring).ok, true);
+    if (editing) assert.equal((await editing).ok, true);
+    b.stop();
+  }
+  assert.deepEqual(b.store[memoryKey], forgotten, 'the later queued forget remains after backup publication');
 });
 
 test('Papers, their JSON documents, versions and presets survive a backup restore', async () => {
@@ -381,7 +421,7 @@ test('a backup of every category comes back whole on a new device', async () => 
     assert.deepEqual(N.unb64(pic.data), PNG);
     // Only these categories: nothing Glaze read from the school.
     const raw = JSON.parse(await (await unzipped(file)).text(B.MANIFEST));
-    assert.deepEqual(Object.keys(raw).sort(), ['classes', 'dashNotes', 'format', 'glaze', 'gpa', 'made', 'notes', 'papers', 'settings', 'sources', 'tasks', 'version', 'widgets', 'writerWords']);
+    assert.deepEqual(Object.keys(raw).sort(), ['classes', 'dashNotes', 'format', 'glaze', 'gpa', 'made', 'memories', 'notes', 'papers', 'settings', 'sources', 'tasks', 'version', 'widgets', 'writerWords']);
   } finally { a.stop(); b.stop(); }
 });
 const unzipped = async (file) => require('../../extension/core/doctext.js').unzip(file.bytes);
@@ -455,6 +495,7 @@ test('an unticked category is left as it is', async () => {
       if (off === 'papers') assert.equal(b.store['writerPaper:bb.school.test|_900_1|_101_1|_7_1'], undefined);
       if (off === 'writerWords') assert.equal(b.store.writerWords, undefined);
       if (off === 'sources') assert.equal(b.store[SOURCES], undefined);
+      if (off === 'memories') assert.equal(b.store[memoryKey], undefined);
       if (off === 'widgets') assert.equal(b.store.widgetLayout, undefined);
       if (off === 'settings') { assert.deepEqual(b.settings, []); assert.deepEqual(b.store.lookFavorites, []); }
       // Tasks without the settings still come back, through the worker's own record write, with nothing of the settings.

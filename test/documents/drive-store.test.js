@@ -28,6 +28,8 @@ const area = (name, heard) => {
     keys: async () => [...m.keys()],
   };
   api.replace = async (key, expected, value) => {
+    // The worker takes its broker queue first, then the memory module's queue and aggregate-limit checks.
+    if (key.startsWith('rimeMemory:')) return require('../../extension/ai/memory.js').replace({ local: api }, key, expected, value);
     if (ST.canon(m.get(key)) !== ST.canon(expected)) return false;
     if (value === undefined) await api.remove(key); else await api.set({ [key]: value });
     return true;
@@ -158,6 +160,16 @@ test('rime malformed or oversized memories never upload', async () => {
     await a.local.set({ [key]: value }); await a.on(); await a.run();
     assert.equal(recFile(drive, 'local', key), undefined);
   }
+});
+
+test('rime a new device refuses memory overflow without evicting its saved facts', async () => {
+  const drive = standin(), a = device(drive), b = device(drive), key = memoryKey(501);
+  await a.local.set({ [key]: memory(501, 'From another device') }); await a.on();
+  await b.local.set(Object.fromEntries(Array.from({ length: 500 }, (_, n) => [memoryKey(n + 1), memory(n + 1, `Local ${n}`)])));
+  const mine = await b.local.get(null);
+  assert.ok((await b.on()).ok);
+  assert.equal((await b.local.get(key))[key], undefined);
+  for (const [k, value] of Object.entries(mine)) assert.deepEqual((await b.local.get(k))[k], value);
 });
 
 test('a local change syncs when its timestamp equals or precedes the last agreed stamp', async () => {
