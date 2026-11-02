@@ -231,7 +231,7 @@ test('exact fitting removes optional current URL before losing any typed resourc
 });
 
 test('only a direct correction request may replace a user-edited memory', async (t) => {
-  for (const [request, explicit] of [['Explain why this approach is correct.', false], ['Do not change my saved preference.', false], ['If I change my saved preference later, remind me.', false], ['Update my assignment.', false], ['Correct my saved preference.', true]]) {
+  for (const [request, explicit] of [['Explain why this approach is correct.', false], ['Do not change my saved preference.', false], ['If I change my saved preference later, remind me.', false], ['Update my assignment.', false], ['Forget my saved preference.', false], ['Forget my saved preference. Explain why this approach is correct.', false], ['Correct my saved preference.', true]]) {
     let saved, edited;
     const text = 'I prefer short bullet points.';
     const h = harness({ script: { 'agent.tools': [() => call('memory_save', { id: saved.receipt.id, revision: edited.receipt.revision, text, evidence: text, category: 'preference' }, 'write'), said(explicit ? 'Updated.' : 'No change.')], 'study.help': [study] } }); t.after(h.close);
