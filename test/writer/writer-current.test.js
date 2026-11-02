@@ -65,6 +65,21 @@ test('compose reply targets and kind transitions revoke the earlier revision eve
   assert.equal(p.messages.at(-1).value, undefined);
 });
 
+test('refreshed compose reply targets revoke a binding when only replyTo changes', () => {
+  const { contextOf } = require('../../extension/writer/writer-context-discussion.js');
+  const context = (id) => contextOf({ kind: 'reply', school: 'school.test', item: '_21_1', course: { id: '_7_1' }, replyTo: { id, text: 'The post being answered' } });
+  const p = setup('reply', { mode: 'compose', noPaper: true, context: context('_10_1') });
+  const b = p.parent.at(-1);
+  assert.ok(b?.token);
+  p.setContext(context('_11_1'));
+  p.port.answer({ id: 1, op: 'current', token: b.token, revision: b.revision });
+  assert.equal(p.messages.at(-1).value, undefined, 'a changed replyTo target cannot supply the earlier pinned draft');
+  const fresh = p.parent.at(-1);
+  assert.ok(fresh.revision > b.revision);
+  p.port.answer({ id: 2, op: 'current', token: fresh.token, revision: fresh.revision });
+  assert.equal(p.messages.at(-1).value.context.replyTo.id, '_11_1');
+});
+
 test('the parent captures one bounded account owner at box creation and transmits it only on private init', async () => {
   const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer/page/writer.js'), 'utf8');
   const start = source.indexOf('  const askOwnerOf ='), end = source.indexOf('  const paperOf =', start);

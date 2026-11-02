@@ -12,7 +12,7 @@
     const eligible = mode === 'paper' ? kind === 'assignment' && p?.kind?.() === 'paper' && !!p.key?.() : mode === 'compose' && COMPOSE.has(kind) && !!owner;
     if (!eligible || (context?.kind && context.kind !== kind) || !v?.state?.doc) { previous = null; return null; }
     const { doc, selection } = v.state, key = p ? p.key() : null;
-    const target = [context?.post?.id, context?.item?.id, context?.course?.id].map((id) => typeof id === 'string' ? id.slice(0, 120) : '').join('|');
+    const target = [context?.post?.id, context?.replyTo?.id, context?.item?.id, context?.course?.id].map((id) => typeof id === 'string' ? id.slice(0, 120) : '').join('|');
     if (!previous || previous.doc !== doc || previous.key !== key || previous.from !== selection.from || previous.to !== selection.to || previous.kind !== kind || previous.mode !== mode || previous.target !== target) {
       previous = { doc, key, from: selection.from, to: selection.to, kind, mode, target };
       revision++;
