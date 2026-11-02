@@ -9,7 +9,7 @@ var GZ_AI_CURRENT = globalThis.GZ_AI_CURRENT || (() => {
   const DOCUMENT = ['paper', 'compose', 'discussion', 'journal', 'assignment', 'document'];
   const obj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v) && [Object.prototype, null].includes(Object.getPrototypeOf(v));
   const keys = (v, allowed) => obj(v) && Object.keys(v).every((k) => allowed.includes(k));
-  const title = (v) => typeof v === 'string' ? X().plain(v).trim().slice(0, 240) : '';
+  const title = (v) => typeof v === 'string' ? X().plain(v).trim().slice(0, 240).trimEnd() : '';
   const id = (v, site) => typeof v === 'string' && (site === 'ultra' ? /^(?:\d{1,20}|_\d{1,18}_\d{1,18})$/ : /^\d{1,20}$/).test(v) && v.length <= 40;
   // A modest share of the trusted window, separate from identity. The normal complete-request count still reserves
   // answers and thinking, and rejects overflow; no page field can enlarge this allowance or shrink those reserves.
@@ -23,7 +23,7 @@ var GZ_AI_CURRENT = globalThis.GZ_AI_CURRENT || (() => {
       const query = [...u.searchParams];
       u.search = '';
       for (const [k, value] of query) if (['id', 'courseid', 'course_id', 'content_id', 'assignment_id', 'discussion_id'].includes(k) && id(value, site)) u.searchParams.append(k, value);
-      return u.href;
+      return u.href.length <= 1200 ? u.href : '';
     } catch { return ''; }
   };
   const clean = (raw, { caps } = {}) => {
@@ -59,6 +59,8 @@ var GZ_AI_CURRENT = globalThis.GZ_AI_CURRENT || (() => {
       let bytes = 0, cut = '';
       const encoder = new TextEncoder();
       for (const c of text) { const n = encoder.encode(c).length; if (bytes + n > limit) break; bytes += n; cut += c; }
+      // Cutting at whitespace must stay canonical when the native request reader cleans this excerpt again.
+      cut = cut.trimEnd();
       if (cut) out.material = { text: cut, source: m.source, truncated: m.truncated || cut.length < text.length };
     }
     return out;
