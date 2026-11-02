@@ -187,9 +187,9 @@ test('automatic memory saving keeps all six selected school tools and uses a sep
   assert.equal(h.state.runs[0].input.help, undefined);
 });
 
-test('memory_save joins a main request only when its full measured request fits', async (t) => {
+test('memory_save joins a larger-window main request only when its full measured request fits', async (t) => {
   for (const fit of [true, false]) {
-    const h = harness({ counts: (input) => ({ used: input.tools?.includes('memory_save') && input.tools.length > 1 && !fit ? 3500 : 1000, window: 4096, reserve: 768, exact: true }),
+    const h = harness({ counts: (input) => ({ used: input.tools?.includes('memory_save') && input.tools.length > 1 && !fit ? 7500 : 1000, window: 8192, reserve: 768, exact: true }),
       script: { 'agent.tools': fit ? [call('todo_list'), said('There are no matching records.')] : [said(), call('todo_list'), said('There are no matching records.')] } }); t.after(h.close);
     assert.equal((await h.ask('What is due today?')).type, 'end');
     const main = h.state.runs.find((r) => r.input.tools.includes('todo_list'));
@@ -227,7 +227,7 @@ test('successful verified assignment reads are ingested with their actual observ
 
 test('exact fitting removes optional current URL before losing any typed resource identity', async (t) => {
   const h = harness({ counts: (input) => ({ used: 3100 + (input.current?.url ? 400 : 0), window: 4096, reserve: 768, exact: true }),
-    script: { 'agent.tools': [call('assignment_read', { course: '25', assignment: '41' }), said('Compare the two invented samples.')] },
+    script: { 'agent.tools': [said(), call('assignment_read', { course: '25', assignment: '41' }), said('Compare the two invented samples.')] },
     active: { site: 'canvas', view: 'assignment', url: 'https://school.instructure.com/courses/25/assignments/41', title: 'Invented lab', course: { id: '25' }, assignment: { id: '41', title: 'Invented lab' } } }); t.after(h.close);
   assert.equal((await h.ask('What are the instructions for this assignment?')).type, 'end');
   const run = h.state.runs.find((r) => r.input.tools?.includes('assignment_read'));
@@ -280,7 +280,7 @@ test('recall revisions are checked before the first model exposure after exact c
 
 test('memory receipts stay out of school material passed to study help', async (t) => {
   const text = 'I prefer short bullet points.';
-  const h = harness({ counts: () => ({ used: 1000, window: 4096, reserve: 768, exact: true }),
+  const h = harness({ counts: () => ({ used: 1000, window: 8192, reserve: 768, exact: true }),
     script: { 'agent.tools': [call('memory_save', { text, evidence: text, category: 'preference' }, 'write'), call('assignment_read', { course: '25', assignment: '41' }), said('Compare the samples.')], 'study.help': [study] },
     active: { site: 'canvas', view: 'assignment', course: { id: '25' }, assignment: { id: '41' } } }); t.after(h.close);
   assert.equal((await h.ask(`Explain this assignment. ${text}`)).type, 'end');
@@ -288,6 +288,36 @@ test('memory receipts stay out of school material passed to study help', async (
   const help = h.state.runs.find((r) => r.task === 'study.help');
   assert.match(help.input.material, /Compare two invented samples/);
   assert.doesNotMatch(help.input.material, /short bullet points|persistence|receipt|m-[0-9a-f]{32}/);
+});
+
+test('4K school requests reserve room for later tool results with saving isolated in a prelude', async (t) => {
+  for (const save of [false, true]) {
+    const text = 'I prefer short bullet points.';
+    const step = (input) => {
+      if (input.tools.includes('memory_save') && !input.steps.length && save) return call('memory_save', { text, evidence: text }, 'write');
+      if (input.tools.length === 1 && input.tools[0] === 'memory_save') return said();
+      return input.steps.length ? said('There are no matching records.') : call('todo_list');
+    };
+    const h = harness({ counts: (input) => ({ used: input.tools?.includes('memory_save') && input.tools.length > 1 && input.steps.length ? 3454 : input.steps?.length ? 3100 : 1000,
+      window: 4096, reserve: 768, exact: true }), script: { 'agent.tools': Array(5).fill(step) },
+      active: { site: 'canvas', view: 'assignment', course: { id: '25' }, assignment: { id: '41' } } }); t.after(h.close);
+    assert.equal((await h.ask(`What is due today? ${text}`)).type, 'end', save ? 'a committed save does not crowd out the school answer' : 'an unused save offer does not crowd out later results');
+    const main = h.state.runs.filter((r) => r.input.tools.includes('todo_list'));
+    assert.equal(main.length, 2);
+    for (const run of main) {
+      assert.equal(run.input.tools.includes('memory_save'), false);
+      assert.equal(run.input.steps.some((s) => s.call.name === 'memory_save'), false, 'called mutation history remains in its separate checked episode');
+      assert.equal(run.input.current.course.id, '25');
+      assert.equal(run.input.current.assignment.id, '41');
+    }
+    assert.equal(h.got.filter((m) => m.type === 'memory').length, save ? 1 : 0);
+    if (save) {
+      const saved = h.got.find((m) => m.type === 'memory').receipt;
+      assert.equal((await h.store.read(ACC, saved.id)).text, text);
+      assert.ok(h.state.runs.some((r) => r.input.tools.length === 1 && r.input.steps.some((s) => s.call.name === 'memory_save' && s.result.receipt.id === saved.id)), 'the prelude retains the successful mutation receipt for grounding');
+    }
+    assert.ok(h.state.counts.filter((r) => r.input.tools?.includes('todo_list')).every((r) => r.input.tools.length >= 3), 'required school tool slots remain available');
+  }
 });
 
 test('explicit memory management requires a freshly verified account before exposing its tools', async (t) => {
