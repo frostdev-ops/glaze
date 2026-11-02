@@ -213,6 +213,21 @@ test('rime regression: restore invalidates earlier leases before a queued automa
   }
 });
 
+test('rime regression: wrapped restore publication invalidates the raw memory storage identity', async () => {
+  const M = require('../../extension/ai/memory.js');
+  for (const atomic of [false, true]) {
+    const b = device({ [memoryKey]: memory('Before') }), runtime = M.create({ local: b.local, now: () => 9000 });
+    try {
+      const lease = runtime.lease(memoryAccount), value = { memories: { [memoryKey]: forgotten } };
+      const local = { get: (k) => b.local.get(k), set: (v) => b.local.set(v), remove: (k) => b.local.remove(k) };
+      const io = { local, sync: local, memoryLocal: b.local };
+      assert.equal((await (atomic ? B.atomic([{ action: 'own', value }], io) : B.apply(value, io))).ok, true);
+      assert.equal(runtime.validateLease(memoryAccount, lease), false);
+      assert.deepEqual(b.store, { [memoryKey]: forgotten });
+    } finally { b.stop(); }
+  }
+});
+
 test('Papers, their JSON documents, versions and presets survive a backup restore', async () => {
   const PA = require('../../extension/writer/writer-papers.js'), key = 'bb.school.test|_900_1|_101_1|_7_1';
   const doc = { type: 'doc', content: [{ type: 'paragraph', attrs: { first: 0 }, content: [{ type: 'text', text: 'Paper before backup.' }] }] };

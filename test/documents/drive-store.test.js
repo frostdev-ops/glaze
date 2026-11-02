@@ -237,6 +237,38 @@ test('rime regression: a concurrent stale upload cannot erase the last Drive del
   noDeletes(drive);
 });
 
+test('rime regression: overlapping memory uploads merge the winning active revision before both devices close', { timeout: 10000 }, async () => {
+  for (const tied of [false, true]) {
+    const drive = standin(), a = device(drive), b = device(drive), key = memoryKey(9), initial = memory(9, 'Original');
+    const edits = [memory(9, 'Alpha', 5000), memory(9, 'Beta', tied ? 5000 : 9000)];
+    const winner = require('../../extension/ai/memory.js').merge(...edits, key), loser = edits.find((x) => x.markdown !== winner.markdown);
+    await a.local.set({ [key]: initial }); await a.on(); await b.on();
+    await a.local.set({ [key]: loser });
+    const fetch = drive.fetch;
+    let release, reached, paused = false;
+    const gate = new Promise((resolve) => { release = resolve; }), started = new Promise((resolve) => { reached = resolve; });
+    drive.fetch = async (url, init = {}) => {
+      if (!paused && url.includes('/upload/') && Buffer.from(init.body || '').includes(Buffer.from(loser.markdown))) {
+        paused = true; reached(); await gate;
+      }
+      return fetch(url, init);
+    };
+    const uploading = a.run({ push: true });
+    try {
+      await started;
+      await b.local.set({ [key]: winner });
+      assert.ok((await b.run({ push: true })).ok);
+    } finally { release(); await uploading; drive.fetch = fetch; }
+    // Both original devices stop here. A fresh device cannot depend on either one repairing a lost winning write.
+    const fresh = device(drive); assert.ok((await fresh.on()).ok);
+    assert.deepEqual((await fresh.local.get(key))[key], winner);
+    assert.deepEqual(body(recFile(drive, 'local', key)).value, winner);
+    assert.equal([...drive.files.values()].filter((f) => f.meta.appProperties?.key === sha(`local\n${key}`).slice(0, 32)).length, 1, 'active edits do not leave extra cloud history files');
+    assert.ok(drive.log.some((x) => x.precondition === 412), 'the losing upload is rejected at its HTTP write');
+    noDeletes(drive);
+  }
+});
+
 test('a local change syncs when its timestamp equals or precedes the last agreed stamp', async () => {
   const drive = standin(), a = device(drive);
   await a.local.set({ writerWords: ['First'] });

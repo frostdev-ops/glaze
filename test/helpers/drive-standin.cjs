@@ -126,6 +126,30 @@ const standin = ({ tokens = null, owner = 'student@school.edu', quantum = 256 <<
     if (f0 >= 0) { const x = faults.splice(f0, 1)[0]; entry.fault = x.status; if (x.status === 0) return null; return json(x.status, x.body); }
     if (u.origin !== 'https://www.googleapis.com') return null;
     if (!valid.has(String(h.authorization || '').replace(/^Bearer /, ''))) return json(401, ERRORS[401]);
+    let m;
+    // Drive v2 retains the File ETag and conditional uploads. The memory-only bridge uses these instead of assuming
+    // v3's upload endpoint implements If-Match. Private v2 properties are v3 appProperties on the same file.
+    if ((m = /^\/drive\/v2\/files\/([\w-]+)$/.exec(u.pathname)) && method === 'GET') {
+      const f = files.get(m[1]);
+      if (!f || !f.app) return json(404, ERRORS[404]);
+      return json(200, mask({ id: f.meta.id, headRevisionId: f.meta.headRevisionId, etag: `"${f.meta.id}:${f.meta.version}"` }, fields(u)));
+    }
+    if ((m = /^\/upload\/drive\/v2\/files\/([\w-]+)$/.exec(u.pathname)) && method === 'PUT' && u.searchParams.get('uploadType') === 'multipart') {
+      const f = files.get(m[1]);
+      if (!f || !f.app) return json(404, ERRORS[404]);
+      entry.match = h['if-match'] || null;
+      if (h['if-match'] !== `"${f.meta.id}:${f.meta.version}"`) {
+        entry.precondition = 412;
+        return json(412, { error: { code: 412, errors: [{ reason: 'conditionNotMet' }] } });
+      }
+      const p = multipart(h['content-type'], body);
+      if (!p || Object.keys(p.meta).some((k) => k !== 'properties') || !Array.isArray(p.meta.properties)
+        || p.meta.properties.some((x) => x.visibility !== 'PRIVATE')) return bad();
+      const appProperties = Object.fromEntries(p.meta.properties.map((x) => [x.key, x.value]));
+      entry.upload = { meta: p.meta, type: p.type, size: p.media.length };
+      update(f, { appProperties }, p.media);
+      return json(200, mask({ id: f.meta.id, headRevisionId: f.meta.headRevisionId }, fields(u)));
+    }
     if (method === 'DELETE') {
       const d = /^\/drive\/v3\/files\/([\w-]+)$/.exec(u.pathname), f = d && files.get(d[1]);
       if (!f || !f.app) return json(404, ERRORS[404]);
@@ -134,7 +158,6 @@ const standin = ({ tokens = null, owner = 'student@school.edu', quantum = 256 <<
       gone(f);
       return { status: 204, headers: {}, body: Buffer.alloc(0) };
     }
-    let m;
     // changes
     if (method === 'GET' && u.pathname === '/drive/v3/changes/startPageToken') return json(200, { kind: 'drive#startPageToken', startPageToken: String(seq + 1) });
     if (method === 'GET' && u.pathname === '/drive/v3/changes') {

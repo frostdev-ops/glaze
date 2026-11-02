@@ -138,6 +138,39 @@ test('the sync client asks Drive exactly, never interactively', async () => {
   assert.ok(drive.log.every((x) => x.auth === 'Bearer tok-1' && !x.cookie));
 });
 
+test('rime regression: conditional memory uploads use a matching v2 ETag and retain private v3 properties', async () => {
+  const drive = standin(), c = D.create({ fetch: drive.fetch, token: async () => 'tok-1', interactive: false });
+  const meta = { appProperties: { glaze: 'rec', cat: 'memories', sum: 'before' } };
+  const first = await c.put({ meta: { ...meta, name: 'memory.json' }, mime: 'application/json', bytes: enc('before') });
+  await c.put({ id: first.id, meta: { appProperties: { ...meta.appProperties, sum: 'after' } }, mime: 'application/json', bytes: enc('after'), match: first.headRevisionId });
+  assert.equal(dec(drive.files.get(first.id).bytes), 'after');
+  assert.deepEqual(drive.view(first.id).appProperties, { ...meta.appProperties, sum: 'after' });
+  const request = drive.log.find((x) => x.path === `/upload/drive/v2/files/${first.id}`);
+  assert.ok(request?.match, 'the update has an actual File ETag precondition');
+  assert.deepEqual(request.upload.meta.properties, Object.entries({ ...meta.appProperties, sum: 'after' }).map(([key, value]) => ({ key, value, visibility: 'PRIVATE' })));
+  await assert.rejects(c.put({ id: first.id, meta, mime: 'application/json', bytes: enc('stale'), match: first.headRevisionId }), (e) => e.why === 'stale');
+  assert.equal(dec(drive.files.get(first.id).bytes), 'after', 'a mismatching head revision never uploads');
+});
+
+test('rime regression: conditional memory uploads reject a concurrent HTTP write and absent ETags', async () => {
+  for (const missing of [false, true]) {
+    const drive = standin();
+    let target;
+    const fetch = async (url, init = {}) => {
+      const r = await drive.fetch(url, init);
+      if (url.includes('/drive/v2/files/')) {
+        if (!missing) drive.edit(target, enc('concurrent'));
+        else { const j = await r.json(); delete j.etag; return new Response(JSON.stringify(j), { status: 200 }); }
+      }
+      return r;
+    };
+    const c = D.create({ fetch, token: async () => 'tok-1', interactive: false });
+    const first = await c.put({ meta: { name: 'memory.json' }, mime: 'application/json', bytes: enc('before') }); target = first.id;
+    await assert.rejects(c.put({ id: first.id, meta: { appProperties: { cat: 'memories' } }, mime: 'application/json', bytes: enc('stale'), match: first.headRevisionId }), (e) => e.why === (missing ? 'bad' : 'stale'));
+    assert.equal(dec(drive.files.get(first.id).bytes), missing ? 'before' : 'concurrent');
+  }
+});
+
 test('turning Sync on uploads every document: its file and a JSON copy in a Glaze folder', async () => {
   const drive = standin(), a = device(drive);
   const paper = 'doc:00000000-0000-4000-8000-000000000001', sheet = 'doc:00000000-0000-4000-8000-000000000002', pdf = 'doc:00000000-0000-4000-8000-000000000003';
