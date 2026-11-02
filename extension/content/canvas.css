@@ -1634,7 +1634,7 @@ html[data-gz-navbar] #nav-tray-portal { z-index: 1261 !important; }
    bar (1260), the sidebar's opener and the course tabs' frames (1250) and floating tiles: the rail stayed clickable over a
    modal's backdrop and the opener covered its buttons. While one shows, those go under it with the page, so Canvas's own
    order among its dialogs and what they open (menus, date pickers) stays as it set it. */
-body:has(> .ui-widget-overlay:not([style*="display: none"]), > .ui-dialog:not([style*="display: none"])) :is(#gz-navbar, #gz-sb-launch, #gz-sb-edge, #gz-ctabs-frames, #gz-float .gz-w, #gz-float[data-stack]) { z-index: 998 !important; }
+body:has(> .ui-widget-overlay:not([style*="display: none"]), > .ui-dialog:not([style*="display: none"])) :is(#gz-navbar, #gz-sb-launch, #gz-sb-edge, #gz-ctabs-frames, #gz-float, #gz-float .gz-w) { z-index: 998 !important; }
 html[data-gz-navbar~="menu"] :is(#left-side, #mobileContextNavContainer, .ic-app-nav-toggle-and-crumbs #courseMenuToggle) { display: none !important; }
 html[data-gz-navbar~="menu"] #main { margin-inline: 0 !important; }
 html[data-gz-ctabs~="nav"] { --gz-ctabs-h: 0px !important; }
