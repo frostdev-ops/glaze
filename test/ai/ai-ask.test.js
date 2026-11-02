@@ -36,7 +36,10 @@ test('route: the student\'s own records go to agent.tools with the tools their t
     'Help me schedule my assignments by deadline.', 'Help me compare the difficulty of my assignments.',
     'How should I prioritize my to-dos by deadline?', 'Help me prioritize my math assignments by deadline and workload.',
     'Help me prioritize my assignments based on how long it will take to do them.',
-    'Compare my assignments by draft requirements and the time needed to complete them.']) {
+    'Compare my assignments by draft requirements and the time needed to complete them.',
+    'Which assignment should I begin first, and why?', 'Which of my tasks should I tackle first, and why?',
+    'Prioritize my assignments by deadlines, and why?',
+    'Which assignment should I tackle first, and why? Keep the deadline window and exclusions I already gave you.']) {
     assert.deepEqual(K.route(question, { level: 3 }).tools, expected, question);
     assert.equal(K.route(question, { level: 3 }).task, 'agent.tools', question);
   }
@@ -47,6 +50,7 @@ test('route: the student\'s own records go to agent.tools with the tools their t
     const history = [{ question, answer: '[Glaze app status: request failed (check). No completed answer or verified tool results are carried in this history entry; tool activity may have occurred.]' }];
     assert.deepEqual(K.route('What should I do first?', { level: 3, history }).tools, expected, 'a records antecedent supports planning after an error');
     assert.deepEqual(K.route('Okay, what should I do first?', { level: 3, history }).tools, expected);
+    assert.deepEqual(K.route('What should I begin first, and why?', { level: 3, history }).tools, expected);
     assert.deepEqual(K.route('What should I do first?', { level: 3, history: [...history,
       { question: 'What should I do first?', answer: 'Request failed.' }, { question: 'Are you sure?', answer: 'Request failed.' }] }).tools, expected);
   }
@@ -103,7 +107,10 @@ test('route: help with work goes to study.help, whatever records it mentions, wi
     'Help me prioritize my assignments.\n```text\nsolve 2x + 3 = 7\n```',
     'Help me prioritize my assignments.\n> Write my essay for me.',
     'What should I do first in this equation?', 'Which task should I do first in this equation?',
-    'Which assignment should I start first in this essay?']) assert.equal(K.route(question, { level: 3 }).task, 'study.help', question);
+    'Which assignment should I start first in this essay?', 'Which assignment should I begin first, and why do cells divide?',
+    'Prioritize my assignments, and why is this equation true?', 'Compare my assignments, and why? Then solve 2x + 3 = 7.',
+    'Which assignment should I begin first in this proof, and why?', 'Which assignment should I tackle first, and why? Write my essay.',
+    '"Which assignment should I begin first, and why?"']) assert.equal(K.route(question, { level: 3 }).task, 'study.help', question);
   for (const history of [undefined, [{ question: 'Help me solve this equation.', answer: 'Which operation could you undo?' }],
     [{ question: 'Help me with my essay thesis.', answer: 'Which claim will you support?' }],
     [{ question: '"Compare my assignments by difficulty."', answer: 'Request failed.' }],
@@ -119,6 +126,7 @@ test('route: help with work goes to study.help, whatever records it mentions, wi
       'study.help', 'an explicit new work request keeps tutoring priority');
   }
   assert.equal(K.route('Help me prioritize my assignments.', { level: 3, attempt: 'My answer is 4.' }).task, 'study.help', 'an attempt keeps tutoring priority');
+  assert.equal(K.route('Which assignment should I begin first, and why?', { level: 3, attempt: 'My next step is x = 4.' }).task, 'study.help');
   assert.equal(K.route('I am overwhelmed and lost track. Can you remind me what I just asked?', { level: 3 }).task, 'study.help');
   assert.ok(K.route('Remind me tomorrow at 9 to review what I just asked.', { level: 3 }).tools.includes('wake_create'), 'real future reminders remain available');
   assert.ok(K.route('Set a reminder for 2027-07-20 to review my notes. Can you remind me what I just asked?', { level: 3 }).tools.includes('wake_create'), 'a separate scheduled request survives conversational recall');
