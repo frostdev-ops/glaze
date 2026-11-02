@@ -162,20 +162,24 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
       const l = value && leases.get(value), e = epoch(env.local);
       return !!l && l.local === env.local && l.account === account && l.all === e.all && l.generation === (e.accounts.get(account) || 0);
     };
+    const authorized = async (account, options) => {
+      if (options?.lease !== undefined && !validateLease(account, options.lease)) return false;
+      try { return options?.guard === undefined || (typeof options.guard === 'function' && await options.guard() === true); } catch { return false; }
+    };
     const mutate = (account, options, work) => {
       if (!accountOf(account)) return Promise.resolve(fail('scope'));
-      const held = options?.lease;
       return queued(env, async () => {
-        if (held !== undefined && !validateLease(account, held)) return fail('scope');
+        if (!await authorized(account, options)) return fail('scope');
         try { return await work(); } catch { return fail('write'); }
       });
     };
     const load = async (account, id) => { const key = keyOf(account, id); return key ? clean((await env.local.get(key))[key], key) : null; };
     const stamp = (old) => { const at = now(); if (!time(at)) throw Error('clock'); return Math.max(at, old ? Math.min(Number.MAX_SAFE_INTEGER, old.updatedAt + 1) : 0); };
-    const commit = async (r, operation) => {
+    const commit = async (r, operation, options) => {
       const key = keyOf(r.account, r.id), next = clean(r, key);
       if (!next) return fail('scope');
       if (!await canFit(env, key, next)) return fail('limit');
+      if (!await authorized(r.account, options)) return fail('scope');
       if (await env.local.set({ [key]: next }) === false) return fail('write');
       return receipt(operation, next);
     };
@@ -199,33 +203,33 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
         if (!newId) return fail('write');
         const at = stamp(old), r = { v: 1, id: newId, account, kind: 'memory', markdown, createdAt: old?.createdAt ?? at, updatedAt: at, revision: token(old?.revision),
           ...((old?.edited || explicit) && { edited: true }), ...(category && { category }), source: { type: 'user-message', evidence: input.evidence } };
-        return commit(r, old ? 'updated' : 'created');
+        return commit(r, old ? 'updated' : 'created', options);
       });
     };
-    const edit = (account, raw) => {
+    const edit = (account, raw, options = {}) => {
       if (!only(raw, ['id', 'revision', 'markdown'], ['id', 'revision', 'markdown']) || kindOf(raw.id) !== 'memory' || typeof raw.revision !== 'string' || !HEX.test(raw.revision) || !str(raw.markdown, LIMIT.memory)) return Promise.resolve(fail('scope'));
       const input = { ...raw };
-      return mutate(account, null, async () => {
+      return mutate(account, options, async () => {
         const old = await load(account, input.id);
         if (!old || old.deleted) return fail('not-found');
         if (old.revision !== input.revision) return fail('conflict', { current: old });
         if (old.markdown === input.markdown.trim() && old.edited) return receipt('unchanged', old);
         const markdown = input.markdown.trim();
-        const result = await commit({ ...old, markdown, updatedAt: stamp(old), revision: token(old.revision), edited: true, source: { type: 'user-message', evidence: clip(markdown, LIMIT.evidence) } }, 'updated');
+        const result = await commit({ ...old, markdown, updatedAt: stamp(old), revision: token(old.revision), edited: true, source: { type: 'user-message', evidence: clip(markdown, LIMIT.evidence) } }, 'updated', options);
         if (result.ok) invalidateNow(env.local, account);
         return result;
       });
     };
     const tombstone = (old) => ({ v: 1, id: old.id, account: old.account, kind: old.kind, createdAt: old.createdAt, updatedAt: stamp(old), revision: token(old.revision), deleted: true });
-    const forget = (account, raw) => {
+    const forget = (account, raw, options = {}) => {
       if (!only(raw, ['id', 'revision'], ['id', 'revision']) || !kindOf(raw.id) || typeof raw.revision !== 'string' || !HEX.test(raw.revision)) return Promise.resolve(fail('scope'));
       const input = { id: raw.id, revision: raw.revision };
-      return mutate(account, null, async () => {
+      return mutate(account, options, async () => {
         const old = await load(account, input.id);
         if (!old) return fail('not-found');
         if (old.revision !== input.revision) return fail('conflict', { current: old });
         if (old.deleted) return receipt('unchanged', old);
-        const result = await commit(tombstone(old), 'forgotten');
+        const result = await commit(tombstone(old), 'forgotten', options);
         if (result.ok) invalidateNow(env.local, account);
         return result;
       });
@@ -244,7 +248,7 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
         if (old?.deleted) return fail('not-found');
         if (old && ((old.source.complete && !source.complete) || old.source.observedAt > source.observedAt || (old.markdown === markdown && equal(old.source, source)))) return receipt('unchanged', old);
         const at = stamp(old);
-        return commit({ v: 1, id: sourceId, account, kind: 'course', markdown, createdAt: old?.createdAt ?? at, updatedAt: at, revision: token(old?.revision), source }, old ? 'updated' : 'created');
+        return commit({ v: 1, id: sourceId, account, kind: 'course', markdown, createdAt: old?.createdAt ?? at, updatedAt: at, revision: token(old?.revision), source }, old ? 'updated' : 'created', options);
       });
     };
     const listRecords = async (account, options = {}) => {
@@ -285,7 +289,7 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
     // Forget suppresses one source id. Explicit cache clearing/site removal releases that suppression so a later fresh
     // verified read can populate the cache again. Snapshot revisions protect active reads that arrived after the UI list.
     const purgeCourses = (options = {}) => {
-      if (!only(options, ['origin', 'account', 'snapshot']) || (options.account !== undefined && !accountOf(options.account))
+      if (!only(options, ['origin', 'account', 'snapshot', 'guard']) || (options.account !== undefined && !accountOf(options.account))
         || (options.snapshot !== undefined && (!Array.isArray(options.snapshot) || options.snapshot.some((r) => !only(r, ['id', 'revision'], ['id', 'revision']) || kindOf(r.id) !== 'course' || typeof r.revision !== 'string' || !HEX.test(r.revision))))) return Promise.resolve(fail('scope'));
       let origin = options.origin;
       if (origin !== undefined) { try { const u = new URL(origin); if (!/^https?:$/.test(u.protocol) || u.origin !== origin) return Promise.resolve(fail('scope')); } catch { return Promise.resolve(fail('scope')); } }
@@ -293,6 +297,7 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
       if (account && origin && accountOf(account).origin !== origin) return Promise.resolve(fail('scope'));
       return queued(env, async () => {
         try {
+          if (!await authorized(account, options)) return fail('scope');
           const rows = (await rowsOf(env, account)).filter((r) => r.kind === 'course' && (!origin || accountOf(r.account).origin === origin));
           const selected = rows.filter((r) => r.deleted), receipts = []; let conflicts = 0;
           if (snapshot) for (const ref of new Map(snapshot.map((r) => [r.id, r])).values()) {
@@ -300,6 +305,7 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
             if (matches.length === 1 && matches[0].revision === ref.revision) selected.push(matches[0]); else conflicts++;
           } else selected.push(...rows.filter((r) => !r.deleted));
           for (const r of selected) receipts.push(receipt('forgotten', tombstone(r)).receipt);
+          if (!await authorized(account, options)) return fail('scope');
           invalidateNow(env.local, account);
           if (selected.length && (typeof env.local.remove !== 'function' || await env.local.remove(selected.map((r) => keyOf(r.account, r.id))) === false)) return fail('write');
           return { ok: true, removed: selected.length, receipts, conflicts };
@@ -307,18 +313,20 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
       });
     };
     const clearRecords = (account, options = {}) => {
-      if (options.kind === 'course') return purgeCourses({ ...(account !== undefined && { account }), ...(options.snapshot !== undefined && { snapshot: options.snapshot }) });
+      if (options.kind === 'course') return purgeCourses({ ...(account !== undefined && { account }), ...(options.snapshot !== undefined && { snapshot: options.snapshot }), ...(options.guard !== undefined && { guard: options.guard }) });
       if ((account !== undefined && !accountOf(account)) || (options.kind !== undefined && !['memory', 'course'].includes(options.kind))
         || (options.snapshot !== undefined && (!Array.isArray(options.snapshot) || options.snapshot.some((r) => !only(r, ['id', 'revision'], ['id', 'revision']) || !kindOf(r.id) || typeof r.revision !== 'string' || !HEX.test(r.revision))))) return Promise.resolve(fail('scope'));
       const snapshot = options.snapshot?.map((r) => ({ ...r })), kind = options.kind;
       return queued(env, async () => {
         try {
+          if (!await authorized(account, options)) return fail('scope');
           const rows = (await rowsOf(env, account)).filter((r) => !r.deleted && (!kind || r.kind === kind)), selected = [], receipts = [];
           let conflicts = 0;
           if (snapshot) for (const ref of new Map(snapshot.map((r) => [r.id, r])).values()) { const matches = rows.filter((r) => r.id === ref.id); if (matches.length === 1 && matches[0].revision === ref.revision) selected.push(matches[0]); else conflicts++; }
           else selected.push(...rows);
           const patch = {};
           for (const r of selected) { const gone = tombstone(r); patch[keyOf(r.account, r.id)] = gone; receipts.push(receipt('forgotten', gone).receipt); }
+          if (!await authorized(account, options)) return fail('scope');
           if (Object.keys(patch).length && await env.local.set(patch) === false) return fail('write');
           if (account !== undefined) invalidateNow(env.local, account); else invalidateNow(env.local);
           return { ok: true, receipts, conflicts };
