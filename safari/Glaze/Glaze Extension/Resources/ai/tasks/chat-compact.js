@@ -27,12 +27,13 @@ var GZ_AI_TASK_CHAT_COMPACT = globalThis.GZ_AI_TASK_CHAT_COMPACT || (() => {
   const system = (locale) => `${SYSTEM}\nReply in ${LANGUAGES[locale]}.`;
 
   const cut = (v, n) => String(v).replace(/\r\n?/g, '\n').trim().slice(0, n);
-  const input = (raw) => {
+  const input = (raw, { caps } = {}) => {
+    const scale = T.retention(caps).scale, limit = (key) => Math.floor((scale > 1 && ['question', 'answer'].includes(key) ? 2000 : LIMIT[key]) * scale);
     if (!S.isObj(raw) || Object.keys(raw).some((k) => !['turns', 'summary', 'locale'].includes(k))) return null;
     const { turns, summary = '', locale = 'en' } = raw;
-    if (!Array.isArray(turns) || !turns.length || turns.length > LIMIT.turns || !Object.hasOwn(LANGUAGES, locale) || typeof summary !== 'string' || summary.length > LIMIT.summary
+    if (!Array.isArray(turns) || !turns.length || turns.length > limit('turns') || !Object.hasOwn(LANGUAGES, locale) || typeof summary !== 'string' || summary.length > LIMIT.summary
       || !turns.every((h) => S.isObj(h) && Object.keys(h).sort().join() === 'answer,question' && typeof h.question === 'string' && typeof h.answer === 'string' && h.question.trim() && h.answer.trim())) return null;
-    return { turns: turns.map((h) => ({ question: cut(h.question, LIMIT.question), answer: cut(h.answer, LIMIT.answer) })), ...(summary.trim() && { summary: summary.trim() }), locale };
+    return { turns: turns.map((h) => ({ question: cut(h.question, limit('question')), answer: cut(h.answer, limit('answer')) })), ...(summary.trim() && { summary: summary.trim() }), locale };
   };
   const turnsText = (inp) => inp.turns.map((h) => `Student: ${h.question}\nRime: ${h.answer}`).join('\n');
   const build = (inp, { text: tx }) => tx.request({

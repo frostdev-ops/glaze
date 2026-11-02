@@ -49,8 +49,10 @@ var GZ_AI_TASK_WRITER_REVIEW = globalThis.GZ_AI_TASK_WRITER_REVIEW || (() => {
     data: [{ label: inp.parts > 1 ? `draft part ${inp.part} of ${inp.parts}` : 'draft', text: inp.text }],
     temperature: 0, maxTokens: 4096,
   });
-  // Parts of a third of what a part's data may take, so the instructions and a long answer fit beside it.
-  const split = (inp, { budget, text }) => {
+  // Larger windows split by complete provider-counted requests; 4K keeps the conservative established part size.
+  const split = (inp, kit) => {
+    const { budget, text, caps } = kit;
+    if (caps?.context > 4096 && kit.count) return T.splitText(inp, kit, { build: (part) => build(part, { caps, text }), parts: LIMIT.parts });
     const size = Math.max(500, Math.floor(budget / 3));
     if (text.estimateTokens(inp.text) <= size) return [inp];
     const parts = text.chunks(inp.text, { size, overlap: 0 });

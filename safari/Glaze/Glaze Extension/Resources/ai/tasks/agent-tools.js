@@ -174,20 +174,22 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       `next week ${day(week + 1)} to ${day(week + 7)}`, `due soon ${day(0)} to ${day(7)}`].join('\n');
   };
   // A result as compact JSON for the model: times (ms since 1970 under Glaze's time keys) as the student's local
-  // "YYYY-MM-DD HH:MM" (with how, { locale, now }: friendly()), long strings cut, and the longest list cut from its end ("… N more") until it fits LIMIT.result.
-  const readable = (value, zone, how) => {
+  // "YYYY-MM-DD HH:MM" (with how, { locale, now }: friendly()), long strings cut, and the longest list cut from its end
+  // ("… N more") until it fits the effective window's scaled result bound. The 4K result shape stays the same.
+  const readable = (value, zone, how, caps) => {
+    const scale = T.retention(caps).scale, limit = (key) => Math.floor(LIMIT[key] * scale);
     try {
       const json = JSON.stringify(value);
-      if (typeof json !== 'string' || json.length > LIMIT.json) return null;
+      if (typeof json !== 'string' || json.length > limit('json')) return null;
       const walk = (v, key, depth = 0) => {
         if (depth > S.LIMIT.depth) throw new TypeError('result depth');
         return Array.isArray(v) ? v.map((x) => walk(x, undefined, depth + 1)) : S.isObj(v) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, k, depth + 1)]))
-          : typeof v === 'number' && TIMES.has(key) && v > 1e11 && v < 1e14 ? (how ? friendly(v, zone, how.locale, how.now) : local(v, zone)) : typeof v === 'string' && v.length > LIMIT.string ? `${v.slice(0, LIMIT.string - 1)}…` : v;
+          : typeof v === 'number' && TIMES.has(key) && v > 1e11 && v < 1e14 ? (how ? friendly(v, zone, how.locale, how.now) : local(v, zone)) : typeof v === 'string' && v.length > limit('string') ? `${v.slice(0, limit('string') - 1)}…` : v;
       };
       const out = walk(JSON.parse(json));
       const cut = new Map();
       const lists = (v, acc = []) => { if (Array.isArray(v)) { acc.push(v); v.forEach((x) => lists(x, acc)); } else if (S.isObj(v)) Object.values(v).forEach((x) => lists(x, acc)); return acc; };
-      while (JSON.stringify(out).length > LIMIT.result) {
+      while (JSON.stringify(out).length > limit('result')) {
         const longest = lists(out).filter((l) => l.length > (cut.has(l) ? 1 : 0)).sort((a, b) => JSON.stringify(b).length - JSON.stringify(a).length)[0];
         if (!longest) return null;
         if (cut.has(longest)) longest.pop();
@@ -268,27 +270,28 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       return readable(f, 'UTC') === text;
     } catch { return false; }
   };
-  const input = (raw) => {
+  const input = (raw, { caps } = {}) => {
+    const scale = T.retention(caps).scale, historyLimit = (key) => Math.floor(HISTORY[key] * scale);
     if (!S.isObj(raw) || Object.keys(raw).some((k) => !['question', 'tools', 'steps', 'now', 'zone', 'locale', 'fired', 'first', 'help', 'history', 'summary', 'fix'].includes(k))) return null;
     // first: answer only from tool results (tools level 3: Ask Rime's tool-first rule, check() 'first' and 'ground'); help:
     // study.help's subject, for a turn that reads what the student's help question names before study help answers it.
     if ((raw.first !== undefined && raw.first !== true) || (raw.help !== undefined && !HELP.includes(raw.help))) return null;
-    // history (tools level 3 only): the panel's conversation so far, [{ question, answer }], the last HISTORY.turns kept, each cut.
-    if (raw.history !== undefined && (raw.first !== true || !Array.isArray(raw.history) || raw.history.length > 6
+    // history (tools level 3 only): the panel's conversation so far, bounded by the trusted effective context.
+    if (raw.history !== undefined && (raw.first !== true || !Array.isArray(raw.history) || raw.history.length > Math.floor(6 * scale)
       || !raw.history.every((h) => S.isObj(h) && Object.keys(h).sort().join() === 'answer,question' && typeof h.question === 'string' && typeof h.answer === 'string'))) return null;
     // summary (tools level 3 only): chat.compact's bullets for the turns history no longer carries.
     // fix (tools level 3 only, after results): the rule the last answer broke, for one corrective turn (FIX).
     if (raw.fix !== undefined && (raw.first !== true || !FIXES.includes(raw.fix) || !Array.isArray(raw.steps) || !raw.steps.length)) return null;
-    if (raw.summary !== undefined && (raw.first !== true || typeof raw.summary !== 'string' || raw.summary.length > HISTORY.summary)) return null;
+    if (raw.summary !== undefined && (raw.first !== true || typeof raw.summary !== 'string' || raw.summary.length > historyLimit('summary'))) return null;
     const summary = (raw.summary || '').trim();
-    const history = (raw.history || []).filter((h) => h.question.trim() && h.answer.trim()).slice(-HISTORY.turns)
-      .map((h) => ({ question: h.question.trim().slice(0, HISTORY.question), answer: h.answer.trim().slice(0, HISTORY.answer) }));
+    const history = (raw.history || []).filter((h) => h.question.trim() && h.answer.trim()).slice(-historyLimit('turns'))
+      .map((h) => ({ question: h.question.trim().slice(0, historyLimit('question')), answer: h.answer.trim().slice(0, historyLimit('answer')) }));
     const { question, tools, steps = [], now, zone, locale = 'en' } = raw;
-    if (typeof question !== 'string' || !question.trim() || question.length > LIMIT.question || !Array.isArray(tools) || !tools.length || new Set(tools).size !== tools.length
+    if (typeof question !== 'string' || !question.trim() || question.length > Math.floor(LIMIT.question * scale) || !Array.isArray(tools) || !tools.length || new Set(tools).size !== tools.length
       || !tools.every((n) => NAMES.includes(n)) || !Array.isArray(steps) || steps.length > LIMIT.steps || !Number.isSafeInteger(now) || now <= 0 || now > 8640000000000000 || typeof zone !== 'string' || !zoneOk(zone)
       || !Object.hasOwn(LANGUAGES, locale)) return null;
     if (!steps.every((s) => S.isObj(s) && Object.keys(s).sort().join() === 'call,result' && validCall(s.call, tools))) return null;
-    const shown_ = steps.map((s) => readable(s.result, zone, raw.first === true ? { locale, now } : undefined));
+    const shown_ = steps.map((s) => readable(s.result, zone, raw.first === true ? { locale, now } : undefined, caps));
     if (shown_.includes(null)) return null;
     const fired = Object.hasOwn(raw, 'fired') ? firedOf(raw.fired, zone) : undefined;
     if (fired === null) return null;

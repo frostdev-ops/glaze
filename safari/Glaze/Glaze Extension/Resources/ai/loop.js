@@ -106,7 +106,7 @@ var GZ_AI_LOOP = globalThis.GZ_AI_LOOP || (() => {
   //   onThinking }) → result, policy: () => current policy (or one), rounds, limits: { ms, tokens }, headless, stream (text
   //   deltas go to emit), signal, emit, ctx (what a tool's run is given), confirms (a Map: parked calls), now }
   // → the last result, with { reply, steps, rounds, usage, pending?, paused? }.
-  const run = async ({ request: raw, tools: given = [], call, policy = POLICY, rounds, limits = {}, headless = false, stream = false, signal, emit = () => {}, ctx, confirms = new Map(), now = Date.now }) => {
+  const run = async ({ request: raw, tools: given = [], call, count, policy = POLICY, rounds, limits = {}, headless = false, stream = false, signal, emit = () => {}, ctx, confirms = new Map(), now = Date.now }) => {
     const Q = R();
     const request = Q.clean(raw);
     if (!request) throw Q.error('request');
@@ -131,7 +131,8 @@ var GZ_AI_LOOP = globalThis.GZ_AI_LOOP || (() => {
         messages = repair(messages);
         if (messages.length > Q.LIMIT.messages) throw Q.error('steps');
         const offered = T().aiTools(tools, current().tools);
-        const asked = X().estimateTokens({ messages, offered });
+        const measured = count ? await F().wait(() => count({ ...request, messages, ...(offered.length && { tools: offered }) }, { signal: both.signal }), both.signal) : null;
+        const asked = measured?.tokens ?? X().estimateTokens({ messages, offered });
         if (used.input + used.output + asked > tokens) throw Q.error('limit');
         emit({ type: 'thinking', round });
         const messageId = crypto.randomUUID();
