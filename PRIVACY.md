@@ -1269,6 +1269,13 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
   the theme on Canvas, Blackboard Ultra (its `/ultra` pages) and Moodle where Instructure, Blackboard and MoodleCloud host
   them, and in Canvas's document viewer on `canvadocs.instructure.com`, where a separate small script applies the palette
   and, if you switch them on, your marks on documents. Glaze reads and restyles the page in your browser only.
+- Host access to `https://mylab.pearson.com/*` and `https://tdx.acs.pearson.com/*` — to theme MyLab's homework
+  player, its nested assignment/player frames and homework overview. The adapter reads the page's homework-mode marker
+  and your existing Glaze appearance settings. The optional problem viewer rearranges the existing layout without copying
+  question or answer content. Its layout switch is temporary; the Settings switch syncs with your other settings.
+  A Glaze frame reads appearance settings to draw the saved Look's background, through the existing background/media
+  renderer and its normal file and host checks. It does not read, store or submit answers, scores or course data,
+  and makes no Pearson API requests. Chosen fonts load through the existing font loader described above.
 - Host access to `https://frostdev.io/*` and `https://share.frostdev.io/*` — for the gallery script above on
   `https://frostdev.io/glaze/looks` and `/glaze/mods`, the gallery's Looks and mods, the mod blocklist and optional
   encrypted share sessions on the default relay.

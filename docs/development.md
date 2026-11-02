@@ -17,6 +17,28 @@ plus that site's own part, `content-ultra.js` on Blackboard Ultra and `content-c
 has no part; it is themed by `content.js` and `moodle.css`. Everything else, from the command palette to the
 grade calculators, loads on demand from its area's `page/` folder the first time a page needs it.
 
+Pearson MyLab homework uses a separate appearance adapter, `content/pearson.js` and `content/pearson.css`.
+The manifest matches MyLab's homework player/overview and the assignment/player frames on
+`tdx.acs.pearson.com`. The latter activate only when Pearson marks the viewer `playmode-homework`.
+Each frame reads the saved Look's palette, typography, surfaces, depth, navigation styling, pointer and motion
+settings, and follows automatic light/dark changes. The question player and overview reuse the existing Look
+background renderer (`preview.html?site=canvas&backdrop&saved`), including scenes, shaders, layers and kept media.
+That frame reads appearance keys itself and rejects settings messages from its Pearson parent.
+The overview keeps Pearson's tables, question links and action handlers, with CSS for the assignment title,
+detail cards, summary strip and responsive question grid. A question tile expands its original anchor's hit area;
+the adapter does not copy or calculate any score or status. Hidden native actions and reminders stay hidden.
+The problem viewer lays out the original prompt and answer nodes as one worksheet, with a collapsible question
+list. Its page switch restores Pearson's layout; the persistent switch is under Course pages → Documents and quizzes.
+Glaze off restores native appearance and removes the renderer, controls and icon filters. Math fonts, diagrams,
+and native answer handling stay with Pearson. Common symbol templates use scalable Glaze artwork on the original buttons;
+unrecognized controls retain Pearson's artwork. Names and shortcuts come from native button metadata. The question list
+owns its scroll area even when Dijit writes a zero-pixel inner height. Shared motion knobs and saved Look animations
+drive problem, panel and symbol transitions, with reduced motion and the entrance switch honored. Background frames
+stay hidden over the palette fallback until their own renderer confirms its first theme paint.
+This adapter has no LMS data bridge or Blackboard embedding behavior. The synthetic
+`checks/pearson/homework-check.js` exercises the unpacked extension across the nested frames;
+it does not establish support for Pearson tests, other products, or native Safari runtime.
+
 ## Activity Stream
 
 Blackboard's Stream notification settings contain a Glaze section, also available at

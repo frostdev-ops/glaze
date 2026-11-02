@@ -84,6 +84,13 @@ course sites (**Use Glaze on example.edu?**) before theming them, reading their 
 Privacy and data → Sites** lists your sites, with Remove, which also forgets the courses and due dates Glaze read there.
 See [Adding a school's own site](../PRIVACY.md#adding-a-schools-own-site).
 
+Pearson MyLab homework is themed on `mylab.pearson.com` and its player frames on `tdx.acs.pearson.com`.
+The problem viewer keeps the native question and answer nodes and changes their layout. Its Settings switch syncs;
+the page's layout switch is temporary. A Glaze frame draws the saved Look's background through the existing media
+and file checks. This appearance adapter reads the homework-mode marker and saved appearance settings; it does not read,
+store or submit answers, scores or course data, or make Pearson API requests. Other Pearson pages and test mode
+keep their native appearance.
+
 The sidebar's title, style, page choices and other general settings sync too. Its width, open/fold state, To Do scope,
 dock order/heights, widget destinations and migration markers stay in local records keyed by LMS, school origin and
 account id. The page's shared account reader gets Canvas's profile id or Ultra's me id from your own school session.

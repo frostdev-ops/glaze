@@ -42,6 +42,17 @@ const worker = (execute = (o) => Promise.resolve([{ result: /typeof GZ_I18N|wind
 };
 const tab = (frameId = 3) => ({ id: ID, tab: { id: 7 }, frameId, url: 'https://school.instructure.com/courses/1' });
 
+test('Pearson homework can load language catalogues, without gaining LMS module authority', async () => {
+  const w = worker();
+  for (const url of ['https://mylab.pearson.com/Student/PlayerHomework.aspx?homeworkId=101', 'https://tdx.acs.pearson.com/Player/Player.aspx']) {
+    const sender = { ...tab(2), url, documentId: 'PEARSON' };
+    assert.deepEqual(await w.send({ type: 'glaze:load', files: ['i18n/es.js'] }, sender), { ok: true });
+    assert.deepEqual(await w.send({ type: 'glaze:load', files: ['writer/page/writer.js'] }, sender), { ok: false, error: 'sender' });
+  }
+  for (const url of ['https://mylab.pearson.com/Student/DoAssignments.aspx', 'https://mylab.pearson.com.evil.test/Student/PlayerHomework.aspx', 'https://tdx.acs.pearson.com:8443/Player/Player.aspx'])
+    assert.deepEqual(await w.send({ type: 'glaze:load', files: ['i18n/es.js'] }, { ...tab(2), url }), { ok: false, error: 'sender' });
+});
+
 test('an allowlisted file runs in the asking frame only, and the reply waits for it', async () => {
   const w = worker();
   assert.deepEqual(await w.send({ type: 'glaze:load', files: ['core/zip.js'] }, tab(3)), { ok: true });

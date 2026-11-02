@@ -3927,5 +3927,9 @@
   "Memory saved on this device": "Erinnerung auf diesem Gerät gespeichert",
   "Memory updated on this device": "Erinnerung auf diesem Gerät aktualisiert",
   "Memory deleted": "Erinnerung gelöscht",
-  "Memory is off": "Erinnerungen sind ausgeschaltet"
+  "Memory is off": "Erinnerungen sind ausgeschaltet",
+  "Questions": "Fragen",
+  "Pearson layout": "Pearson-Layout",
+  "Problem viewer": "Aufgabenansicht",
+  "Pearson problem viewer": "Pearson-Aufgabenansicht"
 };

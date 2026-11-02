@@ -28,6 +28,8 @@
     "https://*.instructure.com/*",
     "https://*.blackboard.com/*",
     "https://*.moodlecloud.com/*",
+    "https://mylab.pearson.com/*",
+    "https://tdx.acs.pearson.com/*",
     "https://frostdev.io/*",
     "https://share.frostdev.io/*"
   ],
@@ -76,6 +78,30 @@
     "open_in_tab": true
   },
   "content_scripts": [
+    {
+      "matches": [
+        "https://mylab.pearson.com/Student/PlayerHomework.aspx*",
+        "https://mylab.pearson.com/Student/OverviewHomework.aspx*",
+        "https://tdx.acs.pearson.com/assignment/assignmentplayer.aspx*",
+        "https://tdx.acs.pearson.com/Player/Player.aspx*"
+      ],
+      "css": ["content/motion.css", "looks/page/surfaces.css", "looks/page/lookx.css", "content/pearson.css"],
+      "js": [
+        "core/color.js",
+        "core/i18n.js",
+        "core/motion.js",
+        "looks/fonts.js",
+        "looks/surfaces.js",
+        "content/defaults.js",
+        "core/ui.js",
+        "looks/lookx.js",
+        "looks/lookparts.js",
+        "looks/motionx.js",
+        "content/pearson.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    },
     {
       "matches": [
         "https://*.blackboard.com/ultra",

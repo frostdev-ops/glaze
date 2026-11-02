@@ -1,0 +1,255 @@
+/* Pearson MyLab homework only. Native controls and math fonts remain Pearson's. */
+@font-face { font-family: "Glaze Inter"; src: url("../fonts/inter.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("../fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Glaze Atkinson"; src: url("../fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; font-display: swap; }
+@media screen {
+html[data-gz-pearson] { color-scheme: var(--gz-pearson-scheme); background: var(--gz-surface-2) !important; }
+html[data-gz-pearson] body { background: var(--gz-surface) !important; color: var(--gz-ink) !important; font-family: var(--gz-font) !important; }
+html[data-gz-pearson] :is(#mainTopNavContainer, #mainTopNav, .navbar-inverse, .statusPanel, .assignmentreviewnavpanel, .assignmentreviewnavListContainer, .assignmentreviewnavListContainer ul, .controlPanel, .palettePanel) {
+  background-color: var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
+  background-image: none !important;
+  border-color: var(--gz-border-line, var(--gz-line)) !important;
+  color: var(--gz-ink) !important;
+}
+html[data-gz-pearson] :is(#mainTopNavContainer, .statusPanel, .assignmentreviewnavheader) :is(h1, h2, h3, span, a, .title) { color: var(--gz-ink) !important; }
+html[data-gz-pearson] :is(#mainTopNavContainer, .assignmentreviewnavheader, .controlPanel, .btn, .learningaid-button, .menu-button, .questionLabel) { font-family: var(--gz-font) !important; }
+html[data-gz-pearson] :is(#playerViewer, #assignmentViewer, .framePanel, .contentHolder) { color: var(--gz-ink) !important; }
+html[data-gz-pearson] :is(.framePanel, .assignmentreviewnavpanel, .assignmentreviewnavheader, .assignmentreviewnavtablediv) { border-color: var(--gz-line) !important; }
+html[data-gz-pearson] :is(.rvTxt, [class*="fNormal"], .equation, .eqDocument, .eqDocument *) { color: var(--gz-ink) !important; }
+html[data-gz-pearson] .fInstructions { color: var(--gz-ink-muted) !important; }
+html[data-gz-pearson] .contentHolder .rvTxt { font-family: var(--gz-font) !important; }
+html[data-gz-pearson="shell"] #mainTopNavContainer h1 { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: clamp(14px,1.8vw,18px) !important; }
+html[data-gz-pearson] :is(.eqEditor, input:not([type="hidden"]), textarea, select) {
+  background-color: var(--gz-surface-2) !important;
+  color: var(--gz-ink) !important;
+  border-color: var(--gz-line-strong) !important;
+  caret-color: var(--gz-accent) !important;
+}
+html[data-gz-pearson] .eqEditor .eqDocument { background: transparent !important; }
+/* The real input is a hidden accessibility/keyboard proxy. Do not resize it or replace its contents. */
+html[data-gz-pearson] .eqEditor:focus-within { border-color: var(--gz-accent) !important; }
+html[data-gz-pearson] .eqCaret { background-color: var(--gz-ink) !important; border-color: var(--gz-ink) !important; }
+html[data-gz-pearson] .eqSelection { background-color: var(--gz-accent-soft) !important; }
+html[data-gz-pearson] .assignmentreviewnavListContainer :is(li, a) { color: var(--gz-accent) !important; }
+html[data-gz-pearson] .assignmentreviewnavListContainer li { background-color: transparent !important; background-image: none !important; border-color: transparent !important; }
+html[data-gz-pearson] .assignmentreviewnavListContainer li:is(.selected, :hover, :focus-within) { background-color: var(--gz-accent-soft) !important; border-color: var(--gz-accent) !important; }
+html[data-gz-pearson] :is(.learningaid-button, .menu-button, .btnClear) { color: var(--gz-ink) !important; }
+html[data-gz-pearson] :is(.learningaid-button,.menu-button) { background-color: transparent !important; }
+html[data-gz-pearson] .btn:not(.btnOverview, .btnPrev, .btnNext) {
+  color: var(--gz-ink) !important;
+  background-color: var(--gz-surface-paint, var(--gz-surface)) !important;
+  border-color: var(--gz-border-strong, var(--gz-line-strong)) !important;
+  border-radius: var(--gz-radius) !important;
+}
+html[data-gz-pearson] .btn.btn-primary {
+  background-image: none !important;
+  color: var(--gz-accent-ink) !important;
+  background-color: var(--gz-accent) !important;
+  border-color: var(--gz-accent) !important;
+}
+html[data-gz-pearson] :is(button, .btn)[disabled] { opacity: .45 !important; }
+html[data-gz-pearson] :is(button, a, input, textarea, select, [tabindex]):focus-visible { outline: 2px solid var(--gz-accent) !important; outline-offset: 2px; }
+html[data-gz-pearson] :is(.dijitMenu, .dijitDialog, .dijitDialogTitleBar, .dijitDialogPaneContent, .dijitTooltipContainer, .xlStandby) {
+  background-color: var(--gz-surface) !important;
+  background-image: none !important;
+  color: var(--gz-ink) !important;
+  border-color: var(--gz-line-strong) !important;
+}
+html[data-gz-pearson] :is(.dijitMenuItem, .dijitMenuItemLabel, .dijitDialogTitle, .dijitDialogPaneContent) { color: var(--gz-ink) !important; }
+html[data-gz-pearson] :is(.dijitMenuItemHover, .dijitMenuItemSelected) { background-color: var(--gz-accent-soft) !important; }
+html[data-gz-pearson] :is(.dijitSplitter, .dijitSplitterThumb) { background-color: var(--gz-surface-2) !important; border-color: var(--gz-line-strong) !important; }
+html[data-gz-pearson] .horizontalsplitterHandle { background-color: var(--gz-surface-2) !important; border-color: var(--gz-line-strong) !important; }
+html[data-gz-pearson] .horizontalHandleSpan2 { background-color: var(--gz-ink-muted) !important; }
+html[data-gz-pearson] .splitterHorizontalLine { border-color: var(--gz-line-strong) !important; }
+html[data-gz-pearson] :is(.btnOverview, .btnPrev, .btnNext, .xlPlayerOptionsIcon) { color: var(--gz-ink) !important; background-color: var(--gz-surface-fill, var(--gz-surface)) !important; border-radius: 50% !important; }
+html[data-gz-pearson][data-gz-pearson-dark] .questionStatusIcon:not(.correct, .incorrect, .partial) { filter: brightness(2); }
+/* Homework overview is part of the homework flow, but other MyLab pages receive no styles. */
+html[data-gz-pearson="overview"] :is(#maindiv, .white-background, .container, .container-fluid, .panel, .panel-heading, .panel-body, .well, .table, th, td) {
+  color: var(--gz-ink) !important;
+  background-color: var(--gz-surface) !important;
+  border-color: var(--gz-line) !important;
+}
+html[data-gz-pearson="overview"] :is(a, .text-primary) { color: var(--gz-accent) !important; }
+html[data-gz-pearson="overview"] :is(h1, h2, h3, h4, label, p, .text-muted) { color: var(--gz-ink) !important; }
+html[data-gz-pearson="overview"] body { min-height: 100vh; margin: 0 !important; line-height: var(--gz-leading); }
+html[data-gz-pearson="overview"] #maindiv { width: min(1180px,calc(100% - 48px)) !important; max-width: none !important; margin: 32px auto !important; padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; box-sizing: border-box; }
+html[data-gz-pearson="overview"] #maindiv > .xlbootstrap { background: transparent !important; }
+html[data-gz-pearson="overview"] #maindiv .pageheader { display: flex; align-items: center; gap: 16px; padding: 0 4px 16px !important; margin: 0 !important; border: 0 !important; background: transparent !important; }
+html[data-gz-pearson="overview"] #maindiv .pageheader > :empty { display: none; }
+html[data-gz-pearson="overview"] #maindiv .page-assistance { flex: 1; min-width: 0; }
+html[data-gz-pearson="overview"] #maindiv #PageHeaderTitle { float: none !important; margin: 0 !important; font: 600 calc(18px * var(--gz-scale))/1.3 var(--gz-font-head) !important; }
+html[data-gz-pearson="overview"] #maindiv #PageHelp { position: relative; inset: auto; margin: 0; }
+html[data-gz-pearson="overview"] #maindiv .help-items { display: flex; align-items: center; gap: 8px; }
+html[data-gz-pearson="overview"] #maindiv :is(.print-icon,#ButtonHelp) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 40px; min-height: 40px; padding: 8px !important; box-sizing: border-box; border: 1px solid transparent !important; border-radius: min(var(--gz-radius),10px) !important; background: var(--gz-surface-fill-2) !important; box-shadow: none !important; color: var(--gz-ink-muted) !important; font-size: 13px !important; text-decoration: none; }
+html[data-gz-pearson="overview"] #maindiv .help-items i { color: inherit !important; font-size: 20px; }
+html[data-gz-pearson="overview"] #maindiv .dropdown-menu { color: var(--gz-ink); background: var(--gz-surface-paint); border: 1px solid var(--gz-border-line); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); }
+html[data-gz-pearson="overview"] #maindiv .dropdown-menu a:hover { background: var(--gz-accent-soft); }
+html[data-gz-pearson="overview"] #maindiv .homework { padding: 0 !important; margin: 0 !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; background: transparent !important; }
+html[data-gz-pearson="overview"] #maindiv .homework > .row { margin: 0 !important; }
+html[data-gz-pearson="overview"] #maindiv .homework > .row > :is(.col-sm-6,.col-sm-12) { width: 100% !important; float: none !important; padding: 0 !important; }
+/* An empty, hidden tutoring control otherwise reserves an 85-pixel float beside the details. */
+html[data-gz-pearson="overview"] #maindiv .homework > div:has(> #btnGetPayLoad1[style*="display: none"]) { display: none; }
+html[data-gz-pearson="overview"] #maindiv .table-homework-details { display: block; width: 100% !important; margin: 0 0 20px !important; padding: 24px; box-sizing: border-box; border: 1px solid var(--gz-border-line); border-radius: var(--gz-radius); background: var(--gz-surface-grain), var(--gz-surface-fill); box-shadow: var(--gz-rest-shadow); backdrop-filter: blur(var(--gz-glass)); animation: var(--gz-enter-page); }
+html[data-gz-pearson="overview"] #maindiv .table-homework-details tbody { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
+html[data-gz-pearson="overview"] #maindiv .table-homework-details tr { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 14px; border: 1px solid var(--gz-border-line); border-radius: min(var(--gz-radius),12px); background: var(--gz-surface-fill-2); }
+html[data-gz-pearson="overview"] #maindiv .table-homework-details td { display: block; width: auto !important; padding: 0 !important; border: 0 !important; background: transparent !important; overflow-wrap: anywhere; font: 500 calc(15px * var(--gz-scale))/var(--gz-leading) var(--gz-font); }
+html[data-gz-pearson="overview"] #maindiv .table-homework-details td:first-child { color: var(--gz-ink-muted) !important; font-size: calc(12px * var(--gz-scale)); font-weight: 400; }
+html[data-gz-pearson="overview"] #maindiv .table-homework-details tr[id$="_TrAssignmentName"] { grid-column: 1 / -1; padding: 0 0 8px; border: 0; background: transparent; }
+html[data-gz-pearson="overview"] #maindiv tr[id$="_TrAssignmentName"] td:first-child { display: none; }
+html[data-gz-pearson="overview"] #maindiv [id$="_LblName"] { font: 650 calc(clamp(22px,2.5vw,30px) * var(--gz-scale))/1.25 var(--gz-font-head); }
+html[data-gz-pearson="overview"] #maindiv #CurrentScore { color: var(--gz-accent); font-weight: 650; }
+html[data-gz-pearson="overview"] #maindiv .homework-reminders { padding: 18px; margin: 0 0 20px !important; border: 1px solid var(--gz-border-line); border-radius: var(--gz-radius); background: var(--gz-surface-fill) !important; }
+html[data-gz-pearson="overview"] #maindiv #exPanel { padding: 24px; margin: 0 !important; border: 1px solid var(--gz-border-line); border-radius: var(--gz-radius); background: var(--gz-surface-grain), var(--gz-surface-fill); box-shadow: var(--gz-rest-shadow); backdrop-filter: blur(var(--gz-glass)); animation: var(--gz-enter-panel); }
+html[data-gz-pearson="overview"] #maindiv #dvQuestionPanel > p:empty { display: none; }
+html[data-gz-pearson="overview"] #maindiv .table-score-details { margin: 0 0 20px !important; border: 0 !important; }
+html[data-gz-pearson="overview"] #maindiv .table-score-details ul { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0; border: 0; list-style: none; }
+html[data-gz-pearson="overview"] #maindiv .table-score-details li { flex: 1 1 auto; width: auto !important; padding: 10px 12px !important; border: 1px solid var(--gz-border-line) !important; border-radius: min(var(--gz-radius),10px); color: var(--gz-ink-muted); background: var(--gz-surface-fill-2); font: 500 calc(13px * var(--gz-scale))/1.4 var(--gz-font); text-align: center; }
+html[data-gz-pearson="overview"] #maindiv .question-details { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; width: 100%; margin: 0 !important; padding: 0 !important; list-style: none; }
+html[data-gz-pearson="overview"] #maindiv .question-details::before, html[data-gz-pearson="overview"] #maindiv .question-details::after { content: none; }
+html[data-gz-pearson="overview"] #maindiv .question-details li { display: grid; grid-template-columns: 18px minmax(0,1fr) auto; align-items: center; gap: 8px; position: relative; float: none !important; width: auto !important; min-width: 0; min-height: 64px; padding: 14px !important; margin: 0 !important; border: 1px solid var(--gz-border-line); border-radius: min(var(--gz-radius),12px); box-sizing: border-box; background: var(--gz-surface-paint); transition: border-color var(--gz-t) var(--gz-ease), background-color var(--gz-t) var(--gz-ease), scale var(--gz-t) var(--gz-ease); }
+html[data-gz-pearson="overview"] #maindiv .question-details li:empty { display: none; }
+html[data-gz-pearson="overview"] #maindiv .question-details li:hover, html[data-gz-pearson="overview"] #maindiv .question-details li:focus-within { border-color: var(--gz-accent); background: var(--gz-accent-soft); }
+html[data-gz-pearson="overview"] #maindiv .question-details li:active { scale: var(--gz-press); }
+html[data-gz-pearson="overview"] #maindiv .question-details li > span { min-width: 0; text-decoration: none !important; }
+html[data-gz-pearson="overview"] #maindiv .question-details li > span:empty { display: none; }
+html[data-gz-pearson="overview"] #maindiv .question-details a { color: var(--gz-ink) !important; font: 550 calc(14px * var(--gz-scale))/1.4 var(--gz-font); text-decoration: none; overflow-wrap: anywhere; }
+html[data-gz-pearson="overview"] #maindiv .question-details a::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+html[data-gz-pearson="overview"] #maindiv .question-details .pts { width: auto !important; white-space: nowrap; color: var(--gz-ink-muted); font: 400 calc(12px * var(--gz-scale))/1.4 var(--gz-font); }
+html[data-gz-pearson="overview"] #maindiv .question-details li > span:first-child { display: flex; align-items: center; justify-content: center; min-height: 20px; line-height: 1; }
+html[data-gz-pearson="overview"] #maindiv .question-status { display: block; position: static !important; inset: auto !important; float: none; margin: 0 !important; width: 16px; height: 16px; object-fit: contain; }
+html[data-gz-pearson="overview"] #maindiv .question-details li > span:has(img[src*="overview_spacer"]) { position: relative; }
+html[data-gz-pearson="overview"] #maindiv img[src*="overview_spacer"] { opacity: 0; }
+html[data-gz-pearson="overview"] #maindiv .question-details li > span:has(img[src*="overview_spacer"])::before { content: ""; position: absolute; width: 13px; height: 13px; top: 50%; left: 0; translate: 0 -50%; border: 1.5px solid var(--gz-line-strong); border-radius: 50%; box-sizing: border-box; }
+html[data-gz-pearson="overview"] #maindiv #divResumeBtn { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin: 20px 0 0; padding: 16px 4px 0; border-top: 1px solid var(--gz-border-line); }
+html[data-gz-pearson="overview"] #maindiv :is(#divStartBtn,#divOKBtn) { margin: 0; padding: 0; }
+html[data-gz-pearson="overview"] #maindiv :is(#ButtonResume,#ButtonStart,#ButtonReview,#ButtonOK) { float: none !important; min-width: 120px; min-height: 44px; width: auto !important; padding: 11px 22px !important; box-sizing: border-box; border-radius: min(var(--gz-radius),12px) !important; box-shadow: none !important; font: 600 calc(14px * var(--gz-scale))/1.4 var(--gz-font) !important; text-align: center; text-decoration: none; }
+html[data-gz-pearson="overview"] #maindiv :is(#ButtonResume,#ButtonStart) { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; border-color: var(--gz-accent) !important; }
+html[data-gz-pearson="overview"] #maindiv #ButtonReview { color: var(--gz-ink) !important; background: var(--gz-surface-fill) !important; }
+@media (max-width: 900px) {
+  html[data-gz-pearson="overview"] #maindiv .table-homework-details tbody, html[data-gz-pearson="overview"] #maindiv .question-details { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 560px) {
+  html[data-gz-pearson="overview"] #maindiv { width: calc(100% - 24px) !important; margin: 16px auto !important; }
+  html[data-gz-pearson="overview"] #maindiv :is(.table-homework-details,#exPanel) { padding: 14px; }
+  html[data-gz-pearson="overview"] #maindiv .table-homework-details tr { padding: 10px; }
+  html[data-gz-pearson="overview"] #maindiv .question-details li { grid-template-columns: 18px minmax(0,1fr); gap: 4px 8px; padding: 12px !important; }
+  html[data-gz-pearson="overview"] #maindiv .question-details .pts { grid-column: 2; }
+  html[data-gz-pearson="overview"] #maindiv #divResumeBtn { padding-inline: 0; }
+}
+
+/* The user's complete surface treatment, rather than a separate Pearson palette. */
+html[data-gz-pearson] :is(h1,h2,h3,.titleText) { font-family: var(--gz-font-head) !important; }
+html[data-gz-pearson]:not([data-gz-bg="solid"]) body { background: transparent !important; isolation: isolate; }
+html[data-gz-pearson] #gz-pearson-backdrop { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; z-index: -1; pointer-events: none; opacity: 0; background: var(--gz-surface-2); transition: opacity var(--gz-t) var(--gz-ease); }
+html[data-gz-pearson] #gz-pearson-backdrop[data-ready] { opacity: 1; }
+html[data-gz-pearson] :is(.statusPanel,.assignmentreviewnavpanel,.controlPanel,.palettePanel,.dijitDialog) { backdrop-filter: blur(var(--gz-glass)); }
+html[data-gz-pearson] .dijitDialog { background: var(--gz-surface-grain), var(--gz-surface-paint) !important; box-shadow: var(--gz-shadow); border-radius: var(--gz-radius) !important; }
+html[data-gz-pearson] .dijitDialog :is(.titleBar,.messageHolder,.messageBox,.buttonBar,.dijitDialogPaneContent) { color: var(--gz-ink) !important; background: var(--gz-surface-paint, var(--gz-surface)) !important; }
+html[data-gz-pearson] .dijitDialog :is(.titleText,.closeText,.messageHolder) { color: var(--gz-ink) !important; }
+html[data-gz-pearson] .feedbackDialog.correct .titleText { color: var(--gz-ok) !important; }
+html[data-gz-pearson] .feedbackDialog.incorrect .titleText { color: var(--gz-err) !important; }
+html[data-gz-pearson] .dijitDialogUnderlay { background: color-mix(in srgb, var(--gz-surface-2) 76%, transparent) !important; opacity: 1 !important; }
+html[data-gz-pearson] .contentHolder .eqEditor.disabled { background-color: var(--gz-accent-soft) !important; color: var(--gz-ink) !important; border-color: var(--gz-ok) !important; }
+html[data-gz-pearson] [data-gz-pearson-icon] { position: relative; background-image: none !important; }
+html[data-gz-pearson] [data-gz-pearson-icon]::before {
+  content: ""; position: absolute; inset: 0; background: var(--gz-pearson-icon) center no-repeat; pointer-events: none;
+  filter: var(--gz-pearson-icon-ink);
+}
+html[data-gz-pearson] #gz-pearson-icon-filters { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+html[data-gz-pearson] :is(.toolButton,.toolButton .glyphicon) { color: var(--gz-ink) !important; }
+html[data-gz-pearson] .toolButton:disabled { opacity: .45 !important; }
+html[data-gz-pearson-nav] :is(#mainTopNavContainer,.statusPanel) { background-color: var(--gz-nav-c) !important; }
+html[data-gz-pearson-nav="gradient"] :is(#mainTopNavContainer,.statusPanel) { background-image: linear-gradient(var(--gz-nav-a),var(--gz-nav-c),var(--gz-nav-d)) !important; }
+html[data-gz-pearson-nav="image"] :is(#mainTopNavContainer,.statusPanel) { background-image: linear-gradient(color-mix(in srgb,var(--gz-nav-c) calc(var(--gz-nav-o) * 100%),transparent),color-mix(in srgb,var(--gz-nav-c) calc(var(--gz-nav-o) * 100%),transparent)),var(--gz-nav-img) !important; background-size: cover !important; background-position: center !important; }
+html[data-gz-pearson-nav] :is(#mainTopNavContainer,.statusPanel) :is(h1,h2,h3,span,a,button) { color: var(--gz-nav-ink) !important; }
+html[data-gz-pearson-nav] :is(#mainTopNavContainer,.statusPanel) [data-gz-pearson-icon]::before { filter: var(--gz-pearson-icon-nav); }
+html[data-gz-pearson] :is(.btn,.questionLabel,.gz-pearson-controls button) { transition: background-color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease), box-shadow var(--gz-t) var(--gz-ease), scale var(--gz-t) var(--gz-ease); }
+html[data-gz-pearson]:not([data-gz-no-hover]) :is(.btn,.gz-pearson-controls button):enabled:hover { border-color: var(--gz-accent) !important; }
+html[data-gz-pearson] :is(.btn,.gz-pearson-controls button):enabled:active { scale: var(--gz-press); }
+html[data-gz-pearson] :is(.dijitDialog,.dijitTooltipContainer) { animation: var(--gz-enter-panel); }
+/* Crisp math templates sit over the original button. The native target still receives every hit. */
+html[data-gz-pearson] [data-gz-pearson-symbol]::before { content: none; }
+html[data-gz-pearson] .toolButton[data-gz-pearson-symbol] { background-image: none !important; font-size: 0 !important; }
+html[data-gz-pearson] .gz-pearson-symbol { position: absolute; inset: 7px; width: calc(100% - 14px); height: calc(100% - 14px); fill: currentColor; pointer-events: none; overflow: visible; font-family: "Cambria Math", "STIX Two Math", Georgia, serif; text-anchor: middle; }
+html[data-gz-pearson] .gz-pearson-symbol path { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Focused worksheet: original nodes, in their original parents, with no cloned answer fields. */
+html[data-gz-pearson] .gz-pearson-controls { position: fixed; right: 16px; bottom: 82px; z-index: 20; display: flex; justify-content: space-between; gap: 10px; padding: 6px; background: var(--gz-surface-fill-2); border: 1px solid var(--gz-border-line); border-radius: var(--gz-radius); }
+html[data-gz-pearson] .gz-pearson-controls button { font: 500 13px var(--gz-font); min-height: 32px; padding: 5px 10px; background: transparent; color: var(--gz-ink-muted); border: 1px solid transparent; border-radius: min(var(--gz-radius),8px); cursor: pointer; }
+html[data-gz-pearson] .gz-pearson-controls button:hover { background: var(--gz-accent-soft); color: var(--gz-ink); }
+html[data-gz-pearson] .gz-pearson-controls button[aria-expanded]::before { content: ""; display: inline-block; width: 12px; height: 12px; margin-right: 8px; vertical-align: -1px; border: 1.5px solid currentColor; border-radius: 2px; background: linear-gradient(90deg,currentColor 30%,transparent 30%); opacity: .8; }
+html[data-gz-pearson] .gz-pearson-controls button[aria-expanded="true"] { color: var(--gz-accent); background: var(--gz-accent-soft); }
+html[data-gz-pearson] .gz-pearson-controls[hidden] { display: none !important; }
+html[data-gz-pearson-viewer] :is(body,#playerViewer) { width: 100% !important; height: 100vh !important; overflow: hidden !important; }
+html[data-gz-pearson-viewer] .mainPanel {
+  display: grid !important; grid-template-columns: 220px minmax(0,1fr); grid-template-rows: auto auto minmax(0,1fr) auto auto;
+  width: 100% !important; height: 100% !important; padding: 0 !important; inset: 0 !important;
+}
+html[data-gz-pearson-viewer] .mainPanel > div:has(> .headerbar) { grid-column: 1 / -1; grid-row: 1; min-width: 0; }
+html[data-gz-pearson-viewer] :is(.headerbar,.statusPanel) { position: relative !important; inset: auto !important; width: 100% !important; height: auto !important; min-height: 64px; box-sizing: border-box; }
+html[data-gz-pearson-viewer] .statusPanel .layoutContainer { display: flex !important; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 18px; width: auto !important; }
+html[data-gz-pearson-viewer] .statusPanel :is(.layoutLeft,.layoutCenter,.layoutRight) { position: relative !important; inset: auto !important; float: none !important; width: auto !important; height: auto !important; }
+html[data-gz-pearson-viewer] .statusPanel .layoutLeft { flex: 1 1 240px; }
+html[data-gz-pearson-viewer] .statusPanel .layoutCenter { flex: 1 1 300px; }
+html[data-gz-pearson-viewer] .gz-pearson-controls { position: static; grid-column: 1 / -1; grid-row: 2; border: 0; border-bottom: 1px solid var(--gz-border-line); border-radius: 0; padding: 5px 14px; }
+html[data-gz-pearson-viewer] .mainPanel > :is(.assignmentreviewnavpanel,.contentPanel,.palettePanel,.controlpanelholder) { position: relative !important; inset: auto !important; width: auto !important; height: auto !important; min-width: 0; min-height: 0; box-sizing: border-box; }
+html[data-gz-pearson-viewer] .assignmentreviewnavpanel { grid-column: 1; grid-row: 3 / 5; overflow: hidden !important; }
+/* Dijit keeps writing a zero-pixel list height after each resize. Let one flex child own scrolling. */
+html[data-gz-pearson-viewer] .assignmentreviewnav { display: flex !important; flex-direction: column; position: static !important; width: 100% !important; height: 100% !important; min-height: 0; overflow: hidden !important; }
+html[data-gz-pearson-viewer] .assignmentreviewnavheader { flex: 0 0 auto; padding: 18px 20px 10px !important; height: auto !important; }
+html[data-gz-pearson-viewer] .assignmentreviewnavheader .title { font: 600 13px var(--gz-font-head) !important; color: var(--gz-ink-muted) !important; }
+html[data-gz-pearson-viewer] .assignmentreviewnavtablediv { flex: 1 1 0; height: auto !important; min-height: 0; width: 100% !important; overflow: auto !important; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--gz-line-strong) transparent; padding: 4px 10px 14px; box-sizing: border-box; }
+html[data-gz-pearson-viewer] .assignmentreviewnavListContainer { width: 100% !important; }
+html[data-gz-pearson-viewer] #playerViewer .assignmentreviewnavListContainer ul { margin: 0 !important; padding: 0 !important; background: transparent !important; }
+html[data-gz-pearson-viewer] .assignmentreviewnavListContainer li { position: relative; display: flex; align-items: center; min-height: 44px !important; height: auto !important; padding: 10px 12px !important; margin: 3px 0; border: 1px solid transparent !important; border-radius: min(var(--gz-radius),10px); box-shadow: none !important; box-sizing: border-box; cursor: pointer; transition: background-color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease); }
+html[data-gz-pearson-viewer] .assignmentreviewnavListContainer li.selected { border-color: color-mix(in srgb,var(--gz-accent) 24%,transparent) !important; }
+html[data-gz-pearson-viewer] .assignmentreviewnavListContainer li.selected::before { content: ""; position: absolute; left: -1px; top: 10px; bottom: 10px; width: 3px; border-radius: 3px; background: var(--gz-accent); }
+html[data-gz-pearson-viewer] .assignmentreviewnavListContainer .leftSide { display: flex; align-items: center; gap: 10px; min-width: 0; }
+html[data-gz-pearson-viewer] .assignmentreviewnavListContainer .questionLabel { font-size: 14px !important; text-decoration: none; color: var(--gz-ink) !important; }
+html[data-gz-pearson-viewer] .assignmentreviewnavListContainer li.selected .questionLabel { color: var(--gz-accent) !important; font-weight: 600; }
+html[data-gz-pearson-viewer] .questionStatusIcon { flex: 0 0 18px; width: 18px !important; height: 18px !important; background-size: contain !important; }
+html[data-gz-pearson-viewer] .assignmentreviewnavpanel { animation: var(--gz-enter-panel); }
+html[data-gz-pearson-viewer] .left-minimize-icon { display: none !important; }
+html[data-gz-pearson-viewer] .contentPanel { grid-column: 2; grid-row: 3; overflow: auto !important; padding: 24px; }
+html[data-gz-pearson-viewer] .contentPanel > .dijitBorderContainer {
+  display: flex !important; flex-direction: column; position: relative !important; inset: auto !important;
+  width: min(100%,1040px) !important; height: auto !important; min-height: 0; margin-inline: auto; padding: 28px !important; box-sizing: border-box;
+  background: var(--gz-surface-grain), var(--gz-surface-fill); border: 1px solid var(--gz-border-line) !important; border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow); backdrop-filter: blur(var(--gz-glass));
+  animation: var(--gz-enter-page);
+}
+html[data-gz-pearson-viewer] .contentPanel .framePanel { position: relative !important; inset: auto !important; width: 100% !important; height: auto !important; min-height: 0 !important; overflow: visible !important; padding: 0 !important; box-sizing: border-box; }
+html[data-gz-pearson-viewer] .contentPanel .framePanel.top { padding-bottom: 24px !important; margin-bottom: 24px; border-bottom: 1px solid var(--gz-border-line) !important; }
+html[data-gz-pearson-viewer] .contentPanel .contentHolder { zoom: calc(1.2 * var(--gz-scale)); line-height: var(--gz-leading); overflow-wrap: break-word; }
+html[data-gz-pearson-viewer] .contentPanel :is(.horizontalSplitterHandler,.dijitSplitter) { display: none !important; }
+html[data-gz-pearson-viewer] .palettePanel { grid-column: 2; grid-row: 4; border-top: 1px solid var(--gz-border-line); max-height: min(40vh,320px); overflow: auto !important; overscroll-behavior: contain; scrollbar-width: thin; }
+html[data-gz-pearson-viewer] .xlInlineMathPalette { position: relative; max-width: 1040px; margin-inline: auto; padding: 10px 42px; box-sizing: border-box; }
+html[data-gz-pearson-viewer] .xlInlineMathPalette .palette:not(.hidden) { animation: var(--gz-enter-panel); }
+html[data-gz-pearson-viewer] .xlInlineMathPalette .keyRow { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 0 0 6px; }
+html[data-gz-pearson-viewer] .xlInlineMathPalette .keyRow:last-child { margin-bottom: 0; }
+html[data-gz-pearson-viewer] .xlInlineMathPalette .palette + .palette .keyRow { display: grid; grid-template-columns: repeat(auto-fit,44px); }
+html[data-gz-pearson-viewer] .xlInlineMathPalette .palette + .palette :is(.iconDiv,.iconPI,.iconAlpha,.iconSum) { grid-column: 1; }
+html[data-gz-pearson-viewer] .toolButton { position: relative; flex: 0 0 auto; width: 44px !important; min-width: 44px; height: 44px !important; margin: 0 !important; padding: 0 !important; border-radius: min(var(--gz-radius),10px) !important; box-shadow: none !important; font: 500 13px var(--gz-font) !important; cursor: pointer; }
+html[data-gz-pearson-viewer] .toolButton.iconMoreTools { width: auto !important; padding-inline: 14px !important; color: var(--gz-accent) !important; }
+html[data-gz-pearson-viewer] .toolButton:enabled:hover { background-color: var(--gz-accent-soft) !important; box-shadow: inset 0 0 0 1px var(--gz-accent) !important; }
+html[data-gz-pearson-viewer] .xlInlineMathPalette .dijitDialogCloseIcon { top: 20px; right: 12px; color: var(--gz-ink-muted); }
+html[data-gz-pearson-viewer] .controlpanelholder { grid-column: 1 / -1; grid-row: 5; }
+html[data-gz-pearson-viewer] .controlPanel { height: auto !important; min-height: 64px; padding: 10px 20px !important; box-sizing: border-box; }
+html[data-gz-pearson-viewer] .controlPanel :is(.learningaid-button,.menu-button) { font-size: 14px !important; font-weight: 500 !important; }
+html[data-gz-pearson-viewer] .controlPanel .btn { font-size: 14px !important; min-height: 36px; padding: 8px 18px !important; border-radius: min(var(--gz-radius),12px) !important; box-shadow: none !important; }
+html[data-gz-pearson-viewer]:not([data-gz-pearson-questions]) .mainPanel { grid-template-columns: 0 minmax(0,1fr); }
+html[data-gz-pearson-viewer]:not([data-gz-pearson-questions]) .assignmentreviewnavpanel { display: none !important; }
+html[data-gz-pearson-viewer][data-gz-density="compact"] .contentPanel { padding: 12px; }
+html[data-gz-pearson-viewer][data-gz-density="roomy"] .contentPanel { padding: 32px; }
+@media (max-width: 760px) {
+  html[data-gz-pearson-viewer] .mainPanel { grid-template-columns: minmax(0,1fr) !important; grid-template-rows: auto auto auto minmax(0,1fr) auto auto; }
+  html[data-gz-pearson-viewer] .assignmentreviewnavpanel { grid-column: 1; grid-row: 3; height: 180px !important; }
+  html[data-gz-pearson-viewer] .contentPanel { grid-column: 1; grid-row: 4; padding: 10px; }
+  html[data-gz-pearson-viewer] .contentPanel > .dijitBorderContainer { padding: 18px !important; }
+  html[data-gz-pearson-viewer] .palettePanel { grid-column: 1; grid-row: 5; max-height: 26vh; }
+  html[data-gz-pearson-viewer] .xlInlineMathPalette { padding: 8px 32px 8px 8px; }
+  html[data-gz-pearson-viewer] .controlpanelholder { grid-row: 6; }
+}
+}
+@media print {
+  #gz-pearson-backdrop, #gz-pearson-icon-filters, .gz-pearson-controls, .gz-pearson-symbol { display: none !important; }
+}

@@ -48,9 +48,9 @@ test('the first content script is Glaze on each LMS\'s own hosts, and nothing ru
   assert.ok(m.content_scripts.every((c) => c.matches.every((p) => !p.startsWith('https://*/') && p !== '<all_urls>')), 'no entry on every host');
 });
 
-test('host access: each LMS\'s own hosts, Glaze\'s gallery and share relay; any other https site, local Canvas and Moodle only when granted', () => {
+test('host access: LMS hosts, the two Pearson homework hosts, gallery and share relay; other sites only when granted', () => {
   assert.ok(m.permissions.includes('scripting'));
-  assert.deepEqual(m.host_permissions, ['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*', 'https://frostdev.io/*', 'https://share.frostdev.io/*']);
+  assert.deepEqual(m.host_permissions, ['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*', 'https://mylab.pearson.com/*', 'https://tdx.acs.pearson.com/*', 'https://frostdev.io/*', 'https://share.frostdev.io/*']);
   assert.deepEqual(m.optional_host_permissions, ['https://*/*', 'http://localhost/*', 'http://127.0.0.1/*']);
   // Every content script's host is held from the start.
   const held = (p) => m.host_permissions.some((h) => { const [, hh] = /^https:\/\/([^/]+)\//.exec(h), [, ph] = /^https:\/\/([^/]+)\//.exec(p); return hh === ph || (hh.startsWith('*.') && ph.endsWith(hh.slice(1))); });
@@ -96,7 +96,7 @@ test('Safari keeps 3.3.8\'s access: every host, Ultra on /ultra anywhere and the
   assert.ok(now.permissions.includes('alarms'), 'Ask Rime\'s wakes, which prompt for nothing');
   const detector = now.content_scripts.find((c) => c.js.includes('content/detect.js'));
   assert.ok(detector.exclude_matches.includes('https://*.moodlecloud.com/*'), 'MoodleCloud has its own entry, so the detector leaves it alone');
-  const as338 = now.content_scripts.filter((c) => !c.matches.includes('https://*.moodlecloud.com/*'))
+  const as338 = now.content_scripts.filter((c) => !c.matches.includes('https://*.moodlecloud.com/*') && !c.js.includes('content/pearson.js'))
     .map((c) => (c === detector ? { ...c, exclude_matches: c.exclude_matches.filter((p) => p !== 'https://*.moodlecloud.com/*') } : c));
   assert.deepEqual(as338, then.content_scripts);
   assert.deepEqual(now.content_scripts.find((c) => c.matches.includes('https://*.moodlecloud.com/*')), { ...moodle, exclude_matches: ['https://*/ultra', 'https://*/ultra/*'] });

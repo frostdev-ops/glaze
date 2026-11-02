@@ -57,7 +57,7 @@ test('a "?" opens a trimmed description', () => {
 
 // Where each works, from the code: content.js loads the site parts (content-canvas.js, content-ultra.js; Moodle has none of
 // their X.* hooks), moodle.css styles Moodle, courses/page/moodle.js and navigation/page/navbar-moodle.js serve it.
-const SHORT = { Canvas: 'Canvas', 'Blackboard Ultra': 'Blackboard', Moodle: 'Moodle' };
+const SHORT = { Canvas: 'Canvas', 'Blackboard Ultra': 'Blackboard', Moodle: 'Moodle', 'Pearson MyLab': 'Pearson' };
 const ALL = ['Canvas', 'Blackboard Ultra', 'Moodle'];
 const LMS_SECTIONS = {
   'look/palette': ALL, 'look/type': ALL, 'look/surfaces': ALL, 'look/background': ALL, 'look/motion': ALL, 'look/pointer': ALL,
@@ -73,7 +73,7 @@ const LMS_SECTIONS = {
   'study/schedule': ['Canvas', 'Blackboard Ultra'],
   // Glaze Writer replaces Blackboard Ultra's editors only.
   ...Object.fromEntries(['setup', 'papers', 'typing', 'proofing', 'discussions', 'submitting'].map((s) => [`writer/${s}`, ['Blackboard Ultra']])),
-  'pages/content': ['Canvas', 'Blackboard Ultra'], 'pages/documents': ['Canvas', 'Blackboard Ultra'], 'pages/dashboard': ['Blackboard Ultra'],
+  'pages/content': ['Canvas', 'Blackboard Ultra'], 'pages/documents': ['Canvas', 'Blackboard Ultra', 'Pearson MyLab'], 'pages/dashboard': ['Blackboard Ultra'],
   'pages/declutter': ['Canvas', 'Blackboard Ultra'], 'pages/shortcuts': ALL,
   // Announcements open in Glaze's pop-up on all three; the pop-up is every site's.
   'pages/announcements': ALL, 'pages/popups': ALL,
@@ -103,7 +103,7 @@ test('site badges: only where something does not work on all three sites, and tr
     const got = heading.match(/<span class="site-badge" translate="no">([^<]*)<\/span>/)?.[1];
     if (!(route in LMS_SECTIONS)) { assert.equal(got, undefined, `${route}: no badge`); continue; }
     assert.equal(sites, LMS_SECTIONS[route].join(' · '), `${route}: data-sites`);
-    assert.equal(got, LMS_SECTIONS[route].length === 3 ? undefined : badge(LMS_SECTIONS[route]), `${route}: badge`);
+    assert.equal(got, LMS_SECTIONS[route] === ALL ? undefined : badge(LMS_SECTIONS[route]), `${route}: badge`);
     // A setting's badge differs from its section's.
     for (const b of body.replace(heading, '').matchAll(/<span class="site-badge" translate="no">([^<]*)<\/span>/g)) {
       assert.notEqual(b[1], got || badge(ALL), `${route}: a setting's badge repeats its section's`);
@@ -120,7 +120,7 @@ test('site badges: only where something does not work on all three sites, and tr
   assert.match(main, /<div class="group" id="ultra-nav-editor"><span class="site-badge" translate="no">Blackboard<\/span>/);
   // Every badge is one of these.
   const kinds = new Set([...html.matchAll(/<span class="site-badge"[^>]*>([^<]*)</g)].map((m) => m[1]));
-  for (const k of kinds) assert.ok(['Canvas', 'Blackboard', 'Moodle', 'Canvas · Blackboard', 'Canvas · Moodle', 'Canvas · Blackboard · Moodle'].includes(k), k);
+  for (const k of kinds) assert.ok(['Canvas', 'Blackboard', 'Moodle', 'Canvas · Blackboard', 'Canvas · Moodle', 'Canvas · Blackboard · Moodle', 'Canvas · Blackboard · Pearson'].includes(k), k);
 });
 
 test('course tabs offer every place navigation/coursetabs.js knows, Automatic first', () => {

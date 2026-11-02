@@ -4,6 +4,9 @@
   // The settings page's own background (options.html #backdrop): the Look's background as the Canvas mock paints it, and
   // nothing else of the mock.
   const backdrop = params.has('backdrop');
+  // A Pearson appearance frame reads its own saved Look. Its parent never supplies settings or page content.
+  const saved = backdrop && params.has('saved');
+  if (saved && !['https://mylab.pearson.com', 'https://tdx.acs.pearson.com'].includes(new URL(document.referrer || 'about:blank').origin)) return;
   const site = backdrop ? 'canvas' : ['canvas', 'moodle'].includes(requested) ? requested : 'ultra';
   const load = (src) => new Promise((resolve, reject) => { const script = Object.assign(document.createElement('script'), { src }); script.onload = resolve; script.onerror = reject; document.body.append(script); });
   const attr = (key, value) => { if (value === false || value === null || value === undefined) html.removeAttribute(key); else html.setAttribute(key, value === true ? '' : value); };
@@ -36,6 +39,7 @@
     document.dispatchEvent(new CustomEvent('glaze:parts'));
   };
   addEventListener('message', (e) => {
+    if (saved) return;
     if (e.origin === location.origin && e.source === parent && e.data?.gzPreview) samples(GZ_SANITIZE(e.data.gzPreview));
     if (e.origin !== location.origin || e.source !== parent || !e.data?.gzPreviewContext) return;
     const next = e.data.gzPreviewContext;
@@ -49,6 +53,7 @@
   // page would. Taking the knobs to none for one style pass and back restarts each animation; motion off or entrances off
   // keep them none, so nothing plays then, and looks/page/motionx.js draws no effect while motion is off.
   addEventListener('message', (e) => {
+    if (saved) return;
     const m = e.origin === location.origin && e.source === parent ? e.data?.gzPreviewMoment : null;
     if (m === 'enter' && !html.hasAttribute('data-gz-no-enter')) { html.setAttribute('data-gz-no-enter', ''); void document.body.offsetWidth; html.removeAttribute('data-gz-no-enter'); }
     else if (globalThis.GZ_MX?.EVENTS.includes(m)) globalThis.GZ_CTX?.moment?.(m);
@@ -170,7 +175,7 @@
         } catch { scene?.stop(); scene = null; sceneCanvas?.remove(); }
       } else { scene?.stop(); scene = null; sceneCanvas?.remove(); }
     };
-    addEventListener('message', (e) => { if (e.origin === location.origin && e.source === parent && e.data?.gzPreview) { settings = { ...GZ_SANITIZE(e.data.gzPreview), card: GZ_CARDS.settings(e.data.gzPreview.card) }; globalThis.GZ_XPARTS_PAGE?.preview(e.data.gzPreviewParts); paint(); } });
+    addEventListener('message', (e) => { if (!saved && e.origin === location.origin && e.source === parent && e.data?.gzPreview) { settings = { ...GZ_SANITIZE(e.data.gzPreview), card: GZ_CARDS.settings(e.data.gzPreview.card) }; globalThis.GZ_XPARTS_PAGE?.preview(e.data.gzPreviewParts); paint(); } });
     // Look parts (looks/lookparts.js), handed over as the Ultra preview's content.js has them: GZ_CTX.parts() and `glaze:parts`.
     globalThis.GZ_CTX ||= Object.freeze({
       site, tabsPreview: () => context.page === 'tabs', settings: () => settings, t: (word, vars) => GZ_I18N.t(word, vars, settings.lang === 'auto' ? navigator.language : settings.lang),
@@ -192,6 +197,34 @@
     matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', paint);
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paint);
     document.addEventListener('glaze:parts', paint);
+    if (saved) {
+      const appearanceKeys = ['enabled', 'colors', 'look', 'auto', 'presets', 'bg', 'nav', 'motion', 'extras', 'lookX'];
+      let turn = 0, clock = 0, alive = true;
+      const readSaved = async () => {
+        if (!alive) return;
+        clearTimeout(clock);
+        const mine = ++turn;
+        const raw = await chrome.storage.sync.get(appearanceKeys);
+        if (!alive || mine !== turn) return;
+        settings = { ...GZ_SANITIZE(raw), card: GZ_CARDS.settings(raw.card) };
+        await GZ_XPARTS_PAGE.read();
+        if (!alive || mine !== turn) return;
+        await paint();
+        if (!alive || mine !== turn) return;
+        parent.postMessage({gzPearsonBackdropReady:true},new URL(document.referrer).origin);
+        if (settings.auto.on && settings.auto.mode === 'schedule') {
+          const at = GZ_SCHEDULE_NEXT(settings.auto.from, settings.auto.to, new Date());
+          if (at) clock = setTimeout(refresh, Math.max(0, at - Date.now()) + 20);
+        }
+      };
+      const refresh = () => readSaved().catch(() => {});
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if ((area === 'sync' && appearanceKeys.some((k) => changes[k])) || (area === 'local' && changes.lookX)) refresh();
+      });
+      addEventListener('pagehide', () => { alive = false; turn++; revision++; clearTimeout(clock); scene?.stop(); scene = null; sceneCanvas?.remove(); });
+      addEventListener('pageshow', (e) => { if (e.persisted) { alive = true; refresh(); } });
+      await readSaved();
+    }
     await paint();
   }
   document.addEventListener('click', (e) => { if (e.target.closest('a')) e.preventDefault(); });

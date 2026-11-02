@@ -99,10 +99,10 @@ const GZ_SPEC = {
     // place: remember Canvas Modules position. Ultra retains live course pages. coursemenu: each course card's button for its color,
     // tint and look. tabs: Ultra's course tabs (navigation/coursetabs.js). prefetch: courses/page/ahead.js. instant: courses/instant.js.
     place: [true, 'bool'], coursemenu: [true, 'bool'], tabs: [true, 'bool'], prefetch: [true, 'bool'], instant: [true, 'bool'],
-    // docPages: previews in a dark palette, plain, dimmed or inverted (the floating button too); toggles: the floating
-    // document buttons. Canvas's document viewer: docTheme its palette, docInk the pen.
+    // docPages: plain, dimmed or inverted previews (the floating button too); toggles: floating document buttons.
+    // Canvas's viewer: docTheme its palette, docInk the pen.
     docPages: ['plain', ['plain', 'dim', 'dark']], toggles: [true, 'bool'], docTheme: [true, 'bool'], docInk: [false, 'bool'],
-    quizLight: [false, 'bool'],
+    quizLight: [false, 'bool'], pearsonViewer: [true, 'bool'],
     // Card grades on hover only; Canvas's GPA, its scale and place (per-course choices: sync item gpaCourses).
     gradeHover: [false, 'bool'], gpa: [false, 'bool'], gpaPlus: [false, 'bool'], gpaWeighted: [false, 'bool'], gpaAfter: [false, 'bool'], insights: [false, 'bool'],
     // Reminders and the streak, each opt-in (planner/remind.js has the rest).

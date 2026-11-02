@@ -537,6 +537,10 @@ const STYLE_READS = [
   ['core/motion.js', 'getComputedStyle(el)', 1],
   ['core/motion.js', 'getComputedStyle(container)', 1],
   ['core/motion.js', "querySelectorAll('*')", 1],
+  // Pearson: each named native icon button once when mounted, to retain its CDN glyph artwork;
+  // one content panel to leave externally rendered questions in their native layout. No element sweep.
+  ['content/pearson.js', 'getComputedStyle(node)', 1],
+  ['content/pearson.js', 'getComputedStyle(content)', 1],
 ];
 
 test('no new whole-page style reads or element sweeps beyond the reviewed ones', () => {

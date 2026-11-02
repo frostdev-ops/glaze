@@ -3927,5 +3927,9 @@
   "Memory saved on this device": "Herinnering opgeslagen op dit apparaat",
   "Memory updated on this device": "Herinnering bijgewerkt op dit apparaat",
   "Memory deleted": "Herinnering verwijderd",
-  "Memory is off": "Geheugen staat uit"
+  "Memory is off": "Geheugen staat uit",
+  "Questions": "Vragen",
+  "Pearson layout": "Pearson-indeling",
+  "Problem viewer": "Opgavenweergave",
+  "Pearson problem viewer": "Pearson-opgavenweergave"
 };

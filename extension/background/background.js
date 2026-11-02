@@ -2493,7 +2493,15 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
     reply({ ok: false, error: 'not loadable' });
     return;
   }
-  Promise.resolve().then(async () => fromGlaze(sender) || !!await lmsPage(sender) || (fromGradescope(sender) && files.every((f) => f.startsWith('i18n/')))).then((ok) => {
+  // Pearson's appearance adapter may load its language catalogue, with no LMS feature or data authority.
+  const pearsonWords = () => {
+    try {
+      const u = new URL(addressOf(sender));
+      return (u.origin === 'https://mylab.pearson.com' && /^\/Student\/(PlayerHomework|OverviewHomework)\.aspx$/i.test(u.pathname))
+        || (u.origin === 'https://tdx.acs.pearson.com' && /^\/(Player\/Player|assignment\/assignmentplayer)\.aspx$/i.test(u.pathname));
+    } catch { return false; }
+  };
+  Promise.resolve().then(async () => fromGlaze(sender) || !!await lmsPage(sender) || ((fromGradescope(sender) || pearsonWords()) && files.every((f) => f.startsWith('i18n/')))).then((ok) => {
     if (ok) loadInto(m, sender, files, reply);
     else reply({ ok: false, error: 'sender' });
   }, () => reply({ ok: false, error: 'sender' }));
