@@ -6,6 +6,7 @@ const out = process.argv[2];
 (async () => {
   let browser;
   try {
+    await require('../../tools/dev/wait-for-browser.js')();
     browser = await chromium.launch({ ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true });
     const page = await browser.newPage();
     await page.route('https://school.test/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>Essay</title><div id="assignment_show"><div class="description">Visible directions<span hidden>ANSWER KEY SECRET</span><span style="display:none">HIDDEN SECRET</span><span style="opacity:0">TRANSPARENT SECRET</span><span aria-hidden="true">ARIA SECRET</span><span inert>INERT SECRET</span><details><summary>More</summary>COLLAPSED SECRET</details></div></div><div hidden>Unrelated hidden data</div>' }));
