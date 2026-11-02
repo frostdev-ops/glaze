@@ -55,7 +55,10 @@ function front({ prelude = () => rejected(), main, count, bind, rows = [] } = {}
     registry: { get: (name) => registry.get(name), describe: (tool) => ({ name: tool.name, inputSchema: tool.parameters }) },
     state: async () => ({}), refresh: async () => null, accounts: async () => [{ account: state.account, origin: 'https://prelude.example.test' }], local,
     keys: async () => Object.keys(data), now: () => NOW, turn: (f) => f(), zone: 'UTC', level: async () => 3, counts: !!count,
-    page: () => ({ url: 'https://prelude.example.test/courses/6' }), current: async () => { const context = state.context; return { account: ACC, ...(bind && { bind }), valid: async () => state.valid && state.account === ACC && state.context === context }; },
+    page: () => ({ url: 'https://prelude.example.test/courses/6' }), current: async () => { const context = state.context; return { account: ACC, ...(bind && { bind }), valid: async () => {
+      if (state.contextError) { const code = state.contextError; state.contextError = null; throw Object.assign(new Error('context validation failed'), { code }); }
+      return state.valid && state.account === ACC && state.context === context;
+    } }; },
     memory: { store, on: async () => state.memory, capable: async () => state.capable }, approve: { ask: async () => assert.fail('no generic approval') },
     own: { writer: async () => true, read: async () => ({ items: [] }), wakes: { on: async () => false, local, read: async () => null } } };
   const [page, worker] = Ask.channel(), connection = Ask.connect(worker, env);
@@ -183,6 +186,14 @@ test('a check thrown while binding a save tool is not a recoverable model reject
   const h = front({ prelude: () => ({ output: call('memory_save', { text: fact, evidence: fact, category: 'preference' }) }),
     bind: () => { throw Object.assign(new Error('binding refused'), { code: 'check' }); } }); t.after(h.close);
   const result = await h.ask(`${fact} ${QUESTION}`);
+  assert.equal(result.type, 'error'); assert.equal(result.error, 'check');
+  assert.equal(h.mains().length, 0);
+  await noRejectedState(h);
+});
+
+test('a validation-coded context failure after a valid prelude response remains terminal', async (t) => {
+  const h = front({ prelude: ({ state }) => { state.contextError = 'check'; return { output: said() }; } }); t.after(h.close);
+  const result = await h.ask();
   assert.equal(result.type, 'error'); assert.equal(result.error, 'check');
   assert.equal(h.mains().length, 0);
   await noRejectedState(h);
