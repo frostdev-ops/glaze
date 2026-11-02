@@ -115,7 +115,8 @@ var GZ_MEMORYEDIT = globalThis.GZ_MEMORYEDIT || (() => {
       }
       list.replaceChildren(...items);
       $(`memory-${kind}-empty`).hidden = !loaded[kind] || all.length > 0;
-      $(`memory-${kind}-clear`).disabled = busy || !loaded[kind] || !records[kind].length;
+      // An empty course cache can still hold suppression records; clearing it permits later reads to refill it.
+      $(`memory-${kind}-clear`).disabled = busy || !loaded[kind] || (kind === 'memory' && !records[kind].length);
     };
     const render = () => {
       const active = document.activeElement, had = active?.id, start = active?.selectionStart, end = active?.selectionEnd;
@@ -126,7 +127,7 @@ var GZ_MEMORYEDIT = globalThis.GZ_MEMORYEDIT || (() => {
       if (had?.startsWith('memory-') && document.activeElement !== $(had)) refocus(had, 'memory-refresh', start, end);
     };
     const askClear = (kind, trigger) => {
-      if (busy || !records[kind].length) return;
+      if (busy || !loaded[kind] || (kind === 'memory' && !records[kind].length)) return;
       pending = { kind, records: snapshot(records[kind]), trigger };
       $('memory-clear-title').textContent = kind === 'memory' ? t('Clear saved memories?') : t('Clear course cache?');
       const dialog = $('memory-clear-ask'); dialog.returnValue = ''; dialog.showModal(); $('memory-clear-cancel').focus();
