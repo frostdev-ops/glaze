@@ -290,11 +290,11 @@ test('a fold is told to the chat as a summary event, with how many of the turns 
   assert.ok(h.got.findIndex((m) => m.type === 'end') < h.got.findIndex((m) => m.type === 'summary'), 'after its question ends');
 });
 
-for (const task of ['agent.tools', 'study.help']) test(`${task}: the fourth answer hands off a fallback before end while model compaction is unfinished`, async () => {
+for (const task of ['agent.tools', 'study.help']) test(`${task}: the fourth small-window answer hands off a fallback before end while model compaction is unfinished`, async () => {
   let release;
   const gate = new Promise((r) => { release = r; });
   const history = [...H3, turn('Any reminders?', 'None.')];
-  const h = harness({ count: () => ({ used: 900, window: 32768, reserve: 768 }), script: {
+  const h = harness({ count: () => ({ used: 900, window: 4096, reserve: 768 }), script: {
     'agent.tools': [said('BIO 1100.', ['BIO 1100'])],
     'study.help': [{ reply: 'Look at the chromosomes.', followUp: '' }],
     'chat.compact': [() => gate],

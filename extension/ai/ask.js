@@ -36,6 +36,7 @@
 var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const R = () => (typeof GZ_AI_REQUEST !== 'undefined' ? GZ_AI_REQUEST : require('./request.js'));
   const SET = () => (typeof GZ_AI_SETTINGS !== 'undefined' ? GZ_AI_SETTINGS : require('./settings.js'));
+  const TASKS = () => (typeof GZ_AI_TASKS !== 'undefined' ? GZ_AI_TASKS : require('./task.js'));
   const AT = () => (typeof GZ_AI_TASK_AGENT_TOOLS !== 'undefined' ? GZ_AI_TASK_AGENT_TOOLS : require('./tasks/agent-tools.js'));
   const SH = () => (typeof GZ_AI_TASK_STUDY_HELP !== 'undefined' ? GZ_AI_TASK_STUDY_HELP : require('./tasks/study-help.js'));
   const CC = () => (typeof GZ_AI_TASK_CHAT_COMPACT !== 'undefined' ? GZ_AI_TASK_CHAT_COMPACT : require('./tasks/chat-compact.js'));
@@ -319,7 +320,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
 
   // ---- the step loop ---------------------------------------------------------------------------------------------------
   const cancelled = () => Object.assign(R().error('cancelled'), { category: 'cancelled' });
-  const episode = async ({ question, tools, locale, now, zone, run, call, signal, fired, first, help, history, summary, measure }) => {
+  const episode = async ({ question, tools, locale, now, zone, run, call, signal, fired, first, help, history, summary, measure, caps }) => {
     const steps = [];
     let fix, fixed = false;
     const inputOf = () => ({ question, tools, steps: steps.map((s) => ({ call: s.call, result: s.result })), now, zone, locale, ...(fired && { fired }), ...(first && { first: true }), ...(help && { help }),
@@ -340,7 +341,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         const failed = R().code(e) === 'check' && first && steps.length;
         if (failed && !fixed && AT().FIXES.includes(e.why)) { fixed = true; fix = e.why; continue; }
         if (failed && fixed) {
-          const shown = AT().task.input(inputOf())?.steps, text = shown && AT().listAnswer(shown, { locale });
+          const shown = AT().task.input(inputOf(), { caps })?.steps, text = shown && AT().listAnswer(shown, { locale });
           if (text) return { answer: { text, quotes: [] }, steps, built: true, ...(typeof e.why === 'string' && { why: e.why }), ...(typeof e.raw === 'string' && { raw: e.raw }) };
         }
         throw Object.assign(e, { steps: steps.length });
@@ -431,9 +432,13 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     // ---- the context window ---------------------------------------------------------------------------------------------
     // measure(task, input) → { used, window, reserve, exact } for the request a run would send (the broker's count), or null.
     // env.counts: the broker answers count (background/background.js); without it nothing is measured.
+    let contextCaps = { context: 4096 };
+    const scale = () => TASKS().retention(contextCaps).scale;
+    const retained = (history) => history.slice(-Math.floor(LIMIT.turns * scale())).map((h) => ({ question: h.question.slice(0, Math.floor(LIMIT.turn * scale())), answer: h.answer.slice(0, Math.floor(LIMIT.turn * scale())) }));
+    const materialOf = (steps, zone, how) => steps.map((s) => AT().readable(s.result, zone, how, contextCaps) || '').join('\n').slice(0, Math.floor(LIMIT.material * scale()));
     const measure = async (task, input, signal) => {
       if (env.counts !== true) return null;
-      try { const a = await broker({ op: 'count', feature: FEATURE, task, input }, signal); return Number.isSafeInteger(a.used) && Number.isSafeInteger(a.window) ? { used: a.used, window: a.window, reserve: Number.isSafeInteger(a.reserve) ? a.reserve : 0, exact: a.exact === true } : null; }
+      try { const a = await broker({ op: 'count', feature: FEATURE, task, input }, signal); if (Number.isSafeInteger(a.window) && a.window > 0) contextCaps = { context: Math.min(131072, a.window) }; return Number.isSafeInteger(a.used) && Number.isSafeInteger(a.window) ? { used: a.used, window: a.window, reserve: Number.isSafeInteger(a.reserve) ? a.reserve : 0, exact: a.exact === true } : null; }
       catch { return null; }
     };
     // The chat's summary of its older turns (chat.compact) and the turns it covers; New chat (a question with no history)
@@ -452,17 +457,18 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const keyOf = (h) => `${h.question.trim()}\u0000${h.answer.trim().slice(0, 200)}`;
     const compact = async ({ id, open, turn, locale, tools, zone }) => {
       const turns = [...open, turn];
+      const keep = Math.min(Math.floor(COMPACT.keep * scale()), Math.max(COMPACT.keep, turns.length - 1));
       if (turns.length <= COMPACT.keep) return;
       const gen = ++CHAT.gen;
-      const handoff = turns.length > AT().HISTORY.turns;
+      const handoff = turns.length > Math.floor(AT().HISTORY.turns * scale());
       let need = handoff;
       if (!need) {
         const fit = await measure('agent.tools', { question: turn.question, tools, steps: [], now: env.now(), zone, locale, first: true, history: turns, ...(CHAT.summary && { summary: CHAT.summary }) });
         need = !!fit && fit.used + fit.reserve > COMPACT.share * fit.window;
       }
       if (!need || gen !== CHAT.gen || closed) return;
-      const older = turns.slice(0, -COMPACT.keep);
-      const input = { turns: older.slice(-CC().LIMIT.turns), ...(CHAT.summary && { summary: CHAT.summary }), locale };
+      const older = turns.slice(0, -keep);
+      const input = { turns: older.slice(-Math.floor(CC().LIMIT.turns * scale())), ...(CHAT.summary && { summary: CHAT.summary }), locale };
       // The chat hears it ({ id, type: 'summary', text, turns }: the summary and how many of the turns it was sent it covers
       // now), shows the line where they were folded and carries the summary with its next question.
       const apply = (out) => {
@@ -470,7 +476,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         CHAT.summary = out.text; for (const h of older) CHAT.covered.add(keyOf(h)); CHAT.pending = null;
         post({ id, type: 'summary', text: CHAT.summary, turns: older.length });
       };
-      const fallback = () => { const inp = CC().task.input(input); if (inp) apply(CC().fallback(inp)); };
+      const fallback = () => { const inp = CC().task.input(input, { caps: contextCaps }); if (inp) apply(CC().fallback(inp)); };
       // The page renews its port for the next question. Give it the fallback before end makes that possible; the model
       // can refine it afterwards, but an immediate follow-up must not discard turns while that model run is pending.
       if (handoff) fallback();
@@ -481,7 +487,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         // Summaries now appear on the page too. Grounded values alone can still solve a student's problem.
         const safe = typeof out?.text === 'string' && older.every((h) => {
           const inp = SH().task.input({ question: h.question, subject: route(h.question, { locale, level: 3 }).subject || 'math', locale,
-            ...(input.summary && { material: input.summary }) });
+            ...(input.summary && { material: input.summary }) }, { caps: contextCaps });
           return inp && !SH().hands(out.text, inp);
         });
         if (safe) apply(out); else fallback();
@@ -602,12 +608,12 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const ask = async (m) => {
       const { id } = m;
       const fail = (error) => post({ id, type: 'error', error });
-      const turn = (h) => isObj(h) && Object.keys(h).sort().join() === 'answer,question' && [h.question, h.answer].every((x) => typeof x === 'string' && x.length <= LIMIT.turn);
+      const turn = (h) => isObj(h) && Object.keys(h).sort().join() === 'answer,question' && [h.question, h.answer].every((x) => typeof x === 'string' && x.length <= LIMIT.turn * 32);
       if (Object.keys(m).some((k) => !['id', 'op', 'question', 'attempt', 'locale', 'history', 'summary', 'tools', 'site', 'text', 'fired'].includes(k)) || typeof m.question !== 'string' || !m.question.trim()
         || (m.tools !== undefined && !(Array.isArray(m.tools) && m.tools.length <= AT().NAMES.length && new Set(m.tools).size === m.tools.length && m.tools.every((n) => AT().NAMES.includes(n)) && unionCost(m.tools) <= UNION.budget))
         || (m.summary !== undefined && (typeof m.summary !== 'string' || m.summary.length > LIMIT.summary))
         || (m.attempt !== undefined && typeof m.attempt !== 'string') || (m.locale !== undefined && typeof m.locale !== 'string')
-        || (m.history !== undefined && !(Array.isArray(m.history) && m.history.length <= LIMIT.turns && m.history.every(turn)))
+        || (m.history !== undefined && !(Array.isArray(m.history) && m.history.length <= LIMIT.turns * 32 && m.history.every(turn)))
         || (m.site !== undefined && !SITES.includes(m.site)) || (m.text !== undefined && typeof m.text !== 'string') || (m.fired !== undefined && typeof m.fired !== 'string')) return fail('request');
       const history = (m.history || []).filter((h) => h.question.trim() && h.answer.trim());
       const question = m.question.trim(), attempt = (m.attempt || '').trim();
@@ -652,13 +658,13 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
             tools = await offer(r.read, { question, tools: r.read, steps: [], now: env.now(), zone, locale, first: true, help: r.subject }, signal);
             // A reader that can't finish (its turn refused, too many steps) leaves study help to answer without it.
             let seen = null;
-            try { seen = await episode({ question, tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, first: true, help: r.subject }); }
+            try { seen = await episode({ question, tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, first: true, help: r.subject, caps: contextCaps }); }
             catch (e) { if (signal.aborted || !['check', 'steps', 'refusal', 'invalid-response'].includes(R().code(e))) throw e; }
             if (seen?.declined) return post({ id, type: 'end', task: r.task, declined: true });
-            if (seen) material = seen.steps.map((st) => AT().readable(st.result, zone) || '').join('\n').slice(0, LIMIT.material);
+            if (seen) material = materialOf(seen.steps, zone);
           }
-          // Level 3: the summary as the conversation's first turn, then the turns it doesn't cover (a cloud model reads them).
-          const past = level >= 3 ? [...(CHAT.summary ? [{ question: 'Earlier in this chat', answer: CHAT.summary }] : []), ...open].slice(-LIMIT.turns) : history;
+          // Level 3: the summary as the conversation's first turn, then the turns it doesn't cover (a model reads them).
+          const past = level >= 3 ? [...(CHAT.summary ? [{ question: 'Earlier in this chat', answer: CHAT.summary }] : []), ...retained(open)].slice(-Math.floor(LIMIT.turns * scale())) : history;
           const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...(past.length && { history: past }), ...(material && { material }) });
           if (level >= 3 && isObj(output)) void compact({ id, open, turn: { question, answer: [output.reply, output.followUp].filter((x) => typeof x === 'string' && x).join('\n\n') }, locale, tools, zone }).catch(() => {});
           post({ id, type: 'end', task: r.task, output });
@@ -666,14 +672,14 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         }
         const tools = level >= 3 ? await offer(r.tools, { question, tools: r.tools, steps: [], now: env.now(), zone, locale, first: true }, signal) : r.tools;
         if (signal.aborted) throw cancelled();
-        const res = await episode({ question, tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, ...(level >= 3 && { first: true, ...(open.length && { history: open }), ...(CHAT.summary && { summary: CHAT.summary }), measure: (task, input) => measure(task, input, signal) }),
+        const res = await episode({ question, tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, caps: contextCaps, ...(level >= 3 && { first: true, ...(open.length && { history: retained(open) }), ...(CHAT.summary && { summary: CHAT.summary }), measure: (task, input) => measure(task, input, signal) }),
           ...(record && { fired: { what: record.what, ...(record.watch && { watch: record.watch }), say: question, at: record.at, ...(record.fact && { fact: record.fact }) } }) });
         if (res.declined) return post({ id, type: 'end', task: r.task, declined: true });
         // The study rule on this path too: an answer about records never gives the answer to work.
         // The results as the model read them (friendly dates at level 3), so the answer's copied values are in the material.
         const how = level >= 3 ? { locale, now: env.now() } : undefined;
-        const material = res.steps.map((s) => AT().readable(s.result, zone, how) || '').join('\n').slice(0, LIMIT.material);
-        const inp = SH().task.input({ question, subject: 'math', locale, ...(material && { material }) });
+        const material = materialOf(res.steps, zone, how);
+        const inp = SH().task.input({ question, subject: 'math', locale, ...(material && { material }) }, { caps: contextCaps });
         if (!res.built && (!inp || SH().hands(res.answer.text, inp))) throw Object.assign(R().error('check'), { why: 'hands', steps: res.steps.length });
         // What the tools asked of the page (open, highlight), for the panel to perform once it shows the answer.
         await carry(env, current.actions).catch(() => {});

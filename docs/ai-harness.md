@@ -296,7 +296,7 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   windows a student means (today, tomorrow, this week to the coming Sunday or on a weekend the next, this weekend, next
   week, due soon: a week), resolved on their clock; times in results are friendly and localized ("Monday, November 2,
   11:59 PM"; the year only when it isn't now's); an answer that says nothing is due while a result lists work not handed in
-  fails (`missed`); agent.tools takes the panel's last three turns (an `earlier` block, 300/600 characters a turn), and
+  fails (`missed`); at 4K agent.tools takes the panel's last three turns (an `earlier` block, 300/600 characters a turn), and
   pushback or a follow-up after an answer ("that's not true", "you missed…", "what about Monday?", six languages) routes as
   the question before it with fresh calls; the system text asks for glaze-plans' MARKDOWN.md answer format, which the
   panel renders. Reminder, notice, watch and cancel phrasings are one table (agent-tools.js `PHRASES`) the router and the
@@ -308,14 +308,21 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
 - **The context window** (ai/ask.js; the owner, 2026-11-01): before each request Ask Rime asks the broker to `count` it
   (Glaze's own model: its tokenizer in the engine host, exactly; a cloud model: text.js's estimate) against the window the
   provider runs with (the configured context, never an assumed 4,096), and posts `{ id, type: 'context', task, used,
-  window, reserve, exact }` to the panel (reserve: the answer's max tokens). At level 3 the panel's turns before the last
-  two fold into a summary once the next request would pass 70% of the window (or more than three turns are open):
+  window, reserve, exact }` to the panel (reserve: the configured answer and thinking allowance, plus picture room).
+  Retained conversation, tool results and study material scale with the effective provider context, bounded at 128K;
+  provider caps are trusted worker values, never a page-selected input field. The 4K size ceilings remain unchanged.
+  Study help reads fenced earlier turns on local models too. At level 3 the panel's older turns fold into a summary
+  once the next request would pass 70% of the window or its context-scaled turn ceiling:
   `chat.compact` (ai/tasks/chat-compact.js, at most six bullets, every bullet resting on a quoted value the turns hold) runs
   between turns with the chat's model; if it fails its check, or the next question comes first, its deterministic
   fallback (the older questions and the items their answers named) stands. agent.tools reads it as a `summary` block
-  before `earlier`; study.help (cloud only) as the conversation's first turn. Within one run, results the model has used
+  before `earlier`; study.help as the conversation's first turn. Within one run, results the model has used
   become digests (titles, ids, dates) when the next request would overflow; the latest never does. A question with no
   history (New chat) clears it all. Compaction scales with the window. Level 1 sends nothing new.
+  Above 4K, long syllabus and proofreading inputs split by complete requests using the provider tokenizer when
+  available, including schema, instructions and output reserves. Every supplied character remains in a part; inputs
+  needing too many parts are refused before inference. Local run accounting grows with the window without changing
+  deadlines, call ceilings, cancellation or output budgets. No filler is added to ordinary requests.
   From a 16K window up, a chat offers the union of the tools routed so far (the newest question's always, earlier ones most
   recent first within about 2,000 tokens of `<tools>` lines), so the system turn stays cached across turns; below 16K each
   question gets its own.
@@ -367,7 +374,7 @@ Throw errors with a `status` or a `category`; `providers.run` turns them into a 
   output: JSON Schema (object root) | 'text', check(output, input, { truncated, caps }) → output | null,
   tools?: ['name'], limits?: { steps, ms, tokens, maxTokens }, stream?: false,
   rate?: { perMinute?: 1..120, supersede?: true }, warm?: true,
-  split?(input, { budget, text }) → [input], merge([output], input) → output }
+  split?(input, { budget, room, caps, text, count }) → [input] or Promise<[input]>, merge([output], input) → output }
 ```
 
 Build with `text.request({ system, context: [{ label, text }], data: [{ label, text }], images })`: instructions go only

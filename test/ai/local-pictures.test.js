@@ -344,7 +344,7 @@ test('a picture download completing after the Settings deadline refreshes the br
     p.say({ id: 2, op: 'run', feature: 'writing', task: 'writer.image', input: { name: 'chart.png', image: { mime: 'image/png', data: PNG }, context: 'Lab 3' } });
     await settle(200);
     assert.deepEqual(p.posted.find((m) => m.id === 2 && m.type === 'end')?.output, READING, JSON.stringify(p.posted.filter((m) => m.id === 2)));
-    // The gray text, which never carries pictures, keeps the catalog it has: its run reads the store once, for its model.
+    // The gray text keeps its catalog. Context preflight counts once, then inference reads the pinned model once.
     const list = s.st.list;
     let reads = 0;
     s.st.list = async () => { reads++; return list(); };
@@ -352,7 +352,7 @@ test('a picture download completing after the Settings deadline refreshes the br
       p.say({ id: 3, op: 'run', feature: 'writing', task: TEXT.id, input: { text: 'y' } });
       await settle(200);
       assert.ok(p.posted.some((m) => m.id === 3 && m.type === 'end'), JSON.stringify(p.posted.filter((m) => m.id === 3)));
-      assert.equal(reads, 1);
+      assert.equal(reads, 2);
     } finally { s.st.list = list; }
   } finally { finish?.(); await preparing; }
 });

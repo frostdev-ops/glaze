@@ -109,10 +109,18 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
       return request;
     };
     // Exact counts when offered; the same trusted request and answer/thinking reserve are used for splitting and inference.
+    let lastCount;
+    const counted = async (request, options) => {
+      const key = JSON.stringify({ ...request, timeoutMs: undefined });
+      if (lastCount?.key === key) return lastCount.value;
+      const value = await P().count(p, request, c, options);
+      lastCount = { key, value };
+      return value;
+    };
     const count = async (built) => {
       const request = Q.clean(requestOf(built));
       if (!request) throw Q.error('request');
-      const n = await F.wait(() => P().count(p, request, c, { signal: both.signal }), both.signal);
+      const n = await F.wait(() => counted(request, { signal: both.signal }), both.signal);
       if (!n) throw Q.error('request');
       const reserve = reserved(p, request, room);
       return { ...n, used: n.tokens, reserve, window: room, available: room - reserve };
@@ -133,7 +141,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
       emit({ type: 'note', part: calls, parts: task.limits.calls || LIMIT.parts, ...(Q.isObj(note) && ['evidence', 'criterion', 'summary'].includes(note.stage) && Number.isSafeInteger(note.part) && Number.isSafeInteger(note.parts) && note.part > 0 && note.part <= note.parts ? { stage: note.stage, part: note.part, parts: note.parts } : {}) });
       try {
         const request = requestOf(built, output, maxTokensCap, call);
-        const res = await L().run({ request, tools: [], call: (r, o) => P().run(p, r, c, { ...o, fetch, ...(accept && { accept }) }), policy, rounds: task.limits.steps, limits, count: can.local === true && room > 4096 ? (r, o) => P().count(p, r, c, o) : undefined, headless, stream: false, signal: both.signal, emit, ctx, confirms });
+        const res = await L().run({ request, tools: [], call: (r, o) => P().run(p, r, c, { ...o, fetch, ...(accept && { accept }) }), policy, rounds: task.limits.steps, limits, count: can.local === true && room > 4096 ? (r, o) => counted(r, o) : undefined, headless, stream: false, signal: both.signal, emit, ctx, confirms });
         steps.push(...res.steps); rounds += res.rounds;
         usage.input += res.usage?.input || 0; usage.output += res.usage?.output || 0;
         if (both.signal.aborted) throw both.signal.reason;
@@ -169,7 +177,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
           if (n.used + n.reserve > room) throw Object.assign(Q.error('size'), { reason: 'context' });
         }
         const call = (r, o) => P().run(p, r, c, { ...o, fetch });
-        const res = await L().run({ request, tools: kit, call, policy, rounds: task.limits.steps, limits, count: can.local === true && room > 4096 ? (r, o) => P().count(p, r, c, o) : undefined, headless, stream: task.stream, signal: both.signal, emit, ctx, confirms });
+        const res = await L().run({ request, tools: kit, call, policy, rounds: task.limits.steps, limits, count: can.local === true && room > 4096 ? (r, o) => counted(r, o) : undefined, headless, stream: task.stream, signal: both.signal, emit, ctx, confirms });
         steps.push(...res.steps);
         rounds += res.rounds;
         usage.input += res.usage?.input || 0; usage.output += res.usage?.output || 0;
@@ -231,6 +239,8 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     return { context, scale: context / 4096 };
   };
   const reserved = (provider, request, window) => {
+    request = R().clean(request);
+    if (!request) throw R().error('request');
     const local = provider.id === 'local' && typeof provider.limits === 'function' ? provider.limits(request.task, window, { maxTokens: request.maxTokens }) : null;
     // Keep the entire configured think allowance even when a slow machine currently answers directly.
     return (local ? local.maxTokens + local.think : request.maxTokens || 1024) + R().images(request) * 1024;

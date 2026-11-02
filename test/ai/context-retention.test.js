@@ -54,6 +54,6 @@ test('compaction reads all turns retained by the larger window before covering t
   const C = require('../../extension/ai/tasks/chat-compact.js');
   const turns = Array.from({ length: 12 }, (_, i) => ({ question: `Topic ${i}: ${'source '.repeat(100)}`, answer: 'Discuss the reading. '.repeat(60) }));
   const input = C.task.input({ turns }, { caps: caps(32768) });
-  assert.deepEqual(input?.turns, turns);
+  assert.deepEqual(input?.turns, turns.map((h) => ({ question: h.question.trim(), answer: h.answer.trim() })));
   assert.equal(C.task.input({ turns }, { caps: caps(4096) }), null);
 });

@@ -274,6 +274,8 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     // memo: the worker's summary of the turns it folded and how many of turns it covers; sentFrom: the first turn the last
     // question carried; base: the chat's own share of the window, read from a first question's context.
     const memo = { summary: '', folded: 0, tools: [] };
+    let contextWindow = 4096;
+    const scale = () => Math.max(1, Math.min(32, contextWindow / 4096));
     let sentFrom = 0, lastAsk = 0, base = null, accepting = true;
     const port = channel((a) => { if (a?.type === 'summary' && a.id === lastAsk) folded(a); });
     const root = make('div', { className: 'gz-ask-chat' });
@@ -451,6 +453,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     const context = (ev, first) => {
       const used = Number(ev.used), window_ = Number(ev.window);
       if (!(Number.isFinite(used) && Number.isFinite(window_) && used >= 0 && window_ > 0)) return;
+      contextWindow = Math.min(131072, window_);
       const exact = Math.max(0, Math.min(100, (used / window_) * 100)), pct = Math.round(exact);
       if (first && (base === null || exact < base)) base = exact;
       shown(pct, exact);
@@ -516,8 +519,8 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     // The conversation so far, for a follow-up: the turns after the folded ones, the last LIMIT.turns of them.
     const history = () => {
       const open = turns.slice(memo.folded);
-      sentFrom = memo.folded + Math.max(0, open.length - LIMIT.turns);
-      return open.slice(-LIMIT.turns).map((x) => ({ question: x.question.slice(0, LIMIT.turn), answer: x.answer.slice(0, LIMIT.turn) }));
+      sentFrom = memo.folded + Math.max(0, open.length - Math.floor(LIMIT.turns * scale()));
+      return open.slice(-Math.floor(LIMIT.turns * scale())).map((x) => ({ question: x.question.slice(0, Math.floor(LIMIT.turn * scale())), answer: x.answer.slice(0, Math.floor(LIMIT.turn * scale())) }));
     };
 
     // Ask: the reservation before the storage read (stopping invalidates it), then the question in the conversation (unless

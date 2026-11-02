@@ -324,7 +324,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         const req = T().prepare(task, m.input, { provider: use.p, cfg, over: over(use) });
         const n = req && !both.signal.aborted ? await P().count(use.p, req, cfg, { signal: both.signal }) : null;
         const window = P().caps(use.p, use.p.config(cfg)).context;
-        done(n && window ? { used: n.tokens, exact: n.exact, window, reserve: Math.min(req.maxTokens || 1024, window) } : null);
+        done(n && window ? { used: n.tokens, exact: n.exact, window, reserve: T().reserved(use.p, req, window) } : null);
       } catch { done(); } finally { mine.delete(m.id); admitted.delete(control); deadline.done(); both.done(); }
     };
     // Admission: → { s, task, use } or throws a code.
