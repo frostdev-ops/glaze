@@ -142,11 +142,13 @@ test('a stale editor read cannot reopen a deleted memory', async () => {
   const P = page(); await P.ask(); P.emit({ type: 'memory', receipt: receipt() });
   let release;
   P.response = () => new Promise((r) => { release = r; });
+  P.find('.gz-ask-memory-edit').focus();
   P.click('.gz-ask-memory-edit'); await settle();
   P.emit({ type: 'memory', receipt: receipt('forgotten', { revision: NEXT, text: undefined }) });
   release({ ok: true, record: record() }); await settle();
   assert.equal(P.find('.gz-ask-memory-input'), null);
   assert.equal(P.find('.gz-ask-memory summary').textContent, 'Memory deleted');
+  assert.ok(P.doc.activeElement === P.find('.gz-ask-memory summary'), 'a superseding receipt restores pending request focus');
 });
 
 test('clearing or closing the chat invalidates pending memory work and late run events', async () => {
