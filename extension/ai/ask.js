@@ -134,6 +134,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const action = /\b(?:remember|recall|show|list|read|search|save|update|edit|correct|change|recuerda|recuerdas|recordar|muestra|guarda|actualiza|corrige|lembrar|lembra|lembre|mostre|salve|atualize|corrija|rappelle|souviens|souvenez|montre|affiche|enregistre|corrige|modifie|erinnere|erinnerst|zeige|speichere|korrigiere|[äa]ndere|onthoud|herinner|toon|bewaar|corrigeer|wijzig)\b/u;
     return target.test(q) && action.test(q) || /\b(?:remember (?:that )?(?:i|my)|recuerda (?:que )?(?:yo|mi)|lembre (?:que )?(?:eu|minha?)|(?:rappelle-toi|souviens-toi) que je|merke dir[,]? (?:dass ich|meine?)|onthoud (?:dat ik|mijn))\b/u.test(q);
   };
+  // Reuse the affirmative request grammar, including its negation/conditional checks. A correction verb elsewhere in
+  // a school question is no permission to replace a preference the student edited themselves.
+  const memoryCorrection = (question) => MEMORY().forgetRequested(MEMORY().userText(question)
+    .replace(/(?<!\p{L})(?:correct|replace|update|change|corrige|reemplaza|actualiza|corrija|substitua|atualize|modifie|remplace|mets à jour|korrigiere|[äa]ndere|corrigeer|vervang|wijzig)(?!\p{L})/giu, 'forget')
+    .replace(/(?<!\p{L})[äa]ndern(?!\p{L})/giu, 'vergessen').replace(/(?<!\p{L})wijzigen(?!\p{L})/giu, 'vergeten'));
 
   // ---- the routing rule ------------------------------------------------------------------------------------------------
   // Each entry a regular expression's source, matched as whole words, case folded.
@@ -451,7 +456,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     let contextCaps = { context: 4096 };
     const scale = () => TASKS().retention(contextCaps).scale;
     const retained = (history) => history.slice(-Math.floor(LIMIT.turns * scale())).map((h) => ({ question: h.question.slice(0, Math.floor(LIMIT.turn * scale())), answer: h.answer.slice(0, Math.floor(LIMIT.turn * scale())) }));
-    const materialOf = (steps, zone, how) => steps.map((s) => AT().readable(s.result, zone, how, contextCaps) || '').join('\n').slice(0, Math.floor(LIMIT.material * scale()));
+    const materialOf = (steps, zone, how) => steps.filter((s) => !s.call.name.startsWith('memory_'))
+      .map((s) => AT().readable(s.result, zone, how, contextCaps) || '').join('\n').slice(0, Math.floor(LIMIT.material * scale()));
     const measure = async (task, input, signal) => {
       if (env.counts !== true) return null;
       try { const a = await broker({ op: 'count', feature: FEATURE, task, input }, signal); if (Number.isSafeInteger(a.window) && a.window > 0) contextCaps = { context: Math.min(131072, a.window) }; return Number.isSafeInteger(a.used) && Number.isSafeInteger(a.window) ? { used: a.used, window: a.window, reserve: Number.isSafeInteger(a.reserve) ? a.reserve : 0, exact: a.exact === true } : null; }
@@ -464,7 +470,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const offer = async (routed, input, signal, count) => {
       const fit = await count('agent.tools', input);
       if (signal.aborted) throw cancelled();
-      let keep = [...CHAT.tools.filter((t) => !routed.includes(t)), ...routed];
+      let keep = [...CHAT.tools.filter((t) => !routed.includes(t)), ...routed]
+        .filter((t) => !t.startsWith('memory_') || current?.memory?.enabled === true);
       while (unionCost(keep) > UNION.budget && keep.length > routed.length) keep = keep.slice(1);
       CHAT.tools = keep;
       post({ id: current.id, type: 'tools', tools: keep });
@@ -662,14 +669,16 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       };
       const count = async (task, input) => {
         await validate();
+        await memoryCurrent(input.recall?.records);
         const fit = await measure(task, input, signal);
         await validate();
+        await memoryCurrent(input.recall?.records);
         return fit;
       };
       const memoryState = async (key) => typeof env.memory?.[key] === 'function' && await F().wait(() => env.memory[key](), signal) === true;
       const memoryLive = async () => {
         await validate();
-        if (!memory || memory.revoked || !await memoryState('on') || !await memoryState('capable')) {
+        if (!memory || memory.revoked || !await memoryState('on') || !await memoryState('capable') || !await live()) {
           if (memory) memory.revoked = true;
           return false;
         }
@@ -678,9 +687,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const refs = (records) => {
         for (const r of records) if (isObj(r) && RECALL().ID.test(r.id) && RECALL().REVISION.test(r.revision)) memory.used.set(r.id, { id: r.id, revision: r.revision });
       };
-      const memoryCurrent = async () => {
+      const memoryCurrent = async (records = []) => {
         if (!memory?.enabled) return;
-        if (!await memoryLive() || !await F().wait(() => memory.store.current(memory.account, [...memory.used.values()]), signal)) throw R().error('changed');
+        const used = new Map(memory.used);
+        for (const r of records) if (isObj(r) && RECALL().ID.test(r.id) && RECALL().REVISION.test(r.revision)) used.set(r.id, { id: r.id, revision: r.revision });
+        if (!await memoryLive() || !await F().wait(() => memory.store.current(memory.account, [...used.values()]), signal)) throw R().error('changed');
         await validate();
       };
       // Count the complete request, keeping generation/result reserves intact. Optional references give way before IDs.
@@ -741,7 +752,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (fit && fit.used + fit.reserve > fit.window && (input.current || input.recall || input.tools?.includes('memory_save'))) throw R().error('size');
         if (fit && !signal.aborted) post({ id, type: 'context', task, ...fit });
         await validate();
-        await memoryCurrent();
+        await memoryCurrent(input.recall?.records);
         if (memory?.enabled && input.recall?.records.length) { refs(input.recall.records); post({ id, type: 'recall', records: input.recall.records }); }
         const output = (await broker({ op: 'run', feature: FEATURE, task, input }, signal, keep)).output;
         await validate();
@@ -769,13 +780,14 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (explicitMemory && (!capable || level < 3)) return fail('caps', 'memory');
         if (!record && memoryOn && capable && level >= 3 && env.memory?.store) {
           const store = env.memory.store, account = active?.account;
-          memory = { store, account, enabled: typeof account === 'string' && typeof active?.valid === 'function', used: new Map(), revoked: false };
+          const lease = typeof account === 'string' && typeof active?.valid === 'function' ? store.lease(account) : undefined;
+          memory = { store, account, enabled: !!lease, used: new Map(), revoked: false };
           // Capture a producer once for this real user turn. Forget, clear, restore or off may revoke it permanently.
-          memory.lease = memory.enabled ? store.lease(account) : undefined;
+          memory.lease = lease;
           memory.env = { store, now: env.now, on: memoryLive, context: async () => {
             await validate();
             return memory.enabled ? { account, question, lease: memory.lease,
-              explicitCorrection: /\b(?:correct|replace|update|change|corrige|actualiza|corrija|atualize|modifie|korrigiere|[äa]ndere|corrigeer|wijzig)\b/iu.test(MEMORY().userText(question)) } : null;
+              explicitCorrection: memoryCorrection(question) } : null;
           } };
           current.memory = memory;
           if (memory.enabled) {
@@ -789,6 +801,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
             }
           }
         }
+        if (explicitMemory && !memory?.enabled) return fail('changed', 'memory');
         const inRecall = memory?.recall ? { recall: memory.recall } : {};
         const r = explicitMemory ? { task: 'agent.tools', tools: MEMORY().SPECS.map((s) => s.name) }
           : record ? routeFired(record) : route(question, { attempt, locale, level, ...inCurrent, ...(level >= 3 && history.length && { history }) });
