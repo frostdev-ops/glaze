@@ -51,6 +51,7 @@ const setup = (opts = {}) => {
   const E = {
     load: async (g) => {
       log.loads.push(g.version);
+      if (opts.onLoad) await opts.onLoad(g.version);
       if (g.version === 'BAD!') throw Object.assign(new Error('not a model'), { reason: 'model' });
       const ids = [...TOK.encode(`answer from ${g.version}`)];
       let i = 0;
@@ -196,6 +197,24 @@ test('a memory request can retry after rollback when the previous weights also s
   assert.equal((await request.done).type, 'done');
   assert.equal(t.text(request.id), 'answer from OLD!');
   assert.deepEqual(t.log.loads, ['BAD!', 'OLD!']);
+});
+
+test('a memory count waits for an in-flight trial rollback and checks the resulting weights', async () => {
+  let reached, release;
+  const loading = new Promise((resolve) => { reached = resolve; }), held = new Promise((resolve) => { release = resolve; });
+  const t = setup({ onLoad: async (version) => { if (version === 'BAD!') { reached(); await held; } } });
+  await ready(t);
+  assert.equal((await update(t, sign(listOf(3, [{ ...broken, memory: 1 }]))).done).result.state, 'swapped');
+  const request = t.run({ memory: 1 });
+  await loading;
+  const counted = t.call('count', { model: old.id, memory: 1, parts: [{ text: 'saved preference' }] });
+  await new Promise(setImmediate);
+  release();
+  assert.equal((await request.done).error.code, 'caps');
+  const result = await counted.done;
+  assert.equal(result.type, 'error', JSON.stringify(result));
+  assert.equal(result.error.code, 'caps');
+  assert.deepEqual(t.log.tokenized, ['BAD!']);
 });
 
 test('a chunk failing its hash twice never swaps; that version is not kept or tried again for the serial', async () => {
