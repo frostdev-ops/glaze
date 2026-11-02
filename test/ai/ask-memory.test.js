@@ -217,3 +217,15 @@ test('successful verified assignment reads are ingested with their actual observ
   assert.equal(rows[0].source.course, '25');
   assert.equal(rows[0].source.id, '41');
 });
+
+test('exact fitting removes optional current URL before losing any typed resource identity', async (t) => {
+  const h = harness({ counts: (input) => ({ used: 3100 + (input.current?.url ? 400 : 0), window: 4096, reserve: 768, exact: true }),
+    script: { 'agent.tools': [call('assignment_read', { course: '25', assignment: '41' }), said('Compare the two invented samples.')] },
+    active: { site: 'canvas', view: 'assignment', url: 'https://school.instructure.com/courses/25/assignments/41', title: 'Invented lab', course: { id: '25' }, assignment: { id: '41', title: 'Invented lab' } } }); t.after(h.close);
+  assert.equal((await h.ask('What are the instructions for this assignment?')).type, 'end');
+  const run = h.state.runs.find((r) => r.input.tools?.includes('assignment_read'));
+  assert.equal(run.input.current.url, undefined);
+  assert.equal(run.input.current.course.id, '25');
+  assert.equal(run.input.current.assignment.id, '41');
+  assert.equal(h.state.counts.some((r) => r.input.current?.url), true, 'the full request is counted before optional fields are removed');
+});
