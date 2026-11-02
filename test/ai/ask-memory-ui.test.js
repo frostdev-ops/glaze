@@ -202,26 +202,26 @@ test('failed memory requests restore keyboard focus and a conflict focuses Reloa
     const P = page(); await P.ask(); P.emit({ type: 'memory', receipt: receipt() });
     P.response = async () => ({ ok: false, error: 'write' });
     const trigger = P.find(`.gz-ask-memory-${action}`); trigger.focus(); P.click(trigger); await settle();
-    assert.equal(P.doc.activeElement, trigger, action + ' remains keyboard reachable after failure');
+    assert.ok(P.doc.activeElement === trigger, action + ' remains keyboard reachable after failure');
   }
   const P = page(); await P.ask(); P.emit({ type: 'memory', receipt: receipt() });
   P.click('.gz-ask-memory-edit'); await settle();
   const save = P.find('.gz-ask-memory-save'); save.focus();
   P.response = async () => ({ ok: false, error: 'write' });
-  P.click(save); await settle(); assert.equal(P.doc.activeElement, save);
+  P.click(save); await settle(); assert.ok(P.doc.activeElement === save);
   P.response = async () => ({ ok: false, error: 'conflict' });
   P.click(save); await settle();
   const reload = P.find('.gz-ask-memory-reload');
-  assert.equal(save.disabled, true); assert.equal(P.doc.activeElement, reload);
+  assert.equal(save.disabled, true); assert.ok(P.doc.activeElement === reload);
   P.response = async () => ({ ok: false, error: 'write' });
-  P.click(reload); await settle(); assert.equal(P.doc.activeElement, reload);
+  P.click(reload); await settle(); assert.ok(P.doc.activeElement === reload);
 });
 
 test('a deletion receipt replaces the focused editor with its surviving summary', async () => {
   const P = page(); await P.ask(); P.emit({ type: 'memory', receipt: receipt() });
   P.click('.gz-ask-memory-edit'); await settle(); P.find('.gz-ask-memory-input').focus();
   P.emit({ type: 'memory', receipt: receipt('forgotten', { revision: NEXT, text: undefined }) });
-  assert.equal(P.doc.activeElement, P.find('.gz-ask-memory summary'));
+  assert.ok(P.doc.activeElement === P.find('.gz-ask-memory summary'));
 });
 
 test('an edit stays intact when a broker response is malformed or exceeds the memory limit', async () => {

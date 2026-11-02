@@ -352,6 +352,15 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     const memorySend = async (message) => { try { return await chrome.runtime.sendMessage({ type: 'glaze:memory', ...message }); } catch { return { ok: false, error: 'write' }; } };
     const memoryLive = (s) => alive_ && accepting && root.isConnected && s.line.isConnected && memoryCards.get(s.id) === s;
     const memoryClear = () => { memoryEpoch++; for (const s of memoryCards.values()) drop(s.line); memoryCards.clear(); };
+    const memoryFocus = (s) => {
+      const active = focused(), start = active?.selectionStart, end = active?.selectionEnd, within = s.line.contains(active);
+      return () => {
+        if (!within || !memoryLive(s) || ![active, document.body].includes(focused())) return;
+        const target = [active, s.editor?.actions.querySelector('.gz-ask-memory-reload'), s.controls.querySelector('button'), s.summary]
+          .find((e) => e?.isConnected && !e.disabled && !e.closest('[hidden]'));
+        target?.focus(); if (target === active && Number.isInteger(start)) target?.setSelectionRange?.(start, end);
+      };
+    };
     const memoryStatus = (s, text = '') => { s.status.textContent = text; s.status.hidden = !text; pin(); };
     const memoryBusy = (s, busy) => {
       s.busy = busy;
@@ -387,7 +396,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     };
     const memoryRead = async (s) => {
       if (!memoryLive(s) || s.busy || s.deleted) return;
-      const token = ++s.token, epoch = memoryEpoch, active = focused();
+      const token = ++s.token, epoch = memoryEpoch, active = focused(), restoreFocus = memoryFocus(s);
       memoryBusy(s, true); memoryStatus(s);
       const r = await memorySend({ op: 'read', id: s.id });
       if (!memoryLive(s) || token !== s.token || epoch !== memoryEpoch) return;
@@ -396,12 +405,13 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
         const restore = focused(), keepFocus = restore === active || restore === document.body;
         memoryEditor(s, r.record, keepFocus);
       } else memoryStatus(s, r?.error === 'not-found' ? memoryError(r.error) : t('Could not load memory. Try again.'));
+      restoreFocus();
     };
     const memorySave = async (s) => {
       if (!memoryLive(s) || s.busy || !s.editor || s.editor.conflict) return;
       const { input, revision, box } = s.editor, markdown = input.value;
       if (!memoryText(markdown)) return memoryStatus(s, t('Use 600 characters or fewer.'));
-      const token = ++s.token, epoch = memoryEpoch;
+      const token = ++s.token, epoch = memoryEpoch, restoreFocus = memoryFocus(s);
       memoryBusy(s, true); memoryStatus(s);
       const r = await memorySend({ op: 'update', id: s.id, revision, markdown });
       if (!memoryLive(s) || token !== s.token || epoch !== memoryEpoch) return;
@@ -414,10 +424,11 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
         if (['conflict', 'not-found'].includes(r?.error)) memoryConflict(s);
         memoryBusy(s, false); memoryStatus(s, memoryError(r?.error));
       }
+      restoreFocus();
     };
     const memoryForget = async (s) => {
       if (!memoryLive(s) || s.busy || s.deleted) return;
-      const token = ++s.token, epoch = memoryEpoch;
+      const token = ++s.token, epoch = memoryEpoch, restoreFocus = memoryFocus(s);
       memoryBusy(s, true); memoryStatus(s);
       const r = await memorySend({ op: 'forget', id: s.id, revision: s.revision });
       if (!memoryLive(s) || token !== s.token || epoch !== memoryEpoch) return;
@@ -426,11 +437,13 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
         const keepFocus = s.line.contains(focused()) || focused() === document.body;
         memoryReceipt({ ...r.receipt, operation: 'forgotten' }); if (keepFocus) s.summary.focus();
       } else memoryStatus(s, memoryError(r?.error));
+      restoreFocus();
     };
     const memoryReceipt = (r) => {
       if (!memoryReceiptValid(r)) return;
       let s = memoryCards.get(r.id);
       if (s && (s.deleted && r.operation !== 'forgotten' || r.at < s.at)) return;
+      const restoreFocus = s ? memoryFocus(s) : () => {};
       if (!s) {
         const summary = make('summary'), text = make('pre', { dir: 'auto', hidden: true }), controls = make('div', { className: 'gz-ask-memory-actions' });
         const details = make('details', {}, summary, text), status = make('p', { className: 'gz-ask-memory-status', hidden: true });
@@ -447,7 +460,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       s.summary.textContent = s.deleted ? t('Memory deleted') : r.operation === 'updated' ? t('Memory updated on this device') : t('Memory saved on this device');
       s.text.textContent = s.deleted ? '' : r.text || ''; s.text.hidden = s.deleted || !r.text;
       if (s.deleted) { s.editor?.box.remove(); s.editor = null; s.text.remove(); s.controls.replaceChildren(); s.details.open = false; }
-      memoryBusy(s, false); memoryStatus(s, s.editor?.conflict ? memoryError('conflict') : ''); pin();
+      memoryBusy(s, false); memoryStatus(s, s.editor?.conflict ? memoryError('conflict') : ''); restoreFocus(); pin();
       return s;
     };
     const memoryRecall = (run, ev) => {
