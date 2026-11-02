@@ -185,3 +185,12 @@ test('an edit stays intact when a broker response is malformed or exceeds the me
   assert.equal(input.value, 'My draft.');
   assert.equal(P.find('.gz-ask-memory-status').textContent, 'Could not save. Try again.');
 });
+
+test('an answer finishing while memory is being edited keeps the editor focus and draft', async () => {
+  const P = page(); await P.ask(); P.emit({ type: 'memory', receipt: receipt() });
+  P.click('.gz-ask-memory-edit'); await settle();
+  const input = P.find('.gz-ask-memory-input'); input.value = 'Still editing.'; input.focus();
+  P.emit({ type: 'end', task: 'agent.tools', answer: { text: 'Ready.' } }); await settle();
+  assert.equal(P.doc.activeElement, input);
+  assert.equal(input.value, 'Still editing.');
+});
