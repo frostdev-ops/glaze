@@ -16,7 +16,6 @@ const key = (r) => `${r.kind === 'memory' ? 'rimeMemory' : 'rimeMaterial'}:${r.a
 const editor = (extra = {}) => ({ id: 'glaze', frameId: 0, url: `${EXT}/options.html`, origin: EXT, tab: { id: 9, url: `${EXT}/options.html` }, ...extra });
 const school = (extra = {}) => ({ id: 'glaze', frameId: 0, documentId: 'school-doc', url: `${SITE}/courses/25`, origin: SITE, tab: { id: 4, url: `${SITE}/courses/25` }, ...extra });
 const request = (op, rest = {}) => ({ type: 'glaze:memory', op, ...rest });
-const plain = (v) => JSON.parse(JSON.stringify(v));
 const make = (rows = [record(A, 1), record(B, 2)]) => {
   const w = worker({ globals: fakeIDB(), fetch: async () => { throw Error('unexpected network'); }, store: {
     sync: { version: 2, enabled: true, enhance: {} }, local: { ultra: [], ai: { on: false, memory: false, features: { ask: false }, future: { preserve: true } }, ...Object.fromEntries(rows.map((r) => [key(r), r])) }, session: {},
@@ -32,7 +31,7 @@ const live = (w, sender = school()) => {
   const state = { account: '42', href: sender.url, doc: sender.documentId, ancestors: [], reads: 0 };
   w.context.chrome.tabs.get = async () => ({ ...sender.tab, url: state.href });
   w.context.chrome.scripting.executeScript = async ({ func }) => {
-    if (func.name === 'rimeRead') state.reads++;
+    if (func?.name === 'rimeRead') state.reads++;
     return [{ frameId: sender.frameId, documentId: state.doc, result: w.realm({ href: state.href, origin: new URL(state.href).origin, ancestors: state.ancestors, ...(state.account && { account: state.account }) }) }];
   };
   return state;
@@ -84,8 +83,8 @@ test('school edits waiting on memory queue are refused after an account switch',
   const blocked = w.context.GZ_MEMORY.queued({}, () => { started(); return new Promise((done) => { release = done; }); });
   await ready;
   const pending = w.send(request('update', { id: row.id, revision: row.revision, markdown: 'Stale edit.' }), school());
-  await until(w, () => state.reads >= 3); await w.settle();
-  state.account = '43'; release(); await blocked;
+  try { await until(w, () => state.reads >= 3); await w.settle(); state.account = '43'; }
+  finally { release(); await blocked; }
   assert.deepEqual(await pending, { ok: false, error: 'scope' });
   assert.equal(w.store.local[key(row)].markdown, row.markdown);
 });
@@ -108,6 +107,15 @@ test('Ask receives the same singleton memory store with separate switch and mode
   w.store.local.ai = { on: true, model: { use: 'main', model: 'cloud' }, features: { ask: true }, memory: true };
   assert.equal(await env.memory.on(), true);
   assert.equal(await env.memory.capable(), true, 'cloud models use the normal tools capability');
+  w.store.local.ai.model = { use: 'local', model: '' };
+  w.context.GZ_AI_LOCAL.config = () => ({ model: 'rime', tier: 1 });
+  w.context.GZ_AI_LOCAL.catalog = async () => ({ models: [{ id: 'rime', weights: 'downloaded-rime' }] });
+  let checked;
+  w.context.GZ_AI_LOCAL.memoryVersion = async (cfg) => { checked = cfg; return 1; };
+  assert.equal(await env.memory.capable(), true);
+  assert.equal(checked.weights, 'downloaded-rime', 'capability is checked against the selected catalog weights');
+  w.context.GZ_AI_LOCAL.memoryVersion = async () => 2;
+  assert.equal(await env.memory.capable(), false, 'unknown memory contracts are not supported');
   w.store.local.ai.memory = false; assert.equal(await env.memory.on(), false);
   w.store.local.ai.memory = true; w.store.local.ai.features.ask = false; assert.equal(await env.memory.on(), false);
   w.store.local.ai.features.ask = true; w.store.sync.enabled = false; assert.equal(await env.memory.on(), false);
