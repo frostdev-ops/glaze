@@ -25,8 +25,8 @@ const CHUNK = 16;
 
 // script: decode's ids, in order (then the end token); the real model otherwise. → { h (the host), g (the GPU double),
 // fed (token ids each forward wrote), extends (each extend call's ids and result), call(m) → the op's result }.
-const setup = ({ script = null, chunk = CHUNK } = {}) => {
-  const g = gpu(), fed = [], extends_ = [], posted = [];
+const setup = ({ script = null, chunk = CHUNK, pictures = false } = {}) => {
+  const g = gpu(), fed = [], extends_ = [], posted = [], models = [];
   const write = g.device.queue.writeBuffer;
   g.device.queue.writeBuffer = function (b, off, data, ...rest) {
     if (b.size === chunk * 4 && ArrayBuffer.isView(data) && data.constructor.name === 'Uint32Array') fed.push(Array.from(data));
@@ -35,6 +35,7 @@ const setup = ({ script = null, chunk = CHUNK } = {}) => {
   const E = {
     load: async (_g, opts) => {
       const m = await g.load(model({ vocab: TOK.size, kinds: ['conv', 'full', 'swa'] }), { ...opts, chunk });
+      models.push(m);
       const extend = m.extend;
       m.extend = async (ids, o) => { const r = JSON.parse(JSON.stringify(await extend(ids, o))); extends_.push({ ids: Array.from(ids), at: o?.at, paced: typeof o?.pace === 'function', ...r }); return r; };
       if (script) { let i = 0; m.decode = async ({ signal } = {}) => { if (signal?.aborted) throw signal.reason; return i < script.length ? script[i++] : TOK.eos; }; }
@@ -43,6 +44,12 @@ const setup = ({ script = null, chunk = CHUNK } = {}) => {
   };
   const store = { list: async () => [{ id: 'm', tier: 1, state: 'ready' }], status: async () => ({ state: 'ready' }), open: async () => ({ size: 1, read: async () => new Uint8Array(0) }) };
   const h = H.create({ store, gguf: { open: async () => ({ kv: {} }) }, tokenizer: { ...K, fromGGUF: () => K.load(VOCAB) }, engine: () => E, grammar: () => null, ladder: () => null,
+    ...(pictures && { decode: async () => ({ width: 1, height: 1, data: new Uint8Array(4) }), vision: () => ({ load: async () => ({
+      prepare: () => ({ tokens: 2 }), encode: async () => {
+        const buffer = g.device.createBuffer({ size: 2 * 256 * 4, usage: 2 });
+        return { tokens: 2, buffer, drop: () => buffer.destroy() };
+      }, release() {},
+    }) }) }),
     gpu: () => ({}), setTimeout: (f, ms) => { const t = setTimeout(f, ms); t.unref?.(); return t; }, post: (m) => posted.push(m) });
   let id = 0;
   const call = (m) => new Promise((resolve, reject) => {
@@ -55,7 +62,7 @@ const setup = ({ script = null, chunk = CHUNK } = {}) => {
     };
     look();
   });
-  return { h, g, fed, extends: extends_, call, posted };
+  return { h, g, fed, extends: extends_, call, posted, models };
 };
 const SYS = [{ special: '<|startoftext|>' }, { special: '<|im_start|>' }, { text: 'system\nYou help a student with their courses. '.repeat(3) }, { special: '<|im_end|>' }, { text: '\n' }];
 const user = (blocks, think = false) => [{ special: '<|im_start|>' }, { text: 'user\n' }, ...blocks.flatMap((b) => [{ special: '<|gz_data|>' }, { text: b }, { special: '<|/gz_data|>' }]),
@@ -101,6 +108,21 @@ test('a warm-up with stable reads the history after the system turn; the run the
   s.fed.length = 0;
   const r = await s.call(req([...history, 'question\nAnd next week?']));
   assert.ok(r.usage.cached >= read, `reused ${r.usage.cached} of the ${read} warmed`);
+});
+
+test('repeated picture requests restore the stable prefix before feeding fresh image rows', async () => {
+  const s = setup({ pictures: true });
+  try {
+    const request = { ...req([]), parts: [...SYS, { text: 'Read this picture: ' }, { image: 0 }, ...user(['question\nWhat is shown?'])], projector: 'projector', images: [{}] };
+    const first = await s.call(request), firstPos = s.models[0].pos;
+    s.fed.length = 0;
+    const second = await s.call(request);
+    assert.equal(second.usage.input, first.usage.input);
+    assert.equal(s.models[0].pos, firstPos, 'the second prompt replaces the old picture request');
+    assert.equal(s.models.length, 1, 'both picture requests share the loaded model');
+    assert.ok(count(s.fed) >= first.usage.input - TOK.encodeWith(SYS).length, 'image rows are fed again');
+  } finally { await s.h.release(); }
+  assert.ok(s.g.buffers.every((b) => b.destroyed));
 });
 
 test('a run stops a warm-up between steps and keeps what it read', async () => {
