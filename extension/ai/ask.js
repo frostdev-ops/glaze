@@ -608,12 +608,13 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const ask = async (m) => {
       const { id } = m;
       const fail = (error) => post({ id, type: 'error', error });
-      const turn = (h) => isObj(h) && Object.keys(h).sort().join() === 'answer,question' && [h.question, h.answer].every((x) => typeof x === 'string' && x.length <= LIMIT.turn * 32);
+      const inputScale = env.counts === true ? 32 : 1;
+      const turn = (h) => isObj(h) && Object.keys(h).sort().join() === 'answer,question' && [h.question, h.answer].every((x) => typeof x === 'string' && x.length <= LIMIT.turn * inputScale);
       if (Object.keys(m).some((k) => !['id', 'op', 'question', 'attempt', 'locale', 'history', 'summary', 'tools', 'site', 'text', 'fired'].includes(k)) || typeof m.question !== 'string' || !m.question.trim()
         || (m.tools !== undefined && !(Array.isArray(m.tools) && m.tools.length <= AT().NAMES.length && new Set(m.tools).size === m.tools.length && m.tools.every((n) => AT().NAMES.includes(n)) && unionCost(m.tools) <= UNION.budget))
         || (m.summary !== undefined && (typeof m.summary !== 'string' || m.summary.length > LIMIT.summary))
         || (m.attempt !== undefined && typeof m.attempt !== 'string') || (m.locale !== undefined && typeof m.locale !== 'string')
-        || (m.history !== undefined && !(Array.isArray(m.history) && m.history.length <= LIMIT.turns * 32 && m.history.every(turn)))
+        || (m.history !== undefined && !(Array.isArray(m.history) && m.history.length <= LIMIT.turns * inputScale && m.history.every(turn)))
         || (m.site !== undefined && !SITES.includes(m.site)) || (m.text !== undefined && typeof m.text !== 'string') || (m.fired !== undefined && typeof m.fired !== 'string')) return fail('request');
       const history = (m.history || []).filter((h) => h.question.trim() && h.answer.trim());
       const question = m.question.trim(), attempt = (m.attempt || '').trim();
