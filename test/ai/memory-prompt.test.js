@@ -43,6 +43,7 @@ test('recall is canonical bounded untrusted data, separate from current, history
 test('memory policy has zero cost without memory tools or recall; optional save prelude may choose no save', () => {
   const bare = A.task.input(raw({ tools: ['courses_list'], first: undefined }));
   assert.equal(F.parse(built(bare)).system, `${A.SYSTEM}\nReply in English.\n\n<tools>\n${A.line(A.SPECS.find((s) => s.name === 'courses_list'))}\n</tools>`);
+  for (const spec of M.SPECS) assert.equal(A.why(call(spec.name, {}), bare), 'tool', 'the static output enum never offers a memory tool');
   const prelude = A.task.input(raw({ question: 'Explain active transport.', tools: ['memory_save'], first: undefined }));
   assert.equal(A.why(answer('No reusable personal fact to save.'), prelude), '');
   assert.match(F.parse(built(prelude)).system, /automatically/i);
@@ -117,9 +118,11 @@ test('each coordinated memory completion needs its own operation receipt', () =>
   const saving = { text: 'Short paragraphs', evidence: 'I prefer short paragraphs.' };
   const saved = A.task.input(raw({ question: saving.evidence, steps: [step('memory_save', saving, receipt('created'))] }));
   for (const text of ['I saved Short paragraphs and deleted that memory.', 'I saved Short paragraphs and I deleted that memory.',
+    'I saved Short paragraphs while I deleted that memory.',
     'Your preference is saved and that memory is deleted: Short paragraphs.']) {
     assert.equal(A.why(answer(text, ['Short paragraphs']), saved), 'ground', text);
   }
+  assert.equal(A.why(answer('I saved Short paragraphs, and if I deleted it, I would say so.', ['Short paragraphs']), saved), '', 'a coordinated conditional is not a second completion');
   const both = A.task.input(raw({ question: 'Forget this memory.', steps: [step('memory_save', saving, receipt('created')),
     step('memory_forget', { id: ID, revision: NEXT }, receipt('forgotten', ID, REV))] }));
   assert.equal(A.why(answer('I saved Short paragraphs, then forgot that memory.', ['Short paragraphs']), both), '', 'accurate historical actions retain their receipts');
