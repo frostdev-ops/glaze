@@ -94,6 +94,12 @@ var GZ_AI_RIME_MEMORY = globalThis.GZ_AI_RIME_MEMORY || (() => {
     if (!await env.on() || ctx?.signal?.aborted) return fail('off');
     return current;
   };
+  // Core invokes this inside its queue and again after awaited reads, immediately before committing. Keep the same
+  // producer lease/account; a later user turn or settings change cannot authorize work already queued by this one.
+  const mutationGuard = (env, ctx, current) => async () => {
+    const fresh = await ready(env, ctx);
+    return fresh.ok !== false && fresh.account === current.account && fresh.lease === current.lease;
+  };
   const tools = (env) => {
     if (!env?.store || typeof env.on !== 'function' || typeof env.context !== 'function') throw new TypeError('memory tools: store, on and context required');
     return SPECS.map((spec) => ({ ...spec, run: async (args, ctx) => {
@@ -105,10 +111,11 @@ var GZ_AI_RIME_MEMORY = globalThis.GZ_AI_RIME_MEMORY || (() => {
         const { account } = current;
         if (spec.name === 'memory_search') return await env.store.search(account, args.query, { ...(args.kind && { kind: args.kind }), limit: LIMIT.hits });
         if (spec.name === 'memory_read') return await env.store.read(account, args.id, { page: args.page || 1 });
-        if (spec.name === 'memory_forget') return forgetRequested(current.question) ? await env.store.forget(account, { ...args }) : fail('evidence');
+        if (spec.name === 'memory_forget') return forgetRequested(current.question) ? await env.store.forget(account, { ...args }, { guard: mutationGuard(env, ctx, current) }) : fail('evidence');
         const question = userText(current.question);
         if (!question.includes(args.evidence) || !String(current.question || '').includes(args.evidence)) return fail('evidence');
-        return await env.store.save(account, { ...args }, { question, explicitCorrection: current.explicitCorrection === true, ...(current.lease !== undefined && { lease: current.lease }) });
+        return await env.store.save(account, { ...args }, { question, explicitCorrection: current.explicitCorrection === true,
+          guard: mutationGuard(env, ctx, current), ...(current.lease !== undefined && { lease: current.lease }) });
       } catch { return fail('write'); }
     } }));
   };
@@ -210,7 +217,7 @@ var GZ_AI_RIME_MEMORY = globalThis.GZ_AI_RIME_MEMORY || (() => {
       const record = material(call, current.account, typeof env.now === 'function' ? env.now() : Date.now());
       if (!record) return fail('scope');
       if (!await env.on() || ctx?.signal?.aborted) return fail('off');
-      return await env.store.ingest(current.account, record, current.lease === undefined ? {} : { lease: current.lease });
+      return await env.store.ingest(current.account, record, { guard: mutationGuard(env, ctx, current), ...(current.lease !== undefined && { lease: current.lease }) });
     } catch { return fail('write'); }
   };
   return { LIMIT, SPECS, READS, isWrite, tools, userText, forgetRequested, material, ingest };
