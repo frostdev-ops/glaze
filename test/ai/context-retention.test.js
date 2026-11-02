@@ -38,7 +38,7 @@ test('split requests use exact prompt count and the actual output reserve at a l
     // Deliberately unlike the UTF-8 estimate, as a real tokenizer can be for non-English material.
     count: async (req) => JSON.stringify(req).length,
     run: async (req) => { seen.push(req); return { text: '{"issues":[]}', finish: 'stop', usage: { input: JSON.stringify(req).length, output: 5 } }; } };
-  const text = 'An invented draft paragraph with enough words to review.\n'.repeat(1600);
+  const text = Array.from({ length: 1600 }, (_, i) => `Paragraph ${i}: An invented draft with enough words to review.\n`).join('');
   const out = await T.run(V.task, { text }, { provider, cfg: {} });
   assert.ok(out.meta.parts > 1);
   assert.ok(seen.length <= 8);
@@ -47,7 +47,9 @@ test('split requests use exact prompt count and the actual output reserve at a l
     assert.ok(req.maxTokens === 4096, 'the answer budget is preserved');
   }
   assert.ok(JSON.stringify(seen[0]).length > 26000, 'large material uses the available prompt capacity');
-  for (const line of text.trim().split('\n')) assert.ok(seen.some((req) => JSON.stringify(req).includes(line)));
+  const format = require('../../extension/ai/local/format.js');
+  const supplied = seen.flatMap((req) => format.parse(req).blocks.filter((b) => /^draft(?: part \d+ of \d+)?$/.test(b.label)).map((b) => b.text)).join('');
+  assert.equal(supplied, text, 'every source character reaches inference once, in source order');
 });
 
 test('compaction reads all turns retained by the larger window before covering them', () => {

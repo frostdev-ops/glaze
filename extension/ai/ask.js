@@ -663,6 +663,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
             if (seen?.declined) return post({ id, type: 'end', task: r.task, declined: true });
             if (seen) material = materialOf(seen.steps, zone);
           }
+          // The page renews this port between questions. Discover the provider's current window before cutting history;
+          // record-reading help already did so through offer(), but a study-only follow-up has no reader.
+          if (level >= 3 && !r.read) await measure('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale }, signal);
           // Level 3: the summary as the conversation's first turn, then the turns it doesn't cover (a model reads them).
           const past = level >= 3 ? [...(CHAT.summary ? [{ question: 'Earlier in this chat', answer: CHAT.summary }] : []), ...retained(open)].slice(-Math.floor(LIMIT.turns * scale())) : history;
           const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...(past.length && { history: past }), ...(material && { material }) });
