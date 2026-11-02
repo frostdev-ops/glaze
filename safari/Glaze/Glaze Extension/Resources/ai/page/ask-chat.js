@@ -270,7 +270,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     const dialog = variant === 'dialog';
     const pinWriter = () => globalThis.GZ_ASK_CURRENT?.pin ? GZ_ASK_CURRENT.pin() : globalThis.GZ_WRITER?.pinCurrent?.();
     pinWriter();
-    const turns = []; // [{ question, answer, li }] of this chat, for follow-ups; gone when it stops or starts anew
+    const turns = []; // [{ question, answer, li, questionLine }] of this chat, including app statuses for unfinished requests
     const afterReveal = new Map(), reveals = new Map(), copyTimers = new Map();
     let actionEpoch = 0, current = 0, pending = null, follow = true, frame = 0, written = -1, sizes = null, moved = 0, alive_ = true;
     // memo: the worker's summary of the turns it folded and how many of turns it covers; sentFrom: the first turn the last
@@ -684,7 +684,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
 
     // Ask: the reservation before the storage read (stopping invalidates it), then the question in the conversation (unless
     // it is a try again of one shown), the run, its end.
-    const ask = async ({ question: q, attempt = '', shown: again = false, sent, fired }) => {
+    const ask = async ({ question: q, attempt = '', shown: again = false, previous, sent, fired }) => {
       if (current || pending || !alive_ || !accepting) return;
       const mine = pending = {};
       actionEpoch++; afterReveal.clear();
@@ -693,7 +693,13 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       if (pending !== mine || !alive_) return;
       pending = null;
       if (!allowed) return onOff?.();
-      if (!again) question(attempt ? `${q}\n\n${attempt}` : q);
+      const questionLine = again ? previous?.questionLine : question(attempt ? `${q}\n\n${attempt}` : q);
+      // A retry of the latest open turn replaces it. An older/folded retry is a new attempt in chronological order.
+      let turn = previous && previous === turns.at(-1) && turns.indexOf(previous) >= memo.folded ? previous : null;
+      const remember = (text, li = questionLine) => {
+        if (turn) Object.assign(turn, { answer: text, li });
+        else turns.push(turn = { question: q, answer: text, li, questionLine });
+      };
       sent?.();
       say(t('Thinking…'));
       running(true);
@@ -730,13 +736,17 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
           c.querySelector('.gz-ask-step-note')?.remove();
         }
       }
+      // App-owned status, never model prose or an assertion about whether earlier tool calls ran or changed anything.
+      const code = ['cancelled', 'connection-lost', 'check', 'setup', 'permission', 'busy', 'often', 'download', 'downloading',
+        'unavailable', 'provider-unavailable', 'refusal', 'steps', 'invalid-response', 'size', 'off', 'feature'].includes(end.error) ? end.error : 'failed';
+      const unfinished = `[Glaze app status: request ${code === 'cancelled' ? 'cancelled' : `failed (${code})`}. No completed answer or verified tool results are carried in this history entry; tool activity may have occurred.]`;
       if (end.type === 'end') {
         say('');
-        if (end.declined) answer(t('Nothing was changed.'));
+        if (end.declined) { const text = t('Nothing was changed.'); remember(text, answer(text)); }
         else if (end.task === 'study.help') {
           const reply = String(end.output?.reply || ''), more = String(end.output?.followUp || '');
           const li = answer(reply, more);
-          turns.push({ question: q, answer: more ? `${reply}\n\n${more}` : reply, li });
+          remember(more ? `${reply}\n\n${more}` : reply, li);
         } else {
           const li = answer(String(end.answer?.text || ''));
           // Glaze's own answer (built from the results), drawn as any is, its detail under it.
@@ -745,24 +755,27 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
             const why = whyOf({ ...end, ...end.answer });
             if (why) li.querySelector('.gz-ask-acts')?.before(why);
           }
-          turns.push({ question: q, answer: String(end.answer?.text || ''), li });
+          remember(String(end.answer?.text || ''), li);
           perform(queued, li);
         }
-      } else if (end.error === 'off' && end.feature === 'memory') say(t('Memory is off'));
+      } else if (end.error === 'off' && end.feature === 'memory') { remember(unfinished); say(t('Memory is off')); }
       else if (['off', 'feature'].includes(end.error)) onOff?.();
-      else if (end.error === 'cancelled') say('');
+      else if (end.error === 'cancelled') { remember(unfinished); say(''); }
       else {
         const text = said(end.error);
         say(text);
         const retry = make('button', { type: 'button', className: 'gz-ask-retry' }, icon('retry'), make('span', { textContent: t('Try again') }));
         const li = note(text, 'gz-ask-err');
+        remember(unfinished, li);
         li.append(retry);
         const why = whyOf(end);
         if (why) li.append(why);
         retry.addEventListener('click', (e) => {
           if (!real(e) || !activated() || current || pending) return;
+          // A folded turn still needs a connected anchor after its retry button's error row goes away.
+          if (turn.li === li) turn.li = turn.questionLine;
           drop(li);
-          ask({ question: q, attempt, shown: true, fired });
+          ask({ question: q, attempt, shown: true, previous: turn, fired });
         });
       }
       if (alive_ && root.isConnected && (dialog || root.contains(focused())) && !focused()?.closest('.gz-ask-memory')

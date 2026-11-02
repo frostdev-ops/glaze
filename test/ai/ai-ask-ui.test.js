@@ -444,7 +444,7 @@ for (const error of ['cancelled', 'connection-lost']) test(`a run ending with ${
   const previous = asked(P).at(-1).history[0];
   assert.equal(previous.question, 'Mark my lab report done');
   assert.match(previous.answer, /^\[Glaze app status: request (?:cancelled|failed)/);
-  assert.match(previous.answer, /No completed answer or tool results are recorded in this history entry/);
+  assert.match(previous.answer, /No completed answer or verified tool results are carried in this history entry; tool activity may have occurred/);
   assert.equal(previous.answer.includes('cancelled'), error === 'cancelled');
   P.box().close();
 });
@@ -462,7 +462,7 @@ test('a failure shows in the conversation with Try again, which asks the same qu
   assert.deepEqual(Object.keys(failed).sort(), ['answer', 'question'], 'keep the existing history wire schema');
   assert.equal(failed.question, 'Plan my study week from my assignments');
   assert.match(failed.answer, /^\[Glaze app status: request failed \(check\)/);
-  assert.match(failed.answer, /No completed answer or tool results are recorded in this history entry/);
+  assert.match(failed.answer, /No completed answer or verified tool results are carried in this history entry; tool activity may have occurred/);
   assert.ok(failedPort.hungUp, 'the failed request survives a fresh port');
   answer(P, study('Start with your next assignment.')); await settle();
   const err = P.box().querySelector('.gz-ask-err');
@@ -479,14 +479,17 @@ test('a failure shows in the conversation with Try again, which asks the same qu
   assert.equal(P.turns().filter(([c, q]) => c === 'gz-ask-q' && q === 'Plan my study week from my assignments').length, 1, 'the question isn\'t shown twice');
   answer(P, { type: 'error', error: 'connection-lost' }); await settle();
   P.doc.fire(P.box().querySelector('.gz-ask-retry'), 'click'); await settle();
-  assert.equal(asked(P).at(-1).history.length, 2, 'repeated retries replace the original history entry');
-  assert.match(asked(P).at(-1).history[0].answer, /request failed \(connection-lost\)/);
+  assert.equal(asked(P).at(-1).history.length, 3, 'an older retry adds one chronological attempt; its immediate retry replaces it');
+  assert.match(asked(P).at(-1).history[0].answer, /request failed \(check\)/, 'the original failed attempt stays honest');
+  assert.match(asked(P).at(-1).history[2].answer, /request failed \(connection-lost\)/);
   answer(P, { type: 'end', task: 'agent.tools', answer: { text: 'Lab report, Friday.' } });
   await settle();
   assert.deepEqual(P.turns().map(([, t]) => t), ['Plan my study week from my assignments', 'What should I do first?', 'Start with your next assignment.', 'Lab report, Friday.']);
   P.ask('And after that?'); await settle();
-  assert.equal(asked(P).at(-1).history.length, 2);
-  assert.deepEqual(JSON.parse(JSON.stringify(asked(P).at(-1).history[0])), { question: 'Plan my study week from my assignments', answer: 'Lab report, Friday.' }, 'a successful retry replaces the app status');
+  assert.equal(asked(P).at(-1).history.length, 3);
+  assert.deepEqual(Array.from(asked(P).at(-1).history, (h) => h.question), ['Plan my study week from my assignments', 'What should I do first?', 'Plan my study week from my assignments']);
+  assert.ok(!asked(P).at(-1).history.some((h) => h.answer.includes('connection-lost')), 'the immediate retry does not retain its superseded failure');
+  assert.deepEqual(JSON.parse(JSON.stringify(asked(P).at(-1).history.at(-1))), { question: 'Plan my study week from my assignments', answer: 'Lab report, Friday.' }, 'a successful retry replaces the latest app status and remains the most recent request');
   P.box().close();
 });
 
@@ -778,10 +781,15 @@ test('turns the worker folded show as one line where they were, opened to read t
   assert.equal(fold.querySelector('summary').textContent, 'Earlier messages summarized');
   assert.equal(fold.querySelector('details').open, undefined, 'closed until the student opens it');
   assert.equal(fold.querySelector('details strong').textContent, 'Mitosis', 'the summary, drawn as the answers are');
+  P.doc.fire(P.box().querySelector('.gz-ask-retry'), 'click'); await settle();
+  assert.equal(asked(P).at(-1).question, 'Question 2');
+  answer(P, study('Answer 2 on retry')); await settle();
   P.ask('Question 4');
   await settle();
   assert.equal(asked(P).at(-1).summary, '- **Mitosis**: asked twice');
-  assert.deepEqual([...asked(P).at(-1).history.map((h) => h.question)], ['Question 3']);
+  assert.deepEqual([...asked(P).at(-1).history.map((h) => h.question)], ['Question 3', 'Question 2'], 'a folded retry becomes the newest attempt without unfolding old history');
+  answer(P, { type: 'summary', text: '- **Mitosis**: earlier attempts', turns: 1 }); await settle();
+  assert.equal(items.indexOf(P.box().querySelector('.gz-ask-fold')), items.indexOf(P.box().querySelectorAll('.gz-ask-a')[1]) + 1, 'sentFrom still locates the newly folded third turn');
   P.doc.fire(P.box().querySelector('.gz-ask-stop'), 'click');
   answer(P, { type: 'error', error: 'cancelled' });
   await settle();
