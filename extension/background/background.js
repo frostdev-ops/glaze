@@ -2482,7 +2482,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   task.then(reply, () => reply({ ok: false }));
   return true;
 });
-const LOADABLE = new Set(['core/motion.js', 'looks/scene-host.js', 'navigation/nav.js', 'looks/page/light.js', 'navigation/nav-items.js', 'navigation/navlayout.js', 'content/content-ultra.js', 'content/content-canvas.js', 'navigation/page/nav.js', 'navigation/navbar.js', 'navigation/page/navbar-canvas.js', 'navigation/page/navbar-moodle.js', 'navigation/page/navbar.js', 'navigation/page/navbar-widgets.js', 'settings/page/settingspage.js', 'courses/stream.js', 'courses/page/stream.js', 'courses/folders.js', 'courses/page/folders.js', 'core/zip.js', 'writer/drafts.js', 'planner/gradecalc.js', 'planner/page/grades.js', 'looks/page/schedule.js', 'planner/todo.js', 'planner/page/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'courses/cards.js', 'courses/page/cards.js', 'courses/page/cardtasks.js', 'courses/moodle.js', 'courses/page/moodle.js', 'navigation/seek.js', 'navigation/page/search.js', 'courses/page/discussion-nav.js', 'planner/remind.js', 'planner/page/reminders.js', 'navigation/page/palette.js', 'navigation/page/keys.js', 'navigation/page/coursemenu.js', 'courses/page/previews.js', 'courses/page/download.js', 'core/widgets.js', 'navigation/sidebar.js', 'navigation/page/sidebar.js', 'core/page/widgets.js', 'courses/page/coursecards.js', 'courses/page/dashboard.js', 'looks/lookx.js', 'looks/lookset.js', 'looks/looks.js', 'looks/page/lookx.js', 'looks/lookparts.js', 'looks/page/lookparts.js', 'looks/motionx.js', 'writer/page/drafts.js', 'courses/page/docs.js', 'courses/page/bbpreview.js', 'courses/page/canvasopen.js', 'courses/page/docreview.js', 'navigation/page/place.js', 'planner/gradescope.js', 'planner/ics.js', 'planner/calexport.js', 'planner/page/calexport.js', 'planner/gpa.js', 'core/doctext.js', 'planner/page/import.js', 'planner/page/gpaterms.js', 'planner/syllabus.js', 'planner/syllabus-ai.js', 'planner/page/syllabus.js', 'planner/classes.js', 'planner/page/classes.js', 'planner/insights.js', 'planner/page/insights.js', 'planner/notes.js', 'planner/page/notes.js', 'courses/ultra.js', 'courses/lmsq.js', 'courses/page/ahead.js', 'courses/instant.js', 'courses/page/instant.js', 'pet/pet.js', 'pet/petbrain.js', 'pet/petphysics.js', 'pet/page/petworld.js', 'pet/petsprites.js', 'pet/petplayer.js', 'pet/page/pet.js', 'navigation/coursetabs.js', 'navigation/page/coursetabs.js', 'sharing/page/sharing.js', 'looks/parts.js', 'looks/page/rules.js', 'looks/page/motionx.js', 'looks/glsl.js', 'mods/page/mods.js', 'mods/page/modui.js', 'mods/page/modwidgets.js', 'content/routes.js', 'core/popup.js', 'courses/page/popup.js', 'courses/announce.js', 'courses/page/announce.js', 'courses/page/announce-read.js', 'courses/rubric.js', 'courses/page/rubric.js', 'writer/page/editor-menu.js', 'navigation/page/sticky-fold.js', 'navigation/page/feedback.js', 'writer/writer-ultra.js', 'writer/page/writer.js', 'writer/writer-target.js', 'writer/writer-context-discussion.js', 'writer/page/writer-quote.js', 'writer/writer-context-assignment.js', 'writer/writer-submit.js', 'writer/page/writer-submit.js', 'ai/page/ask.js', 'ai/page/ask-chat.js', 'ai/page/ask-tile.js']);
+const LOADABLE = new Set(['core/motion.js', 'looks/scene-host.js', 'navigation/nav.js', 'looks/page/light.js', 'navigation/nav-items.js', 'navigation/navlayout.js', 'content/content-ultra.js', 'content/content-canvas.js', 'navigation/page/nav.js', 'navigation/navbar.js', 'navigation/page/navbar-canvas.js', 'navigation/page/navbar-moodle.js', 'navigation/page/navbar.js', 'navigation/page/navbar-widgets.js', 'settings/page/settingspage.js', 'courses/stream.js', 'courses/page/stream.js', 'courses/folders.js', 'courses/page/folders.js', 'core/zip.js', 'writer/drafts.js', 'planner/gradecalc.js', 'planner/page/grades.js', 'looks/page/schedule.js', 'planner/todo.js', 'planner/page/todo.js', 'i18n/de.js', 'i18n/es.js', 'i18n/fr.js', 'i18n/nl.js', 'i18n/pt-BR.js', 'courses/cards.js', 'courses/page/cards.js', 'courses/page/cardtasks.js', 'courses/moodle.js', 'courses/page/moodle.js', 'navigation/seek.js', 'navigation/page/search.js', 'courses/page/discussion-nav.js', 'planner/remind.js', 'planner/page/reminders.js', 'navigation/page/palette.js', 'navigation/page/keys.js', 'navigation/page/coursemenu.js', 'courses/page/previews.js', 'courses/page/download.js', 'core/widgets.js', 'navigation/sidebar.js', 'navigation/page/sidebar.js', 'core/page/widgets.js', 'courses/page/coursecards.js', 'courses/page/dashboard.js', 'looks/lookx.js', 'looks/lookset.js', 'looks/looks.js', 'looks/page/lookx.js', 'looks/lookparts.js', 'looks/page/lookparts.js', 'looks/motionx.js', 'writer/page/drafts.js', 'courses/page/docs.js', 'courses/page/bbpreview.js', 'courses/page/canvasopen.js', 'courses/page/docreview.js', 'navigation/page/place.js', 'planner/gradescope.js', 'planner/ics.js', 'planner/calexport.js', 'planner/page/calexport.js', 'planner/gpa.js', 'core/doctext.js', 'planner/page/import.js', 'planner/page/gpaterms.js', 'planner/syllabus.js', 'planner/syllabus-ai.js', 'planner/page/syllabus.js', 'planner/classes.js', 'planner/page/classes.js', 'planner/insights.js', 'planner/page/insights.js', 'planner/notes.js', 'planner/page/notes.js', 'courses/ultra.js', 'courses/lmsq.js', 'courses/page/ahead.js', 'courses/instant.js', 'courses/page/instant.js', 'pet/pet.js', 'pet/petbrain.js', 'pet/petphysics.js', 'pet/page/petworld.js', 'pet/petsprites.js', 'pet/petplayer.js', 'pet/page/pet.js', 'navigation/coursetabs.js', 'navigation/page/coursetabs.js', 'sharing/page/sharing.js', 'looks/parts.js', 'looks/page/rules.js', 'looks/page/motionx.js', 'looks/glsl.js', 'mods/page/mods.js', 'mods/page/modui.js', 'mods/page/modwidgets.js', 'content/routes.js', 'core/popup.js', 'courses/page/popup.js', 'courses/announce.js', 'courses/page/announce.js', 'courses/page/announce-read.js', 'courses/rubric.js', 'courses/page/rubric.js', 'writer/page/editor-menu.js', 'navigation/page/sticky-fold.js', 'navigation/page/feedback.js', 'writer/writer-ultra.js', 'writer/page/writer.js', 'writer/writer-target.js', 'writer/writer-context-discussion.js', 'writer/page/writer-quote.js', 'writer/writer-context-assignment.js', 'writer/writer-submit.js', 'writer/page/writer-submit.js', 'ai/page/ask.js', 'ai/page/ask-chat.js', 'ai/page/current-view.js', 'ai/page/ask-tile.js']);
 chrome.runtime.onMessage.addListener((m, sender, reply) => {
   if (m?.type !== 'glaze:load') return;
   const files = Array.isArray(m.files) ? m.files : [];
@@ -2536,7 +2536,7 @@ const loadInto = (m, sender, files, reply) => {
 // tab's own Glaze has said the attempt is an assignment (aiWriter). The connections live in the worker's own store; only
 // Settings' top frame reads and writes them ('glaze:ai-config'), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
 // worker's importScripts calls name (scripts/package-firefox.sh). A task (ai/tasks/<id>.js) goes in this list too.
-const aiFiles = () => importScripts('../writer/writer-sources.js', '../writer/writer-cite.js', '../ai/schema.js', '../ai/request.js', '../ai/stream.js', '../ai/failure.js', '../ai/endpoint.js', '../ai/text.js', '../ai/visual-cache.js', '../ai/models.js', '../ai/providers.js', '../ai/providers/openai.js', '../ai/providers/device.js', '../ai/providers/apple.js', '../ai/local/store.js', '../ai/local/updates.js', '../ai/local/format.js', '../ai/local/link.js', '../ai/providers/local.js', '../ai/tools.js', '../ai/loop.js', '../ai/task.js', '../ai/tasks/syllabus-read.js', '../ai/tasks/writer-context.js', '../ai/tasks/writer-complete.js', '../ai/tasks/writer-review.js', '../ai/tasks/writer-image.js', '../ai/tasks/writer-feedback.js', '../ai/tasks/writer-outline.js', '../ai/tasks/writer-requirements.js', '../ai/tasks/writer-cite.js', '../ai/tasks/writer-decide.js', '../ai/tasks/wording.js', '../ai/tasks/study-help.js', '../ai/tasks/agent-tools.js', '../ai/tasks/chat-compact.js', '../ai/agent/js.js', '../ai/agent/places.js', '../ai/agent/wakes.js', '../ai/agent/school.js', '../ai/settings.js', '../ai/broker.js', '../ai/ask.js');
+const aiFiles = () => importScripts('../writer/writer-sources.js', '../writer/writer-cite.js', '../ai/schema.js', '../ai/request.js', '../ai/stream.js', '../ai/failure.js', '../ai/endpoint.js', '../ai/text.js', '../ai/visual-cache.js', '../ai/models.js', '../ai/providers.js', '../ai/providers/openai.js', '../ai/providers/device.js', '../ai/providers/apple.js', '../ai/local/store.js', '../ai/local/updates.js', '../ai/local/format.js', '../ai/local/link.js', '../ai/providers/local.js', '../ai/tools.js', '../ai/loop.js', '../ai/task.js', '../ai/tasks/syllabus-read.js', '../ai/tasks/writer-context.js', '../ai/tasks/writer-complete.js', '../ai/tasks/writer-review.js', '../ai/tasks/writer-image.js', '../ai/tasks/writer-feedback.js', '../ai/tasks/writer-outline.js', '../ai/tasks/writer-requirements.js', '../ai/tasks/writer-cite.js', '../ai/tasks/writer-decide.js', '../ai/tasks/wording.js', '../ai/tasks/study-help.js', '../ai/current.js', '../ai/tasks/agent-tools.js', '../ai/tasks/chat-compact.js', '../ai/agent/js.js', '../ai/agent/places.js', '../ai/agent/wakes.js', '../ai/agent/school.js', '../ai/settings.js', '../ai/broker.js', '../ai/ask.js');
 globalThis.addEventListener?.('install', aiFiles);
 // run_js's engine (ai/agent/js.js), cached here so the worker may import it on its first run; its WebAssembly loads then.
 globalThis.addEventListener?.('install', () => importScripts('../vendor/quickjs/quickjs.js'));
@@ -2545,11 +2545,11 @@ const ai = () => { if (typeof GZ_AI_BROKER === 'undefined') aiFiles(); return GZ
 // its tool calls through agents/calls.js with Agents' tools and approval window (mcpCore: the native link stays off).
 chrome.runtime.onConnect.addListener((p) => {
   if (p.name !== 'glaze:ask') return;
-  const s = p.sender || {}, allowed = (what) => aiSender(s, what), core = mcpCore();
+  const s = p.sender || {}, allowed = (what) => aiSender(s, what), core = mcpCore(), pageEnv = rimePage(s);
   ai(); GZ_AI_ASK.connect(p, { allowed, broker: (q) => ai().connect(q, { ...aiEnv(), who: String(s.tab?.id ?? 'none'), allowed }), settings: aiEnv().settings, enabled: glazeOn,
     registry: GZ_MCP_REGISTRY, state: mcpRead, approve: core.approve, refresh: mcpRefresh, accounts: async () => (await GZ_AI_TOOLS.get('accounts_list').run({}, mcpCtx(null))).items,
     local: chrome.storage.local, keys: mcpKeys, now: Date.now, turn: (f) => (brokerTurn ||= GZ_CARDS.queue())(f),
-    ...rimePage(s), scope: `${s.tab?.id}|${s.documentId || `${s.frameId}|${s.url}`}`, level: rimeLevel, counts: true, page: () => ({ url: s.url }), own: { read: rimeWakesEnv().read, tab: (account, op, args, options) => { mcpCore(); return mcpTabs().run(account, op, args, options); }, writer: async () => GZ_SANITIZE(await chrome.storage.sync.get(null)).enhance.writer !== false, wakes: rimeWakesEnv() } });
+    ...pageEnv, current: async (m) => { const out = await rimeCurrent(s, m); if (!out) throw GZ_AI_REQUEST.error('changed'); if (out.page) pageEnv.setPage(out.page); return out; }, scope: `${s.tab?.id}|${s.documentId || `${s.frameId}|${s.url}`}`, level: rimeLevel, counts: true, own: { read: rimeWakesEnv().read, tab: (account, op, args, options) => { mcpCore(); return mcpTabs().run(account, op, args, options); }, writer: async () => GZ_SANITIZE(await chrome.storage.sync.get(null)).enhance.writer !== false, wakes: rimeWakesEnv() } });
 });
 // The tools level of Ask Rime's model (ai/ask.js route): Glaze's own model's, as models.json says it was trained (1 for Rime r5,
 // so its requests stay what it was gated on); every other model gets Rime's own tools.
@@ -2562,7 +2562,7 @@ const rimeLevel = async () => {
   const cfg = GZ_AI_LOCAL.config(raw);
   return cfg ? GZ_AI_LOCAL.toolsLevel(cfg) : 1;
 };
-const rimePage = (s) => ({ tab: s.tab?.id, session: chrome.storage.session, now: Date.now, page: () => ({ url: s.url }) });
+const rimePage = (s) => { let page = { url: s.url }; return { tab: s.tab?.id, session: chrome.storage.session, now: Date.now, page: () => page, setPage: (v) => { page = v; } }; };
 // A school page's look for reminders and watches that fired (ai/agent/wakes.js peek): how many, none taken; the panel takes them.
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:rime' || m.op !== 'peek') return;
@@ -2688,7 +2688,7 @@ const aiFramePage = () => {
   try {
     const ancestors = [];
     for (let frame = window; frame !== frame.top;) { frame = frame.parent; ancestors.push(frame.location.href); }
-    return { href: location.href, origin: globalThis.origin || location.origin, ancestors };
+    return { href: location.href, origin: globalThis.origin || location.origin, ancestors, attemptKind: globalThis.GZ_WRITER_ULTRA?.pageKind?.(document) || '' };
   } catch { return null; }
 };
 // The LMS document's own page may be an attempt. Every ancestor must be a same-origin LMS page outside a quiet route.
@@ -2744,22 +2744,127 @@ const aiSender = async (s, what = {}) => {
     let u, parent;
     try { u = new URL(addressOf(sender)); parent = new URL(top); } catch { return false; }
     if (sender.origin !== undefined && sender.origin !== u.origin) return false;
-    if (parent.origin !== u.origin || modQuiet(decodeURIComponent(u.pathname)) || modQuiet(decodeURIComponent(parent.pathname))) return false;
+    const path = decodeURIComponent(u.pathname), topPath = decodeURIComponent(parent.pathname);
+    const assignment = what.feature === 'ask' && AI_ATTEMPT.test(path) && sender.documentId
+      && (sender.attemptKind === undefined || sender.attemptKind === 'assignment')
+      && await aiAttempt(sender.tab.id, sender.documentId, u.href) === 'assignment';
+    if (parent.origin !== u.origin || (modQuiet(path) && !assignment) || (modQuiet(topPath) && !(assignment && aiPage(parent.href) === aiPage(u.href)))) return false;
     return !!await lmsPage(sender);
   };
   if (!await safe(s, s.tab.url)) return false;
   // A Port's sender URL is a snapshot. Re-read the isolated document and its tab so SPA navigation or an assessment
   // ancestor cannot retain an earlier course page's authority. documentId pins the frame where the browser supplies it.
   const target = s.documentId ? { tabId: s.tab.id, documentIds: [s.documentId] } : { tabId: s.tab.id, frameIds: [s.frameId] };
+  if (what.feature === 'ask') await chrome.scripting.executeScript({ target, files: ['writer/writer-ultra.js'] });
   const [tab, frames] = await Promise.all([chrome.tabs.get(s.tab.id), chrome.scripting.executeScript({ target, func: aiFramePage })]);
-  const page = frames?.[0]?.result;
-  if (typeof page?.href !== 'string' || typeof page.origin !== 'string' || !Array.isArray(page.ancestors)) return false;
+  const live = frames?.[0], page = live?.result;
+  if (s.documentId && live?.documentId !== s.documentId) return false;
+  if (typeof page?.href !== 'string' || typeof page.origin !== 'string' || !Array.isArray(page.ancestors)
+    || (s.frameId === 0) !== !page.ancestors.length || aiPage(page.ancestors.at(-1) || page.href) !== aiPage(tab.url)) return false;
   for (const address of page.ancestors) {
     let parent;
     try { parent = new URL(address); } catch { return false; }
     if (parent.origin !== page.origin || modQuiet(decodeURIComponent(parent.pathname))) return false;
   }
-  return safe({ ...s, url: page.href, origin: page.origin, tab }, tab.url);
+  return safe({ ...s, url: page.href, origin: page.origin, attemptKind: page.attemptKind || '', tab }, tab.url);
+};
+// A separate read-only channel from Writer. It grants no agent-app tools and does not depend on mcp.on.
+const rimeWriters = new Set();
+let rimeWriterSeq = 0, rimeDocHandles;
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'glaze:ask-writer') return;
+  const sender = port.sender || {}, seat = { sender, port, waits: new Map(), gone: false };
+  const end = () => { seat.gone = true; rimeWriters.delete(seat); for (const done of [...seat.waits.values()]) done(null); };
+  port.onDisconnect.addListener(end);
+  port.onMessage.addListener((m) => { if (Number.isSafeInteger(m?.id)) seat.waits.get(m.id)?.(m.value || null); });
+  Promise.resolve().then(() => aiWriter(sender, { op: 'run', feature: 'writing' })).then((ok) => {
+    if (ok === true && !seat.gone) rimeWriters.add(seat); else { end(); try { port.disconnect(); } catch { /* gone */ } }
+  }, () => { end(); try { port.disconnect(); } catch { /* gone */ } });
+});
+const rimeWriterAsk = (seat, binding) => new Promise((resolve) => {
+  if (seat.gone) return resolve(null);
+  const id = ++rimeWriterSeq;
+  const done = (value) => { clearTimeout(timer); seat.waits.delete(id); resolve(value); };
+  const timer = setTimeout(done, 2000, null);
+  seat.waits.set(id, done);
+  try { seat.port.postMessage({ id, op: 'current', token: binding.token, revision: binding.revision }); } catch { done(null); }
+});
+const rimeWriterCurrent = async (s, at, binding) => {
+  if (!at?.href || !at.account || !binding || !/^[a-f0-9]{32}$/.test(binding.token) || !Number.isSafeInteger(binding.revision) || binding.revision < 0) return null;
+  const seats = [...rimeWriters].filter((seat) => seat.sender.tab?.id === s.tab.id && !seat.gone);
+  const found = (await Promise.all(seats.map(async (seat) => {
+    await aiKept();
+    const host = aiHosts.get(`${s.tab.id}|${seat.sender.frameId}`);
+    if (!host || host.documentId !== s.documentId || host.frameId !== s.frameId || await aiWriter(seat.sender, { op: 'run', feature: 'writing' }) !== true) return null;
+    const value = await rimeWriterAsk(seat, binding);
+    if (!value || value.token !== binding.token || value.revision !== binding.revision || typeof value.key !== 'string') return null;
+    const key = value.key, parts = key.split('|');
+    // Standalone documents can be pinned only by their same-document frame seat. Assignment keys must match live user,
+    // school and resource exactly; the raw key never enters model input or a page message.
+    const local = /^doc:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(key);
+    if (!local && (parts.length !== 4 || parts[0] !== new URL(at.href).host.toLowerCase() || parts[1] !== at.account
+      || parts[2] !== at.capture?.current?.course?.id || parts[3] !== at.capture?.current?.assignment?.id)) return null;
+    if (value.context?.kind === 'test' || typeof value.text !== 'string' || value.text.length > 3072) return null;
+    return { seat, value };
+  }))).filter(Boolean);
+  if (found.length !== 1) return null;
+  const match = found[0];
+  if (!rimeDocHandles) { mcpCore(); rimeDocHandles = GZ_MCP_WRITER.handles(chrome.storage.session); }
+  return { seat: match.seat, value: match.value, id: await rimeDocHandles.handle(match.value.key) };
+};
+// Capture in the pinned isolated document, never accept page identity supplied by an Ask message.
+// The authenticated account is refreshed independently of Glaze's memoized page helper.
+const rimeRead = async () => {
+  const page = (() => { try { const ancestors = []; for (let f = window; f !== f.top;) { f = f.parent; ancestors.push(f.location.href); }
+    return { href: location.href, origin: location.origin, ancestors }; } catch { return null; } })();
+  if (!page) return null;
+  const capture = globalThis.GZ_ASK_CURRENT?.capture?.();
+  if (!capture) return page;
+  const control = new AbortController(), timer = setTimeout(() => control.abort(), 5000);
+  try {
+    const endpoint = capture.current?.site === 'ultra' ? '/learn/api/v1/users/me' : capture.current?.site === 'canvas' ? '/api/v1/users/self/profile' : '';
+    if (!endpoint) return page;
+    const res = await fetch(location.origin + endpoint, { credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: control.signal, headers: { accept: 'application/json' } });
+    const id = res.ok ? (await res.json())?.id : null;
+    if (location.href !== page.href || !/^(?:\d{1,20}|_\d+_\d+)$/.test(String(id))) return page;
+    return { ...page, capture, account: String(id) };
+  } catch { return page; } finally { clearTimeout(timer); }
+};
+const rimeCurrent = async (s, m = {}) => {
+  if (!Number.isInteger(s.tab?.id) || !Number.isInteger(s.frameId) || fromGlaze(s)) return null;
+  const target = s.documentId ? { tabId: s.tab.id, documentIds: [s.documentId] } : { tabId: s.tab.id, frameIds: [s.frameId] };
+  const read = async () => {
+    const [tab, frames] = await Promise.all([chrome.tabs.get(s.tab.id), chrome.scripting.executeScript({ target, func: rimeRead })]);
+    const live = frames?.[0], page = live?.result;
+    if (!page || (s.documentId && live.documentId !== s.documentId) || !await aiLmsFrame(tab, live, s.frameId)) return null;
+    return { ...page, documentId: live.documentId };
+  };
+  const at = await read();
+  if (m.currentPage !== undefined && at?.href !== m.currentPage) return null;
+  if (!at || !await aiSender(s, { op: 'run', feature: 'ask' })) return null;
+  // Context-free questions still pin the live URL; a late reply on a different SPA surface is rejected.
+  let value = null, writer = null;
+  if (at.account && at.capture?.currentPage === at.href && m.currentPage === at.href) {
+    ai();
+    value = GZ_AI_CURRENT.clean(at.capture.current, { caps: { context: 131072 } });
+    if (value) {
+      value = { ...value }; delete value.document; if (value.material?.source === 'writer') delete value.material;
+      if (m.writer && JSON.stringify(m.writer) === JSON.stringify(at.capture.writer)) writer = await rimeWriterCurrent(s, at, m.writer);
+      if (writer) value = { ...value, view: 'document', document: { id: writer.id, title: writer.value.title || '', kind: 'paper', revision: writer.value.revision }, material: { text: writer.value.text, source: 'writer', truncated: writer.value.truncated === true } };
+    }
+  }
+  return { ...(value && { current: value }), page: { url: at.href, ...(value && { site: value.site }) }, bind: (call, input) => {
+    const args = call.arguments || {}, pinned = value && GZ_AI_TASK_AGENT_TOOLS.currentBound?.(call, input);
+    if (!pinned || !at.account) return call;
+    const account = `${new URL(at.href).origin}/${at.account}`;
+    if (args.account && args.account !== account) throw GZ_AI_REQUEST.error('changed');
+    return { ...call, arguments: { ...args, account } };
+  }, valid: async () => {
+    const now = await read();
+    if (writer) { if (now?.capture?.writer?.token !== m.writer.token || now?.capture?.writer?.revision !== m.writer.revision) return false; const live = await rimeWriterCurrent(s, now || {}, m.writer); if (!live || live.seat !== writer.seat || live.value.key !== writer.value.key) return false; }
+    return !!now && now.href === at.href && now.documentId === at.documentId && now.account === at.account
+      && JSON.stringify(now.ancestors) === JSON.stringify(at.ancestors) && await aiSender(s, { op: 'run', feature: 'ask' }) === true;
+  } };
 };
 // Read cache authority from the claimed host's isolated Glaze world. Neither the Writer payload nor a page-selected
 // cache key may name another account. A navigation during the account read invalidates this snapshot.

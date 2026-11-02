@@ -273,7 +273,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     'das stimmt (?:nicht|so nicht)|das ist (?:falsch|nicht richtig)|du hast [\\p{L} ]{0,30}vergessen|bist du sicher|was ist mit|und (?:n[äa]chste|morgen|montag|f[üu]r)|falsch',
     'dat klopt niet|dat is (?:niet waar|fout)|je bent [\\p{L} ]{0,30}vergeten|weet je het zeker|hoe zit het met|en (?:volgende|morgen|maandag|voor)|fout',
   ].join('|')})(?![\\p{L}])`, 'iu');
-  const route = (question, { attempt = '', locale = 'en', level = 1, history } = {}) => {
+  const route = (question, { attempt = '', locale = 'en', level = 1, history, current } = {}) => {
     const last = level >= 3 && Array.isArray(history) && history.length ? history[history.length - 1] : null;
     if (last && !String(attempt).trim() && FOLLOW.test(String(question).replace(/[‘’]/g, "'"))) {
       // Follow-up-only questions carry no topic themselves. Walk back to the question that supplied their tools.
@@ -293,22 +293,27 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const computing = own.includes('compute') && !AT().gradedWork(AT().fold(q));
     const working = computing ? words(lists(WORK, locale).filter((w) => !COMPUTING.includes(w))).test(q) : has(WORK);
     const subject = () => subjectOf(`${q}\n${work}`);
+    // A deictic question names the active resource only when the worker independently captured one.
+    const deictic = level >= 3 && /\b(?:this|here|it|este|esta|esto|aqui|isso|isto|ici|ceci|dies|hier|dit|deze)\b/iu.test(q);
+    const active = deictic && current?.document?.id ? TOOLS.documents : deictic && current?.course?.id ? current.assignment?.id ? TOOLS.assignments : current.content?.id
+      ? (current.view === 'discussion' ? TOOLS3.discussions : TOOLS3.content) : current.document?.id ? TOOLS.documents : [] : [];
+    const contextualWork = deictic && /\b(?:what (?:do|should|can) i do|explain|help)\b/iu.test(q);
     // Tool first (level 3): help with work that names the student's records reads them first (read: agent.tools' help turn,
     // its tools these topics' reads), then study.help answers with what was read; help naming nothing is study help alone.
-    if (work.trim() || working) {
+    if (work.trim() || working || contextualWork) {
       const numbered = words(lists(NAMED, locale).map((n) => `(?:${n}) #?\\d+`)).test(q);
       const particular = words(lists(NAMED, locale).map((n) => `${PARTICULAR.source}[ -]+(?:[\\p{L}-]+[ -]+){0,2}(?:${n})`)).test(q);
       const named = level >= 3 && (CODE.test(q) || particular || numbered) && !on.includes('assignments') ? TOOLS.assignments : [];
-      const reads = level >= 3 ? [...on.filter((k) => READS.includes(k) && k !== 'mark').flatMap((k) => TOOLS[k]), ...own.filter((k) => READS.includes(k)).flatMap((k) => TOOLS3[k]), ...named] : [];
+      const reads = level >= 3 ? [...active, ...on.filter((k) => READS.includes(k) && k !== 'mark').flatMap((k) => TOOLS[k]), ...own.filter((k) => READS.includes(k)).flatMap((k) => TOOLS3[k]), ...named] : [];
       return reads.length ? { task: 'study.help', subject: subject(), read: [...new Set(reads)].slice(0, LIMIT.tools - 1).concat('accounts_list') } : { task: 'study.help', subject: subject() };
     }
-    if (!on.length && !own.length) return { task: 'study.help', subject: subject() };
+    if (!on.length && !own.length && !active.length) return { task: 'study.help', subject: subject() };
     if (on.includes('mark') && !on.includes('todo')) on.push('todo');
     // Rime's own topics first: their tools must fit the window before records' ones fill it.
-    const tools = [...Object.keys(TOOLS3).filter((k) => own.includes(k) && (k !== 'compute' || computing)).flatMap((k) => TOOLS3[k]),
+    const tools = [...active, ...Object.keys(TOOLS3).filter((k) => own.includes(k) && (k !== 'compute' || computing)).flatMap((k) => TOOLS3[k]),
       ...Object.keys(TOOLS).filter((k) => on.includes(k)).flatMap((k) => TOOLS[k])];
     if (!tools.length) return { task: 'study.help', subject: subjectOf(`${q}\n${work}`) };
-    const accounts = on.some((k) => ACCOUNTS.includes(k)) || own.some((k) => k === 'watch' || READS.includes(k));
+    const accounts = active.length > 0 || on.some((k) => ACCOUNTS.includes(k)) || own.some((k) => k === 'watch' || READS.includes(k));
     // Multiple topics may fill the window. Keep discovery available so a student with two accounts can still choose one.
     return { task: 'agent.tools', tools: [...new Set(tools)].slice(0, LIMIT.tools - (accounts ? 1 : 0)).concat(accounts ? ['accounts_list'] : []) };
   };
@@ -320,11 +325,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
 
   // ---- the step loop ---------------------------------------------------------------------------------------------------
   const cancelled = () => Object.assign(R().error('cancelled'), { category: 'cancelled' });
-  const episode = async ({ question, tools, locale, now, zone, run, call, signal, fired, first, help, history, summary, measure, caps }) => {
+  const episode = async ({ question, tools, locale, now, zone, run, call, signal, fired, first, help, history, summary, measure, caps, current }) => {
     const steps = [];
     let fix, fixed = false;
     const inputOf = () => ({ question, tools, steps: steps.map((s) => ({ call: s.call, result: s.result })), now, zone, locale, ...(fired && { fired }), ...(first && { first: true }), ...(help && { help }),
-      ...(first && history?.length && { history }), ...(first && summary && { summary }), ...(fix && { fix }) });
+      ...(first && history?.length && { history }), ...(first && summary && { summary }), ...(fix && { fix }), ...(current && { current }) });
     for (;;) {
       if (signal?.aborted) throw cancelled();
       // Results that would overflow the window: those the model has used become digests, the latest never.
@@ -352,7 +357,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       if (!isObj(out?.call)) throw R().error('check');
       if (steps.length >= AT().LIMIT.steps) throw R().error('steps');
       const { name, arguments: args, kind } = out.call;
-      const r = await call({ name, arguments: args, kind });
+      const r = await call({ name, arguments: args, kind }, inputOf());
       if (signal?.aborted) throw cancelled();
       // A change the student didn't allow: nothing more is asked, so nothing can claim it was done.
       if ((kind === 'write' || kind === 'confirm') && r?.asked !== 'yes') return { declined: r?.asked || 'refused', steps };
@@ -496,7 +501,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
 
     // Ask's tool calls, through Agents' one call path, as an app of Glaze's own that Ask's switch has granted every group.
     const live = async () => SET().allowed(SET().clean(await env.settings()), FEATURE) && (await env.enabled()) === true
-      && await allowed({ op: 'run', feature: FEATURE }) === true;
+      && await allowed({ op: 'run', feature: FEATURE }) === true && (!current?.fresh || await current.fresh());
     let asked; // the student's answer to the current call's change, from Agents' approval window
     const calls = CALLS().create({
       registry: env.registry, state: env.state, refresh: env.refresh, accounts: env.accounts, local: env.local, keys: env.keys, now: env.now, turn: env.turn,
@@ -610,7 +615,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const fail = (error) => post({ id, type: 'error', error });
       const inputScale = env.counts === true ? 32 : 1;
       const turn = (h) => isObj(h) && Object.keys(h).sort().join() === 'answer,question' && [h.question, h.answer].every((x) => typeof x === 'string' && x.length <= LIMIT.turn * inputScale);
-      if (Object.keys(m).some((k) => !['id', 'op', 'question', 'attempt', 'locale', 'history', 'summary', 'tools', 'site', 'text', 'fired'].includes(k)) || typeof m.question !== 'string' || !m.question.trim()
+      if (Object.keys(m).some((k) => !['id', 'op', 'question', 'attempt', 'locale', 'history', 'summary', 'tools', 'site', 'text', 'fired', 'current', 'currentPage', 'writer'].includes(k)) || typeof m.question !== 'string' || !m.question.trim()
         || (m.tools !== undefined && !(Array.isArray(m.tools) && m.tools.length <= AT().NAMES.length && new Set(m.tools).size === m.tools.length && m.tools.every((n) => AT().NAMES.includes(n)) && unionCost(m.tools) <= UNION.budget))
         || (m.summary !== undefined && (typeof m.summary !== 'string' || m.summary.length > LIMIT.summary))
         || (m.attempt !== undefined && typeof m.attempt !== 'string') || (m.locale !== undefined && typeof m.locale !== 'string')
@@ -633,14 +638,26 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       current = { id, control, n: 0, locale, zone, actions: [], text: (m.text || '').slice(0, LIMIT.text), page: { site: m.site, url: env.page?.()?.url } };
       const keep = (a) => { if (a.type === 'keepalive') post({ id, type: 'keepalive' }); };
       let level = 1;
+      let active;
+      const validate = async () => { if (active?.valid && !await active.valid()) throw R().error('changed'); if (signal.aborted) throw cancelled(); };
       const run = async (task, input) => {
+        await validate();
         if (level >= 3 && (await env.level?.().catch(() => 1) ?? 1) < 3) throw R().error('changed');
         // { id, type: 'context', task, used, window, reserve, exact }: the request about to go, against the model's window.
         const fit = await measure(task, input, signal);
         if (fit && !signal.aborted) post({ id, type: 'context', task, ...fit });
-        return (await broker({ op: 'run', feature: FEATURE, task, input }, signal, keep)).output;
+        await validate();
+        const output = (await broker({ op: 'run', feature: FEATURE, task, input }, signal, keep)).output;
+        await validate();
+        return output;
       };
       try {
+        active = await env.current?.(m);
+        current.fresh = active?.valid;
+        if (active?.page) current.page = active.page;
+        const context = active?.current;
+        const inCurrent = context ? { current: context } : {};
+        const studyContext = context ? { context: { kind: context.assignment ? 'assignment' : context.view, course: { name: context.course?.name || '' }, ...(context.assignment && { assignment: { title: context.assignment.title || '' } }) } } : {};
         level = await env.level?.().catch(() => 1) ?? 1;
         if (signal.aborted) throw cancelled();
         // A fired record the student asked about: its own turn for a model trained on it; else the say as any question.
@@ -649,35 +666,36 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (level >= 3 && m.fired !== undefined && (!kept || (kept.say && kept.say !== question))) throw R().error('request');
         const record = kept && level >= 3 ? kept : undefined;
         if (record) KEPT.delete(firedKey(m.fired));
-        const r = record ? routeFired(record) : route(question, { attempt, locale, level, ...(level >= 3 && history.length && { history }) });
+        const r = record ? routeFired(record) : route(question, { attempt, locale, level, ...inCurrent, ...(level >= 3 && history.length && { history }) });
         post({ id, type: 'route', task: r.task });
         if (r.task === 'study.help') {
           // Help naming the student's records (level 3): agent.tools' help turn reads them; study.help then helps with what
           // was read as its material, under its own rules. Its reader's answer is never shown.
-          let material = '', tools = ['accounts_list'];
+          let material = context?.material?.text || '', tools = ['accounts_list'];
           if (r.read) {
-            tools = await offer(r.read, { question, tools: r.read, steps: [], now: env.now(), zone, locale, first: true, help: r.subject }, signal);
+            tools = await offer(r.read, { question, tools: r.read, steps: [], now: env.now(), zone, locale, first: true, help: r.subject, ...inCurrent }, signal);
             // A reader that can't finish (its turn refused, too many steps) leaves study help to answer without it.
             let seen = null;
-            try { seen = await episode({ question, tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, first: true, help: r.subject, caps: contextCaps }); }
+            try { seen = await episode({ question, tools, locale, now: env.now(), zone, run, call: async (c, inp) => { await validate(); const out = await tool(active?.bind ? active.bind(c, AT().task.input(inp, { caps: contextCaps })) : c, signal); await validate(); return out; }, signal, first: true, help: r.subject, ...inCurrent, caps: contextCaps }); }
             catch (e) { if (signal.aborted || !['check', 'steps', 'refusal', 'invalid-response'].includes(R().code(e))) throw e; }
             if (seen?.declined) return post({ id, type: 'end', task: r.task, declined: true });
-            if (seen) material = materialOf(seen.steps, zone);
+            if (seen) material = [material, materialOf(seen.steps, zone)].filter(Boolean).join('\n').slice(0, Math.floor(LIMIT.material * scale()));
           }
           // The page renews this port between questions. Discover the provider's current window before cutting history;
           // record-reading help already did so through offer(), but a study-only follow-up has no reader.
-          if (level >= 3 && !r.read) await measure('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale }, signal);
+          if (level >= 3 && !r.read) await measure('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...studyContext, ...(material && { material }) }, signal);
           // Level 3: the summary as the conversation's first turn, then the turns it doesn't cover (a model reads them).
           const past = level >= 3 ? [...(CHAT.summary ? [{ question: 'Earlier in this chat', answer: CHAT.summary }] : []), ...retained(open)].slice(-Math.floor(LIMIT.turns * scale())) : history;
-          const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...(past.length && { history: past }), ...(material && { material }) });
+          const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...studyContext, ...(past.length && { history: past }), ...(material && { material }) });
           if (level >= 3 && isObj(output)) void compact({ id, open, turn: { question, answer: [output.reply, output.followUp].filter((x) => typeof x === 'string' && x).join('\n\n') }, locale, tools, zone }).catch(() => {});
           post({ id, type: 'end', task: r.task, output });
           return;
         }
-        const tools = level >= 3 ? await offer(r.tools, { question, tools: r.tools, steps: [], now: env.now(), zone, locale, first: true }, signal) : r.tools;
+        const tools = level >= 3 ? await offer(r.tools, { question, tools: r.tools, steps: [], now: env.now(), zone, locale, first: true, ...inCurrent }, signal) : r.tools;
         if (signal.aborted) throw cancelled();
-        const res = await episode({ question, tools, locale, now: env.now(), zone, run, call: (c) => tool(c, signal), signal, caps: contextCaps, ...(level >= 3 && { first: true, ...(open.length && { history: retained(open) }), ...(CHAT.summary && { summary: CHAT.summary }), measure: (task, input) => measure(task, input, signal) }),
+        const res = await episode({ question, tools, locale, now: env.now(), zone, run, call: async (c, inp) => { await validate(); const out = await tool(active?.bind ? active.bind(c, AT().task.input(inp, { caps: contextCaps })) : c, signal); await validate(); return out; }, signal, ...inCurrent, caps: contextCaps, ...(level >= 3 && { first: true, ...(open.length && { history: retained(open) }), ...(CHAT.summary && { summary: CHAT.summary }), measure: (task, input) => measure(task, input, signal) }),
           ...(record && { fired: { what: record.what, ...(record.watch && { watch: record.watch }), say: question, at: record.at, ...(record.fact && { fact: record.fact }) } }) });
+        await validate();
         if (res.declined) return post({ id, type: 'end', task: r.task, declined: true });
         // The study rule on this path too: an answer about records never gives the answer to work.
         // The results as the model read them (friendly dates at level 3), so the answer's copied values are in the material.
@@ -687,7 +705,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (!res.built && (!inp || SH().hands(res.answer.text, inp))) throw Object.assign(R().error('check'), { why: 'hands', steps: res.steps.length });
         // What the tools asked of the page (open, highlight), for the panel to perform once it shows the answer.
         await carry(env, current.actions).catch(() => {});
-        if (signal.aborted) throw cancelled();
+        await validate();
         for (const a of current.actions) { const { action, ...rest } = a; post({ id, type: 'action', action: { kind: action, ...rest } }); }
         // A built answer also carries the failed answer it replaced and its code, to this panel only (never Activity).
         if (level >= 3) void compact({ id, open, turn: { question, answer: res.answer.text }, locale, tools, zone }).catch(() => {});
