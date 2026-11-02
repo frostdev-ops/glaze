@@ -25,14 +25,19 @@ const fixture = async (locale, state = 'failed') => {
 };
 const answer = (value) => ({ call: null, answer: { text: `${value} Calendar`, quotes: ['Calendar'] } });
 for (const { source, raw, final, window } of require('../fixtures/rime-navigation-trajectories.json').cases) {
-  test(`${source}: scoped and localized navigation claims match their successful receipt`, () => {
-    const caps = { context: window };
+  test(`${source}: scoped and localized navigation claims match their successful receipt`, async () => {
+    const caps = { local: true, context: window };
     const input = A.task.input(raw, { caps });
     assert.ok(input);
     assert.equal(A.why(final, input), '', final.answer.text);
     const missing = A.task.input({ ...raw, steps: raw.steps.filter((step) => step.call.name !== 'place_open') }, { caps });
     assert.ok(missing);
     assert.equal(A.why(final, missing), 'ground', 'a course name and highlighted text cannot replace the open receipt');
+    const call = { name: 'place_open', arguments: { place: 'calendar' } };
+    const result = await TOOL('place_open').run(call.arguments, { page: { site: 'canvas', url: 'https://school.example.edu/' }, ui: { push() {} } });
+    const different = A.task.input({ ...raw, steps: raw.steps.map((step) => step.call.name === 'place_open' ? { call, result } : step) }, { caps });
+    assert.ok(different);
+    assert.equal(A.why(final, different), 'ground', 'a different successful open cannot replace the matching receipt');
   });
 }
 for (const [locale, words] of Object.entries(PHRASES)) {
@@ -69,6 +74,7 @@ test('a different opened destination never proves the claimed target; an earlier
     assert.equal(A.why({ call: null, answer: { text: 'I opened Grades. Calendar could not be opened.', quotes: ['Grades', 'Calendar'] } }, current), '');
   }
   assert.equal(A.why(answer('The requested place was opened successfully.'), withSteps([grades, calendar])), 'ground');
+  for (const claim of ['Calendar se abrió correctamente.', 'Calendar a bien été ouvert.']) assert.equal(A.why(answer(claim), withSteps([calendar, grades])), 'ground', claim);
 });
 
 test('a course subpage claim uses the most specific listed destination, not the home-name prefix', () => {
@@ -110,4 +116,22 @@ test('coordinated completions and failures each use their own destination', asyn
   }
   const input = A.task.input({ question: 'Open Grades and Calendar', tools: ['places_list', 'place_open'], now: 1793577600000, zone: 'UTC', first: true, steps });
   assert.equal(A.why({ call: null, answer: { text: 'I opened Grades and Calendar.', quotes: ['Grades', 'Calendar'] } }, input), 'ground', 'a coordinated target list still needs both successes');
+});
+
+test('course scope, page kind and explicit ids each require matching navigation evidence', async () => {
+  const ctx = { page: { site: 'canvas', url: 'https://school.example.edu/' }, courses: async () => [{ id: '25', name: 'BIO 1100: Field Studies' }, { id: '26', name: 'BIO 2200: Laboratory Studies' }], ui: { push() {} } };
+  const lists = [];
+  for (const args of [{}, { course: '25' }, { course: '26' }]) lists.push({ call: { name: 'places_list', arguments: args }, result: await TOOL('places_list').run(args, ctx) });
+  const withOpen = async (place) => A.task.input({ question: 'Open BIO 1100 grades', tools: ['places_list', 'place_open'], now: 1793577600000, zone: 'UTC', first: true, steps: [...lists,
+    { call: { name: 'place_open', arguments: { place } }, result: await TOOL('place_open').run({ place }, ctx) },
+  ] });
+  const output = { call: null, answer: { text: 'I opened the grades page for BIO 1100.', quotes: ['BIO 1100'] } };
+  assert.equal(A.why(output, await withOpen('course:25/grades')), '');
+  for (const place of ['course:26/grades', 'grades', 'course:25/assignments', 'course:25']) assert.equal(A.why(output, await withOpen(place)), 'ground', place);
+  for (const id of ['course:25', 'course:25/grades']) {
+    const explicit = { call: null, answer: { text: `I opened ${id}.`, quotes: [id] } };
+    assert.equal(A.why(explicit, await withOpen(id)), '');
+    assert.equal(A.why(explicit, await withOpen('course:26/grades')), 'ground', id);
+  }
+  assert.equal(A.why({ call: null, answer: { text: 'I opened course:25.', quotes: ['course:25'] } }, await withOpen('course:25/grades')), 'ground', 'an explicit home id still requires the home receipt');
 });
