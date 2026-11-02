@@ -166,3 +166,18 @@ test('after a think run the host reads the answer back as the next request holds
   const r = await s.call({ op: 'run', model: 'm', parts: next, stable: SYS.length, sampler: { temperature: 0 }, maxTokens: 2 });
   assert.ok(r.usage.cached >= back.length, `reused ${r.usage.cached} of ${back.length}`);
 });
+
+test('a warm-up reserves its selected room before reading large history and yields between GPU steps', async () => {
+  const s = setup({ chunk: 512 });
+  try {
+    const parts = [...SYS, { text: 'history\n' + 'x '.repeat(5000) }];
+    const tokens = TOK.encodeWith(parts).length;
+    assert.ok(tokens > H.LIMIT.first && tokens < 32768);
+    assert.deepEqual(await s.call({ op: 'warm', model: 'm', parts, stable: SYS.length, window: 32768 }), { ok: true });
+    assert.equal(s.extends.at(-1).ids.length, tokens);
+    assert.ok(s.extends.every((e) => e.paced), 'background history uses the same yielding GPU budget as completions');
+    s.fed.length = 0;
+    await assert.rejects(s.call({ op: 'warm', model: 'm', parts: [...parts, { text: 'x '.repeat(5000) }], stable: SYS.length, window: 4096 }), (e) => e.reason === 'context' && e.context === H.LIMIT.context);
+    assert.equal(s.fed.length, 0, 'an oversized warm-up never starts feeding');
+  } finally { await s.h.release(); }
+});
