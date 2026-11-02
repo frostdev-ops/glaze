@@ -19,8 +19,9 @@
 //       { id, type: 'action', action: { kind: 'open' | 'highlight', … } } just before an answer's end (the panel performs them
 //       once it shows the answer); 'fired' → { id, type: 'end', fired: [{ id, what, watch?, say, at }] }.
 //       then { id, type: 'end', task, output (study.help's) | answer: { text } | declined: true } or { id, type: 'error',
-//       error }; status → the broker's status for the feature 'ask'. After an end, a compaction's { id, type: 'summary', text,
-//       turns }: the turns it folded, of the ones that question carried and itself; the panel sends that summary (summary)
+//       error }; status → the broker's status for the feature 'ask'. A compaction's { id, type: 'summary', text, turns }
+//       follows an end, or precedes it with the fallback when the next question would drop older turns. The turns it folded
+//       are of the ones that question carried and itself; the panel sends that summary (summary)
 //       with its later questions and only the turns after them, since each question may come on a new port.
 //     Model runs go to the AI broker over a channel in the worker (env.broker(port): ai/broker.js connect with this sender's
 //     checks), as the feature 'ask'. Tool calls go through agents/calls.js: Ask's own switch is the grant of Agents' groups,
@@ -453,7 +454,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const turns = [...open, turn];
       if (turns.length <= COMPACT.keep) return;
       const gen = ++CHAT.gen;
-      let need = turns.length > AT().HISTORY.turns;
+      const handoff = turns.length > AT().HISTORY.turns;
+      let need = handoff;
       if (!need) {
         const fit = await measure('agent.tools', { question: turn.question, tools, steps: [], now: env.now(), zone, locale, first: true, history: turns, ...(CHAT.summary && { summary: CHAT.summary }) });
         need = !!fit && fit.used + fit.reserve > COMPACT.share * fit.window;
@@ -469,6 +471,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         post({ id, type: 'summary', text: CHAT.summary, turns: older.length });
       };
       const fallback = () => { const inp = CC().task.input(input); if (inp) apply(CC().fallback(inp)); };
+      // The page renews its port for the next question. Give it the fallback before end makes that possible; the model
+      // can refine it afterwards, but an immediate follow-up must not discard turns while that model run is pending.
+      if (handoff) fallback();
       const control = new AbortController();
       CHAT.pending = { now: (keep = true) => { if (keep) fallback(); CHAT.gen++; CHAT.pending = null; control.abort(); } };
       try {
@@ -655,8 +660,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           // Level 3: the summary as the conversation's first turn, then the turns it doesn't cover (a cloud model reads them).
           const past = level >= 3 ? [...(CHAT.summary ? [{ question: 'Earlier in this chat', answer: CHAT.summary }] : []), ...open].slice(-LIMIT.turns) : history;
           const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...(past.length && { history: past }), ...(material && { material }) });
-          post({ id, type: 'end', task: r.task, output });
           if (level >= 3 && isObj(output)) void compact({ id, open, turn: { question, answer: [output.reply, output.followUp].filter((x) => typeof x === 'string' && x).join('\n\n') }, locale, tools, zone }).catch(() => {});
+          post({ id, type: 'end', task: r.task, output });
           return;
         }
         const tools = level >= 3 ? await offer(r.tools, { question, tools: r.tools, steps: [], now: env.now(), zone, locale, first: true }, signal) : r.tools;
@@ -675,8 +680,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (signal.aborted) throw cancelled();
         for (const a of current.actions) { const { action, ...rest } = a; post({ id, type: 'action', action: { kind: action, ...rest } }); }
         // A built answer also carries the failed answer it replaced and its code, to this panel only (never Activity).
-        post({ id, type: 'end', task: r.task, answer: { text: res.answer.text, ...(res.built && { built: true }) }, ...(res.built && { ...(res.why && { why: res.why }), ...(res.raw && { raw: res.raw.slice(0, 2000) }) }) });
         if (level >= 3) void compact({ id, open, turn: { question, answer: res.answer.text }, locale, tools, zone }).catch(() => {});
+        post({ id, type: 'end', task: r.task, answer: { text: res.answer.text, ...(res.built && { built: true }) }, ...(res.built && { ...(res.why && { why: res.why }), ...(res.raw && { raw: res.raw.slice(0, 2000) }) }) });
       } catch (e) {
         // { id, type: 'error', error, why?, steps?, raw? }: the check's code, the tool steps run, and the model's raw answer
         // (to this panel only; Activity keeps the code, never the answer).

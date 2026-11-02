@@ -545,6 +545,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
           if (ev.step?.state === 'run') say(t('Reading your courses…'));
         } else if (ev.type === 'approve') say(t('Waiting for your answer in Glaze’s window'));
         else if (ev.type === 'context') context(ev, first);
+        else if (ev.type === 'summary') folded(ev);
         else if (ev.type === 'tools' && Array.isArray(ev.tools) && ev.tools.length <= 64 && ev.tools.every((n) => typeof n === 'string' && /^[a-z_]{1,64}$/.test(n))) memo.tools = ev.tools.slice();
         else if (ev.type === 'action' && ev.action && typeof ev.action === 'object') queued.push(ev.action);
       });
