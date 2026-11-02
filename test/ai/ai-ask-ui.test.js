@@ -783,6 +783,21 @@ test('New chat rejects a delayed summary from the conversation it cleared', asyn
   P.box().close();
 });
 
+test('a summary handed off before end survives an immediate follow-up on a fresh port', async () => {
+  const P = page({ reply: ready });
+  await P.ui.open({ event: { isTrusted: true } });
+  for (let i = 1; i <= 3; i++) { P.ask(`Question ${i}`); await settle(); answer(P, study(`Answer ${i}`)); await settle(); }
+  P.ask('Question 4'); await settle();
+  answer(P, { type: 'summary', text: '- Asked: Question 1\n- Asked: Question 2', turns: 2 });
+  answer(P, study('Answer 4')); await settle();
+  P.ask('Question 5'); await settle();
+  const sent = asked(P).at(-1);
+  assert.equal(sent.summary, '- Asked: Question 1\n- Asked: Question 2');
+  assert.deepEqual(Array.from(sent.history, (h) => h.question), ['Question 3', 'Question 4']);
+  assert.ok(P.ports.at(-2).hungUp, 'the summary is retained across port replacement');
+  P.box().close();
+});
+
 test('the chat mounts in a tile with its own port and conversation, no ids, its meter and New chat in its head, beside the dialog', async () => {
   const P = page({ reply: ready });
   const host = P.doc.createElement('div');

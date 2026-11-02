@@ -290,6 +290,28 @@ test('a fold is told to the chat as a summary event, with how many of the turns 
   assert.ok(h.got.findIndex((m) => m.type === 'end') < h.got.findIndex((m) => m.type === 'summary'), 'after its question ends');
 });
 
+for (const task of ['agent.tools', 'study.help']) test(`${task}: the fourth answer hands off a fallback before end while model compaction is unfinished`, async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const history = [...H3, turn('Any reminders?', 'None.')];
+  const h = harness({ count: () => ({ used: 900, window: 32768, reserve: 768 }), script: {
+    'agent.tools': [said('BIO 1100.', ['BIO 1100'])],
+    'study.help': [{ reply: 'Look at the chromosomes.', followUp: '' }],
+    'chat.compact': [() => gate],
+  } });
+  try {
+    h.say({ id: 1, op: 'ask', question: task === 'study.help' ? 'Explain mitosis' : "What's due this week?", history });
+    await settle();
+    assert.ok(h.seen.runs.some((m) => m.task === 'chat.compact'), 'model compaction is still running');
+    const end = h.got.findIndex((m) => m.type === 'end');
+    assert.ok(end >= 0, 'the answer does not wait for compaction');
+    const handoff = h.got.findIndex((m) => m.type === 'summary');
+    assert.ok(handoff >= 0 && handoff < end, 'the page must own the summary before it can replace the port');
+    assert.equal(h.got[handoff].turns, 2);
+    assert.match(h.got[handoff].text, /Which courses am I in/);
+  } finally { release({ text: '- BIO 1100', quotes: ['BIO 1100'] }); await settle(); }
+});
+
 test('a question on a new port carries the chat\'s summary: the next request has it; a bad one is refused', async () => {
   const summary = '- Asked: Which courses am I in?\n- **BIO 1100**.';
   const h = harness({ script: { 'agent.tools': [said('Still nothing.', ['BIO 1100'])] } });
