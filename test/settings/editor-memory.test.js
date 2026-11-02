@@ -188,6 +188,20 @@ test('clearing the last record returns focus to Refresh when its trigger becomes
   assert.equal(p.doc.activeElement, p.$('memory-on'));
 });
 
+test('an empty loaded course cache can be cleared to release suppression records', async () => {
+  const failed = await page({ items: [], fail: 'list' });
+  assert.equal(failed.$('memory-course-clear').disabled, true, 'wait for a successful cache read');
+  const p = await page({ items: [], enabled: false });
+  assert.equal(p.$('memory-memory-clear').disabled, true);
+  assert.equal(p.$('memory-course-clear').disabled, false);
+  await p.fire('memory-course-clear');
+  assert.equal(p.$('memory-clear-ask').open, true);
+  p.$('memory-clear-ask').close('ok'); await settle();
+  assert.deepEqual(p.sent.find((m) => m.op === 'clear'), { type: 'glaze:memory', op: 'clear', kind: 'course', records: [] });
+  assert.equal(p.$('memory-course-clear').disabled, false);
+  assert.equal(p.doc.activeElement, p.$('memory-course-clear'));
+});
+
 test('export downloads the broker Markdown without course content and releases its object URL', async () => {
   const p = await page({ enabled: false }); await p.fire('memory-export');
   assert.deepEqual(p.exports, [{ href: 'blob:memory-export', download: 'glaze-memories.md' }]);
@@ -230,5 +244,6 @@ test('page wiring keeps Memory outside AI enablement and every new label is tran
   assert.ok(html.indexOf('<dialog id="memory-clear-ask"') > html.indexOf('<div id="panel-backup"'));
   assert.doesNotMatch(js, /\bconfirm\(/);
   const words = new Set([...js.matchAll(/\bt\('([^']+)'/g)].map((m) => m[1]).concat([...section.matchAll(/>([^<]+)</g)].map((m) => m[1].trim()).filter((w) => /\p{L}/u.test(w))));
+  for (const word of ['Memory used', 'Memory saved on this device', 'Memory updated on this device', 'Memory deleted', 'Memory is off']) words.add(word);
   for (const [lang, cat] of Object.entries(globalThis.GZ_LANGS)) for (const word of words) assert.ok(word in cat, lang + ': ' + word);
 });

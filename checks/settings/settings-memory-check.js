@@ -112,7 +112,11 @@ async function pass(scheme) {
       await page.keyboard.press('Escape'); assert.equal(await cache.count(), 1);
       await page.locator('#memory-course-clear').click(); await page.locator('#memory-clear-ask button[value="ok"]').click();
       await page.locator('#memory-course-empty').waitFor(); assert.equal(await saved.count(), 1);
-      assert.equal(await page.locator('#memory-refresh').evaluate((e) => document.activeElement === e), true);
+      await page.waitForFunction(() => !document.getElementById('memory-course-clear').disabled);
+      assert.equal(await page.locator('#memory-course-clear').evaluate((e) => document.activeElement === e), true);
+      await page.locator('#memory-course-clear').click(); await page.locator('#memory-clear-ask button[value="ok"]').click();
+      await page.waitForFunction(() => memoryUi.sent.filter((m) => m.op === 'clear' && m.kind === 'course').length === 2);
+      assert.deepEqual(await page.evaluate(() => memoryUi.sent.filter((m) => m.op === 'clear' && m.kind === 'course').at(-1).records), []);
     });
     await check('Memory switch uses the worker and page has no errors', async () => {
       await page.locator('#memory-on').click();
