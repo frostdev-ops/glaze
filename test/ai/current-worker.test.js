@@ -86,7 +86,7 @@ const writerFixture = async () => {
   const reconnect = () => {
     const channel = w.connect('glaze:ask-writer', writerSender);
     channel.port.postMessage = (m) => queueMicrotask(() => channel.say({ id: m.id, value: {
-      ...binding, revision: state.revision, key: state.key, context: { kind: 'assignment' }, title: 'Draft', text: 'Draft:\nUnsaved words',
+      ...binding, revision: state.revision, key: state.key, context: { kind: state.kind || 'assignment' }, ...(state.mode && { mode: state.mode }), ...(state.kind && { kind: state.kind }), ...(state.owner && { owner: state.owner }), title: 'Draft', text: 'Draft:\nUnsaved words',
     } }));
     return channel;
   };
@@ -226,4 +226,36 @@ test('a stale current snapshot is rejected before its first measurement as well 
     assert.equal(h.got.find((m) => m.type === 'error').error, 'changed');
     assert.deepEqual(h.sent, [], 'stale material never reaches count or run');
   } finally { h.close(); }
+});
+
+
+test('current account lease exists without a resource or Writer, and refreshes outside capture availability', async () => {
+  const w = worker(); live(w);
+  const snap = await vm.runInContext('rimeCurrent', w.context)(sender);
+  assert.equal(snap.account, sender.origin + '/5');
+  assert.equal(snap.current, undefined, 'the account lease is separate from visible current');
+  const top = {}; top.top = top;
+  w.context.window = top; w.context.location = new URL(sender.origin + '/');
+  w.context.GZ_CTX = { site: 'canvas' };
+  w.context.fetch = async () => ({ ok: true, json: async () => ({ id: 5 }) });
+  const read = await vm.runInContext('rimeRead()', w.context);
+  assert.equal(read.account, '5'); assert.equal(read.capture, undefined);
+});
+
+test('course-only deictic help offers reads without guessing an active assignment', () => {
+  const route = K.route('What should I do here?', { level: 3, current: { site: 'canvas', view: 'course', course: { id: '25' } } });
+  assert.equal(route.task, 'study.help'); assert.ok(route.read.includes('assignments_list'));
+});
+
+test('compose draft needs original editor owner and never fabricates a document handle', async () => {
+  const h = await writerFixture();
+  h.state.key = null; h.state.mode = 'compose'; h.state.kind = 'post'; h.state.owner = sender.origin + '/5';
+  const snap = await h.capture();
+  assert.ok(snap.current.document); assert.equal(snap.current.document.kind, 'discussion');
+  assert.equal(snap.current.document.id, undefined); assert.equal(snap.current.material.source, 'writer');
+  assert.equal(await snap.valid(), true);
+  h.state.owner = sender.origin + '/6'; assert.equal(await snap.valid(), false);
+  assert.equal(await h.capture(), null, 'a different original editor account cannot supply this draft');
+  delete h.state.owner; assert.equal(await h.capture(), null, 'unknown original owner is not authority');
+  h.state.owner = sender.origin + '/5'; h.state.kind = 'unknown'; assert.equal(await h.capture(), null);
 });
