@@ -97,9 +97,9 @@ var GZ_CTABS_LIB = globalThis.GZ_CTABS_LIB || (() => {
     if (path.startsWith(`${rootOf(cid)}/outline/`)) return 'peek';
     return path.match(ITEM)?.[1] === cid ? 'item' : null;
   };
-  // Ultra puts an assignment's rubric in the address. Keep that destination valid for an explicit click, but never
-  // save or restore its panel: closing it can leave the assignment's main nodes unchanged, so its last capture lingers.
-  const remembered = (page) => page && page.replace(/^(\/ultra\/courses\/_\d+_\d+\/(?:outline\/)?assessment\/_\d+_\d+\/(?:overview|attempt(?:\/(?:create|_\d+_\d+))?))\/rubric-view\/?(?=\?|$)/, '$1');
+  // Ultra puts assessment and discussion rubrics in the address. Keep that destination valid for an explicit click,
+  // but never save or restore its panel: a URL-only close can leave the item's main nodes and last capture unchanged.
+  const remembered = (page) => page && page.replace(/^(\/ultra\/courses\/_\d+_\d+\/(?:outline\/)?(?:assessment\/_\d+_\d+\/(?:overview|attempt(?:\/(?:create|_\d+_\d+))?)|discussion\/_\d+_\d+))\/rubric-view\/?(?=\?|$)/, '$1');
   // What a course page is to its tab: { path, exact } (exact: the page itself, so its scroll means something there).
   const placeOf = (path, search) => { const p = safe(path, search), kept = remembered(p); return { path: kept || back(path), exact: !!p && kept === p }; };
   // Where a click on tab `t` goes: its remembered place when that's still safe and in its own course, else its outline.

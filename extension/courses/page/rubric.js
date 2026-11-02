@@ -43,7 +43,7 @@ td[aria-current] { background:var(--gz-accent-soft,#e2f2ff); box-shadow:inset 0 
         // A discussion's Details panel and the attempt page View instructions opens have no room beside the link: Glaze's
         // pop-up opens from it in place of Ultra's Rubric Details panel.
         const links = [...document.querySelectorAll(route.view === 'discussion'
-          ? 'a.rubric-title[analytics-id="components.directives.discussionSettings.gradedWithRubric.li"]'
+          ? 'a.rubric-title[analytics-id="components.directives.discussionSettings.gradedWithRubric.link"]'
           : 'a[data-analytics-id="assignment.attempt.authoring.rubric.view.link"]')].filter((e) => shown(e) || active?.link === e);
         return links.length === 1 ? { box: links[0].parentElement, row: links[0], link: links[0], inline: false } : null;
       }

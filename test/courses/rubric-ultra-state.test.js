@@ -33,7 +33,7 @@ const page = (data, width = 706, kind = 'overview') => {
   let link, row, box;
   if (kind === 'discussion') {
     link = make('a', 'rubric-title', 'This item is graded with a rubric');
-    link.setAttribute('analytics-id', 'components.directives.discussionSettings.gradedWithRubric.li'); link.setAttribute('href', 'javascript:void(0);');
+    link.setAttribute('analytics-id', 'components.directives.discussionSettings.gradedWithRubric.link'); link.setAttribute('href', 'javascript:void(0);');
     row = make('div', 'settings-link', link);
     box = make('div', 'layer-details', make('bb-discussion-settings', '', make('div', 'full-panel-details', make('div', 'discussion-settings student-details',
       make('div', 'full-panel-details-info', make('div', 'element-card discussion-info-list', make('div', 'element-details discussion-info-details', row)))))));
