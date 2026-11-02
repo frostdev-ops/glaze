@@ -331,11 +331,12 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   ].join('|')})(?![\\p{L}])`, 'iu');
   // Organizing a collection of records is not help doing an assessed step. Planning still yields to WORK below.
   const PLAN_RECORDS = /\b(?:assignments|tasks|homework|coursework|to-?dos?|(?:which|what) (?:assignment|task))\b/iu;
-  const PLAN_INTENT = /\b(?:prioriti[sz]\p{L}*|compare|rank|order|plan|schedule|workload|difficulty|hardest|easiest|harder|easier|how (?:hard|difficult)|(?:what|which).{0,80}(?:do|start|work on) first)\b/iu;
+  const PLAN_INTENT = /\b(?:prioriti[sz]\p{L}*|compare|rank|order|plan|schedule|workload|difficulty|hardest|easiest|harder|easier|how (?:hard|difficult)|(?:what|which).{0,80}(?:do|start|work on|tackle|begin) first)\b/iu;
   const PLAN_WRAPPER = /\b(?:help me(?: to)?|how (?:do|can|could|would|should) i)\s+(?=(?:prioriti[sz]e|compare|rank|order|plan|schedule)\s+(?:(?:the )?(?:deadlines?|workloads?|difficulty|requirements) (?:of|for)\s+)?(?:(?!(?:in|of|for|from|with|to|and|or)\b)[\p{L}\p{N}'-]+\s+){0,4}(?:assignments|tasks|homework|coursework|to-?dos?)\b)/giu;
   const PLAN_WORK = /(?:^|[.!?;,]\s*|\b(?:and(?:\s+then)?|then|also)\s+)(?:(?:(?:can|could|would|will) you(?: please)?|please|i (?:want|need|would like) you to)\s+)?(?:implement|debug|(?:draft|rewrite|finish|complete|write|code|do)\s+(?:it|them|me|my|the|this|that|these|those|an?|code|essays?|paragraphs?|replies|responses?|outlines?|functions?|programs?|reports?))\b/iu;
   const PLAN_STEP = /\bfirst (?:in|for|on|with) (?:[\p{L}-]+\s+){0,3}(?:equation|essay|code|program|paragraph|proof|problem|question)\b/iu;
-  const PLAN_FOLLOW = /^(?:(?:okay|ok|so|then)[,\s]+)?(?:what (?:should|do|can) i (?:do|start|work on) first|which (?:one|assignment|task) should i (?:do|start|work on) first)[?!.\s]*$/iu;
+  const PLAN_FOLLOW = /^(?:(?:okay|ok|so|then)[,\s]+)?(?:what (?:should|do|can) i (?:do|start|work on|tackle|begin) first|which (?:one|assignment|task) should i (?:do|start|work on|tackle|begin) first)(?:\s*,?\s*(?:and\s+)?why)?[?!.\s]*$/iu;
+  const PLAN_REASON = /(?:,\s*(?:and\s+)?|\band\s+)why(?=\s*(?:[?!.;]|$))/giu;
   const PLAN_TOOLS = [...TOOLS.todo, ...TOOLS.assignments, 'accounts_list'];
   const CHAT_RECALL = /\bremind me what i (?:just|last|previously) asked(?: you)?[?!.\s]*$/iu;
   const SCHEDULE_WHEN = /\b(?:tomorrow|tonight|next (?:week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|(?:at|in|on)\s+(?:\d+|noon|midnight|monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/iu;
@@ -387,7 +388,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const work = typeof attempt === 'string' ? attempt : '';
     const planning = level >= 3 && PLAN_RECORDS.test(direct) && PLAN_INTENT.test(direct);
     // Exempt only a direct wrapper organizing records, preserving every other work cue, including quoted/code text.
-    const planningText = planning ? q.replace(PLAN_WRAPPER, (match, offset) => direct.slice(offset, offset + match.length) === match ? '' : match) : q;
+    // A bare "and why?" explains the record choice; conceptual/quoted why clauses retain their work cues.
+    const planRequest = planning ? q.replace(/\r\n?/g, '\n').replace(PLAN_REASON, (match, offset) => direct.slice(offset, offset + match.length) === match ? ' '.repeat(match.length) : match) : q;
+    const planningText = planning ? planRequest.replace(PLAN_WRAPPER, (match, offset) => direct.slice(offset, offset + match.length) === match ? '' : match) : q;
     const has = (table) => words(lists(table, locale)).test(q);
     const on = Object.keys(TOPICS).filter((k) => has(TOPICS[k]));
     const school = CODE.test(q) || SCHOOL_WORDS.test(q) || /\b(?:my|our)\b/iu.test(q);
