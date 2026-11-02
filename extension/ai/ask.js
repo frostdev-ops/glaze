@@ -308,9 +308,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     'dat klopt niet|dat is (?:niet waar|fout)|je bent [\\p{L} ]{0,30}vergeten|weet je het zeker|hoe zit het met|en (?:volgende|morgen|maandag|voor)|fout',
   ].join('|')})(?![\\p{L}])`, 'iu');
   const route = (question, { attempt = '', locale = 'en', level = 1, history, current } = {}) => {
-    const q = (level >= 3 ? MEMORY().userText(String(question)) : String(question)).replace(/[‘’]/g, "'");
+    const q = String(question).replace(/[‘’]/g, "'");
+    // Quoted titles can identify a record, but quoted requests cannot select a current reference or course discovery.
+    const direct = level >= 3 ? MEMORY().userText(q) : q;
     const last = level >= 3 && Array.isArray(history) && history.length ? history[history.length - 1] : null;
-    if (last && !String(attempt).trim() && FOLLOW.test(q)) {
+    if (last && !String(attempt).trim() && FOLLOW.test(direct)) {
       // Follow-up-only questions carry no topic themselves. Walk back to the question that supplied their tools.
       let previous = last, i = history.length - 1;
       while (i > 0 && FOLLOW.test(previous.question) && route(previous.question, { locale, level }).task !== 'agent.tools') previous = history[--i];
@@ -324,7 +326,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const own = level >= 3 ? Object.keys(TOPICS3).filter((k) => has(own3(k))
       && (!READS.includes(k) || school || !DEFINITION.test(q))
       && (k !== 'content' || school || subjectOf(q) !== 'code')) : [];
-    const courseRequests = level >= 3 ? q.split(/[\n.!?;]+/u).map((c) => c.trim()).filter((c) =>
+    const courseRequests = level >= 3 ? direct.split(/[\n.!?;]+/u).map((c) => c.trim()).filter((c) =>
       words(lists(RECORD_REQUEST, locale)).exec(c)?.index === 0 && words(lists(COURSE_RECORD, locale)).test(c)
       && !words(lists(GENERIC_COURSE, locale)).test(c)) : [];
     if (courseRequests.some((c) => words(lists(COURSE_WORK, locale)).test(c))) { if (!on.includes('assignments')) on.push('assignments'); }
@@ -332,10 +334,10 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     // A compute question's own computing verb is no help request, unless it would work out graded work.
     const computing = own.includes('compute') && !AT().gradedWork(AT().fold(q));
     const working = computing ? words(lists(WORK, locale).filter((w) => !COMPUTING.includes(w))).test(q) : has(WORK);
-    const subject = () => subjectOf(`${question}\n${work}`);
+    const subject = () => subjectOf(`${q}\n${work}`);
     // A deictic question names the active resource only when the worker independently captured one.
     const deictic = level >= 3 && words(['this', 'that', 'these', 'those', 'here', 'it', 'est[ea]s?', 'estos?', 'es[ea]s?', 'esos?', 'aqu[ií]', 'isso', 'isto', 'essa', 'esse',
-      'ici', 'ceci', 'cela', 'ça', 'ce', 'cet(?:te)?', 'dies(?:e[nsrm]?)?', 'das', 'hier', 'dit', 'dat', 'deze']).test(q);
+      'ici', 'ceci', 'cela', 'ça', 'ce', 'cet(?:te)?', 'dies(?:e[nsrm]?)?', 'das', 'hier', 'dit', 'dat', 'deze']).test(direct);
     const active = deictic && current?.document?.id ? TOOLS.documents : deictic && current?.course?.id ? current.assignment?.id ? TOOLS.assignments : current.content?.id
       ? (current.view === 'discussion' ? TOOLS3.discussions : TOOLS3.content) : current.view === 'course' ? TOOLS.assignments : [] : [];
     const contextualWork = deictic && /\b(?:what (?:do|should|can) i do|explain|help)\b/iu.test(q);
