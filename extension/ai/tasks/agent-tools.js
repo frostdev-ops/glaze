@@ -248,7 +248,13 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // What Glaze's own model may write for a turn: the answer's JSON or one native call to an offered tool, as the engine
   // host's run takes it ({ schema, tools }: ai/local/grammar.js compile's tools), so a turn the grammar lets through is one
   // fromNative() reads and OUTPUT holds.
-  const constraint = (inp) => ({ schema: ANSWER, tools: offered(inp.tools).map((t) => ({ name: t.name, parameters: t.parameters })) });
+  const constraint = (inp) => ({ schema: ANSWER, tools: offered(inp.tools).flatMap((t) => {
+    if (t.name !== 'memory_save') return [{ name: t.name, parameters: t.parameters }];
+    // The native grammar unions these two forms. A replacement's id and revision must never be independently optional.
+    const create = Object.fromEntries(Object.entries(t.parameters.properties).filter(([key]) => !['id', 'revision'].includes(key)));
+    return [{ name: t.name, parameters: { ...t.parameters, properties: create } },
+      { name: t.name, parameters: { ...t.parameters, required: [...t.parameters.required, 'id', 'revision'] } }];
+  }) });
 
   const zoneOk = (z) => { try { clock(z); return true; } catch { return false; } };
   // A history step may carry check()'s derived kind. It is checked here, then omitted from the native call.

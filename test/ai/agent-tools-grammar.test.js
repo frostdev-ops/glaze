@@ -163,6 +163,10 @@ test('tool argument schemas with unsupported root constraints are refused instea
 
 test('native memory enum parameters keep only valid raw string choices', () => {
   const inp = A.task.input({ question: 'I prefer short paragraphs.', tools: ['memory_save', 'memory_search'], now: NOW, zone: 'UTC' });
+  const alternatives = A.constraint(inp).tools;
+  assert.equal(A.SPECS.filter((t) => t.name === 'memory_save').length, 1, 'the public tool spec stays singular');
+  assert.equal(alternatives.filter((t) => t.name === 'memory_save').length, 2, 'create and replace are grammar alternatives');
+  assert.equal(alternatives.filter((t) => t.name === 'memory_search').length, 1, 'ordinary schemas retain one entry');
   const g = grammarFor(inp);
   assert.equal(g.exact, true);
   const saving = { text: 'Short paragraphs', evidence: 'I prefer short paragraphs.' };

@@ -33,6 +33,7 @@ test('recall is canonical bounded untrusted data, separate from current, history
   assert.equal(blocks.find((b) => b.label === 'recall').kind, 'data');
   assert.deepEqual(JSON.parse(blocks.find((b) => b.label === 'recall').text), inp.recall);
   assert.deepEqual(A.fromRequest(req, { window: 8192 }).parts, A.layout(inp, { window: 8192 }));
+  assert.deepEqual(F.format(req).constraint, A.constraint(inp), 'the provider keeps the same native create/replace alternatives');
   const prepared = T.prepare(A.task, raw({ recall: recall() }), { provider: 'mock', cfg: { caps: { context: 8192 }, replies: [] } });
   assert.ok(prepared && JSON.stringify(prepared).includes(memory().text));
   assert.match(system, /current question wins/i);
@@ -184,5 +185,5 @@ test('study help with recall cannot claim memory mutations or Drive sync without
     assert.equal(H.why(reply(text), inp), 'ground', text);
   }
   assert.equal(H.why(reply('I could not save your preference.'), inp), '');
-  assert.equal(H.why(reply('The phrase "I saved it" is not a receipt.'), inp), '');
+  assert.equal(H.why(reply('The phrase "I saved it" is not a receipt.'), inp), 'quote', 'the existing quote rule still applies');
 });
