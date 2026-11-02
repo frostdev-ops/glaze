@@ -643,7 +643,7 @@ not: the reasoning keeps its budget while the answer is left at least 256 tokens
 answer is cut to the rest (a request asking 4,096 still thinks its 256); a prompt that leaves the answer less runs
 as planned in the engine's room (a request whose close that room can't hold is refused before prefill); `usage.output` counts both. `test/ai/local-think.test.js` holds it with a stub engine.
 The window a run plans for is its model's: 4,096 tokens for a model without `stock` (FORMAT.md's inference window; the
-training data was made at caps.context 4096), 14,400 (16,000 less a tenth) for a stock one, the picture model included.
+training data was made at caps.context 4096), 131,072 for a stock one (with an input limit of 90% of that), the picture model included.
 `catalog` says the window of the text model the connection runs (its tier's, else the one here) and that model's store id
 (`weights`), and, while pictures are here, `pictures.context`; the broker sets `cfg.context` from the first (from the
 second for a task that only reads pictures, `writer.image`) and `cfg.weights`, and a text request runs on that model
@@ -728,14 +728,19 @@ printed, committed or logged.
 
 ```js
 GZ_AI_ENGINE.load(gguf, { context, signal, onProgress? }) → Promise<model>
-  // gguf: GZ_AI_GGUF.open(store.open(id)); context: positions a sequence may hold (16000)
-model.context                                   // the positions it holds
-model.prefill(ids, { snapshot?, signal }) → Promise<snap | undefined>
+  // gguf: GZ_AI_GGUF.open(store.open(id)); context: positions allocated initially; reserve grows the live sequence.
+model.context                                   // the positions allocated now
+model.reserve(n, most) → Promise<number>         // grow without losing the sequence, up to most
+model.common(ids) → number                       // length of the common held prefix
+model.extend(ids, { at?, signal, step?, pace? }) → Promise<{ reused, fed }>
+  // Keep the common prefix, rewind to a light mark if needed, feed only the rest; at: token positions to mark.
+model.prefill(ids, { snapshot?, signal, step?, pace? }) → Promise<snap | undefined>
   // ids: Uint32Array fed at the next positions; afterwards the model holds the logits for the next one.
   // snapshot: true → resolves to a snapshot of the state after them.
 model.decode({ sampler: { temperature, topK, topP?, repetitionPenalty? }, mask?, signal }) → Promise<id>
-  // samples one id from the held logits (temperature 0: greedy), with mask: a Uint32Array, token i allowed when bit
-  // i & 31 of word i >> 5 is set, never written; then feeds that id (the engine may defer it to its next call).
+  // Samples one id (temperature 0: greedy); mask: a Uint32Array, or a function returning one once the previous
+  // token's forward is submitted. Token i allowed when bit i & 31 of word i >> 5 is set; never written.
+  // The selected id is fed by the next decode or prefill.
 model.snapshot() → Promise<snap>;  model.restore(snap) → Promise<void>  // positions after snap.pos are dropped
 snap: { pos, drop() }                           // drop frees what it holds; the host drops each one it lets go
 model.release()                                 // frees every GPU resource; the model is not used again
@@ -761,8 +766,22 @@ is `provider-unavailable`, reason `engine`, never a run in words only. The other
 `unavailable`, reason `engine`; no ladder, the smallest tier where there is an adapter.
 
 The host's messages (`host.js` header): `prepare { tier?, part? }`, `run { model, parts, stable, schema?, sources?, sampler, maxTokens,
-projector?, images?, think?: { budget, close, after }, window? }`, `warm { model, parts }`, `remove { part? }`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s
+projector?, images?, think?: { budget, close, after }, window?, priority?: 'low' }`, `warm { model, parts, stable?, window? }`, `remove { part? }`, `release`, `cancel`; it answers `progress`, `delta`, `done` or `error`, `tick` every 20 s
 while anything is in flight, and `idle`.
+
+The host starts with 8,192 allocated positions and grows only when a request needs more, up to its requested window
+(at least 16,000 physical positions, at most 131,072). Text requests retain one sequence across runs: common history is
+kept, and a changed suffix rewinds to a light checkpoint of convolution state, sliding-window keys/values and logits.
+Checkpoints sit at the system turn, selected turn boundaries and sparse 2,048-token positions; a checkpoint splits a
+prefill, so the host avoids placing one at every conversation marker. `usage.cached` reports prompt positions already held.
+Warm-up may include history after its `stable` system turn; an incoming run cancels background reading before taking over.
+`writer.complete` and explicit low-priority runs use small adaptive prefill submissions, wait for their GPU completion and
+yield between them, aiming for about 20 ms each. Decode also yields, and cancellation is observed between submissions.
+The grammar mask is built after the preceding token's GPU forward is submitted, overlapping CPU grammar work with it.
+Integer dot-product and experimental subgroup-matrix candidates are optional. On each engine/device load, they must
+match the normal matmul on the loaded model's representative matrices and run at least 10% faster, including activation
+packing, before that exact matrix/tile shape can use them. Unsupported, inaccurate, slower or failed candidates retain
+the normal f32/f16 path. No hardware speedup follows from feature support alone.
 
 What needs a real GPU or browser: the engine's numbers and speed, the ladder's tiers, Firefox's event page staying while its
 Worker works (measured nowhere yet), and Chrome closing an idle offscreen document. `checks/ai/local-provider-check.js`

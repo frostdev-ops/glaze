@@ -183,12 +183,12 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       return fed;
     };
     // Where a later request may part from this one, as marks: the system turn's end, a think prefill's start (the next turn
-    // holds an empty think block there), and every LIMIT.spacing tokens of a long feed. Each mark splits the feed into
+    // holds an empty think block there; a block already closed needs none), and every LIMIT.spacing tokens of a long feed. Each mark splits the feed into
     // another forward pass, which reads every weight again (about a 30-token prefill's time), so block edges get none.
     const stops = (job, ids, from) => {
       const out = [from], think = job.tok.id('<think>');
       const open = Number.isInteger(think) ? ids.lastIndexOf(think) : -1;
-      if (open > from) out.push(open);
+      if (open > from && ids[open + 1] !== job.tok.id('</think>')) out.push(open);
       for (let p = from + LIMIT.spacing; p < ids.length; p += LIMIT.spacing) out.push(p);
       return [...new Set(out)].sort((a, b) => a - b);
     };
