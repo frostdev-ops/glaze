@@ -84,6 +84,10 @@ test('route: the student\'s own records go to agent.tools with the tools their t
   assert.deepEqual(K.route('what i gotta do before tomorrow; debug my Python loop', { level: 3 }).task, 'study.help');
   assert.equal(K.route('what i gotta do before tomorrow; debug my Python loop', { level: 3 }).subject, 'code');
   assert.equal(K.route('When is my Debug Lab due?', { level: 3 }).task, 'agent.tools');
+  assert.deepEqual(K.route("Compare my assignments by workload and tomorrow's deadline.", { level: 3,
+    history: [...natural, { question: 'Exclude chapter notes.', answer: 'Okay.' },
+      { question: 'nah i meant art history', answer: 'Okay.' }] }).tools, expected,
+    'an independently explicit new planning request keeps its route across earlier generic filters');
   for (const question of ['the earlier one please', "i'm still lost", 'not those, the other set',
     'same deal but only the short ones', 'uh wait, the other class']) {
     assert.deepEqual(K.route(question, { level: 3, history: natural }).tools, expected, 'the model gets reads for unfamiliar contextual intent: ' + question);
