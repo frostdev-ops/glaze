@@ -157,7 +157,7 @@ test('AI, Ask, Memory and Glaze off fence already queued automatic producers', a
       } else if (off === 'glaze') await w.context.chrome.storage.sync.set({ enabled: false });
       else await w.raw.set({ ai: { ...w.store.local.ai, ...(off === 'ai' ? { on: false } : { features: { ask: false } }) } });
     } finally { release(); await held; }
-    assert.deepEqual(await pending, { ok: false, error: 'scope' }, off);
+    assert.deepEqual(JSON.parse(JSON.stringify(await pending)), { ok: false, error: 'scope' }, off);
     if (changed) assert.equal((await changed).ok, true);
     assert.equal(Object.values(w.store.local).some((r) => r?.markdown === text), false, off);
   }
