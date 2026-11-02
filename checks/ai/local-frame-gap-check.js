@@ -68,6 +68,7 @@ function fakeGPU(perToken) {
   let browser;
   const report = { backend: 'CPU WebGPU double; no shaders or hardware GPU', perTokenMs: 2, limitMs: 50, results: [] };
   try {
+    await require('../../tools/dev/wait-for-browser.js')();
     browser = await chromium.launch({ ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, args: ['--disable-background-networking', '--disable-gpu', '--disable-background-timer-throttling', '--disable-renderer-backgrounding'] });
     const page = await browser.newPage();
     const errors = [];
