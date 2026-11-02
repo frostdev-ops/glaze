@@ -268,7 +268,7 @@ var GZ_MEMORY = globalThis.GZ_MEMORY || (() => {
       let found = ranked.filter((r) => r.score > 0), available = found.length;
       if (options.includePreferences === true && options.kind !== 'course') {
         const preference = ranked.filter((v) => v.r.kind === 'memory' && v.r.category === 'preference').sort((a, b) => b.r.updatedAt - a.r.updatedAt || a.r.id.localeCompare(b.r.id))[0];
-        if (preference) { found = found.filter((v) => v !== preference).slice(0, limit - 1).concat(preference); available = Math.max(available, found.length); }
+        if (preference) { available += found.includes(preference) ? 0 : 1; found = found.filter((v) => v !== preference).slice(0, limit - 1).concat(preference); }
       }
       return { ok: true, items: found.slice(0, limit).map((h) => hitOf(h.r, h.text, h.score)), truncated: available > limit };
     };

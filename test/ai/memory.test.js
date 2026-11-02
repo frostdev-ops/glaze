@@ -155,6 +155,15 @@ test('pre-turn recall includes a saved preference without changing ordinary lexi
   assert.equal(recall.items[0].category, 'preference');
   assert.equal(recall.items.length <= 3, true);
   assert.equal((await s.search(B, 'photosynthesis', { includePreferences: true })).items.length, 0);
+  await save(s, A, 'Photosynthesis uses light.');
+  assert.equal((await s.search(A, 'photosynthesis', { limit: 1, includePreferences: true })).truncated, true);
+});
+
+test('retrieval offsets follow original Unicode text after compatibility folding', async () => {
+  const local = area(), s = make(local);
+  await s.ingest(A, { source: source(), markdown: '\ufb03 '.repeat(2000) + '\n\nTitration measures acid concentration.' });
+  const r = await s.search(A, 'acid concentration', { maxChars: 120 });
+  assert.match(r.items[0].text, /acid concentration/);
 });
 
 test('aggregate caps refuse automatic memory saves without evicting any saved record', async () => {
