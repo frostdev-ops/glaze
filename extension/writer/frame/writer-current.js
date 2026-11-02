@@ -8,7 +8,7 @@
   const paper = () => globalThis.GZ_WRITER_PAPER?.current?.();
   const sample = () => {
     const p = paper(), v = F.editor()?.view, context = F.context();
-    if (F.kind() === 'test' || context?.kind === 'test' || F.mode() !== 'paper' || p?.kind?.() !== 'paper' || !p.key?.() || !v?.state?.doc) return null;
+    if (F.kind() === 'test' || context?.kind === 'test' || F.mode() !== 'paper' || p?.kind?.() !== 'paper' || !p.key?.() || !v?.state?.doc) { previous = null; return null; }
     const { doc, selection } = v.state, key = p.key();
     if (!previous || previous.doc !== doc || previous.key !== key || previous.from !== selection.from || previous.to !== selection.to) {
       previous = { doc, key, from: selection.from, to: selection.to };
@@ -24,10 +24,13 @@
   const answer = (m) => {
     const s = sample();
     if (m?.op !== 'current' || !s || m.token !== token || m.revision !== revision) return { error: 'stale' };
-    const selected = s.selection.from === s.selection.to ? '' : s.doc.textBetween(s.selection.from, s.selection.to, '\n');
-    const all = `${selected ? `Selected text:\n${selected}\n\n` : ''}Draft:\n${s.doc.textContent}`;
+    // Bound the reads themselves, including selections far into a large paper. ProseMirror positions count structure
+    // too; cutting before the end conservatively reports truncation even when fewer text characters were extracted.
+    const end = Math.min(s.doc.content.size, 3073), selectedEnd = Math.min(s.selection.to, s.selection.from + 3073);
+    const selected = s.selection.from === s.selection.to ? '' : s.doc.textBetween(s.selection.from, selectedEnd, '\n');
+    const all = `${selected ? `Selected text:\n${selected}\n\n` : ''}Draft:\n${s.doc.textBetween(0, end, '\n')}`;
     const title = s.p.paper?.()?.title;
-    return { value: { token, revision, key: s.key, context: s.context, ...(typeof title === 'string' && { title: title.slice(0, 240) }), text: all.slice(0, 3072), truncated: all.length > 3072 } };
+    return { value: { token, revision, key: s.key, context: s.context, ...(typeof title === 'string' && { title: title.slice(0, 240) }), text: all.slice(0, 3072), truncated: end < s.doc.content.size || selectedEnd < s.selection.to || all.length > 3072 } };
   };
   const close = () => { const old = port; port = null; try { old?.disconnect(); } catch { /* gone */ } };
   const open = () => {

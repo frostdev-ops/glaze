@@ -3,12 +3,38 @@
 var GZ_ASK_CURRENT = globalThis.GZ_ASK_CURRENT || (() => {
   const LIMIT = 3072;
   const short = (s) => typeof s === 'string' ? s.replace(/\s+/g, ' ').trim().slice(0, 240) : '';
-  const visible = (el) => {
-    if (!el || !el.getClientRects?.().length || el.closest?.('[hidden], [aria-hidden="true"], [inert]')) return '';
-    const style = getComputedStyle(el);
-    if (style.display === 'none' || ['hidden', 'collapse'].includes(style.visibility)) return '';
-    // innerText is the rendered-text reader. A textContent fallback would include hidden descendants and answer keys.
-    return typeof el.innerText === 'string' ? el.innerText.trim() : '';
+  const visible = (root) => {
+    if (!root?.getClientRects?.().length) return null;
+    const styles = new WeakMap();
+    const shown = (el) => {
+      if (el.getAttribute?.('hidden') != null || el.getAttribute?.('inert') != null || el.getAttribute?.('aria-hidden') === 'true') return null;
+      if (!styles.has(el)) styles.set(el, getComputedStyle(el));
+      const style = styles.get(el);
+      return style.display === 'none' || ['hidden', 'collapse'].includes(style.visibility) || style.opacity === '0' || style.contentVisibility === 'hidden' ? null : style;
+    };
+    let ancestors = 0;
+    for (let el = root; el; el = el.parentElement) if (++ancestors > 64 || !shown(el)) return null;
+    // innerText includes transparent, aria-hidden and inert descendants. Read only text nodes under checked elements,
+    // bounded to this explicit instruction root, 256 nodes and one character beyond the material limit.
+    let text = '', nodes = 0, truncated = false;
+    const add = (s) => { const room = LIMIT + 1 - text.length; text += s.slice(0, room); if (s.length > room) truncated = true; };
+    const visit = (node) => {
+      nodes++;
+      if (node.nodeType === 3) { add(node.nodeValue || ''); return; }
+      if (node.nodeType !== 1 || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/.test(node.tagName)) return;
+      const style = shown(node);
+      if (!style) return;
+      const block = !/^(inline|contents)/.test(style.display);
+      if (node.tagName === 'BR' || (block && text)) add('\n');
+      for (let child = node.firstChild; child; child = child.nextSibling) {
+        if (nodes >= 256 || text.length > LIMIT) { truncated = true; break; }
+        visit(child);
+      }
+      if (block && text && text.length <= LIMIT) add('\n');
+    };
+    visit(root);
+    text = text.replace(/[ \t\r\f]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    return text ? { text: text.slice(0, LIMIT), source: 'instructions', truncated: truncated || text.length > LIMIT } : null;
   };
   const pin = () => globalThis.GZ_WRITER?.pinCurrent?.();
   const capture = () => {
@@ -53,8 +79,8 @@ var GZ_ASK_CURRENT = globalThis.GZ_ASK_CURRENT || (() => {
       }
     }
     if (root && !blocked) {
-      const text = visible(document.querySelector(root));
-      if (text) current.material = { text: text.slice(0, LIMIT), source: 'instructions', truncated: text.length > LIMIT };
+      const material = visible(document.querySelector(root));
+      if (material) current.material = material;
     }
     const writer = !blocked && globalThis.GZ_WRITER?.current?.();
     return { currentPage: u.href, current, ...(writer && { writer }) };

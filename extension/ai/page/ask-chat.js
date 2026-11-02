@@ -268,9 +268,8 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
   // model's access gone (the dialog closes); onShow(): before Show on the page scrolls there (the dialog closes).
   const mount = (host, { variant = 'tile', onClose, onOff, onShow } = {}) => {
     const dialog = variant === 'dialog';
-    globalThis.GZ_WRITER?.pinCurrent?.();
-    globalThis.GZ_ASK_CURRENT?.pin?.();
-    host.addEventListener('pointerdown', (e) => { if (e.isTrusted) globalThis.GZ_ASK_CURRENT?.pin?.(); }, true);
+    const pinWriter = () => globalThis.GZ_ASK_CURRENT?.pin ? GZ_ASK_CURRENT.pin() : globalThis.GZ_WRITER?.pinCurrent?.();
+    pinWriter();
     const turns = []; // [{ question, answer, li }] of this chat, for follow-ups; gone when it stops or starts anew
     const afterReveal = new Map(), reveals = new Map(), copyTimers = new Map();
     let actionEpoch = 0, current = 0, pending = null, follow = true, frame = 0, written = -1, sizes = null, moved = 0, alive_ = true;
@@ -283,6 +282,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     const port = channel((a) => { if (a?.type === 'summary' && a.id === lastAsk) folded(a); });
     const root = make('div', { className: 'gz-ask-chat' });
     root.dataset.variant = variant;
+    for (const event of ['pointerdown', 'focusin']) root.addEventListener(event, (e) => { if (e.isTrusted) pinWriter(); }, true);
     const $ = (sel) => root.querySelector(sel);
     const say = (s) => { const l = $('.gz-ask-say'); if (l && l.textContent !== s) l.textContent = s; };
     const log = () => $('.gz-ask-log');
@@ -735,7 +735,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       port.hangUp();
       root.remove();
     };
-    return { root, focus: () => q_.focus(), ask: (o) => ask(o), stop, cancel: cancelRun, busy: () => !!(current || pending) };
+    return { root, focus: () => { pinWriter(); q_.focus(); }, ask: (o) => ask(o), stop, cancel: cancelRun, busy: () => !!(current || pending) };
   };
 
   return { mount, request, on: onAction, mark, still, real, activated, alive, read, enabled: on, icon, make, t, focused, STEPS, LOCALES, lang, LIMIT };

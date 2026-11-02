@@ -25,8 +25,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const pinCurrent = () => {
     const focused = [...boxes.values()].filter((b) => b.frame === document.activeElement);
     const b = focused.length === 1 ? focused[0] : null;
-    if (b && b.askBinding && sameBox(b) && b.frame?.isConnected && boxes.get(b.editor) === b) pinnedCurrent = { box: b, frame: b.frame, ...b.askBinding };
-    else pinnedCurrent = activeCurrent;
+    if (focused.length) activeCurrent = b && b.askBinding && sameBox(b) && b.frame?.isConnected && boxes.get(b.editor) === b ? { box: b, frame: b.frame, ...b.askBinding } : null;
+    pinnedCurrent = activeCurrent;
     return current();
   };
   for (const event of ['pointerdown', 'focusin']) document.addEventListener(event, (e) => {
