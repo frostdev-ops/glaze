@@ -2799,15 +2799,18 @@ const rimeWriterCurrent = async (s, at, binding) => {
     const host = aiHosts.get(`${s.tab.id}|${seat.sender.frameId}`);
     if (!host || host.documentId !== s.documentId || host.frameId !== s.frameId || await aiSender(seat.sender, { op: 'run', feature: 'writing' }) !== true) return null;
     const value = await rimeWriterAsk(seat, binding);
-    if (!value || value.token !== binding.token || value.revision !== binding.revision || typeof value.key !== 'string') return null;
-    const key = value.key, parts = key.split('|');
+    if (!value || value.token !== binding.token || value.revision !== binding.revision || !(typeof value.key === 'string' || value.key === null)) return null;
+    const key = value.key, compose = key === null && value.mode === 'compose' && ['post', 'reply', 'message', 'journal'].includes(value.kind)
+      && value.owner === `${new URL(at.href).origin}/${at.account}`;
+    if (key === null && !compose) return null;
+    const parts = typeof key === 'string' ? key.split('|') : [];
     // Standalone documents can be pinned only by their same-document frame seat. Assignment keys must match live user,
     // school and resource exactly; the raw key never enters model input or a page message.
-    const local = /^doc:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(key);
-    if (!local && (parts.length !== 4 || parts[0] !== new URL(at.href).host.toLowerCase() || parts[1] !== at.account
+    const local = typeof key === 'string' && /^doc:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(key);
+    if (!compose && !local && (parts.length !== 4 || parts[0] !== new URL(at.href).host.toLowerCase() || parts[1] !== at.account
       || parts[2] !== at.capture?.current?.course?.id || parts[3] !== at.capture?.current?.assignment?.id)) return null;
     if (value.context?.kind === 'test' || typeof value.text !== 'string' || value.text.length > 3072) return null;
-    return { seat, value };
+    return { seat, value, kind: compose ? value.kind === 'journal' ? 'journal' : ['post', 'reply'].includes(value.kind) ? 'discussion' : 'compose' : 'paper' };
   };
   let found = (await Promise.all(seats.map(readSeat))).filter(Boolean);
   // A restarted worker has lost its ports; Safari may leave the editor believing its old port is still open.
@@ -2830,8 +2833,9 @@ const rimeWriterCurrent = async (s, at, binding) => {
   }
   if (found.length !== 1) return null;
   const match = found[0];
+  if (match.value.key === null) return match;
   if (!rimeDocHandles) { mcpCore(); rimeDocHandles = GZ_MCP_WRITER.handles(chrome.storage.session); }
-  return { seat: match.seat, value: match.value, id: await rimeDocHandles.handle(match.value.key) };
+  return { seat: match.seat, value: match.value, kind: match.kind, id: await rimeDocHandles.handle(match.value.key) };
 };
 // Capture in the pinned isolated document, never accept page identity supplied by an Ask message.
 // The authenticated account is refreshed independently of Glaze's memoized page helper.
@@ -2840,15 +2844,15 @@ const rimeRead = async () => {
     return { href: location.href, origin: location.origin, ancestors }; } catch { return null; } })();
   if (!page) return null;
   const capture = globalThis.GZ_ASK_CURRENT?.capture?.();
-  if (!capture) return page;
+  const site = capture?.current?.site || globalThis.GZ_CTX?.site;
   const control = new AbortController(), timer = setTimeout(() => control.abort(), 5000);
   try {
-    const endpoint = capture.current?.site === 'ultra' ? '/learn/api/v1/users/me' : capture.current?.site === 'canvas' ? '/api/v1/users/self/profile' : '';
+    const endpoint = site === 'ultra' ? '/learn/api/v1/users/me' : site === 'canvas' ? '/api/v1/users/self/profile' : '';
     if (!endpoint) return page;
     const res = await fetch(location.origin + endpoint, { credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: control.signal, headers: { accept: 'application/json' } });
     const id = res.ok ? (await res.json())?.id : null;
-    if (location.href !== page.href || !/^(?:\d{1,20}|_\d+_\d+)$/.test(String(id))) return page;
-    return { ...page, capture, account: String(id) };
+    if (location.href !== page.href || !/^(?:\d{1,20}|_\d{1,20}_\d{1,20})$/.test(String(id)) || String(id).length > 40) return page;
+    return { ...page, ...(capture && { capture }), account: String(id) };
   } catch { return page; } finally { clearTimeout(timer); }
 };
 const rimeCurrent = async (s, m = {}) => {
@@ -2875,12 +2879,12 @@ const rimeCurrent = async (s, m = {}) => {
         if (!pin || Object.keys(pin).sort().join() !== 'revision,token' || pin.token !== live?.token || pin.revision !== live?.revision) return null;
         writer = await rimeWriterCurrent(s, at, pin);
       }
-      if (writer) value = { ...value, view: 'document', document: { id: writer.id, title: writer.value.title || '', kind: 'paper', revision: writer.value.revision }, material: { text: writer.value.text, source: 'writer', truncated: writer.value.truncated === true } };
+      if (writer) value = GZ_AI_CURRENT.clean({ ...value, view: 'document', document: { ...(writer.id && { id: writer.id }), title: writer.value.title || '', kind: writer.kind, revision: writer.value.revision }, material: { text: writer.value.text, source: 'writer', truncated: writer.value.truncated === true } }, { caps: { context: 131072 } });
     }
   }
   // A requested draft is never silently replaced with the surrounding page when its editor pin cannot be resolved.
   if (m.writer !== undefined && !writer) return null;
-  return { ...(value && { current: value }), page: { url: at.href, ...(value && { site: value.site }) }, bind: (call, input) => {
+  return { ...(value && { current: value }), ...(at.account && { account: `${new URL(at.href).origin}/${at.account}` }), page: { url: at.href, ...(value && { site: value.site }) }, bind: (call, input) => {
     // Document tools already name their exact opaque key and do not accept an account argument.
     if (!value || !GZ_AI_TASK_AGENT_TOOLS.SPECS.find((s) => s.name === call.name)?.parameters.properties.account) return call;
     const args = call.arguments || {}, pinned = value && GZ_AI_TASK_AGENT_TOOLS.currentBound?.(call, input);

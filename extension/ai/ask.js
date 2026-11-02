@@ -296,7 +296,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     // A deictic question names the active resource only when the worker independently captured one.
     const deictic = level >= 3 && /\b(?:this|here|it|este|esta|esto|aqui|isso|isto|ici|ceci|dies|hier|dit|deze)\b/iu.test(q);
     const active = deictic && current?.document?.id ? TOOLS.documents : deictic && current?.course?.id ? current.assignment?.id ? TOOLS.assignments : current.content?.id
-      ? (current.view === 'discussion' ? TOOLS3.discussions : TOOLS3.content) : current.document?.id ? TOOLS.documents : [] : [];
+      ? (current.view === 'discussion' ? TOOLS3.discussions : TOOLS3.content) : TOOLS.assignments : [];
     const contextualWork = deictic && /\b(?:what (?:do|should|can) i do|explain|help)\b/iu.test(q);
     // Tool first (level 3): help with work that names the student's records reads them first (read: agent.tools' help turn,
     // its tools these topics' reads), then study.help answers with what was read; help naming nothing is study help alone.
