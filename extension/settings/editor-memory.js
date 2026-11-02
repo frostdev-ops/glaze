@@ -18,12 +18,16 @@ var GZ_MEMORYEDIT = globalThis.GZ_MEMORYEDIT || (() => {
     const c = globalThis.chrome, $ = (id) => document.getElementById(id), section = $('ai-memory');
     if (!section) return;
     const el = (tag, cls = '', text = '') => { const e = document.createElement(tag); e.className = cls; e.textContent = text; return e; };
-    const button = (text, on, cls = '') => { const b = el('button', cls, text); b.type = 'button'; b.disabled = busy; b.addEventListener('click', on); return b; };
+    const button = (text, on, cls = '', id = '') => { const b = el('button', cls, text); b.type = 'button'; b.id = id; b.disabled = busy; b.addEventListener('click', on); return b; };
     const send = async (message) => { try { const r = await c.runtime.sendMessage({ type: TYPE, ...message }); return isObj(r) ? r : { ok: false, error: 'write' }; } catch { return { ok: false, error: 'write' }; } };
     let enabled = true, initialized = false, busy = false, editor = null, pending = null, stateVersion = 0;
     const opened = new Set();
     const records = { memory: [], course: [] }, loaded = { memory: false, course: false }, versions = { memory: 0, course: 0 };
     const say = (text = '') => { $('memory-said').textContent = text; $('memory-said').hidden = !text; };
+    const refocus = (id, fallback = 'memory-refresh', start, end) => {
+      const target = [$(id), $(fallback), $('memory-refresh')].find((e) => e && !e.disabled);
+      target?.focus(); if (Number.isInteger(start)) target?.setSelectionRange?.(start, end);
+    };
     const loadState = async () => {
       const version = ++stateVersion, r = await send({ op: 'state' });
       if (version !== stateVersion) return;
@@ -40,6 +44,7 @@ var GZ_MEMORYEDIT = globalThis.GZ_MEMORYEDIT || (() => {
     };
     const perform = async (message, done) => {
       if (busy) return;
+      const active = document.activeElement, had = active?.id, start = active?.selectionStart, end = active?.selectionEnd;
       busy = true; say(); render();
       try {
         const r = await send(message);
@@ -47,7 +52,11 @@ var GZ_MEMORYEDIT = globalThis.GZ_MEMORYEDIT || (() => {
         else { if (editor && message.op === 'update' && ['conflict', 'not-found'].includes(r.error)) editor.conflict = true; say(errorText(r.error, t)); }
         if (message.op !== 'settings' && message.op !== 'export') await load(message.id?.startsWith('s-') || message.kind === 'course' ? 'course' : 'memory');
         return r;
-      } finally { busy = false; render(); }
+      } finally {
+        busy = false; render();
+        // Disabled/replaced controls lose focus. Restore it only if the user has not moved elsewhere while awaiting the worker.
+        if (had?.startsWith('memory-') && document.activeElement === document.body) refocus(had, message.op === 'update' ? `memory-edit-${message.id}` : 'memory-refresh', start, end);
+      }
     };
     const startEdit = (record) => { editor = { record, draft: record.markdown, conflict: false }; say(); render(); $('memory-edit-text')?.focus(); };
     const save = () => {
@@ -64,22 +73,25 @@ var GZ_MEMORYEDIT = globalThis.GZ_MEMORYEDIT || (() => {
         input.disabled = busy; input.setAttribute('aria-label', t('Saved memory')); input.setAttribute('data-local', ''); input.setAttribute('writingsuggestions', 'false');
         input.addEventListener('input', () => { if (editor?.record.id === record.id) editor.draft = input.value; });
         const actions = el('div', 'row');
-        actions.append(button(t('Save'), save, 'primary'), button(t('Cancel'), () => { editor = null; say(); render(); }));
+        actions.append(button(t('Save'), save, 'primary', `memory-save-${record.id}`), button(t('Cancel'), () => {
+          editor = null; say(); render(); refocus(`memory-edit-${record.id}`);
+        }, '', `memory-cancel-${record.id}`));
         if (editor.conflict) actions.append(button(t('Reload'), () => {
           const latest = records.memory.find((r) => r.id === record.id);
           if (latest) startEdit(latest); else { editor = null; say(t('This memory was deleted.')); render(); }
-        }));
+        }, '', `memory-reload-${record.id}`));
         li.append(input, actions);
       } else {
         const actions = el('div', 'row');
-        const edit = button(t('Edit'), () => startEdit(record)); edit.disabled ||= !!editor;
-        actions.append(edit, button(t('Delete'), () => remove(record), 'wr-danger'));
+        const edit = button(t('Edit'), () => startEdit(record), '', `memory-edit-${record.id}`); edit.disabled ||= !!editor;
+        actions.append(edit, button(t('Delete'), () => remove(record), 'wr-danger', `memory-forget-${record.id}`));
         li.append(el('pre', 'memory-markdown', record.markdown), actions);
       }
       return li;
     };
     const drawCourse = (record) => {
       const li = el('li', 'memory-record'), details = el('details'), summary = el('summary'), source = record.source || {};
+      summary.id = `memory-source-${record.id}`;
       li.dataset.memoryId = record.id; details.open = opened.has(record.id);
       details.addEventListener('toggle', () => { if (details.open) opened.add(record.id); else opened.delete(record.id); });
       summary.append(el('span', '', typeof source.title === 'string' && source.title ? source.title : typeof source.tool === 'string' ? source.tool : t('Course material')));
@@ -87,7 +99,7 @@ var GZ_MEMORYEDIT = globalThis.GZ_MEMORYEDIT || (() => {
       const meta = [Number.isFinite(time) ? when(time) : '', source.complete === false ? t('Partial') : ''].filter(Boolean).join(' · ');
       if (meta) summary.append(el('small', '', meta));
       details.append(summary, el('pre', 'memory-markdown', record.markdown));
-      li.append(details, button(t('Delete'), () => remove(record), 'wr-danger'));
+      li.append(details, button(t('Delete'), () => remove(record), 'wr-danger', `memory-forget-${record.id}`));
       return li;
     };
     const drawList = (kind) => {
@@ -111,7 +123,7 @@ var GZ_MEMORYEDIT = globalThis.GZ_MEMORYEDIT || (() => {
       $('memory-refresh').disabled = busy;
       $('memory-export').disabled = busy || !loaded.memory || !records.memory.length;
       drawList('memory'); drawList('course');
-      if (had && $(had) && document.activeElement !== $(had)) { $(had).focus(); if (Number.isInteger(start)) $(had).setSelectionRange?.(start, end); }
+      if (had?.startsWith('memory-') && document.activeElement !== $(had)) refocus(had, 'memory-refresh', start, end);
     };
     const askClear = (kind, trigger) => {
       if (busy || !records[kind].length) return;
