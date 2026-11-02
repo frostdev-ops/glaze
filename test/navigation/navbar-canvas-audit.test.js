@@ -448,7 +448,7 @@ test("Canvas's footer is in its page, above the bar's room: the bar isn't raised
 
 test("a Canvas jQuery UI dialog showing takes Glaze's layers under it with the page, and Canvas keeps its own order", () => {
   const css = read('content/canvas.css').replace(/\/\*[\s\S]*?\*\//g, '');
-  const rule = 'body:has(> .ui-widget-overlay:not([style*="display: none"]), > .ui-dialog:not([style*="display: none"])) :is(#gz-navbar, #gz-sb-launch, #gz-sb-edge, #gz-ctabs-frames, #gz-float .gz-w, #gz-float[data-stack]) { z-index: 998 !important; }';
+  const rule = 'body:has(> .ui-widget-overlay:not([style*="display: none"]), > .ui-dialog:not([style*="display: none"])) :is(#gz-navbar, #gz-sb-launch, #gz-sb-edge, #gz-ctabs-frames, #gz-float, #gz-float .gz-w) { z-index: 998 !important; }';
   assert.ok(css.includes(rule), 'while a dialog or its backdrop shows (jQuery hides them with an inline display: none)');
   // jQuery UI starts its dialogs at z-index 1000, inline; each of these layers stands over that otherwise.
   const z = (file, start) => { const src = read(file), at = src.indexOf(start); return Number(src.slice(at, src.indexOf('}', at)).match(/z-index: (\d+)/)[1]); };

@@ -129,8 +129,10 @@ html[data-gz-motion="off"] #gz-ctabs .gz-ctab[data-loading]::before { animation:
 #gz-ctabs-frames[data-turning]::after { content: ""; position: absolute; z-index: 3; top: var(--gz-navbar-top, 0px); inset-inline: var(--gz-navbar-left, 0px) 0; height: 2px; pointer-events: none; background: linear-gradient(90deg, transparent, var(--gz-accent, #6fdcff), transparent) 0 0 / 30% 100% no-repeat; animation: gz-ctab-load 1s linear infinite, gz-ctab-beat 0.01s 0.15s both; }
 @keyframes gz-ctab-beat { from { opacity: 0; } to { opacity: 1; } }
 html[data-gz-motion="off"] #gz-ctabs-frames[data-turning]::after { animation: none; background: var(--gz-accent, #6fdcff); opacity: 0.5; }
-html[data-gz-ctab-framed] :is(#gz-float .gz-w),
-html[data-gz-ctab-framed] #gz-float[data-stack] { z-index: 1260; }
+/* Lift the whole floating surface: each widget's inline z orders it among its peers, and must not leave it below the
+   course frame. A relative container keeps fixed tiles in viewport coordinates; the narrow stack stays fixed itself. */
+html[data-gz-ctab-framed] #gz-float { z-index: 1260; }
+html[data-gz-ctab-framed] #gz-float:not([data-stack]) { position: relative; }
 /* What belongs to the covered page itself stays under the frame: its stickers, reading bar, document tools, a peek or menu. */
 html[data-gz-ctab-framed] #gz-stickers,
 html[data-gz-ctab-framed] #gz-read,
