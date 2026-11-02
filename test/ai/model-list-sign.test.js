@@ -53,5 +53,5 @@ test('the serial defaults to one above the live list', () => {
 
 test('the shipped models.json says each Rime size\'s version', () => {
   const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '../../extension/ai/local/models.json'), 'utf8'));
-  for (const m of doc.models.filter((x) => !x.role && !x.stock)) assert.equal(m.version, 'r5', m.id);
+  for (const m of doc.models.filter((x) => !x.role && !x.stock)) assert.equal(m.version, 'r8-test-20261102', m.id);
 });

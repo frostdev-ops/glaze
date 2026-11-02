@@ -223,13 +223,13 @@ test('no ladder, a catalog of Glaze-tuned models only (Rime, no `stock`): the sm
 
 test('a saved tier no longer offered by the catalog follows Auto through Download and the broker', async () => {
   const models = require('../../extension/ai/local/models.json').models;
-  const s = setup({ ladder: { pick: () => ({ id: 'rime-1.7b-q8_0' }) } });
+  const s = setup({ ladder: { pick: () => ({ id: 'rime-1.7b-r8-q8_0' }) } });
   s.st.list = async () => models.map((m) => ({ ...m, state: s.st.here[m.id] || 'missing' }));
-  const e = env({ task: async (id) => id === TEXT.id ? TEXT : null }, { local: { provider: 'local', tier: 2, generation: 'old-q5' } });
+  const e = env({ task: async (id) => id === TEXT.id ? TEXT : null }, { local: { provider: 'local', tier: 9, generation: 'removed-tier' } });
   assert.equal((await B.config({ op: 'test', provider: 'local' }, e)).state, 'download');
   assert.deepEqual(s.st.log.downloads, [], 'status never downloads');
   assert.deepEqual(await B.config({ op: 'prepare', provider: 'local' }, e), { ok: true, state: 'ready' });
-  assert.deepEqual(s.st.log.downloads, ['rime-1.7b-q8_0'], 'the missing saved tier lets the ladder choose');
+  assert.deepEqual(s.st.log.downloads, ['rime-1.7b-r8-q8_0'], 'the missing saved tier lets the ladder choose');
   assert.deepEqual(await B.config({ op: 'test', provider: 'local' }, e).then((r) => [r.state, r.tier]), ['ready', 4]);
   const p = port(e);
   try {
@@ -244,24 +244,22 @@ test('a saved tier no longer offered by the catalog follows Auto through Downloa
 
 test('a missing saved tier reuses a ready Rime model; an offered tier still selects exactly that model', async () => {
   const models = [...require('../../extension/ai/local/models.json').models];
-  const s = setup({ here: { 'rime-1.7b-q6_k': 'ready' } });
+  const s = setup({ here: { 'rime-1.7b-r8-q6_k': 'ready' } });
   s.st.list = async () => models.map((m) => ({ ...m, state: s.st.here[m.id] || 'missing' }));
-  const old = LOCAL.config({ tier: 2 });
+  const old = LOCAL.config({ tier: 9 });
   assert.deepEqual(await LOCAL.status(old).then((r) => [r.state, r.tier]), ['ready', 3]);
-  assert.equal((await LOCAL.catalog(old)).models[0].weights, 'rime-1.7b-q6_k');
+  assert.equal((await LOCAL.catalog(old)).models[0].weights, 'rime-1.7b-r8-q6_k');
   await P.run('local', request(TEXT, { text: 'Hello' }), old);
-  assert.deepEqual(s.st.log.opened, ['rime-1.7b-q6_k']);
+  assert.deepEqual(s.st.log.opened, ['rime-1.7b-r8-q6_k']);
   assert.deepEqual(await LOCAL.prepare(old), { state: 'ready' });
-  assert.deepEqual(s.st.log.downloads, ['rime-1.7b-q6_k']);
-  // The hole is deliberate: adding just a catalog entry must make a saved tier 2 meaningful again.
-  models.push({ ...models[0], id: 'rime-1.7b-q5_k_m', tier: 2 });
-  try {
-    assert.deepEqual(await LOCAL.status(old).then((r) => [r.state, r.tier]), ['download', 2]);
-    await LOCAL.prepare(old);
-    assert.equal(s.st.log.downloads.at(-1), 'rime-1.7b-q5_k_m');
-    assert.equal((await LOCAL.catalog(old)).models[0].weights, 'rime-1.7b-q5_k_m');
-    assert.deepEqual(await LOCAL.status(LOCAL.config({ tier: 4 })).then((r) => [r.state, r.tier]), ['download', 4]);
-  } finally { models.pop(); }
+  assert.deepEqual(s.st.log.downloads, ['rime-1.7b-r8-q6_k']);
+  // The shipped Q5_K_M is an offered tier: it takes precedence over the ready Q6_K fallback.
+  const q5 = LOCAL.config({ tier: 2 });
+  assert.deepEqual(await LOCAL.status(q5).then((r) => [r.state, r.tier]), ['download', 2]);
+  await LOCAL.prepare(q5);
+  assert.equal(s.st.log.downloads.at(-1), 'rime-1.7b-r8-q5_k_m');
+  assert.equal((await LOCAL.catalog(q5)).models[0].weights, 'rime-1.7b-r8-q5_k_m');
+  assert.deepEqual(await LOCAL.status(LOCAL.config({ tier: 4 })).then((r) => [r.state, r.tier]), ['download', 4]);
 });
 
 test('a download that outlasts the request answers downloading and goes on; status says downloading with its progress', async () => {

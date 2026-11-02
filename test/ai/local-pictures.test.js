@@ -293,8 +293,8 @@ test('the shipped manifest: the picture download is its own two files, never a t
   // The ladder ranks the text tiers only, from the manifest whole or its defaults.
   const input = { adapter: {}, info: { vendor: 'x', architecture: 'y', device: '', description: '', isFallbackAdapter: false }, features: ['shader-f16'],
     limits: { maxBufferSize: 4e9, maxStorageBufferBindingSize: 4e9 }, deviceMemory: 16, bench: { bandwidth: 400e9, overheadMs: 2 } };
-  assert.deepEqual(LAD.pick({ ...input, models }).quants.map((q) => q.tier), [1, 3, 4]);
-  assert.deepEqual(LAD.pick(input).quants.map((q) => q.tier), [1, 3, 4]);
+  assert.deepEqual(LAD.pick({ ...input, models }).quants.map((q) => q.tier), [1, 2, 3, 4]);
+  assert.deepEqual(LAD.pick(input).quants.map((q) => q.tier), [1, 2, 3, 4]);
   // A role entry's fields are checked.
   assert.equal(S.valid({ ...lm, projector: undefined }), false);
   assert.equal(S.valid({ ...proj, projector: lm.id }), false);
