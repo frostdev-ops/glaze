@@ -113,3 +113,29 @@ test('current URL bounds apply to the serialized URL without losing resource ide
   const url = `https://school.example/${'x'.repeat(1200 - 'https://school.example/'.length)}`;
   assert.equal(C.clean(current({ url })).url, url, 'the inclusive URL bound remains usable');
 });
+
+test('Ultra current identities accept each typed component up to the shared 40-character bound', () => {
+  const course = `_${'1'.repeat(20)}_${'2'.repeat(18)}`;
+  const assignment = `_${'3'.repeat(18)}_${'4'.repeat(20)}`;
+  const inp = A.task.input(raw({ current: current({ site: 'ultra', course: { id: course }, assignment: { id: assignment },
+    content: { id: assignment, kind: 'discussion' }, url: `https://school.example/ultra?course_id=${course}&content_id=${assignment}` }),
+    tools: ['assignment_read', 'discussion_read'] }));
+  assert.equal(inp.current.course?.id, course);
+  assert.equal(inp.current.assignment?.id, assignment);
+  assert.equal(inp.current.content?.id, assignment);
+  assert.equal(new URL(inp.current.url).searchParams.get('course_id'), course);
+  assert.equal(new URL(inp.current.url).searchParams.get('content_id'), assignment);
+  for (const c of [call('assignment_read', { course, assignment }), call('discussion_read', { course, id: assignment })]) {
+    assert.equal(A.why(c, inp), '');
+    assert.equal(A.currentBound(c.call, inp), true);
+  }
+  assert.deepEqual(A.fromRequest(built(inp)).parts, A.layout(inp));
+  for (const id of [`_${'1'.repeat(20)}_${'2'.repeat(19)}`, `_${'1'.repeat(21)}_1`, '1'.repeat(21), '_1_2\n', '_1_2extra']) {
+    assert.equal(C.clean(current({ site: 'ultra', course: { id } })).course, undefined, id);
+  }
+  for (const site of ['canvas', 'moodle']) {
+    assert.equal(C.clean(current({ site, course: { id: course } })).course, undefined, site);
+    const id = '1'.repeat(20);
+    assert.equal(C.clean(current({ site, course: { id } })).course.id, id);
+  }
+});
