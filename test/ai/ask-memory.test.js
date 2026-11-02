@@ -229,3 +229,16 @@ test('exact fitting removes optional current URL before losing any typed resourc
   assert.equal(run.input.current.assignment.id, '41');
   assert.equal(h.state.counts.some((r) => r.input.current?.url), true, 'the full request is counted before optional fields are removed');
 });
+
+test('only a direct correction request may replace a user-edited memory', async (t) => {
+  for (const explicit of [false, true]) {
+    let saved, edited;
+    const text = 'I prefer short bullet points.';
+    const h = harness({ script: { 'agent.tools': [() => call('memory_save', { id: saved.receipt.id, revision: edited.receipt.revision, text, evidence: text, category: 'preference' }, 'write'), said(explicit ? 'Updated.' : 'No change.')], 'study.help': [study] } }); t.after(h.close);
+    saved = await preference(h.store);
+    edited = await h.store.edit(ACC, { id: saved.receipt.id, revision: saved.receipt.revision, markdown: 'I prefer long paragraphs.' });
+    await h.ask(`${explicit ? 'Correct my saved preference.' : 'Explain why this approach is correct.'} ${text}`);
+    assert.equal((await h.store.read(ACC, saved.receipt.id)).text, explicit ? text : 'I prefer long paragraphs.');
+    assert.equal(h.got.some((m) => m.type === 'memory'), explicit);
+  }
+});
