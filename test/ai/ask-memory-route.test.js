@@ -128,6 +128,26 @@ for (const [locale, question] of [
   assert.equal(h.runs.some((m) => m.input.tools?.includes('memory_search')), false);
 });
 
+for (const [locale, question, evidence] of [
+  ['en', 'Remember my preferred language is Spanish.', 'my preferred language is Spanish.'],
+  ['es', 'Recuerda mi idioma preferido es el español.', 'mi idioma preferido es el español.'],
+  ['pt-BR', 'Lembre minha língua preferida é o espanhol.', 'minha língua preferida é o espanhol.'],
+  ['de', 'Merke dir, meine bevorzugte Sprache ist Spanisch.', 'meine bevorzugte Sprache ist Spanisch.'],
+  ['nl', 'Onthoud mijn voorkeurstaal is Spaans.', 'mijn voorkeurstaal is Spaans.'],
+]) test(`${locale}: direct possessive facts keep their existing memory-management path`, async (t) => {
+  const h = front({ mode: 'save', evidence, category: 'fact' }); t.after(h.close);
+  const end = await h.ask(question, locale);
+  assert.equal(end.type, 'end', JSON.stringify(end));
+  assert.equal(end.task, 'agent.tools');
+  assert.equal(h.events.find((m) => m.type === 'memory')?.receipt.operation, 'created');
+});
+
+test('remembering a future school task is not a personal-fact assertion', async (t) => {
+  const h = front({ mode: 'none' }); t.after(h.close);
+  await h.ask('Remember my assignment tomorrow.', 'en');
+  assert.equal(h.runs.some((m) => m.input.tools?.includes('memory_search')), false);
+});
+
 // Exact failure-only questions and before-state from peer bundle SHA256 82eb8676205a6035aaae59efdcdd7712b75a0278e09f34033cc6bc9ab02cb244.
 // Only the 13 memory routing failures and six non-benchmark save controls are reproduced. No after-envelope is inferred.
 const REPLAY_READS = [
