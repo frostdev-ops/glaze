@@ -247,6 +247,18 @@ test('course-only deictic help offers reads without guessing an active assignmen
   assert.equal(route.task, 'study.help'); assert.ok(route.read.includes('assignments_list'));
 });
 
+test('course fallback does not turn context-only drafts or unrecognized resources into assignment reads', () => {
+  for (const surface of [
+    { view: 'document', document: { kind: 'discussion', revision: 3 }, material: { text: 'Draft:\nUnsaved words', source: 'writer', truncated: false } },
+    { view: 'content' },
+    { view: 'page' },
+  ]) {
+    const route = K.route('Explain this', { level: 3, current: { site: 'canvas', course: { id: '25' }, ...surface } });
+    assert.equal(route.task, 'study.help');
+    assert.equal(route.read, undefined, surface.view + ' supplies no active assignment');
+  }
+});
+
 test('compose draft needs original editor owner and never fabricates a document handle', async () => {
   const h = await writerFixture();
   h.state.key = null; h.state.mode = 'compose'; h.state.kind = 'post'; h.state.owner = sender.origin + '/5';
