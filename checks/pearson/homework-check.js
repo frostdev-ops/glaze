@@ -11,7 +11,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-pearson-check-'));
 const out = process.argv[2], results = [], errors = [];
 const check = (yes, label) => { assert.ok(yes, label); results.push(label); console.log(`ok ${label}`); };
 const rgb = (hex) => `rgb(${hex.slice(1).match(/../g).map((x) => parseInt(x, 16)).join(', ')})`;
-const shell = `<!doctype html><html><head><style>body{margin:0;background:white;color:#252525;font:16px Arial}nav{height:48px;padding:0 20px;display:flex;align-items:center;background:white}iframe{display:block;border:0;width:100%;height:calc(100vh - 48px)}</style></head><body><nav id="mainTopNavContainer"><h1>Sample mathematics</h1></nav><iframe title="Question Viewer" src="https://tdx.acs.pearson.com/assignment/assignmentplayer.aspx"></iframe></body></html>`;
+const shell = `<!doctype html><html><head><style>body{margin:0;background:white;color:#252525;font:16px Arial}nav{height:48px;padding:0 20px;display:flex;align-items:center;background:white}iframe{display:block;border:0;width:100%;height:calc(100vh - 48px)}</style></head><body><nav id="mainTopNavContainer"><h1>Sample mathematics</h1></nav><div id="main-body-container"><div id="dvMainRow" class="main-row" style="background-color:white"><iframe title="Question Viewer" src="https://tdx.acs.pearson.com/assignment/assignmentplayer.aspx"></iframe></div></div></body></html>`;
 const assignment = `<!doctype html><html><head><style>html,body{margin:0;height:100%;background:white}iframe{border:0;width:100%;height:100%}</style></head><body><div id="assignmentViewer" class="playmode-homework"></div><iframe id="activityFrame" src="https://tdx.acs.pearson.com/Player/Player.aspx"></iframe></body></html>`;
 const player = `<!doctype html><html style="--gz-ink: #123456 !important"><head><style>
   body{margin:0;color:#4d4d4d;background:white;font:16px Arial}.statusPanel{height:64px;display:flex;align-items:center;justify-content:space-between;background:#007899;color:white;padding:0 20px}.statusPanel h2{font-size:18px}
@@ -93,6 +93,7 @@ const until = async (fn) => {
     for (const f of [page, assigned, play]) await themed(f);
     await until(async()=>await color(play,'.btn-primary')===rgb(D.GZ_DEFAULTS.colors['--gz-accent']));
     check(true, 'the real manifest themes the shell and both nested player documents');
+    check(await color(page,'#dvMainRow')==='rgba(0, 0, 0, 0)', 'the inline-white native homework shell reveals the top-level saved background');
     const surface=f=>f.locator('html').evaluate(e=>getComputedStyle(e).getPropertyValue('--gz-surface').trim());
     for (const f of [page, assigned, play]) check(await surface(f) === D.GZ_DEFAULTS.colors['--gz-surface'], 'each document receives the saved Frost surface palette');
     check(await color(page,'body')===rgb(D.GZ_DEFAULTS.colors['--gz-surface'])&&(await Promise.all([assigned,play].map(f=>color(f,'body')))).every(c=>c==='rgba(0, 0, 0, 0)'), 'the top-level MyLab canvas owns the surface while nested documents stay transparent');
@@ -193,6 +194,7 @@ const until = async (fn) => {
     check(await color(play, '.eqText', 'color') === 'rgb(0, 0, 0)', 'Glaze off restores native math ink');
     check(await play.locator('html').evaluate((e) => [e.style.getPropertyValue('--gz-ink'), e.style.getPropertyPriority('--gz-ink')].join('|')) === '#123456|important', 'Glaze off restores preexisting inline variables and priorities');
     check(await play.getByLabel('Sample answer').inputValue() === 'unsent work', 'turning Glaze off preserves native answer text');
+    check(await color(page,'#dvMainRow')==='rgb(255, 255, 255)' && await page.locator('#dvMainRow').getAttribute('style')==='background-color:white', 'Glaze off restores the original inline-white homework wrapper without rewriting it');
     check(await play.locator('.toolButton').first().getAttribute('data-gz-pearson-icon') === null && (await color(play, '.toolButton', 'backgroundImage')).includes('synthetic-symbol.svg'), 'Glaze off restores native symbol artwork');
     check(await play.locator('.gz-pearson-symbol').count()===0 && await play.locator('.iconDiv').getAttribute('aria-label')===null, 'Glaze off removes the symbol decoration and restores native attributes');
 

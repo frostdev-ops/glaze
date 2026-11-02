@@ -8,6 +8,7 @@ html[data-gz-pearson] body { background: var(--gz-surface) !important; color: va
 /* The top-level host owns the canvas; nested documents and native layout wrappers only reveal it. */
 html[data-gz-pearson][data-gz-pearson-nested], html[data-gz-pearson][data-gz-pearson-nested] body { background: transparent !important; }
 html[data-gz-pearson] iframe[data-gz-pearson-child] { background: transparent !important; }
+html[data-gz-pearson="shell"] #dvMainRow { background: transparent !important; }
 html[data-gz-pearson] :is(#playerViewer,#assignmentViewer,.mainPanel,.contentPanel,.framePanel,.contentHolder) { background: transparent !important; }
 html[data-gz-pearson] :is(#mainTopNavContainer, #mainTopNav, .navbar-inverse, .statusPanel, .assignmentreviewnavpanel, .assignmentreviewnavListContainer, .assignmentreviewnavListContainer ul, .controlPanel, .palettePanel) {
   background-color: var(--gz-surface-fill-2, var(--gz-surface-2)) !important;
