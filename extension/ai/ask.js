@@ -188,7 +188,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   // Help with work: study.help, whatever records the question names.
   const WORK = {
     en: ['how (?:do|can|could|would|should|does) (?:i|you|we|one)', 'how to', 'explain\\p{L}*', 'solv\\p{L}*', 'help me', 'help with', 'answers?', 'solutions?', 'check my', 'is (?:this|my|it) (?:right|correct|wrong)',
-      'why', "i don'?t (?:get|understand)", 'hints?', 'calculat\\p{L}*', 'prove', 'derive', 'define', 'write (?:me|my|an?|the)', 'what does .{1,40} mean', 'teach me', 'practice'],
+      'debug (?:my|this|that|the|our)', 'why', "i don'?t (?:get|understand)", 'hints?', 'calculat\\p{L}*', 'prove', 'derive', 'define', 'write (?:me|my|an?|the)', 'what does .{1,40} mean', 'teach me', 'practice'],
     es: ['c[oó]mo (?:se|hago|puedo|resuelvo|calculo|escribo)', 'expl[ií]ca\\p{L}*', 'resuel\\p{L}*', 'resolver', 'ay[uú]dame', 'ayuda con', 'respuestas?', 'soluci[oó]n', 'revisa', 'por qu[eé]', 'no entiendo', 'pistas?', 'calcula\\p{L}*'],
     'pt-BR': ['como (?:eu|fa[çc]o|posso|resolvo|calculo|escrevo|se)', 'expli\\p{L}*', 'resolv\\p{L}*', 'me ajud\\p{L}*', 'ajuda com', 'respostas?', 'solu[çc][ãa]o', 'confer\\p{L}*', 'verifi\\p{L}*', 'por qu[eê]', 'n[ãa]o entendo', 'dicas?', 'calcul\\p{L}*'],
     fr: ['comment (?:faire|je|on|r[ée]soudre|calculer|[ée]crire)', 'expliqu\\p{L}*', 'r[ée]sou\\p{L}*', 'aide-moi', 'aide avec', 'r[ée]ponses?', 'solutions?', 'v[ée]rifi\\p{L}*', 'pourquoi', 'je ne comprends pas', 'indices?', 'calcul\\p{L}*'],
@@ -335,7 +335,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const PLAN_WRAPPER = /\b(?:help me(?: to)?|how (?:do|can|could|would|should) i)\s+(?=(?:prioriti[sz]e|compare|rank|order|plan|schedule)\s+(?:(?:the )?(?:deadlines?|workloads?|difficulty|requirements) (?:of|for)\s+)?(?:(?!(?:in|of|for|from|with|to|and|or)\b)[\p{L}\p{N}'-]+\s+){0,4}(?:assignments|tasks|homework|coursework|to-?dos?)\b)/giu;
   const PLAN_WORK = /(?:^|[.!?;,]\s*|\b(?:and(?:\s+then)?|then|also)\s+)(?:(?:(?:can|could|would|will) you(?: please)?|please|i (?:want|need|would like) you to)\s+)?(?:implement|debug|(?:draft|rewrite|finish|complete|write|code|do)\s+(?:it|them|me|my|the|this|that|these|those|an?|code|essays?|paragraphs?|replies|responses?|outlines?|functions?|programs?|reports?))\b/iu;
   const PLAN_STEP = /\bfirst (?:in|for|on|with) (?:[\p{L}-]+\s+){0,3}(?:equation|essay|code|program|paragraph|proof|problem|question)\b/iu;
-  const PLAN_FOLLOW = /^(?:(?:okay|ok|so|then)[,\s]+)?(?:what (?:should|do|can) i (?:do|start|work on|tackle|begin) first|which (?:one|assignment|task) should i (?:do|start|work on|tackle|begin) first)(?:\s*,?\s*(?:and\s+)?why)?[?!.\s]*$/iu;
+  const PLAN_FOLLOW = /^(?:(?:okay|ok|so|then)[,\s]+)?(?:what (?:should|do|can) i (?:do|start|work on|tackle|begin) first|which (?:one|assignment|task) should i (?:do|start|work on|tackle|begin) first|which one should i (?:start|work on|tackle|begin))(?:\s*,?\s*(?:and\s+)?why)?[?!.\s]*$/iu;
+  const RECORD_CORRECTION = /^(?:(?:no|nah|sorry|actually)[,\s]+)?i meant [\p{L}\p{N}][\p{L}\p{N} &'-]{0,59}[?!.\s]*$/iu;
   const PLAN_REASON = /(?:,\s*(?:and\s+)?|\band\s+)why(?=\s*(?:[?!.;]|$))/giu;
   const PLAN_TOOLS = [...TOOLS.todo, ...TOOLS.assignments, 'accounts_list'];
   const CHAT_RECALL = /\bremind me what i (?:just|last|previously) asked(?: you)?[?!.\s]*$/iu;
@@ -366,12 +367,13 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         }
       }
     }
-    if (last && !String(attempt).trim() && PLAN_FOLLOW.test(q.trim())) {
+    if (last && !String(attempt).trim() && (PLAN_FOLLOW.test(q.trim()) || RECORD_CORRECTION.test(q.trim()))) {
       let previous = last, i = history.length - 1;
-      while (i > 0 && (PLAN_FOLLOW.test(String(previous.question).trim()) || FOLLOW.test(previous.question) && subjectOf(previous.question) === 'other')
-        && route(previous.question, { locale, level }).task !== 'agent.tools') previous = history[--i];
+      while (i > 0 && (PLAN_FOLLOW.test(String(previous.question).trim()) || RECORD_CORRECTION.test(String(previous.question).trim())
+        || FOLLOW.test(previous.question) && subjectOf(previous.question) === 'other')) previous = history[--i];
       // Keep intervening questions' work guards, and require unquoted records intent. Answers/statuses prove no facts.
-      const antecedent = history.slice(i).filter((h) => !PLAN_FOLLOW.test(String(h.question).trim())).map((h) => h.question).join('\n');
+      const antecedent = [...history.slice(i), ...(RECORD_CORRECTION.test(q.trim()) ? [{ question: q }] : [])]
+        .filter((h) => !PLAN_FOLLOW.test(String(h.question).trim())).map((h) => h.question).join('\n');
       const before = route(antecedent, { locale, level }), intent = route(MEMORY().userText(antecedent), { locale, level });
       if (before.task === 'agent.tools' && intent.task === 'agent.tools'
         && intent.tools.some((t) => ['todo_list', 'schedule_list', 'assignments_list', 'assignment_read'].includes(t))) {
@@ -381,8 +383,18 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     if (last && !String(attempt).trim() && FOLLOW.test(direct)) {
       // Follow-up-only questions carry no topic themselves. Walk back to the question that supplied their tools.
       let previous = last, i = history.length - 1;
-      while (i > 0 && FOLLOW.test(previous.question) && route(previous.question, { locale, level }).task !== 'agent.tools') previous = history[--i];
-      const again = route(`${previous.question}\n${question}`, { locale, level });
+      while (i > 0 && (PLAN_FOLLOW.test(String(previous.question).trim()) || RECORD_CORRECTION.test(String(previous.question).trim())
+        || FOLLOW.test(previous.question) && subjectOf(previous.question) === 'other')) previous = history[--i];
+      const prior = history.slice(i).filter((h) => !PLAN_FOLLOW.test(String(h.question).trim())).map((h) => h.question).join('\n');
+      const again = route(`${prior}\n${question}`, { locale, level });
+      const intent = route(MEMORY().userText(prior), { locale, level });
+      if (history.slice(i).some((h) => PLAN_FOLLOW.test(String(h.question).trim()) || RECORD_CORRECTION.test(String(h.question).trim()))) {
+        if (again.task !== 'agent.tools') return again;
+        if (intent.task !== 'agent.tools' || !intent.tools.some((t) => ['todo_list', 'schedule_list', 'assignments_list', 'assignment_read'].includes(t))) {
+          return { task: 'study.help', subject: subjectOf(`${prior}\n${q}`) };
+        }
+        return { task: 'agent.tools', tools: [...PLAN_TOOLS] };
+      }
       if (again.task === 'agent.tools') return again;
     }
     const work = typeof attempt === 'string' ? attempt : '';
