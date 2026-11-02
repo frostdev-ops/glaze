@@ -333,6 +333,142 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       pin();
       return li;
     };
+    // A committed memory save is its own receipt, even if the model later fails. These controls address only a worker-
+    // verified record; they never carry account authority. Revisions protect edits against other devices or tool calls.
+    const memoryCards = new Map();
+    let memoryEpoch = 0;
+    const memoryId = (id) => typeof id === 'string' && /^m-[a-f0-9]{32}$/.test(id);
+    const memoryRevision = (rev) => typeof rev === 'string' && /^[a-f0-9]{32}$/.test(rev);
+    const memoryText = (text, max = 600) => typeof text === 'string' && text.length <= max && !!text.trim() && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(text);
+    const memoryReceiptValid = (r) => r && typeof r === 'object' && !Array.isArray(r)
+      && Object.keys(r).every((k) => ['operation', 'id', 'revision', 'at', 'text', 'persistence'].includes(k))
+      && ['created', 'updated', 'forgotten', 'unchanged'].includes(r.operation) && memoryId(r.id)
+      && memoryRevision(r.revision) && Number.isSafeInteger(r.at) && r.at >= 0 && r.persistence === 'device'
+      && (r.operation === 'forgotten' ? r.text === undefined : r.operation === 'unchanged' && r.text === undefined || memoryText(r.text));
+    const memoryRecordValid = (r, id) => r && r.id === id && r.kind === 'memory' && r.deleted !== true
+      && memoryRevision(r.revision) && memoryText(r.markdown);
+    const memoryError = (error) => error === 'conflict' ? t('This memory changed. Reload it before saving.')
+      : error === 'not-found' ? t('This memory was deleted.') : error === 'limit' ? t('Use 600 characters or fewer.') : t('Could not save. Try again.');
+    const memorySend = async (message) => { try { return await chrome.runtime.sendMessage({ type: 'glaze:memory', ...message }); } catch { return { ok: false, error: 'write' }; } };
+    const memoryLive = (s) => alive_ && accepting && root.isConnected && s.line.isConnected && memoryCards.get(s.id) === s;
+    const memoryClear = () => { memoryEpoch++; for (const s of memoryCards.values()) drop(s.line); memoryCards.clear(); };
+    const memoryStatus = (s, text = '') => { s.status.textContent = text; s.status.hidden = !text; pin(); };
+    const memoryBusy = (s, busy) => {
+      s.busy = busy;
+      for (const b of s.line.querySelectorAll('button')) b.disabled = busy || b.className === 'gz-ask-memory-save' && s.editor?.conflict === true;
+      if (s.editor) s.editor.input.disabled = busy;
+    };
+    const memoryButton = (s, cls, label, run) => {
+      const b = make('button', { type: 'button', className: `gz-ask-memory-${cls}`, textContent: label });
+      b.addEventListener('click', (e) => { if (real(e) && !s.busy && memoryLive(s)) run(); });
+      return b;
+    };
+    const memoryEditor = (s, r, focus) => {
+      s.revision = r.revision;
+      s.text.textContent = r.markdown; s.text.hidden = false;
+      s.editor?.box.remove();
+      const input = make('textarea', { className: 'gz-ask-memory-input', rows: 4, maxLength: 600, value: r.markdown });
+      input.setAttribute('aria-label', t('Saved memory'));
+      input.setAttribute('writingsuggestions', 'false');
+      const actions = make('div', { className: 'gz-ask-memory-actions' });
+      const box = make('div', { className: 'gz-ask-memory-editor' }, input, actions);
+      s.editor = { input, actions, box, revision: r.revision, conflict: false };
+      s.controls.hidden = true;
+      actions.append(memoryButton(s, 'save', t('Save'), () => memorySave(s)), memoryButton(s, 'cancel', t('Cancel'), () => {
+        s.editor.box.remove(); s.editor = null; s.controls.hidden = false; memoryStatus(s); s.controls.querySelector('button')?.focus();
+      }));
+      s.status.before(box);
+      memoryStatus(s); if (focus) input.focus(); pin();
+    };
+    const memoryConflict = (s) => {
+      if (!s.editor) return;
+      s.editor.conflict = true;
+      if (!s.editor.actions.querySelector('.gz-ask-memory-reload')) s.editor.actions.append(memoryButton(s, 'reload', t('Reload'), () => memoryRead(s)));
+    };
+    const memoryRead = async (s) => {
+      if (!memoryLive(s) || s.busy || s.deleted) return;
+      const token = ++s.token, epoch = memoryEpoch, active = focused();
+      memoryBusy(s, true); memoryStatus(s);
+      const r = await memorySend({ op: 'read', id: s.id });
+      if (!memoryLive(s) || token !== s.token || epoch !== memoryEpoch) return;
+      memoryBusy(s, false);
+      if (r?.ok === true && memoryRecordValid(r.record, s.id)) {
+        const restore = focused(), keepFocus = restore === active || restore === document.body;
+        memoryEditor(s, r.record, keepFocus);
+      } else memoryStatus(s, r?.error === 'not-found' ? memoryError(r.error) : t('Could not load memory. Try again.'));
+    };
+    const memorySave = async (s) => {
+      if (!memoryLive(s) || s.busy || !s.editor || s.editor.conflict) return;
+      const { input, revision, box } = s.editor, markdown = input.value;
+      if (!memoryText(markdown)) return memoryStatus(s, t('Use 600 characters or fewer.'));
+      const token = ++s.token, epoch = memoryEpoch;
+      memoryBusy(s, true); memoryStatus(s);
+      const r = await memorySend({ op: 'update', id: s.id, revision, markdown });
+      if (!memoryLive(s) || token !== s.token || epoch !== memoryEpoch) return;
+      memoryBusy(s, false);
+      if (r?.ok === true && memoryReceiptValid(r.receipt) && r.receipt.id === s.id && r.receipt.at >= s.at && ['updated', 'unchanged'].includes(r.receipt.operation) && typeof r.receipt.text === 'string') {
+        const keepFocus = box.contains(focused()) || focused() === document.body;
+        s.editor.box.remove(); s.editor = null; s.controls.hidden = false;
+        memoryReceipt(r.receipt); if (keepFocus) s.controls.querySelector('button')?.focus();
+      } else {
+        if (['conflict', 'not-found'].includes(r?.error)) memoryConflict(s);
+        memoryBusy(s, false); memoryStatus(s, memoryError(r?.error));
+      }
+    };
+    const memoryForget = async (s) => {
+      if (!memoryLive(s) || s.busy || s.deleted) return;
+      const token = ++s.token, epoch = memoryEpoch;
+      memoryBusy(s, true); memoryStatus(s);
+      const r = await memorySend({ op: 'forget', id: s.id, revision: s.revision });
+      if (!memoryLive(s) || token !== s.token || epoch !== memoryEpoch) return;
+      memoryBusy(s, false);
+      if (r?.ok === true && memoryReceiptValid(r.receipt) && r.receipt.id === s.id && r.receipt.at >= s.at && ['forgotten', 'unchanged'].includes(r.receipt.operation) && r.receipt.text === undefined) {
+        const keepFocus = s.line.contains(focused()) || focused() === document.body;
+        memoryReceipt({ ...r.receipt, operation: 'forgotten' }); if (keepFocus) s.summary.focus();
+      } else memoryStatus(s, memoryError(r?.error));
+    };
+    const memoryReceipt = (r) => {
+      if (!memoryReceiptValid(r)) return;
+      let s = memoryCards.get(r.id);
+      if (s && (s.deleted && r.operation !== 'forgotten' || r.at < s.at)) return;
+      if (!s) {
+        const summary = make('summary'), text = make('pre', { dir: 'auto', hidden: true }), controls = make('div', { className: 'gz-ask-memory-actions' });
+        const details = make('details', {}, summary, text), status = make('p', { className: 'gz-ask-memory-status', hidden: true });
+        status.setAttribute('role', 'status');
+        const line = make('li', { className: 'gz-ask-memory' }, make('div', { className: 'gz-ask-memory-head' }, details, controls), status);
+        line.dataset.memoryId = r.id;
+        s = { id: r.id, line, summary, text, controls, details, status, token: 0, busy: false, editor: null };
+        controls.append(memoryButton(s, 'edit', t('Edit'), () => memoryRead(s)), memoryButton(s, 'delete', t('Delete'), () => memoryForget(s)));
+        memoryCards.set(r.id, s); put(line);
+      }
+      s.token++; s.at = r.at;
+      if (s.editor && s.editor.revision !== r.revision) memoryConflict(s);
+      s.revision = r.revision; s.deleted = r.operation === 'forgotten' || r.operation === 'unchanged' && r.text === undefined;
+      s.summary.textContent = s.deleted ? t('Memory deleted') : r.operation === 'updated' ? t('Memory updated on this device') : t('Memory saved on this device');
+      s.text.textContent = s.deleted ? '' : r.text || ''; s.text.hidden = s.deleted || !r.text;
+      if (s.deleted) { s.editor?.box.remove(); s.editor = null; s.text.remove(); s.controls.replaceChildren(); s.details.open = false; }
+      memoryBusy(s, false); memoryStatus(s, s.editor?.conflict ? memoryError('conflict') : ''); pin();
+      return s;
+    };
+    const memoryRecall = (run, ev) => {
+      if (!Array.isArray(ev.records)) return;
+      let used = 0;
+      const records = ev.records.filter((r) => r && ['memory', 'course'].includes(r.kind) && typeof r.id === 'string'
+        && new RegExp(`^${r.kind === 'memory' ? 'm' : 's'}-[a-f0-9]{32}$`).test(r.id) && memoryRevision(r.revision)
+        && memoryText(r.text, 2400)).slice(0, 3)
+        .filter((r) => { used += r.text.length; return used <= 2400; });
+      if (!records.length) return;
+      const list = make('ul', { className: 'gz-ask-recall-records' });
+      for (const r of records) {
+        const label = r.kind === 'memory' ? t('Saved memory') : typeof r.source?.title === 'string' && r.source.title.trim() ? r.source.title.slice(0, 200) : t('Course material');
+        list.append(make('li', { className: 'gz-ask-recall-record' }, make('span', { textContent: label, dir: 'auto' }), make('pre', { textContent: r.text, dir: 'auto' })));
+      }
+      const details = make('details', {}, make('summary', { textContent: t('Memory used') }), list);
+      if (run.recall?.isConnected) run.recall.replaceChildren(details);
+      else run.recall = put(make('li', { className: 'gz-ask-recall' }, details));
+      pin();
+    };
+
     const grow = (q) => { if (!q?.style) return; q.style.height = 'auto'; if (q.scrollHeight) q.style.height = `${Math.min(q.scrollHeight, LIMIT.grow)}px`; };
     const empty = () => {
       const chips = STARTERS().map((s) => {
@@ -555,6 +691,8 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
         } else if (ev.type === 'approve') say(t('Waiting for your answer in Glaze’s window'));
         else if (ev.type === 'context') context(ev, first);
         else if (ev.type === 'summary') folded(ev);
+        else if (ev.type === 'memory') memoryReceipt(ev.receipt);
+        else if (ev.type === 'recall') memoryRecall(run, ev);
         else if (ev.type === 'tools' && Array.isArray(ev.tools) && ev.tools.length <= 64 && ev.tools.every((n) => typeof n === 'string' && /^[a-z_]{1,64}$/.test(n))) memo.tools = ev.tools.slice();
         else if (ev.type === 'action' && ev.action && typeof ev.action === 'object') queued.push(ev.action);
       });
@@ -590,7 +728,8 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
           turns.push({ question: q, answer: String(end.answer?.text || ''), li });
           perform(queued, li);
         }
-      } else if (['off', 'feature'].includes(end.error)) onOff?.();
+      } else if (end.error === 'off' && end.feature === 'memory') say(t('Memory is off'));
+      else if (['off', 'feature'].includes(end.error)) onOff?.();
       else if (end.error === 'cancelled') say('');
       else {
         const text = said(end.error);
@@ -606,7 +745,8 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
           ask({ question: q, attempt, shown: true, fired });
         });
       }
-      if (alive_ && root.isConnected && (dialog || root.contains(focused()))) q_.focus();
+      if (alive_ && root.isConnected && (dialog || root.contains(focused())) && !focused()?.closest('.gz-ask-memory')
+        && ![...memoryCards.values()].some((s) => s.editor && s.busy)) q_.focus();
     };
 
     const submit = async (e) => {
@@ -624,12 +764,14 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       accepting = false;
       root.inert = true;
       actionEpoch++; afterReveal.clear();
+      memoryClear();
       if (current) port.post({ id: current, op: 'cancel' });
       current = 0; pending = null;
     };
     const clear = (e) => {
       if (!real(e) || current || pending || !alive_ || !accepting) return;
       lastAsk = 0; sentFrom = 0;
+      memoryClear();
       port.hangUp();
       turns.length = 0;
       memo.summary = ''; memo.folded = 0; memo.tools = [];
