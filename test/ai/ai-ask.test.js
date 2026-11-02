@@ -84,6 +84,24 @@ test('route: the student\'s own records go to agent.tools with the tools their t
   assert.deepEqual(K.route('what i gotta do before tomorrow; debug my Python loop', { level: 3 }).task, 'study.help');
   assert.equal(K.route('what i gotta do before tomorrow; debug my Python loop', { level: 3 }).subject, 'code');
   assert.equal(K.route('When is my Debug Lab due?', { level: 3 }).task, 'agent.tools');
+  for (const question of ['the earlier one please', "i'm still lost", 'not those, the other set',
+    'same deal but only the short ones', 'uh wait, the other class']) {
+    assert.deepEqual(K.route(question, { level: 3, history: natural }).tools, expected, 'the model gets reads for unfamiliar contextual intent: ' + question);
+    assert.deepEqual(K.route(question, { level: 3, history: [...natural,
+      { question: 'not those, the other set', answer: 'Which set did you mean?' },
+      { question: "i'm still lost", answer: 'We can check again.' }] }).tools, expected);
+    assert.equal(K.route(question, { level: 3 }).task, 'study.help', 'no generic first-turn expansion');
+    for (const previous of ['Help me solve this equation.', 'Debug my Python loop.', 'Write my essay.',
+      'Do my homework.', '"What do I have due tomorrow?"', 'Mark Lab report 3 as done', 'What are my grades?']) {
+      assert.equal(K.route(question, { level: 3, history: [...natural, { question: previous, answer: 'Request failed.' }] }).task,
+        'study.help', 'a different substantive topic or untrusted anchor stops context inheritance');
+    }
+  }
+  for (const question of ['"the earlier one please"', '> the earlier one please', '```text\nthe earlier one please\n```',
+    'draft my response', 'implement my solution', 'do my homework', '2x + 3 = 7', 'my essay thesis', 'photosynthesis']) {
+    assert.equal(K.route(question, { level: 3, history: natural }).task, 'study.help', question);
+  }
+  assert.equal(K.route('the earlier one please', { level: 3, history: natural, attempt: 'My answer is x = 4.' }).task, 'study.help');
   const content = { site: 'ultra', view: 'content', course: { id: '_25_1' }, content: { id: '_7_1', kind: 'document' } };
   for (const question of ['Read the whole item and list the required materials and delivery format.', 'Read the full item and summarize its materials and later instructions.']) {
     const r = K.route(question, { level: 3, current: content });
