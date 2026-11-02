@@ -170,6 +170,25 @@ Ask Rime runs both (below); the worker loads them with the harness (`aiFiles`). 
   offered tool (`constraint()`), and the provider reads a native call back as the task's JSON. A stock model reads the
   harness's messages, held to the task's schema.
 
+### Active context
+
+`agent.tools` accepts optional `current`, cleaned by the pure `ai/current.js` boundary (`GZ_AI_CURRENT.clean(raw, { caps })`). Missing context preserves the earlier request format. Context is captured again for each question/retry and worker-validated against the live page and active Writer binding; a failed or ambiguous binding is omitted. It never becomes a current identity in history or summary.
+
+```
+{ site: "canvas" | "ultra" | "moodle",
+  view: "page" | "course" | "assignment" | "content" | "discussion" | "document" | "dashboard",
+  url?, title?, course?: { id, name? }, assignment?: { id, title? },
+  content?: { id, title?, kind? },
+  document?: { id?, title?, kind?, revision?, saved? },
+  material?: { text, source: "instructions" | "writer", truncated: boolean } }
+```
+
+Titles/names are plain text, trimmed to 240 characters. Canvas/Moodle resource IDs are 1–20 decimal digits; Ultra also accepts its `_number_number` IDs (at most 40 characters). Document IDs use Writer's existing opaque `document:` plus 32 lowercase hex digits, never a storage key. Revision is a nonnegative safe integer; saved is a boolean. Content kind is `page`, `file`, `assignment`, `quiz`, `discussion`, `link`, `document`, `folder`, `module` or `test`; document kind is `paper`, `compose`, `discussion`, `journal`, `assignment` or `document`. Invalid optional groups are omitted; unknown top-level fields or an invalid site/view refuse the context. URLs are bounded HTTP(S) URLs with no credentials or fragment and only typed LMS identifier query parameters. The worker also checks their live origin.
+
+The request carries metadata as fenced untrusted `current` data and excerpt text separately as `current material`, with its source/truncated flag in metadata. Writer material requires an active document; instructions require an assignment/content identity. Material uses at most 768 UTF-8 bytes at 4K, scaled by trusted provider caps up to 128K; truncation preserves identity and sets `truncated`. The complete request uses the same count path and answer/thinking reserve as inference. Cloud, native layout and `fromRequest` roundtrip the same cleaned blocks; no new special tokens are needed.
+
+Typed current IDs provide narrowly matching read provenance: course IDs for course reads, course plus assignment for `assignment_read`, course plus content for `content_read` (and discussion content for `discussion_read`), and opaque document handles for `document_read`/`document_assignment`. Current supplies no account ID: the worker binds current-dependent reads to the freshly verified live account and rejects a conflicting explicit account. Independently question/result-grounded requests keep their original account. Unresolved live identity requires discovery/clarification. Account IDs, item types, writes, navigation and reminders still require their existing evidence. Titles, URL substrings and material never provide IDs. Current context proves no due date, grade, submission state, assignment requirement or completed action; those still require tools. A Writer excerpt can include unsaved changes; `document_read` reports saved content. Explicit user targets take precedence over implicit current references.
+
 ## Ask Rime
 
 Rime is Glaze's assistant; its voice comes from the fine-tune alone, so no task's instructions name it. Internal ids keep
