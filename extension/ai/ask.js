@@ -128,11 +128,26 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
   // Only direct current user words select memory management. A quotation, supplied document or earlier turn cannot.
   const memoryQuestion = (question) => {
-    const q = MEMORY().userText(question).normalize('NFKC').toLowerCase();
     if (MEMORY().forgetRequested(question)) return true;
-    const target = /\b(?:memor(?:y|ies)|saved (?:facts?|preferences?)|about (?:me|my preferences)|my (?:facts?|preferences?)|memorias?|recuerdos?|mis preferencias|sobre m[ií]|lembran[çc]as?|minhas prefer[eê]ncias|sobre mim|m[ée]moires?|souvenirs?|mes pr[ée]f[ée]rences|sur moi|erinnerungen?|meine vorlieben|[üu]ber mich|herinneringen|mijn voorkeuren|over mij)\b/u;
-    const action = /\b(?:remember|recall|show|list|read|search|save|update|edit|correct|change|recuerda|recuerdas|recordar|muestra|guarda|actualiza|corrige|lembrar|lembra|lembre|mostre|salve|atualize|corrija|rappelle|souviens|souvenez|montre|affiche|enregistre|corrige|modifie|erinnere|erinnerst|zeige|speichere|korrigiere|[äa]ndere|onthoud|herinner|toon|bewaar|corrigeer|wijzig)\b/u;
-    return target.test(q) && action.test(q) || /\b(?:remember (?:that )?(?:i|my)|recuerda (?:que )?(?:yo|mi)|lembre (?:que )?(?:eu|minha?)|(?:rappelle-toi|souviens-toi) que je|merke dir[,]? (?:dass ich|meine?)|onthoud (?:dat ik|mijn))\b/u.test(q);
+    // JavaScript's \b is ASCII: an accented personal pronoun must keep its boundary too. Inflected verbs and nouns
+    // describe the operation; ownership/"about me" supplies personal scope, rather than any mention of memory in schoolwork.
+    const word = (source) => new RegExp(String.raw`(?<![\p{L}\p{N}_])(?:${source})(?![\p{L}\p{N}_])`, 'u');
+    const record = '(?:memor(?:y|ies)|preferences?|facts?|mem[oó]rias?|recuerdos?|lembran[çc]as?|prefer[eê]ncias?|preferencias?|fatos?|datos?|m[ée]moires?|souvenirs?|pr[ée]f[ée]rences?|faits?|erinnerung(?:en)?|vorlieben?|pr[äa]ferenz(?:en)?|fakten|tatsachen?|herinnering(?:en)?|voorkeur(?:en)?|feit(?:en)?)';
+    const modifiers = String.raw`(?:[\p{L}-]+\s+){0,2}`;
+    const owned = word(String.raw`(?:my|mi|mis|minha?s?|meus?|mes|ma|mon|meine[nmrs]?|mijn)\s+${modifiers}${record}`);
+    const about = word(String.raw`about\s+(?:me|myself)|(?:sobre|de)\s+m[ií]|sobre\s+mim|sur\s+moi|[àa]\s+mon\s+sujet|(?:von|[üu]ber|ueber)\s+(?:mir|mich)|over\s+mij`);
+    const remembered = word(String.raw`(?:saved|stored|personal|guardad[oa]s?|salv[oa]s?|pessoais|enregistr[ée]s?|personnels?|gespeicherte[nmrs]?|pers[öo]nliche[nmrs]?|opgeslagen|persoonlijke)\s+${record}`);
+    const recall = word(String.raw`remember|recall|know|recuerd(?:a|as|an|e|en)|record(?:ar|as|a|am|o|e|em)|lembr(?:a|as|am|ar|o|ou|e|em|ei)|souviens|souvenez|rappell\p{L}*|erinner(?:e|st|t|n)|wei(?:ß|ss)t?|herinner(?:t|en|de|den)?|weet`);
+    const read = word(String.raw`show|list|read|search|find|look\s+up|busc\p{L}*|muestr\p{L}*|procur\p{L}*|pesquis\p{L}*|mostr\p{L}*|cherch\p{L}*|recherch\p{L}*|montr\p{L}*|affich\p{L}*|lis|lisez|such\p{L}*|zeig\p{L}*|lies|lesen|zoek\p{L}*|toon\p{L}*|lees`);
+    const save = word(String.raw`save|store|keep|note|guarda\p{L}*|apunt\p{L}*|salv\p{L}*|anot\p{L}*|enregistr\p{L}*|conserv\p{L}*|retiens|speicher\p{L}*|notier\p{L}*|bewaar\p{L}*|noteer\p{L}*|onthoud`);
+    const change = word(String.raw`update|edit|correct|change|actualiz\p{L}*|corrig\p{L}*|atualiz\p{L}*|modifi\p{L}*|korrigier\p{L}*|[äa]nder\p{L}*|corrigeer\p{L}*|wijzig\p{L}*`);
+    const stated = word(String.raw`(?:this|that|these|a|an|este|esta|estos|estas|un|una|esse|essa|estes|estas|um|uma|ce|cet|cette|ces|une|diese[nmrs]?|eine[nmrs]?|dit|deze|een)\s+${modifiers}${record}`);
+    const self = word(String.raw`remember\s+(?:that\s+)?i|recuerda\s+(?:que\s+)?yo|lembre\s+(?:que\s+)?eu|(?:rappelle-toi|souviens-toi)\s+que\s+je|merke\s+dir[,]?\s+dass\s+ich|onthoud\s+(?:dat\s+)?ik`);
+    return MEMORY().userText(question).normalize('NFKC').toLowerCase().split(/[\u0000\n.!?;]+/u).some((q) => {
+      const personal = owned.test(q) || remembered.test(q) || about.test(q) && word(record).test(q);
+      return personal && (recall.test(q) || read.test(q) || save.test(q) || change.test(q))
+        || about.test(q) && recall.test(q) || stated.test(q) && save.test(q) || self.test(q);
+    });
   };
   // Reuse the affirmative request grammar, including its negation/conditional checks. A correction verb elsewhere in
   // a school question is no permission to replace a preference the student edited themselves.
