@@ -68,6 +68,10 @@ test('route: the student\'s own records go to agent.tools with the tools their t
   const corrected = [...natural, { question: 'which one should i start', answer: 'Request failed.' },
     { question: 'nah i meant bio', answer: 'Request failed.' }];
   assert.deepEqual(K.route('ok what about next week', { level: 3, history: corrected }).tools, expected);
+  for (const history of [
+    [...corrected, { question: 'nah i meant debug my Python loop', answer: 'Show your attempt.' }],
+    [{ question: '"Compare my assignments by difficulty."', answer: 'Request failed.' }, ...corrected.slice(1)],
+  ]) assert.equal(K.route('ok what about next week', { level: 3, history }).task, 'study.help', 'a date follow-up cannot bypass work guards or quoted-only intent');
   for (const question of ['which one should i start', 'nah i meant bio', 'ok what about next week']) {
     if (!question.includes('next week')) assert.equal(K.route(question, { level: 3 }).task, 'study.help', 'no invented records antecedent');
     if (!question.includes('next week')) assert.equal(K.route(question, { level: 3, history: [{ question: 'Help me solve this equation.', answer: 'Try undoing addition.' }] }).task, 'study.help');
