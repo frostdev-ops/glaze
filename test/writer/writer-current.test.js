@@ -5,17 +5,18 @@ const vm = require('node:vm');
 const source = () => fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer/frame/writer-current.js'), 'utf8');
 const setup = (kind = 'assignment') => {
   const events = {}, messages = [], parent = [], hooks = {}, listeners = {};
-  let text = 'Draft body', selected = 'Draft', key = 'school.test|_2_1|_7_1|_21_1';
-  const editor = { view: { state: { doc: { textContent: text, textBetween: () => selected }, selection: { from: 0, to: 5 } } } };
+  let key = 'school.test|_2_1|_7_1|_21_1';
+  const doc = (text) => ({ textContent: text, content: { size: text.length }, textBetween: (from, to) => text.slice(from, to) });
+  const editor = { view: { state: { doc: doc('Draft body'), selection: { from: 0, to: 5 } } } };
   const port = { onMessage: { addListener: (f) => { port.answer = f; } }, onDisconnect: { addListener() {} }, postMessage: (m) => messages.push(m), disconnect() {} };
   const context = vm.createContext({ crypto: require('node:crypto').webcrypto, document: { visibilityState: 'visible', hasFocus: () => true, addEventListener: (e, f) => { listeners[e] = f; } },
     addEventListener: (e, f) => { events[e] = f; },
-    chrome: { runtime: { connect: () => port, onMessage: { addListener() {} }, id: 'glaze' } },
+    chrome: { runtime: { connect: ({ name }) => { assert.equal(name, 'glaze:ask-writer'); return port; }, onMessage: { addListener() {} }, id: 'glaze' } },
     GZ_WRITER_FRAME: { on: (e, f) => { hooks[e] = f; }, say: (m) => parent.push(m), kind: () => kind, mode: () => 'paper', context: () => ({ kind, paper: { course: '_7_1' } }), editor: () => editor },
     GZ_WRITER_PAPER: { current: () => ({ key: () => key, kind: () => 'paper', paper: () => ({ title: 'Title' }) }) } });
   vm.runInContext(source(), context);
   hooks.ready();
-  return { port, parent, messages, events, hooks, editor, listeners, setKey: (v) => { key = v; }, update: () => { editor.view.state.doc = { textContent: 'Changed body', textBetween: () => selected }; hooks.change(); } };
+  return { port, parent, messages, events, hooks, editor, listeners, setKey: (v) => { key = v; }, setKind: (v) => { kind = v; hooks.context(); }, update: () => { editor.view.state.doc = doc('Changed body'); hooks.change(); } };
 };
 test('dedicated Ask binding is read-only, independent of MCP settings, and contains bounded editor material', () => {
   const p = setup();
@@ -41,6 +42,66 @@ test('old revision, replaced key, and test editors cannot be read by an old bind
   assert.equal(p.messages.at(-1).value, undefined);
   const restricted = setup('test');
   assert.equal(restricted.parent.length, 0);
+});
+
+test('draft and selection reads are bounded before extracting text', () => {
+  const p = setup(), reads = [];
+  p.editor.view.state.doc = {
+    content: { size: 1000000 },
+    get textContent() { assert.fail('must not materialize the whole draft'); },
+    textBetween(from, to, separator) { reads.push([from, to]); assert.ok(to - from <= 3073); assert.equal(separator, '\n'); return 'x'.repeat(to - from); },
+  };
+  p.editor.view.state.selection = { from: 500000, to: 999999 };
+  p.hooks.change();
+  const b = p.parent.at(-1);
+  p.port.answer({ id: 1, op: 'current', token: b.token, revision: b.revision });
+  assert.ok(reads.some(([from]) => from === 500000), 'selection is read from its actual position');
+  assert.ok(reads.some(([from]) => from === 0), 'draft has its own bounded read');
+  assert.equal(p.messages.at(-1)?.value?.truncated, true);
+  assert.ok(p.messages.at(-1).value.text.length <= 3072);
+});
+
+test('an ineligible document cannot restore an earlier revision when it becomes eligible again', () => {
+  const p = setup(), b = p.parent.at(-1);
+  p.setKind('test');
+  assert.equal(p.parent.at(-1).token, null);
+  p.setKind('assignment');
+  p.port.answer({ id: 1, op: 'current', token: b.token, revision: b.revision });
+  assert.equal(p.messages.at(-1).value, undefined);
+  assert.ok(p.parent.at(-1).revision > b.revision);
+});
+
+const parentSetup = () => {
+  const source = fs.readFileSync(require('node:path').join(__dirname, '../../extension/writer/page/writer.js'), 'utf8');
+  const start = source.indexOf('  let activeCurrent'), end = source.indexOf('  const declined', start);
+  const hearStart = source.indexOf("    if (m.type === 'ask:binding')"), hearEnd = source.indexOf("    if (m.type === 'ready'", hearStart);
+  const listeners = {}, document = { activeElement: null, addEventListener: (e, f) => { listeners[e] = f; } };
+  const context = vm.createContext({ document, boxes: new Map(), sameBox: (b) => b.live });
+  vm.runInContext(source.slice(start, end) + '\nglobalThis.capture = {current,pinCurrent,hear: (box,m) => {' + source.slice(hearStart, hearEnd) + '}};', context);
+  const box = { editor: {}, frame: { isConnected: true }, live: true };
+  context.boxes.set(box.editor, box); document.activeElement = box.frame;
+  context.capture.hear(box, { type: 'ask:binding', token: 'a'.repeat(32), revision: 1, focused: true });
+  return { context, box, document, listeners, capture: context.capture };
+};
+
+test('an unready or ambiguous focused Writer never falls back to a previous document', () => {
+  for (const ambiguous of [false, true]) {
+    const p = parentSetup();
+    assert.equal(p.capture.pinCurrent().revision, 1);
+    const other = { editor: {}, frame: ambiguous ? p.box.frame : { isConnected: true }, live: true };
+    p.context.boxes.set(other.editor, other);
+    p.document.activeElement = other.frame;
+    assert.equal(p.capture.pinCurrent(), null);
+    assert.equal(p.capture.current(), null);
+  }
+});
+
+test('a binding delivered before frame focus is retained when Ask takes focus', () => {
+  const p = parentSetup();
+  p.listeners.focusin({ isTrusted: true, target: { closest: () => null } });
+  assert.equal(p.capture.pinCurrent().revision, 1, 'direct frame focus establishes a pin');
+  p.document.activeElement = {};
+  assert.equal(p.capture.pinCurrent()?.revision, 1, 'Ask focus retains that exact pin');
 });
 
 test('parent pins one exact frame and revision, omitting replacements and ambiguous focus', () => {

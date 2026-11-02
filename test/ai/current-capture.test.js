@@ -11,7 +11,13 @@ const page = (url, site, elements = {}, extra = {}) => {
   vm.runInContext(source(), context);
   return { get: () => JSON.parse(JSON.stringify(context.GZ_ASK_CURRENT.capture())), location, context };
 };
-const visible = (text) => ({ innerText: text, getClientRects: () => [1], closest: () => null });
+const visible = (text, children = []) => {
+  const nodes = [{ nodeType: 3, nodeValue: text }, ...children];
+  const el = { nodeType: 1, tagName: 'DIV', innerText: text + children.map((c) => c.innerText).join(''), childNodes: nodes, getClientRects: () => [1], closest: () => null, getAttribute: () => null };
+  for (let i = 0; i < nodes.length; i++) { nodes[i].parentElement = el; nodes[i].nextSibling = nodes[i + 1] || null; }
+  el.firstChild = nodes[0];
+  return el;
+};
 test('capture uses live Canvas identity and visible explicit instruction roots, never page fallback', () => {
   const p = page('https://school.test/courses/7/assignments/21?token=secret', 'canvas', { '#assignment_show .description': visible('Visible instructions') });
   assert.deepEqual(p.get(), { currentPage: 'https://school.test/courses/7/assignments/21?token=secret', current: { site: 'canvas', view: 'assignment', url: 'https://school.test/courses/7/assignments/21', title: 'School', course: { id: '7' }, assignment: { id: '21' }, material: { text: 'Visible instructions', source: 'instructions', truncated: false } } });
@@ -39,4 +45,27 @@ test('private Writer binding is separate from model context and absent when ambi
   assert.equal(p.get().current.document, undefined);
   p.context.GZ_WRITER.current = () => null;
   assert.equal(p.get().writer, undefined);
+});
+
+test('transparent ancestors and excluded descendants never contribute instruction material', () => {
+  const ghost = visible('INVISIBLE ANSWERS'); ghost.style = { opacity: '0', display: 'block' };
+  const privateText = visible('ARIA ANSWERS'); privateText.getAttribute = (name) => name === 'aria-hidden' ? 'true' : null;
+  const inert = visible('INERT ANSWERS'); inert.getAttribute = (name) => name === 'inert' ? '' : null;
+  const root = visible('Visible directions', [ghost, privateText, inert]);
+  const p = page('https://school.test/courses/7/assignments/21', 'canvas', { '#assignment_show .description': root });
+  assert.equal(p.get().current.material.text, 'Visible directions');
+  root.parentElement = { style: { opacity: '0', display: 'block' }, getAttribute: () => null };
+  assert.equal(p.get().current.material, undefined);
+});
+
+test('live test evidence excludes a pinned Writer as well as instruction material', () => {
+  const writer = { current: () => ({ token: 'a'.repeat(32), revision: 1 }) };
+  const canvas = page('https://school.test/courses/7/assignments/21', 'canvas', {
+    '#assignment_show .description': visible('Directions'), '#quiz_show, #questions.assessment_questions, .quiz-taking': {},
+  }, { GZ_WRITER: writer }).get();
+  assert.equal(canvas.current.assignment, undefined); assert.equal(canvas.current.material, undefined); assert.equal(canvas.writer, undefined);
+  const ultra = page('https://school.test/ultra/courses/_7_1/assessment/_21_1/attempt', 'ultra', {
+    '#bb-editorassignment-attempt-authoring-instructions': visible('Directions'), 'bb-attempt-canvas': {},
+  }, { GZ_WRITER: writer }).get();
+  assert.equal(ultra.current.assignment, undefined); assert.equal(ultra.current.material, undefined); assert.equal(ultra.writer, undefined);
 });

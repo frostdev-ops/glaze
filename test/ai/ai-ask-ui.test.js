@@ -935,3 +935,31 @@ test('every question and retry captures the current page after asynchronous admi
   await settle();
   assert.equal(P.posted.filter((m) => m.op === 'ask').at(-1).current.course.id, '3');
 });
+
+test('an existing chat pins Writer before pointer focus even before the capture module loads', async () => {
+  const P = page();
+  const host = new El('section', P.doc); P.doc.body.append(host);
+  const chat = P.context.GZ_ASK_CHAT.mount(host);
+  const writerFrame = {}, pins = [];
+  P.context.GZ_WRITER = { pinCurrent: () => { pins.push(P.doc.activeElement); } };
+  P.doc.activeElement = writerFrame;
+  P.doc.fire(chat.root.querySelector('textarea'), 'pointerdown');
+  assert.equal(pins.at(-1), writerFrame);
+  chat.stop();
+  const count = pins.length;
+  P.doc.fire(host, 'pointerdown');
+  assert.equal(pins.length, count, 'stopped chats release their pin listener');
+});
+
+test('programmatic chat focus pins the newly active Writer before moving focus', () => {
+  const P = page();
+  const host = new El('section', P.doc); P.doc.body.append(host);
+  const chat = P.context.GZ_ASK_CHAT.mount(host);
+  const writerFrame = {}, pins = [];
+  P.context.GZ_WRITER = { pinCurrent: () => { pins.push(P.doc.activeElement); } };
+  P.doc.activeElement = writerFrame;
+  chat.focus();
+  assert.equal(pins.at(-1), writerFrame);
+  assert.notEqual(P.doc.activeElement, writerFrame);
+  chat.stop();
+});
