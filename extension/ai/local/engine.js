@@ -539,7 +539,10 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       const mk = (n) => storage(n * 4);
       fits(ctx * c.nRot * 4, device.limits.maxStorageBufferBindingSize);
       fits(ctx * c.nRotSwa * 4, device.limits.maxStorageBufferBindingSize);
-      for (let i = 0; i < c.nLayer; i++) if (c.layers[i] !== 'conv') fits(ctx * c.nHeadKv[i] * hd * kvb, device.limits.maxStorageBufferBindingSize);
+      for (let i = 0; i < c.nLayer; i++) if (c.layers[i] !== 'conv') {
+        const slots = c.layers[i] === 'swa' ? Math.min(ctx, c.window + chunk) : ctx;
+        fits(slots * c.nHeadKv[i] * hd * kvb, device.limits.maxStorageBufferBindingSize);
+      }
       const B = {
         ids: mk(chunk), x: mk(chunk * E), n: mk(chunk * E), a: mk(chunk * E), y: mk(chunk * E),
         big: mk(chunk * hidden), up: mk(chunk * F), q: mk(chunk * H * hd), k: mk(chunk * kvHeads * hd), v: mk(chunk * kvHeads * hd), g: mk(chunk * H),
