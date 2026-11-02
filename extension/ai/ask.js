@@ -460,6 +460,36 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const retained = (history) => history.slice(-Math.floor(LIMIT.turns * scale())).map((h) => ({ question: h.question.slice(0, Math.floor(LIMIT.turn * scale())), answer: h.answer.slice(0, Math.floor(LIMIT.turn * scale())) }));
     const materialOf = (steps, zone, how) => steps.filter((s) => !s.call.name.startsWith('memory_'))
       .map((s) => AT().readable(s.result, zone, how, contextCaps) || '').join('\n').slice(0, Math.floor(LIMIT.material * scale()));
+    // study.help has one fenced material field rather than agent.tools' structured current. Preserve the provenance
+    // inside it, and never use a saved body to complete a different live/partial draft.
+    const studyMaterial = (context, steps, documents, question, zone) => {
+      const current = !documents.length && !/\bdocument:[a-f0-9]{32}\b/u.test(question) || documents.some((d) => d.currentBound);
+      const blocks = [], limit = Math.floor(LIMIT.material * scale());
+      let left = limit;
+      const append = (provenance, text) => {
+        if (!text) return;
+        let body = text, json = JSON.stringify({ ...provenance, text: body });
+        while (json.length > left && body.length) {
+          body = body.slice(0, Math.floor(body.length / 2)).replace(/[\ud800-\udbff]$/u, '');
+          json = JSON.stringify({ ...provenance, truncated: true, text: body });
+        }
+        if (body && json.length <= left) { blocks.push(json); left -= json.length + 1; }
+      };
+      const material = current && context?.material, doc = context?.document;
+      if (material) append({ label: material.source === 'writer' ? doc?.saved === false ? 'Live unsaved Writer draft' : 'Live Writer draft' : 'Current page instructions',
+        source: material.source, truncated: material.truncated === true, ...(doc?.id && { document: doc.id }),
+        ...(Number.isSafeInteger(doc?.revision) && { revision: doc.revision }), ...(typeof doc?.saved === 'boolean' && { saved: doc.saved }) }, material.text);
+      for (const s of steps) {
+        if (s.call.name.startsWith('memory_')) continue;
+        if (material?.source === 'writer' && s.call.name === 'document_read' && s.call.arguments.document === doc?.id
+          && documents.some((d) => d.currentBound && d.document === doc.id)) continue;
+        const text = AT().readable(s.result, zone, undefined, contextCaps);
+        if (s.call.name === 'document_read') append({ label: 'Saved Writer document', source: 'document_read', document: s.call.arguments.document, saved: true,
+          truncated: s.result?.truncated === true || s.result?.cut === true || s.result?.pages > 1 || s.result?.outlineCut === true }, text);
+        else append({ source: s.call.name, truncated: s.result?.truncated === true || s.result?.cut === true }, text);
+      }
+      return { material: blocks.join('\n'), current };
+    };
     const measure = async (task, input, signal) => {
       if (env.counts !== true) return null;
       try { const a = await broker({ op: 'count', feature: FEATURE, task, input }, signal); if (Number.isSafeInteger(a.window) && a.window > 0) contextCaps = { context: Math.min(131072, a.window) }; return Number.isSafeInteger(a.used) && Number.isSafeInteger(a.window) ? { used: a.used, window: a.window, reserve: Number.isSafeInteger(a.reserve) ? a.reserve : 0, exact: a.exact === true } : null; }
@@ -664,6 +694,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const keep = (a) => { if (a.type === 'keepalive') post({ id, type: 'keepalive' }); };
       let level = 1;
       let active, memory;
+      const documents = []; // private read provenance; never added to the public current/task schema
       const validate = async () => {
         if (signal.aborted) throw cancelled();
         if (active?.valid && !await F().wait(() => active.valid(), signal)) throw R().error('changed');
@@ -721,7 +752,10 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       };
       const call = async (c, input) => {
         await validate();
-        const bound = active?.bind ? active.bind(c, AT().task.input(input, { caps: contextCaps })) : c;
+        const supplied = AT().task.input(input, { caps: contextCaps });
+        const bound = active?.bind ? active.bind(c, supplied) : c;
+        if (['document_read', 'document_assignment'].includes(c.name)) documents.push({ document: c.arguments.document,
+          currentBound: !!supplied && AT().currentBound(c, supplied) });
         const out = await tool(bound, signal);
         if (memory?.enabled) {
           const result = out?.result;
@@ -767,7 +801,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (active?.page) current.page = active.page;
         const context = active?.current;
         const inCurrent = context ? { current: context } : {};
-        const studyContext = context ? { context: { kind: context.assignment ? 'assignment' : context.view, course: { name: context.course?.name || '' }, ...(context.assignment && { assignment: { title: context.assignment.title || '' } }) } } : {};
+        let studyContext = context ? { context: { kind: context.assignment ? 'assignment' : context.view, course: { name: context.course?.name || '' }, ...(context.assignment && { assignment: { title: context.assignment.title || '' } }) } } : {};
         level = await env.level?.().catch(() => 1) ?? 1;
         if (signal.aborted) throw cancelled();
         // A fired record the student asked about: its own turn for a model trained on it; else the say as any question.
@@ -829,19 +863,19 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (r.task === 'study.help') {
           // Help naming the student's records (level 3): agent.tools' help turn reads them; study.help then helps with what
           // was read as its material, under its own rules. Its reader's answer is never shown.
-          let material = context?.material?.text || '', tools = ['accounts_list'];
+          let seen = null, tools = ['accounts_list'];
           if (r.read) {
             const reader = { question, tools: r.read, steps: [], now: env.now(), zone, locale, first: true, help: r.subject, ...inCurrent, ...inRecall };
             tools = await offer(r.read, reader, signal, count);
             tools = await withSave(tools, reader);
             // A reader that can't finish (its turn refused, too many steps) leaves study help to answer without it.
-            let seen = null;
             try { seen = await episode({ question, tools, locale, now: env.now(), zone, run, call, signal, first: true, help: r.subject, ...inCurrent, ...inRecall, caps: contextCaps }); }
             catch (e) { if (signal.aborted || !['check', 'steps', 'refusal', 'invalid-response'].includes(R().code(e))) throw e; }
             if (seen?.declined) return post({ id, type: 'end', task: r.task, declined: true });
-            if (seen) material = [material, materialOf(seen.steps, zone)].filter(Boolean).join('\n').slice(0, Math.floor(LIMIT.material * scale()));
           }
           else await optionalSave();
+          const projected = studyMaterial(context, seen?.steps || [], documents, question, zone), material = projected.material;
+          if (!projected.current) studyContext = {};
           // The page renews this port between questions. Discover the provider's current window before cutting history;
           // record-reading help already did so through offer(), but a study-only follow-up has no reader.
           if (level >= 3 && !r.read) await count('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...studyContext, ...inRecall, ...(material && { material }) });
