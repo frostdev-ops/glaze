@@ -11,7 +11,7 @@ const call = (name, arguments_ = {}, kind = 'read') => ({ call: { name, argument
 const study = { kind: 'concept', step: null, reply: 'Think about how each part depends on the whole.', followUp: null };
 const pause = () => new Promise((resolve) => setTimeout(resolve, 0));
 const settled = async (done) => { for (let i = 0; i < 500; i++) { if (done()) return; await pause(); } assert.fail('Ask did not settle'); };
-const harness = ({ script = {}, counts, verified = true } = {}) => {
+const harness = ({ script = {}, counts, verified = true, active, assignment } = {}) => {
   const data = {}, local = { get: async (keys) => structuredClone(Object.fromEntries((keys === null ? Object.keys(data) : [].concat(keys)).filter((k) => Object.hasOwn(data, k)).map((k) => [k, data[k]]))),
     set: async (patch) => { Object.assign(data, structuredClone(patch)); } };
   let random = 0;
@@ -23,7 +23,7 @@ const harness = ({ script = {}, counts, verified = true } = {}) => {
   registry.add({ name: 'todo_list', kind: 'read', group: 'courses', scope: 'account', title: 'To-dos', description: 'To-dos', parameters: A.SPECS.find((s) => s.name === 'todo_list').parameters,
     run: async (_, ctx) => ({ account: ctx.account, at: NOW, items: [] }) });
   registry.add({ name: 'assignment_read', kind: 'read', group: 'assignments', scope: 'account', title: 'Assignment', description: 'Assignment', parameters: A.SPECS.find((s) => s.name === 'assignment_read').parameters,
-    run: async (_, ctx) => ({ account: ctx.account, title: 'Invented lab', instructions: 'Compare two invented samples.', at: NOW }) });
+    run: async (_, ctx) => assignment || ({ account: ctx.account, title: 'Invented lab', instructions: 'Compare two invented samples.', at: NOW }) });
   const broker = (port) => port.onMessage.addListener(async (m) => {
     if (m.op === 'count') { state.counts.push(m); const fit = counts ? counts(m.input, m.task) : { used: 1000, window: 4096, reserve: 768, exact: true }; return port.postMessage({ id: m.id, type: 'end', ...fit }); }
     if (m.op !== 'run') return;
@@ -36,7 +36,7 @@ const harness = ({ script = {}, counts, verified = true } = {}) => {
     registry: { get: (n) => registry.get(n), describe: (t) => ({ name: t.name, inputSchema: t.parameters }) }, state: async () => ({}), refresh: async () => null,
     accounts: async () => [{ account: state.account, origin: 'https://school.instructure.com' }], local, keys: async () => Object.keys(data), now: () => NOW, turn: (f) => f(), zone: 'UTC', level: async () => 3,
     page: () => ({ url: 'https://school.instructure.com/courses/25' }), counts: counts ? true : false,
-    current: async () => ({ ...(verified && { account: state.account }), page: { site: 'canvas', url: 'https://school.instructure.com/courses/25' },
+    current: async () => ({ ...(verified && { account: state.account }), ...(active && { current: structuredClone(active) }), page: { site: 'canvas', url: 'https://school.instructure.com/courses/25' },
       valid: async () => state.valid && state.account === ACC, bind: (c) => c }),
     memory: { store, on: async () => state.on },
     approve: { ask: async (...args) => { state.approvals.push(args); return 'yes'; } },
@@ -142,4 +142,64 @@ test('turns begun with Memory off use the existing study path without a save pas
   assert.equal(h.state.searches.length, 0);
   assert.deepEqual(h.state.runs.map((r) => r.task), ['study.help']);
   assert.equal(h.got.some((m) => ['memory', 'recall'].includes(m.type)), false);
+});
+
+test('explicit memory management while off returns its feature error without a model run', async (t) => {
+  const h = harness(); t.after(h.close); h.state.on = false;
+  const out = await h.ask('What do you remember about my preferences?');
+  assert.equal(out.type, 'error');
+  assert.equal(out.error, 'off');
+  assert.equal(out.feature, 'memory');
+  assert.deepEqual(h.state.runs, []);
+});
+
+test('automatic memory saving keeps all six selected school tools and uses a separate optional pass', async (t) => {
+  const question = 'What are my assignments, grades and due dates?';
+  const selected = K.route(question, { level: 3 }).tools;
+  assert.equal(selected.length, 6);
+  const h = harness({ script: { 'agent.tools': [said(), call('todo_list'), said('There are no matching records.')] } }); t.after(h.close);
+  assert.equal((await h.ask(question)).type, 'end');
+  assert.deepEqual(h.state.runs[0].input.tools, ['memory_save']);
+  assert.deepEqual(h.state.runs[1].input.tools, selected);
+  assert.equal(h.state.runs[0].input.first, undefined);
+  assert.equal(h.state.runs[0].input.history, undefined);
+  assert.equal(h.state.runs[0].input.help, undefined);
+});
+
+test('memory_save joins a main request only when its full measured request fits', async (t) => {
+  for (const fit of [true, false]) {
+    const h = harness({ counts: (input) => ({ used: input.tools?.includes('memory_save') && input.tools.length > 1 && !fit ? 3500 : 1000, window: 4096, reserve: 768, exact: true }),
+      script: { 'agent.tools': fit ? [call('todo_list'), said('There are no matching records.')] : [said(), call('todo_list'), said('There are no matching records.')] } }); t.after(h.close);
+    assert.equal((await h.ask('What is due today?')).type, 'end');
+    const main = h.state.runs.find((r) => r.input.tools.includes('todo_list'));
+    assert.equal(main.input.tools.includes('memory_save'), fit);
+    assert.equal(h.state.runs[0].input.tools.length === 1, !fit);
+    assert.ok(h.state.counts.some((r) => r.input.tools?.includes('memory_save') && r.input.tools.length > 1));
+  }
+});
+
+test('a producer begun before deletion cannot capture a new lease and save afterward', async (t) => {
+  let saved;
+  const text = 'I prefer paragraphs.';
+  const h = harness({ script: { 'agent.tools': [async (_, __, store) => {
+    await store.forget(ACC, { id: saved.receipt.id, revision: saved.receipt.revision });
+    return call('memory_save', { text, evidence: text, category: 'preference' }, 'write');
+  }, said()], 'study.help': [study] } }); t.after(h.close);
+  saved = await preference(h.store);
+  await h.ask(`${text} Explain photosynthesis.`);
+  assert.equal(h.got.some((m) => m.type === 'memory'), false);
+  assert.equal((await h.store.list(ACC)).items.length, 0);
+});
+
+test('successful verified assignment reads are ingested with their actual observed time', async (t) => {
+  const h = harness({ script: { 'agent.tools': [call('assignment_read', { course: '25', assignment: '41' }), said('The assignment asks you to compare two invented samples.')] },
+    active: { site: 'canvas', view: 'assignment', course: { id: '25' }, assignment: { id: '41' } },
+    assignment: { title: 'Invented lab', instructions: 'Compare two invented samples.', at: NOW - 60000 } }); t.after(h.close);
+  assert.equal((await h.ask('What are the instructions for this assignment?')).type, 'end');
+  const rows = (await h.store.list(ACC)).items;
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].kind, 'course');
+  assert.equal(rows[0].source.observedAt, NOW - 60000);
+  assert.equal(rows[0].source.course, '25');
+  assert.equal(rows[0].source.id, '41');
 });
