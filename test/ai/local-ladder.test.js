@@ -33,7 +33,7 @@ const MACHINES = [
       storageEstimate: { quota: 600 * GB, usage: 0.05 * GB },
       bench: () => BENCH.m5pro,
     },
-    expect: { tier: 4, id: 'rime-1.7b-q8_0', reason: 'fastest' },
+    expect: { tier: 4, id: 'rime-1.7b-r8-q8_0', reason: 'fastest' },
   },
   {
     name: 'M5 Pro, Firefox',
@@ -48,7 +48,7 @@ const MACHINES = [
       storageEstimate: { quota: 10 * GB, usage: 0.01 * GB }, // Firefox's group limit: 10 GB
       bench: () => BENCH.m5pro,
     },
-    expect: { tier: 4, id: 'rime-1.7b-q8_0', reason: 'fastest' },
+    expect: { tier: 4, id: 'rime-1.7b-r8-q8_0', reason: 'fastest' },
   },
   {
     name: 'RTX 3080 Ti, Chrome on Linux',
@@ -62,7 +62,7 @@ const MACHINES = [
       storageEstimate: { quota: 300 * GB, usage: 0.05 * GB },
       bench: () => BENCH.rtx3080ti,
     },
-    expect: { tier: 4, id: 'rime-1.7b-q8_0', reason: 'fastest' },
+    expect: { tier: 4, id: 'rime-1.7b-r8-q8_0', reason: 'fastest' },
   },
   {
     name: 'Intel Iris Xe iGPU, 8 GB RAM',
@@ -79,7 +79,7 @@ const MACHINES = [
       storageEstimate: { quota: 150 * GB, usage: 0.05 * GB }, // 256 GB SSD, 60%
       bench: () => ({ bandwidth: 68 * GB * SHARE(), overheadMs: 2 * BENCH.m5pro.overheadMs }),
     },
-    expect: { tier: 4, id: 'rime-1.7b-q8_0', reason: 'fastest' },
+    expect: { tier: 4, id: 'rime-1.7b-r8-q8_0', reason: 'fastest' },
   },
   {
     name: 'Low-end Chromebook (no shader-f16)',
@@ -95,7 +95,7 @@ const MACHINES = [
       bench: () => ({ bandwidth: 23 * GB * SHARE(), overheadMs: 4 * BENCH.m5pro.overheadMs }),
     },
     // Every size is under 15 tok/s, none is refused: the smallest, flagged slow.
-    expect: { tier: 1, id: 'rime-1.7b-q4_k_m', reason: 'slow' },
+    expect: { tier: 1, id: 'rime-1.7b-r8-q4_k_m', reason: 'slow' },
   },
   {
     name: 'SwiftShader fallback (refused)',
@@ -167,7 +167,7 @@ test('storage must hold the size plus 20%, unless it is already stored', () => {
   assert.equal(run({ ...M5, storageEstimate: free(size(4) * 1.2) }).tier, 4);
   assert.equal(run({ ...M5, storageEstimate: free(size(4) * 1.2 - 1) }).tier, 3);
   assert.equal(run({ ...M5, storageEstimate: free(size(1) * 1.2 - 1) }).reason, 'storage');
-  assert.equal(run({ ...M5, storageEstimate: free(0), stored: ['rime-1.7b-q6_k'] }).tier, 3);
+  assert.equal(run({ ...M5, storageEstimate: free(0), stored: ['rime-1.7b-r8-q6_k'] }).tier, 3);
   // No estimate (an API the browser lacks): storage does not refuse.
   assert.equal(run({ ...M5, storageEstimate: undefined }).tier, 4);
 });
@@ -199,41 +199,39 @@ test('non-finite benchmark measurements cannot select a larger model', () => {
 const pickOf = (r) => ({ tier: r.tier, reason: r.reason });
 
 test('a student may choose another size, never a refused one', () => {
-  assert.deepEqual(pickOf(run(M5, { choice: 'rime-1.7b-q6_k' })), { tier: 3, reason: 'chosen' });
+  assert.deepEqual(pickOf(run(M5, { choice: 'rime-1.7b-r8-q6_k' })), { tier: 3, reason: 'chosen' });
   // Chromebook: slow but allowed, so a larger size can be chosen.
-  assert.deepEqual(pickOf(run(MACHINES[4].input, { choice: 'rime-1.7b-q8_0' })), { tier: 4, reason: 'chosen' });
+  assert.deepEqual(pickOf(run(MACHINES[4].input, { choice: 'rime-1.7b-r8-q8_0' })), { tier: 4, reason: 'chosen' });
   // Storage refuses Q8_0 here: the automatic pick stands and says why the choice did not.
   const tight = { ...M5, storageEstimate: { quota: models.find((x) => x.tier === 3).size * 1.2, usage: 0 } };
-  const r = run(tight, { choice: 'rime-1.7b-q8_0' });
+  const r = run(tight, { choice: 'rime-1.7b-r8-q8_0' });
   assert.deepEqual({ tier: r.tier, reason: r.reason, refused: r.refused }, { tier: 3, reason: 'fastest', refused: 'storage' });
   // A refused machine stays refused whatever the choice.
-  assert.equal(run(MACHINES[5].input, { choice: 'rime-1.7b-q4_k_m' }).tier, null);
+  assert.equal(run(MACHINES[5].input, { choice: 'rime-1.7b-r8-q4_k_m' }).tier, null);
   // An unknown id is no choice.
   assert.equal(run(M5, { choice: 'nope' }).reason, 'fastest');
 });
 
 test('every size is listed with its verdict, for the advanced picker', () => {
   const r = run(MACHINES[4].input);
-  assert.deepEqual(r.quants.map((q) => q.tier), [1, 3, 4]);
+  assert.deepEqual(r.quants.map((q) => q.tier), [1, 2, 3, 4]);
   for (const q of r.quants) assert.equal(q.refused, undefined);
   assert.ok(r.quants.every((q) => q.tps > 0 && q.tps < 15));
   const s = run(MACHINES[5].input);
   assert.deepEqual(s.quants, []);
 });
 
-test('the shipped tiers are Rime\'s quants by size, with tier 2 free for a Q5_K_M', () => {
-  assert.deepEqual(models.map((m) => [m.tier, m.quant]), [[1, 'Q4_K_M'], [3, 'Q6_K'], [4, 'Q8_0']]);
+test('the shipped tiers are Rime\'s quants by size, with Q5_K_M at tier 2', () => {
+  assert.deepEqual(models.map((m) => [m.tier, m.quant]), [[1, 'Q4_K_M'], [2, 'Q5_K_M'], [3, 'Q6_K'], [4, 'Q8_0']]);
   for (let i = 1; i < models.length; i++) assert.ok(models[i].size > models[i - 1].size, models[i].id);
 });
 
-test('a Q5_K_M added at tier 2 slots in between: no tier moves, and it is picked when it is the fastest fit', () => {
-  const q4 = models.find((x) => x.tier === 1), q6 = models.find((x) => x.tier === 3);
-  // A size between Q4_K_M's and Q6_K's, as a later models.json entry would give it.
-  const q5 = { ...q4, id: 'rime-1.7b-q5_k_m', name: 'Rime 1.7B Q5_K_M', quant: 'Q5_K_M', tier: 2, size: Math.round((q4.size + q6.size) / 2) };
-  const all = [...models, q5];
-  const r = run(MACHINES[4].input, { models: all });
-  assert.deepEqual(r.quants.map((q) => [q.tier, q.id]), [[1, q4.id], [2, q5.id], [3, q6.id], [4, 'rime-1.7b-q8_0']]);
+test('the shipped Q5_K_M at tier 2 fits between unchanged tiers and is picked when it is the fastest fit', () => {
+  const q4 = models.find((x) => x.tier === 1), q5 = models.find((x) => x.tier === 2), q6 = models.find((x) => x.tier === 3);
+  assert.ok(q4.size < q5.size && q5.size < q6.size);
+  const r = run(MACHINES[4].input);
+  assert.deepEqual(r.quants.map((q) => [q.tier, q.id]), [[1, q4.id], [2, q5.id], [3, q6.id], [4, 'rime-1.7b-r8-q8_0']]);
   const bw = 15e9 / L.decodeSpeed(q5, { bandwidth: 1e9, overheadMs: 0 });
-  assert.deepEqual(pickOf(run({ ...M5, bench: () => ({ bandwidth: bw * 1.001, overheadMs: 0 }) }, { models: all })), { tier: 2, reason: 'fastest' });
-  assert.deepEqual(pickOf(run(M5, { models: all, choice: q5.id })), { tier: 2, reason: 'chosen' });
+  assert.deepEqual(pickOf(run({ ...M5, bench: () => ({ bandwidth: bw * 1.001, overheadMs: 0 }) })), { tier: 2, reason: 'fastest' });
+  assert.deepEqual(pickOf(run(M5, { choice: q5.id })), { tier: 2, reason: 'chosen' });
 });

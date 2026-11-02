@@ -613,10 +613,16 @@ If the system refuses token counting, the request retains its output ceiling and
 ## Glaze's own model
 
 `ai/providers/local.js` (`local`, Settings' **Rime**) runs Rime, Frostdev's fine-tune of LiquidAI's LFM3-1.7B
-(`frostdev-ops/Rime-1.7B-GGUF`: Q4_K_M, Q6_K and Q8_0 at tiers 1, 3 and 4, tier 2 kept for a Q5_K_M), from
+(`frostdev-ops/Rime-1.7B-GGUF`: R8 test Q4_K_M, Q5_K_M, Q6_K and Q8_0 at tiers 1, 2, 3 and 4), from
 `ai/local/models.json` on Glaze's WebGPU engine. caps: `{ text, json, stream, local: true, tools: false, images, context }` (`context`, the window
 below; `images` below), so `writer.complete`'s brief path and Feedback's local orchestration apply. Settings, `ai/settings.js`
 `HERE` and `writer-ai.js` treat `device`, `apple` and `local` alike as models on this computer: no model id, no key.
+
+The bundled text entries are the `r8-test-20261102` candidates, pinned to Hugging Face commit
+`f9e6936f5a8cc802bbdf4efafa942e518fc43071`, with distinct `rime-1.7b-r8-*` ids, `tools: 3` and `memory: 1`.
+They are available for testing: dedicated personality training is missing and full D4 evaluation is incomplete.
+The previous R5 files remain published; the picture model and projector are unchanged. No signed update feed has been
+published for these R8 candidates, so this bundled catalog does not trigger a signed-feed upgrade of an existing R5 download.
 
 Where it runs: Chrome, an offscreen document (`ai/local/host.html`, reason WORKERS, the `offscreen` permission) whose
 `offscreen.js` runs `ai/local/host.js` in a dedicated Worker and connects a port `glaze:local` to the worker
@@ -719,7 +725,8 @@ prompt and output exceed the window (`request-rejected`, `context`).
 ### Model updates
 
 Glaze ships before Rime is final and takes newer versions without the student doing anything (`ai/local/updates.js`).
-Frostdev publishes a signed list beside the weights, `https://huggingface.co/frostdev-ops/Rime-1.7B-GGUF/resolve/main/glaze-models.json`:
+Frostdev can publish a signed list beside the weights at `https://huggingface.co/frostdev-ops/Rime-1.7B-GGUF/resolve/main/glaze-models.json`
+(the R8 test candidates have no published signed feed). The list format is:
 
 ```json
 { "list": { "v": 1, "serial": 2, "issued": "2026-11-20T09:00:00Z", "models": [

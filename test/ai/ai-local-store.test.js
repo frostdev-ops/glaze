@@ -383,11 +383,12 @@ test('the shipped manifest is well formed and pinned', () => {
 
 test('the shipped text models are Rime\'s published files, pinned to their commit', () => {
   const M = require('../../extension/ai/local/models.json');
-  const COMMIT = '1d945ca0420ca0952c641b8dfed789c4a13bff0f';
+  const COMMIT = 'f9e6936f5a8cc802bbdf4efafa942e518fc43071';
   const want = [
-    ['rime-1.7b-q4_k_m', 'Rime 1.7B Q4_K_M', 'Rime-1.7B-Q4_K_M.gguf', 1099627200, 'cdf235cba2228d58148a245846b3bad4324c626936f7981496a45d0b837ecea2'],
-    ['rime-1.7b-q6_k', 'Rime 1.7B Q6_K', 'Rime-1.7B-Q6_K.gguf', 1427637696, '1414d3501009228a4f332a49d91e0599da74275cca49b2ed98dd57a7bade3688'],
-    ['rime-1.7b-q8_0', 'Rime 1.7B Q8_0', 'Rime-1.7B-Q8_0.gguf', 1846237888, '7520da22275730692ff54bf88dbd25309bc89fb8c9a7803dc7e18c02bda40999'],
+    ['rime-1.7b-r8-q4_k_m', 'Rime R8 test Q4_K_M', 'r8-test-20261102/r8-Q4_K_M.gguf', 1099627232, '706183e0b05dd3efab9bd7c1cefa3c6adad3c82e51e5bf9748dabab55c91b8ff'],
+    ['rime-1.7b-r8-q5_k_m', 'Rime R8 test Q5_K_M', 'r8-test-20261102/r8-Q5_K_M.gguf', 1258662624, '17932cbe27f5a98fd4e3a434f3a2fd2a7876518a0d364e54a3a7b5250dcb9168'],
+    ['rime-1.7b-r8-q6_k', 'Rime R8 test Q6_K', 'r8-test-20261102/r8-Q6_K.gguf', 1427637728, '888fd91bbaad114916623efd5550de1403486f28009805a4722ab0519bc8cdb6'],
+    ['rime-1.7b-r8-q8_0', 'Rime R8 test Q8_0', 'r8-test-20261102/r8-Q8_0.gguf', 1846237920, 'c310897f026e9b3a07a9ab2968e7ad78aaf3091c2ff4241816b040528f7792d5'],
   ];
   const text = M.models.filter((m) => !m.role);
   assert.deepEqual(text.map((m) => [m.id, m.name, m.file, m.size, m.total]), want);
