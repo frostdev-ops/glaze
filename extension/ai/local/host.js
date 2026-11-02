@@ -46,7 +46,7 @@
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
-  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, maxContext: 131072, first: 8192, step: 8, busy: 20, background: 128, spacing: 2048, rate: 16, answer: 256, spans: 2 };
+  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, maxContext: 131072, first: 8192, step: 8, busy: 20, spacing: 2048, rate: 16, answer: 256, spans: 2 };
   // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
   const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js', 'updates.js']),
     optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
@@ -488,7 +488,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       ahead = control;
       queued(async () => {
         if (loaded !== job) return;
-        await job.model.extend(ids, { at: [ids.length], signal: control.signal, step: LIMIT.background });
+        await job.model.extend(ids, { at: [ids.length], signal: control.signal, ...paced() });
       }, control.signal).catch(() => {}).finally(() => { if (ahead === control) ahead = null; });
     };
     // The system turn (parts, or its first `stable`), kept; with stable the rest is read on after it in the live sequence.
