@@ -214,6 +214,13 @@ test('the corrective block is included when measuring the retry against the prov
   assert.equal(measured.at(-1).fix, 'ground');
   assert.equal(r.steps[0].digested, true);
   assert.equal(r.steps[1].digested, undefined, 'the latest result stays whole');
+  const failure = { ok: false, error: 'timeout', account: ACC, title: 'Failed read', items: [{ title: 'Untrusted partial item' }] };
+  let n = 0;
+  const preserved = await K.episode({ question: 'Which assignments are coming up?', tools: ['assignments_list', 'schedule_list'], locale: 'en', now: SUNDAY, zone: ZONE,
+    measure: async () => ({ used: 3950, reserve: 200, window: 4096 }),
+    call: async () => ({ result: n === 1 ? failure : SCHEDULE }),
+    run: async () => ++n === 1 ? { call: { name: 'assignments_list', arguments: {}, kind: 'read' }, answer: null } : n === 2 ? call : { call: null, answer: { text: 'Partial results only.', quotes: [] } } });
+  assert.deepEqual(preserved.steps[0].result, { ok: false, error: 'timeout', account: ACC }, 'digestion preserves the root failure receipt without partial payload');
 });
 
 test('when the retry fails too and the results hold a list, Glaze\'s own list is the answer; with nothing read, the error keeps its code and the raw answer', async () => {
@@ -227,6 +234,35 @@ test('when the retry fails too and the results hold a list, Glaze\'s own list is
   assert.equal(none.r.steps, 0);
   assert.match(none.r.raw, /a few assignments/);
   assert.equal(none.seen.length, 1, 'no retry before anything was read');
+  const repeat = await loop([call, call, call]);
+  assert.equal(repeat.seen[2].fix, 'repeat', 'the independent episode gate uses the single correction');
+  assert.equal(repeat.r.steps.length, 1, 'neither forbidden repeat executes');
+  assert.equal(repeat.r.built, true);
+  assert.match(repeat.r.answer.text, /Reflection Week 11/);
+  assert.match(repeat.r.answer.text, /couldn't finish answering the full request/);
+  const continued = await loop([call, call, { call: { name: 'accounts_list', arguments: {}, kind: 'read' }, answer: null }, { why: 'ground' }]);
+  assert.equal(continued.r.built, true);
+  assert.match(continued.r.answer.text, /couldn't finish answering the full request/, 'repeat recovery remains partial after a useful different read');
+  const spent = await loop([call, { why: 'ground' }, call]);
+  assert.equal(spent.seen.length, 3, 'a repeat cannot add another correction after the one check correction');
+  assert.match(spent.r.answer.text, /couldn't finish answering the full request/);
+  const R = require('../../extension/ai/request.js');
+  for (const mutation of [false, true]) {
+    let n = 0, calls = 0;
+    const read = { call: { name: 'todo_list', arguments: {}, kind: 'read' }, answer: null };
+    const write = { call: { name: 'todo_mark_done', arguments: { type: 'assignment', id: '_21_1' }, kind: 'write' }, answer: null };
+    const plans = mutation ? [read, write, read, { call: { name: 'accounts_list', arguments: {}, kind: 'read' }, answer: null }] : [read, read];
+    const result = await K.episode({ question: 'Mark my assignment done and list my work.', tools: ['todo_list', 'todo_mark_done', 'accounts_list'], locale: 'en', now: SUNDAY, zone: ZONE, first: true,
+      call: async (c) => { calls++; return c.kind === 'write' ? { asked: 'yes', result: { ok: true } } : { result: SCHEDULE }; },
+      run: async () => { if (n < plans.length) return plans[n++]; throw Object.assign(R.error('check'), { why: 'ground' }); } }).catch((e) => e);
+    if (mutation) assert.equal(result.code, 'check', 'a mutation episode retains its error after the repeat correction continues with a different read');
+    else assert.match(result.answer.text, /couldn't finish answering the full request/);
+    assert.equal(calls, mutation ? 3 : 1, 'the forbidden repeat never executes');
+  }
+  for (const locale of ['en', 'es', 'pt-BR', 'fr', 'de', 'nl']) {
+    const text = A.recoveryAnswer([], { locale });
+    assert.ok(text && !text.includes('From what Glaze read'), locale);
+  }
 });
 
 test('the worker\'s error to the panel carries the code, the step count and the raw answer', () => {

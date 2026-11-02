@@ -74,6 +74,36 @@ test('episode: an answer ends it; a read is run and appended, and the next run s
   assert.deepEqual(two.calls, [{ name: 'todo_list', arguments: { days: 7 }, kind: 'read' }]);
   assert.deepEqual(two.runs[1].steps, [{ call: { name: 'todo_list', arguments: { days: 7 } }, result: TODO }]);
   assert.deepEqual(two.runs[1].tools, ['todo_list', 'todo_mark_done']);
+  const R = require('../../extension/ai/request.js');
+  for (const error of ['timeout', 'connection-lost']) {
+    let reads = 0;
+    const retry = loop({ outs: [asks('todo_list'), asks('todo_list'), said('Lab report is due.')], results: { todo_list: () => {
+      if (++reads === 1) return { result: { ok: false, error } };
+      return { result: TODO };
+    } } });
+    const recovered = await retry.go();
+    assert.equal(recovered.steps.length, 2);
+    assert.equal(retry.runs[1].steps[0].result.ok, false, 'the model sees the failed read');
+    assert.deepEqual(retry.calls[0], retry.calls[1]);
+  }
+  for (const result of [TODO, { ok: false, error: 'permission' }, { ok: false, error: 'Maybe a timeout?' }]) {
+    const blocked = loop({ outs: [asks('todo_list'), asks('todo_list')], results: { todo_list: { result } } });
+    assert.match((await blocked.go()).answer.text, /couldn't finish answering the full request/);
+    assert.equal(blocked.calls.length, 1);
+  }
+  const exhausted = loop({ outs: [asks('todo_list'), asks('todo_list'), asks('todo_list')], results: { todo_list: { result: { ok: false, error: 'timeout' } } } });
+  assert.match((await exhausted.go()).answer.text, /couldn't finish answering the full request/);
+  assert.equal(exhausted.calls.length, 2);
+  for (const error of ['timeout', 'connection-lost', 'permission', 'off', 'changed', 'cancelled', 'tool', 'request', 'refusal', 'invalid-response']) {
+    const blocked = loop({ outs: [asks('todo_list')], results: { todo_list: () => { throw R.error(error); } } });
+    await assert.rejects(blocked.go(), (e) => e.code === error);
+    assert.equal(blocked.runs.length, 1, error);
+  }
+  const model = loop({ outs: [() => { throw R.error('timeout'); }] });
+  await assert.rejects(model.go(), (e) => e.code === 'timeout');
+  assert.equal(model.calls.length, 0, 'model errors are not tool receipts');
+  const failedWrite = loop({ outs: [asks('todo_mark_done', {}, 'write')], results: { todo_mark_done: () => { throw R.error('timeout'); } } });
+  await assert.rejects(failedWrite.go(), (e) => e.code === 'timeout');
 });
 
 test('episode: six steps at most, then a call ends it as steps', async () => {
@@ -205,6 +235,51 @@ test('port: a tool\'s failure is the model\'s to read; an answer that hands over
   assert.deepEqual(h.seen.runs[1].input.steps[0].result, { ok: false, error: 'Glaze has no grades yet.' });
   assert.equal(h.got.filter((m) => m.type === 'step').at(-1).step.state, 'fail', 'its card shows it failed');
   assert.deepEqual(h.ends(), [{ id: 5, type: 'error', error: 'check', why: 'hands', steps: 1 }]);
+  let checks = 0;
+  const sender = harness({ allowed: () => ++checks === 2 ? 'timeout' : true,
+    script: { 'agent.tools': [asks('todo_list'), said('No verified records.')] } });
+  sender.say({ id: 50, op: 'ask', question: 'What is due?' });
+  await settle(60);
+  assert.equal(sender.seen.runs.length, 1, 'a sender-port timeout is not a failed tool receipt');
+  assert.deepEqual(sender.ends(), [{ id: 50, type: 'error', error: 'timeout' }]);
+  for (const error of ['timeout', 'connection-lost']) for (const revoked of [false, true]) {
+    let reads = 0, valid = true;
+    const runs = [], got = [], [page, worker] = ports();
+    const local = { get: async () => {
+      if (++reads === 1) {
+        if (revoked) valid = false;
+        throw error === 'timeout' ? new DOMException('The read deadline elapsed.', 'TimeoutError') : require('../../extension/ai/request.js').error(error);
+      }
+      return {};
+    } };
+    const registry = TL.registry();
+    const connected = K.connect(worker, {
+      allowed: async () => true, settings: async () => ({ on: true, model: { use: 'openai', model: 'm' }, features: { ask: true } }), enabled: async () => true,
+      level: async () => 3, current: async () => ({ valid: async () => valid }),
+      registry: { get: (n) => registry.get(n), describe: (t) => ({ name: t.name, inputSchema: t.parameters }) },
+      state: async () => ({}), approve: { ask: async () => assert.fail('reads need no approval') }, refresh: async () => null,
+      accounts: async () => [], local, keys: async () => [], now: () => 1e12, turn: (f) => f(), zone: 'UTC',
+      own: { writer: async () => false, wakes: { local, on: async () => true, now: () => 1e12 } },
+      broker: (p) => p.onMessage.addListener((m) => {
+        if (m.op !== 'run') return;
+        runs.push(m.input);
+        p.postMessage({ id: m.id, type: 'end', output: runs.length <= 2 ? asks('wakes_list') : said('No reminders.') });
+      }),
+    });
+    page.onMessage.addListener((m) => got.push(m));
+    try {
+      page.postMessage({ id: 51, op: 'ask', question: 'List my reminders.' });
+      await settle(80);
+      if (revoked) {
+        assert.equal(runs.length, 1, 'live identity is rechecked before a failed receipt reaches the model');
+        assert.equal(got.at(-1)?.error, 'changed');
+      } else {
+        assert.equal(reads, 2, 'an actual allowlisted execution failure can retry once');
+        assert.deepEqual(runs[1].steps[0].result, { ok: false, error });
+        assert.equal(got.at(-1)?.type, 'end');
+      }
+    } finally { connected.close(); }
+  }
 });
 
 test('port: Ask turned off, a sender refused, a second question while one runs, a cancel, a bad message', async () => {

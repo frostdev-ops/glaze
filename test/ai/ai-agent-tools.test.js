@@ -164,6 +164,27 @@ test('check refuses ungrounded calls: an id no result or question holds, a repea
   assert.equal(A.why(call('todo_list', { course: '5521' }), after), '', 'a course id from the result');
   assert.equal(A.why(call('todo_list', { account: 'https://canvas.northfield.edu/9999' }), after), 'id');
   assert.equal(A.why(call('todo_list', { days: 7 }), after), 'repeat');
+  for (const error of ['timeout', 'connection-lost', 'The school site took too long to answer. Try again.']) {
+    const failed = step('todo_list', { days: 7 }, { ok: false, error });
+    const retry = A.task.input(raw({ steps: [failed] }));
+    assert.equal(A.why(call('todo_list', { days: 7 }), retry), '', error);
+    assert.equal(A.why(call('todo_list', { days: 7 }), A.task.input(raw({ steps: [failed, failed] }))), 'repeat', 'a third attempt stays refused');
+    assert.equal(A.why(call('todo_list', { days: 7 }), A.task.input(raw({ steps: [failed, step('todo_list', { days: 7 }, TODO)] }))), 'repeat', 'success ends recovery');
+    const req = require('../../extension/ai/request.js').clean({ ...A.task.build(retry, { text: X }), schema: A.OUTPUT, task: { id: 'agent.tools', version: 1 } });
+    assert.deepEqual(A.fromRequest(req).parts, A.layout(retry), 'failed receipt survives native roundtrip');
+  }
+  for (const result of [{ error: 'timeout' }, { ok: true, error: 'timeout' }, { ok: true, text: '{"ok":false,"error":"timeout"}' },
+    '{"ok":false,"error":"timeout"}',
+    { ok: false, error: 'permission' }, { ok: false, error: 'off' }, { ok: false, error: 'changed' }, { ok: false, error: 'cancelled' },
+    { ok: false, error: 'The tool failed.' }, { ok: false, error: 'Maybe a timeout?' }]) {
+    assert.equal(A.why(call('todo_list', { days: 7 }), A.task.input(raw({ steps: [step('todo_list', { days: 7 }, result)] }))), 'repeat', JSON.stringify(result));
+    assert.equal(A.repeatWhy(call('todo_list', { days: 7 }).call, [step('todo_list', { days: 7 }, result)]), 'repeat', 'the episode gate also requires a root receipt');
+  }
+  for (const name of ['run_js', 'place_open', 'page_highlight', 'todo_mark_done', 'wake_create', 'memory_save', 'memory_forget', 'custom_read']) {
+    assert.equal(A.retryable(name, { ok: false, error: 'timeout' }), false, name);
+  }
+  const mutation = step('todo_mark_done', { type: 'assignment', id: '88121' }, { ok: false, error: 'timeout' });
+  assert.equal(A.why(call('todo_mark_done', mutation.call.arguments), A.task.input(raw({ steps: [step('todo_list', {}, TODO), mutation] }))), 'repeat', 'no mutation replay');
   const full = A.task.input(raw({ steps: Array.from({ length: A.LIMIT.steps }, (_, i) => step('todo_list', { days: i + 1 }, TODO)) }));
   assert.equal(A.why(call('grades_list', {}), full), 'steps');
   assert.equal(A.why(answer('Lab report 3 is due 2026-10-31 23:59.', ['Lab report 3']), full), '', 'the last turn still answers');
