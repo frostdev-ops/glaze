@@ -120,6 +120,13 @@ test('quoted and negated memory success phrases do not claim a mutation; device 
   assert.equal(A.why(answer('I saved Short paragraphs and synced it to Drive.', ['Short paragraphs']), saved), 'ground');
 });
 
+test('an unchanged save receipt proves an existing durable preference without a replacement id', () => {
+  const args = { text: 'Short paragraphs', evidence: 'I prefer short paragraphs.' };
+  const inp = A.task.input(raw({ question: args.evidence, steps: [step('memory_save', args, receipt('unchanged'))] }));
+  assert.equal(A.why(answer('I saved your preference for Short paragraphs.', ['Short paragraphs']), inp), '');
+  assert.equal(A.why(answer('I updated your preference for Short paragraphs.', ['Short paragraphs']), inp), 'ground');
+});
+
 const cached = () => ({ ok: true, record: { id: SOURCE, revision: REV, kind: 'course', text: 'Lab report is due Sunday. Current grade: 92%. Submitted: false.', source: { type: 'course-read', tool: 'assignment_read', course: '52', id: '70', observedAt: NOW - 864e5, complete: true } }, page: 1, pages: 1 });
 test('cached course material cannot prove current due, grade or submission status; each topic needs its own fresh tool', () => {
   const cases = [

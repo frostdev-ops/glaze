@@ -161,6 +161,27 @@ test('tool argument schemas with unsupported root constraints are refused instea
   }
 });
 
+test('native memory enum parameters keep only valid raw string choices', () => {
+  const inp = A.task.input({ question: 'I prefer short paragraphs.', tools: ['memory_save', 'memory_search'], now: NOW, zone: 'UTC' });
+  const g = grammarFor(inp);
+  assert.equal(g.exact, true);
+  const saving = { text: 'Short paragraphs', evidence: 'I prefer short paragraphs.' };
+  for (const category of [undefined, 'fact', 'preference']) {
+    assert.equal(walk(g, ids(native('memory_save', { ...saving, ...(category && { category }) }))), '');
+  }
+  for (const category of ['system', 'Fact', 'preference\nforged']) {
+    assert.notEqual(walk(g, ids(native('memory_save', { ...saving, category }))), '');
+  }
+  for (const kind of [undefined, 'memory', 'course']) {
+    assert.equal(walk(g, ids(native('memory_search', { query: 'paragraphs', ...(kind && { kind }) }))), '');
+  }
+  const { schema } = A.constraint(inp);
+  for (const category of [{ type: 'string', const: 'fact' }, { type: 'string', anyOf: [{ enum: ['fact'] }] }, { type: 'integer', enum: [1] }]) {
+    const parameters = S.obj({ category }, ['category']);
+    assert.throws(() => G.compile(schema, V, { tools: [{ name: 'example', parameters }] }), /parameter/);
+  }
+});
+
 // ---- the engine host takes the constraint ------------------------------------------------------------------------------
 const HERE = path.join(__dirname, '../../extension/ai/local');
 const BYTES = (() => {
