@@ -123,7 +123,7 @@ test('a task that streams lets the deltas through; one that doesn\'t, doesn\'t',
 });
 
 test('the settings model is off by default, local, and lets a feature ask only when AI is on, a model chosen and it is allowed', () => {
-  assert.deepEqual(A.clean(undefined), { on: false, outline: true, sources: true, wakes: true, updates: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false, ask: false } });
+  assert.deepEqual(A.clean(undefined), { on: false, outline: true, sources: true, wakes: true, updates: true, memory: true, mode: 'simple', model: { use: null, model: '' }, models: {}, tune: {}, features: { syllabus: false, completion: false, writing: false, ask: false } });
   assert.deepEqual(A.clean({ on: 'yes', use: 'Bad Name', features: { syllabus: 1, other: true } }).model, { use: null, model: '' });
   const s = A.clean({ on: true, model: { use: 'my-ollama', model: 'llama3.2' }, features: { syllabus: true } });
   assert.equal(s.model.use, 'my-ollama');

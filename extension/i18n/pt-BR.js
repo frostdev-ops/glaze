@@ -3906,5 +3906,21 @@
   "Context size": "Tamanho do contexto",
   "{n}K": "{n}K",
   "Too large for this computer": "Grande demais para este computador",
-  "Needs a GPU with f16": "Requer uma GPU com f16"
+  "Needs a GPU with f16": "Requer uma GPU com f16",
+  "This memory changed. Reload it before saving.": "Esta memória mudou. Recarregue-a antes de salvar.",
+  "This memory was deleted.": "Esta memória foi excluída.",
+  "Use 600 characters or fewer.": "Use no máximo 600 caracteres.",
+  "Could not load memory. Try again.": "Não foi possível carregar a memória. Tente novamente.",
+  "Some records changed. Review them and try again.": "Alguns registros mudaram. Revise-os e tente novamente.",
+  "Saved memory": "Memória salva",
+  "Course material": "Material do curso",
+  "Partial": "Parcial",
+  "Clear saved memories?": "Limpar memórias salvas?",
+  "Clear course cache?": "Limpar o cache dos cursos?",
+  "Memory": "Memória",
+  "Saved memories": "Memórias salvas",
+  "Export Markdown": "Exportar Markdown",
+  "Course cache": "Cache dos cursos",
+  "Clear cache": "Limpar cache",
+  "No course material cached": "Nenhum material de curso em cache"
 };

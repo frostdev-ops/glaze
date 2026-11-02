@@ -273,6 +273,24 @@
   .ai-picker li .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ai-picker li small { color: var(--gz-ink-faint); }
   .ai-picker li.none { color: var(--gz-ink-faint); cursor: default; }
+  /* Saved memories and this device's course reads (settings/editor-memory.js). Markdown is displayed as text. */
+  .memory-head { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-block: 1.2rem .6rem; }
+  .memory-head h3 { margin: 0; margin-inline-end: auto; }
+  .memory-list, .memory-records { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+  .memory-account h4 { margin: .5rem 0; color: var(--gz-ink-muted); font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+  .memory-record { min-inline-size: 0; display: grid; gap: .6rem; padding: .8rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius, 12px); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); }
+  .memory-record > .row { justify-content: flex-end; }
+  .memory-markdown { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.55; }
+  .memory-edit { inline-size: 100%; min-inline-size: 0; box-sizing: border-box; resize: vertical; font: inherit; line-height: 1.55; }
+  .memory-record summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .4rem .75rem; cursor: pointer; }
+  .memory-record summary::before { content: "›"; }
+  .memory-record details[open] > summary::before { content: "⌄"; }
+  .memory-record summary > span { min-inline-size: 0; overflow-wrap: anywhere; }
+  .memory-record summary small { color: var(--gz-ink-muted); font-size: 12px; }
+  .memory-record details[open] .memory-markdown { margin-block-start: .6rem; max-block-size: 24rem; overflow: auto; }
+  @media (max-width: 640px) { .memory-record summary { grid-template-columns: auto minmax(0, 1fr); } .memory-record summary small { grid-column: 2; } }
+  #memory-course-list .memory-record > button { justify-self: end; }
+  #memory-clear-ask .wr-go { color: #fff; background: var(--gz-err); border-color: transparent; }
   /* Settings → Writer (settings/editor-writer.js), drawn as Settings → AI: a row per setting, its name and "?" on the left and
      its control on the right, then each section's list (saved papers by course, the personal dictionary's words as pills). */
   .wr-rows { display: grid; }
@@ -612,7 +630,7 @@
 <div data-editor-jumps="writer" hidden><a href="#writer/setup" data-editor-jump>Writer</a><a href="#writer/papers" data-editor-jump>Papers</a><a href="#writer/typing" data-editor-jump>Typing</a><a href="#writer/proofing" data-editor-jump>Proofing</a><a href="#writer/discussions" data-editor-jump>Discussions</a><a href="#writer/submitting" data-editor-jump>Submitting</a></div>
 <div data-editor-jumps="sharing" hidden><a href="#sharing/sessions" data-editor-jump>Share sessions</a><a href="#sharing/relay" data-editor-jump>Relay</a><a href="#sharing/calendar" data-editor-jump data-gcal-link hidden>Google Calendar sync</a></div>
 <div data-editor-jumps="mods" hidden><a href="#mods/installed" data-editor-jump>Installed mods</a><a href="#mods/add" data-editor-jump>Add a mod</a><a href="#mods/widget" data-editor-jump>Widget builder</a><a href="#mods/dev" data-editor-jump>Mod development</a></div>
-<div data-editor-jumps="ai" hidden><a href="#ai/setup" data-editor-jump>AI</a><a href="#ai/features" data-editor-jump>Features</a><a href="#ai/activity" data-editor-jump>Activity</a><a href="#ai/agents" data-editor-jump>Agents</a></div>
+<div data-editor-jumps="ai" hidden><a href="#ai/setup" data-editor-jump>AI</a><a href="#ai/features" data-editor-jump>Features</a><a href="#ai/memory" data-editor-jump>Memory</a><a href="#ai/activity" data-editor-jump>Activity</a><a href="#ai/agents" data-editor-jump>Agents</a></div>
 <div data-editor-jumps="backup" hidden><a href="#backup/privacy" data-editor-jump>Backup and reset</a><a href="#backup/sites" data-editor-jump>Sites</a></div>
 <div data-editor-jumps="about" hidden><a href="#about/glaze" data-editor-jump>About Glaze</a></div>
     </nav>
@@ -1749,6 +1767,14 @@
 <p class="section-path" data-editor-breadcrumb><a href="#ai/features" data-editor-alias>Features</a></p><div class="section-heading"><h2 id="heading-ai-features">Features</h2></div>
 <div class="ai-feats"><div class="ai-fh" aria-hidden="true"><span></span><span>Model</span><span>Effort</span></div><div class="stack" id="ai-feature-list"></div></div>
 </section>
+<section id="ai-memory" data-editor-section="ai/memory" data-sites="Extension only" aria-labelledby="heading-ai-memory">
+<p class="section-path" data-editor-breadcrumb><a href="#ai/memory" data-editor-alias>Memory</a></p><div class="section-heading"><h2 id="heading-ai-memory">Memory</h2><button type="button" id="memory-refresh">Refresh</button><input type="checkbox" role="switch" id="memory-on" aria-label="Memory" data-local disabled></div>
+<p class="desc" id="memory-said" role="status" aria-live="polite" hidden></p>
+<div class="memory-head"><h3 id="memory-saved-head">Saved memories</h3><button type="button" id="memory-export" disabled>Export Markdown</button><button type="button" class="wr-danger" id="memory-memory-clear" disabled>Clear</button></div>
+<ul class="memory-list" id="memory-memory-list" aria-labelledby="memory-saved-head"></ul><p class="desc" id="memory-memory-empty" hidden>None yet</p>
+<div class="memory-head"><h3 id="memory-course-head">Course cache</h3><button type="button" class="wr-danger" id="memory-course-clear" disabled>Clear cache</button></div>
+<ul class="memory-list" id="memory-course-list" aria-labelledby="memory-course-head"></ul><p class="desc" id="memory-course-empty" hidden>No course material cached</p>
+</section>
 <section id="ai-activity" data-editor-section="ai/activity" data-sites="Extension only" aria-labelledby="heading-ai-activity" hidden>
 <p class="section-path" data-editor-breadcrumb><a href="#ai/activity" data-editor-alias>Activity</a></p><div class="section-heading"><h2 id="heading-ai-activity">Activity</h2><button type="button" id="ai-calls-clear" disabled>Clear</button></div>
 <ul class="ai-calls" id="ai-calls"></ul>
@@ -1853,6 +1879,12 @@
       <div class="row"><button value="cancel" id="agents-forget-cancel">Cancel</button><button value="ok" class="primary wr-go">Forget all</button></div>
     </form>
   </dialog>
+  <dialog id="memory-clear-ask" aria-labelledby="memory-clear-title">
+    <form method="dialog">
+      <h3 id="memory-clear-title"></h3>
+      <div class="row"><button value="cancel" id="memory-clear-cancel">Cancel</button><button value="ok" class="primary wr-go">Clear</button></div>
+    </form>
+  </dialog>
   <!-- Restore…'s list (options.js): what the picked file holds, all ticked; Cancel changes nothing. -->
   <dialog id="restore-pick" aria-labelledby="restore-title">
     <form method="dialog">
@@ -1946,6 +1978,7 @@
 <script src="ai/failure.js"></script>
   <script src="ai/endpoint.js"></script>
   <script src="settings/editor-ai.js"></script>
+  <script src="settings/editor-memory.js"></script>
   <script src="settings/editor-agents.js"></script>
   <script src="writer/writer-papers.js"></script>
   <script src="settings/editor-writer.js"></script>

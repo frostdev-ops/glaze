@@ -6,6 +6,7 @@
 // models, and the device provider's prepare), and a key comes back only masked. Connect, Save and Test ask the browser for
 // exactly the address's host (core/site.js reach) from their click, before anything is awaited. The record (storage.local
 // aiCalls, ai/failure.js) is metadata only and never leaves this device. Every word reaches the page as textContent.
+// Memory controls live in editor-memory.js and remain available while AI is off. clean() preserves that switch on writes.
 // Extension options page only (mount); the pure helpers are for node tests.
 var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
   const A = () => (typeof GZ_AI_SETTINGS !== 'undefined' ? GZ_AI_SETTINGS : require('../ai/settings.js'));
