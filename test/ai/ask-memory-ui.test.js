@@ -194,3 +194,11 @@ test('an answer finishing while memory is being edited keeps the editor focus an
   assert.equal(P.doc.activeElement, input);
   assert.equal(input.value, 'Still editing.');
 });
+
+test('Memory off is its own status and leaves the Ask composer available', async () => {
+  const P = page(); await P.ask();
+  P.emit({ type: 'error', error: 'off', feature: 'memory' }); await settle();
+  assert.equal(P.find('.gz-ask-say').textContent, 'Memory is off');
+  assert.ok(P.root.isConnected);
+  assert.equal(P.find('.gz-ask-send').disabled, false);
+});
