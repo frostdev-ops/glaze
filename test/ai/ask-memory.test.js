@@ -90,8 +90,9 @@ test('unverified scope supplies no memories and cannot make an automatic write',
 
 test('automatic saves emit their device receipt before a later model failure and never ask approval', async (t) => {
   const text = 'I prefer short bullet points.';
-  const h = harness({ script: { 'agent.tools': [call('memory_save', { text, evidence: text, category: 'preference' }, 'write')], 'study.help': [study] } }); t.after(h.close);
+  const h = harness({ script: { 'agent.tools': [call('memory_save', { text, evidence: text, category: 'preference' }, 'write')] } }); t.after(h.close);
   assert.equal((await h.ask(`${text} Explain photosynthesis.`)).type, 'error');
+  assert.equal(h.state.runs.at(-1).task, 'study.help', 'the terminal failure is in the main task after the optional save');
   const receipt = h.got.find((m) => m.type === 'memory')?.receipt;
   assert.equal(receipt.operation, 'created');
   assert.equal(receipt.persistence, 'device');

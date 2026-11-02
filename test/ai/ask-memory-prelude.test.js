@@ -15,7 +15,7 @@ const rejected = () => ({ output: call('memory_save', { text: REJECTED, evidence
 const waitFor = async (done) => { for (let n = 0; n < 1000; n++) { if (done()) return; await new Promise((r) => setTimeout(r, 0)); } assert.fail('Ask did not settle'); };
 const gate = () => { let release; const promise = new Promise((r) => { release = r; }); return { promise, release }; };
 
-function front({ prelude = () => rejected(), main, count, rows = [] } = {}) {
+function front({ prelude = () => rejected(), main, count, bind, rows = [] } = {}) {
   const data = {}, local = { get: async (keys) => structuredClone(Object.fromEntries((keys === null ? Object.keys(data) : [].concat(keys)).filter((k) => Object.hasOwn(data, k)).map((k) => [k, data[k]]))),
     set: async (patch) => Object.assign(data, structuredClone(patch)) };
   let random = 0;
@@ -55,7 +55,7 @@ function front({ prelude = () => rejected(), main, count, rows = [] } = {}) {
     registry: { get: (name) => registry.get(name), describe: (tool) => ({ name: tool.name, inputSchema: tool.parameters }) },
     state: async () => ({}), refresh: async () => null, accounts: async () => [{ account: state.account, origin: 'https://prelude.example.test' }], local,
     keys: async () => Object.keys(data), now: () => NOW, turn: (f) => f(), zone: 'UTC', level: async () => 3, counts: !!count,
-    page: () => ({ url: 'https://prelude.example.test/courses/6' }), current: async () => { const context = state.context; return { account: ACC, valid: async () => state.valid && state.account === ACC && state.context === context }; },
+    page: () => ({ url: 'https://prelude.example.test/courses/6' }), current: async () => { const context = state.context; return { account: ACC, ...(bind && { bind }), valid: async () => state.valid && state.account === ACC && state.context === context }; },
     memory: { store, on: async () => state.memory, capable: async () => state.capable }, approve: { ask: async () => assert.fail('no generic approval') },
     own: { writer: async () => true, read: async () => ({ items: [] }), wakes: { on: async () => false, local, read: async () => null } } };
   const [page, worker] = Ask.channel(), connection = Ask.connect(worker, env);
@@ -168,11 +168,41 @@ test('an optional pass that cannot fit is skipped before the main request', asyn
   await noRejectedState(h);
 });
 
+test('a size barrier discovered at the actual prelude request remains terminal', async (t) => {
+  let optionalCounts = 0;
+  const h = front({ count: (m) => ({ used: m.input.tools?.length === 1 && m.input.tools[0] === 'memory_save' && ++optionalCounts > 1 ? 4000 : 1000,
+    window: 4096, reserve: 768, exact: true }) }); t.after(h.close);
+  const result = await h.ask();
+  assert.equal(result.type, 'error'); assert.equal(result.error, 'size');
+  assert.equal(h.state.runs.length, 0);
+  await noRejectedState(h);
+});
+
+test('a check thrown while binding a save tool is not a recoverable model rejection', async (t) => {
+  const fact = 'I prefer wide margins.';
+  const h = front({ prelude: () => ({ output: call('memory_save', { text: fact, evidence: fact, category: 'preference' }) }),
+    bind: () => { throw Object.assign(new Error('binding refused'), { code: 'check' }); } }); t.after(h.close);
+  const result = await h.ask(`${fact} ${QUESTION}`);
+  assert.equal(result.type, 'error'); assert.equal(result.error, 'check');
+  assert.equal(h.mains().length, 0);
+  await noRejectedState(h);
+});
+
 test('a main-task validation error after a skipped save stays terminal', async (t) => {
   const h = front({ main: () => ({ output: said('No matching records were found.') }) }); t.after(h.close);
   const result = await h.ask();
   assert.equal(result.type, 'error'); assert.equal(result.error, 'check'); assert.equal(result.why, 'first');
   assert.equal(h.mains().length, 1);
+});
+
+test('the existing main-task corrective turn still runs after optional rejection', async (t) => {
+  const h = front({ rows: [{ id: '21', title: 'Optics lab', type: 'assignment' }], main: ({ message: m }) => !m.input.steps.length ? { output: call('todo_list') }
+    : { output: m.input.fix ? said('Optics lab', ['Optics lab']) : said('Review the listed work.') } }); t.after(h.close);
+  const result = await h.ask();
+  assert.equal(result.type, 'end', JSON.stringify(result));
+  assert.equal(result.answer.text, 'Optics lab');
+  assert.ok(h.state.checks.some((c) => !c.automatic && c.why === 'ground'));
+  assert.ok(h.mains().some((m) => m.input.fix === 'ground'));
 });
 
 test('explicit memory action validation failures are never treated as optional', async (t) => {
