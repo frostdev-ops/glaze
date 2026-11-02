@@ -13,7 +13,7 @@ test('every tile body is a container: by width always, by height once dragged to
   assert.ok(top.some(([s, b]) => s === '.gz-w > .gz-w-body' && /container:\s*gz-tile\s*\/\s*inline-size/.test(b)));
   assert.ok(top.some(([s, b]) => s === '.gz-w > .gz-w-body[style*="height"]' && /container-type:\s*size/.test(b)));
   assert.ok(top.some(([s, b]) => s === '.gz-game-dialog > div' && /container:\s*gz-tile/.test(b)));
-  assert.ok(blocks.length && blocks.every(([q]) => q.startsWith('gz-tile ')), 'every tier asks the tile');
+  assert.ok(blocks.length && blocks.every(([q]) => q.startsWith('gz-tile ') || q.startsWith('gz-ask ')), 'every tier asks its tile or chat container');
 });
 
 test("the study buddy's centring is its own: the habitat (whose pet is a .gz-w-pet too) fills its tile", () => {
