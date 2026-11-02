@@ -524,6 +524,8 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // A quoted page title is data, not an assertion by the assistant. Ignore quoted/code fragments when recognizing
   // explicit completed navigation; apostrophes inside words (I've, j'ai) are not quote delimiters.
   const actionWords = (text) => text.replace(/```[\s\S]*?```|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|„[^“\n]*“|«[^»\n]*»|‘[^’\n]*’|(?<![\p{L}])'[^'\n]*'/gu, (match) => ' '.repeat(match.length));
+  // Markdown emphasis may wrap only a course-name prefix. Remove paired delimiters without changing underscores in ids.
+  const destinationWords = (text) => fold(text.replace(/(?<![\p{L}\p{N}])(\*\*|__|\*|_)(?=\S)([^\n]*?\S)\1(?![\p{L}\p{N}])/gu, '$2'));
   const NAV_CLAIMS = [
     /\b(?:i(?:['’]ve| have)?|we(?:['’]ve| have)?|rime|glaze) (?:already |just |successfully )?opened\b|^(?:already |just |successfully )?opened\b|\b(?:was|were|has been|have been|is now|are now) (?:already |just |successfully )?opened\b/u,
     /^(?:(?:yo )?(?:ya )?(?:he abierto|abrí))(?![\p{L}\p{N}])|\b(?:se (?:ha )?abrió|(?:fue|ha sido|está) (?:correctamente )?abiert[oa])(?![\p{L}\p{N}])/u,
@@ -533,7 +535,9 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     /\bik heb [^.!?;]{0,160}?geopend\b|\b(?:is|zijn|werd|werden) (?:succesvol |al |nu )?geopend\b/u,
   ];
   const navigationClaims = (text) => {
-    const masked = actionWords(text), clauses = [], boundaries = [...masked.matchAll(/[.!?;\n]+|\b(?:but|pero|mas|mais|aber|maar)\b/giu)];
+    // A new subject or negated action after a coordinator starts its own claim. Keep target lists ("Grades and
+    // Calendar") together, so one successful target cannot stand in for both.
+    const masked = actionWords(text), clauses = [], boundaries = [...masked.matchAll(/[.!?;\n]+|\b(?:but|pero|mas|mais|aber|maar)\b|\b(?:and|y|e|et|und|en)\b(?=\s+(?:i|we|rime|glaze|yo|no|he abierto|abrí|eu|não|abri|je|j['’]ai|ich|ik|(?:could|can|did) not)(?![\p{L}\p{N}]))/giu)];
     let at = 0;
     for (const boundary of [...boundaries, { index: masked.length, 0: '' }]) {
       const clause = fold(masked.slice(at, boundary.index)).replace(/^\s*[-*]\s*/, '').trim();
@@ -562,9 +566,9 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       try { for (const place of JSON.parse(step.result).places || []) if (typeof place.place === 'string' && typeof place.title === 'string') { known.set(place.place, place.place); known.set(place.title, place.place); } } catch { /* no listed targets */ }
     }
     return claims.every((clause) => {
-      const normalized = fold(clause);
+      const normalized = destinationWords(clause);
       const named = [...known].flatMap(([name, place]) => {
-        const match = new RegExp(`(?<![\\p{L}\\p{N}])${fold(name).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'u').exec(normalized);
+        const match = new RegExp(`(?<![\\p{L}\\p{N}])${destinationWords(name).replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'u').exec(normalized);
         return match ? [{ place, at: match.index, end: match.index + match[0].length }] : [];
       });
       // A course home name/id can be a prefix of its Grades destination. Only the most specific name at that span counts.
