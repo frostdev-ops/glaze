@@ -142,7 +142,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const save = word(String.raw`save|store|keep|note|guarda\p{L}*|apunt\p{L}*|salv\p{L}*|anot\p{L}*|enregistr\p{L}*|conserv\p{L}*|retiens|speicher\p{L}*|notier\p{L}*|bewaar\p{L}*|noteer\p{L}*|onthoud`);
     const change = word(String.raw`update|edit|correct|change|actualiz\p{L}*|corrig\p{L}*|atualiz\p{L}*|modifi\p{L}*|korrigier\p{L}*|[äa]nder\p{L}*|corrigeer\p{L}*|wijzig\p{L}*`);
     const stated = word(String.raw`(?:this|that|these|a|an|este|esta|estos|estas|un|una|esse|essa|estes|estas|um|uma|ce|cet|cette|ces|une|diese[nmrs]?|eine[nmrs]?|dit|deze|een)\s+${modifiers}${record}`);
-    const self = word(String.raw`remember\s+(?:that\s+)?i|recuerda\s+(?:que\s+)?yo|lembre\s+(?:que\s+)?eu|(?:rappelle-toi|souviens-toi)\s+que\s+je|merke\s+dir[,]?\s+dass\s+ich|onthoud\s+(?:dat\s+)?ik`);
+    const property = String.raw`(?:[\p{L}-]+\s+){1,5}`;
+    const self = word(String.raw`remember\s+(?:that\s+)?(?:i|my\s+${property}(?:is|are))|recuerda\s+(?:que\s+)?(?:yo|mi\s+${property}(?:es|son))|lembre\s+(?:que\s+)?(?:eu|minha?\s+${property}(?:[ée]|s[ãa]o))|(?:rappelle-toi|souviens-toi)\s+que\s+je|merke\s+dir[,]?\s+(?:dass\s+ich|meine?\s+${property}(?:ist|sind))|onthoud\s+(?:dat\s+)?(?:ik|mijn\s+${property}(?:is|zijn))`);
     return MEMORY().userText(question).normalize('NFKC').toLowerCase().split(/[\u0000\n.!?;]+/u).some((q) => {
       const personal = owned.test(q) || remembered.test(q) || about.test(q) && word(record).test(q);
       return personal && (recall.test(q) || read.test(q) || save.test(q) || change.test(q))
