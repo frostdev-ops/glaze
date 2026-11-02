@@ -6,6 +6,8 @@
 // tensor at a 256-byte boundary; a tensor larger than the device's binding limit is split into runs of whole rows.
 // Paths: f16 (`shader-f16`): the key/value caches and the GEMM tiles in f16, sums in f32; f32 otherwise. Subgroups
 // (`subgroups`, checked on the device first) for the GEMV's row sums; workgroup memory otherwise (Firefox).
+// Optional dp4a and experimental i8 subgroup-matrix GEMMs use two residual activation planes. Each model/device
+// checks accuracy and complete-path speed at startup; only that exact matrix shape and 128-token batch can use them.
 // One token: GEMV per matrix (ffn_gate and ffn_up together, SwiGLU applied); several: tiled GEMM. Sliding layers keep
 // a ring of window + chunk positions; full layers every position up to the session's context.
 // Classic script; node exports (the pure parts run in Node: plan, preprocess, grid, splits, ropeTable).
@@ -17,7 +19,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   // Values and bytes per block of the types with kernels.
   const QUANT = { Q4_K: [256, 144], Q5_K: [256, 176], Q6_K: [256, 210], Q8_0: [32, 34] };
   const KERNELS = ['quant', 'matvec', 'matmul', 'embed', 'norm', 'swiglu', 'shortconv', 'rope', 'attention', 'argmax', 'topk', 'penalty', 'probe'];
-  const QUANTIZED = new Set(['matvec', 'matmul', 'embed']);
+  const QUANTIZED = new Set(['matvec', 'matmul', 'embed', 'imatmul', 'tensormul']);
   const SLOT = 256; // bytes per op's uniforms (minUniformBufferOffsetAlignment)
   const CAP = 2 ** 30; // bytes per weight buffer
   const up = (n, a) => Math.ceil(n / a) * a;
@@ -94,6 +96,24 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   // slower on a 3080 Ti), at most 8, whole sub-blocks of 32 each; rows a multiple of 4 (the sum reads vec4).
   const splits = (rows, cols, T) => (rows % 4 ? 1 : Math.max(1, Math.min(8, cols / 32, Math.floor(320 / (Math.ceil(rows / 128) * Math.ceil(T / 128))))));
 
+  // Admission is deliberately conservative: no zero-only/NaN corpus, cancellation-sensitive error scaled to the
+  // whole output, and all three complete-path timings must beat the fastest baseline by at least 10%.
+  const accelerationCheck = (expected, actual, baseline = [], candidate = []) => {
+    if (!expected.length || expected.length !== actual.length) return { ok: false, reason: 'shape' };
+    let norm = 0, error = 0, peak = 0, delta = 0;
+    for (let i = 0; i < expected.length; i++) {
+      const x = expected[i], y = actual[i];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return { ok: false, reason: 'nonfinite' };
+      norm += x * x; error += (x - y) ** 2; peak = Math.max(peak, Math.abs(x)); delta = Math.max(delta, Math.abs(x - y));
+    }
+    if (!(norm > 0) || !Number.isFinite(norm)) return { ok: false, reason: 'empty' };
+    const rms = Math.sqrt(error / norm), max = delta / peak;
+    if (rms > 5e-5 || max > 2e-4) return { ok: false, reason: 'accuracy', rms, max };
+    if (baseline.length < 3 || candidate.length < 3 || [...baseline, ...candidate].some((n) => !Number.isFinite(n) || n <= 0)) return { ok: false, reason: 'timing', rms, max };
+    const speedup = Math.min(...baseline) / Math.max(...candidate);
+    return { ok: speedup >= 1.1, reason: speedup >= 1.1 ? null : 'speed', rms, max, speedup };
+  };
+
   // cos and sin of NeoX RoPE for positions from..from + count − 1, as the reference computes them (θ in double, then
   // rounded to f32): rows of n / 2 (cos, sin) pairs.
   const ropeTable = (from, count, n, base, factors) => {
@@ -138,10 +158,11 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
   };
 
   // A device for the engine: the adapter's limits, shader-f16 and subgroups when it has them.
-  const requestDevice = async (adapter, { f16, subgroups, profile }) => {
+  const requestDevice = async (adapter, { f16, subgroups, profile, tensor }) => {
     const L = adapter.limits, requiredFeatures = [];
     if (f16) requiredFeatures.push('shader-f16');
     if (subgroups) requiredFeatures.push('subgroups');
+    if (tensor) requiredFeatures.push('chromium-experimental-subgroup-matrix');
     if (profile && adapter.features.has('timestamp-query')) requiredFeatures.push('timestamp-query');
     return adapter.requestDevice({
       requiredFeatures,
@@ -155,7 +176,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
 
   // gguf: an open GGUF (ai/local/gguf.js). opts: { adapter, device (made from adapter if absent), precision 'auto' |
   // 'f32' | 'f16', subgroups 'auto' | false, kernels (name → source, or a base URL; the package's by default), onProgress,
-  // profile (timestamp-query, for forward's profile option) }.
+  // profile (timestamp-query, for forward's profile option), acceleration false (skip optional candidate selfchecks) }.
   const create = async (gguf, opts = {}) => {
     const halt = () => { if (opts.signal?.aborted) throw opts.signal.reason ?? new DOMException('Aborted', 'AbortError'); };
     halt();
@@ -174,8 +195,19 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     const f16 = precision === 'f16' || (precision === 'auto' && adapter.features.has('shader-f16'));
     if (f16 && !adapter.features.has('shader-f16')) fail('this adapter has no shader-f16', 'webgpu');
     let sg = opts.subgroups !== false && adapter.features.has('subgroups');
+    // Never enable unsafe browser flags here. An absent experimental API is an ordinary fallback.
+    const tensorConfig = sg && opts.acceleration !== false && adapter.features.has('chromium-experimental-subgroup-matrix')
+      && adapter.info?.subgroupMaxSize === 32 && adapter.info?.subgroupMinSize === 32
+      && adapter.info?.subgroupMatrixConfigs?.some((q) => q.componentType === 'i8' && q.resultComponentType === 'i32' && q.M === 16 && q.N === 16 && q.K === 32);
     let device;
-    try { device = opts.device || await requestDevice(adapter, { f16, subgroups: sg, profile: opts.profile }); } catch (e) { halt(); fail(`no device: ${e.message}`, 'webgpu'); }
+    let failedBuffers = [];
+    try {
+      if (opts.device) device = opts.device;
+      else {
+        try { device = await requestDevice(adapter, { f16, subgroups: sg, profile: opts.profile, tensor: tensorConfig }); }
+        catch (e) { if (!tensorConfig) throw e; halt(); device = await requestDevice(adapter, { f16, subgroups: sg, profile: opts.profile }); }
+      }
+    } catch (e) { halt(); fail(`no device: ${e.message}`, 'webgpu'); }
     // A device the engine made is the engine's to destroy (all its memory with it).
     const own = !opts.device;
     const bail = (e) => { if (own) device.destroy?.(); throw e; };
@@ -209,14 +241,23 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     const src = typeof opts.kernels === 'function' ? opts.kernels : typeof opts.kernels === 'object' && opts.kernels ? (n) => opts.kernels[n] : defaultSource(opts.kernels);
     const sources = {};
     for (const k of KERNELS) sources[k] = await src(k);
+    const acceleration = { dp4a: { enabled: false, types: {}, reason: 'unsupported' }, tensor: { enabled: false, types: {}, reason: 'unsupported' } };
+    const dp4a = opts.acceleration !== false && navigator.gpu.wgslLanguageFeatures?.has('packed_4x8_integer_dot_product');
+    const tensorAvailable = tensorConfig && device.features.has('chromium-experimental-subgroup-matrix');
+    if (dp4a || tensorAvailable) {
+      // Optional assets, like optional pipeline compilation, may fail without disabling the portable engine.
+      for (const k of ['quantx', 'iquant', 'imatmul', 'tensormul']) {
+        try { sources[k] = await src(k); } catch { sources[k] = ''; }
+      }
+    }
 
     // ---- pipelines ----
     const pipes = new Map();
     let tpr = 32;
     const code = (kernel, defines = {}) => {
       const d = { ...defines, F16: f16, SUBGROUPS: sg && kernel !== 'probe' ? true : defines.SUBGROUPS };
-      const head = [d.F16 && 'enable f16;', (d.SUBGROUPS || kernel === 'probe') && 'enable subgroups;', `alias H = ${d.F16 ? 'f16' : 'f32'};`, `const TPR: u32 = ${tpr}u;`];
-      return [...head.filter(Boolean), QUANTIZED.has(kernel) ? preprocess(sources.quant, d) : '', preprocess(sources[kernel], d)].join('\n');
+      const head = [kernel === 'tensormul' && 'enable chromium_experimental_subgroup_matrix;', d.F16 && 'enable f16;', (d.SUBGROUPS || kernel === 'probe') && 'enable subgroups;', `alias H = ${d.F16 ? 'f16' : 'f32'};`, `const TPR: u32 = ${tpr}u;`];
+      return [...head.filter(Boolean), QUANTIZED.has(kernel) ? preprocess(sources.quant, d) : '', (kernel === 'imatmul' || kernel === 'tensormul') ? preprocess(sources.iquant, d) : '', preprocess(sources[kernel], d)].join('\n');
     };
     const pipe = async (kernel, defines = {}) => {
       const key = `${kernel} ${JSON.stringify(defines)}`;
@@ -275,7 +316,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       device.queue.submit([enc.finish()]);
       u.destroy();
     };
-    const paramBinding = { matvec: 3, matmul: 3, embed: 3, norm: 5, swiglu: 2, shortconv: 4, rope: 8, attention: 5, argmax: 3, topk: 3, penalty: 2 };
+    const paramBinding = { matvec: 3, matmul: 3, embed: 3, norm: 5, swiglu: 2, shortconv: 4, rope: 8, attention: 5, argmax: 3, topk: 3, penalty: 2, quantx: 3, imatmul: 3, tensormul: 3 };
 
     // Subgroups: the kernels assume invocation li is lane li mod size, and need TPR ≤ the size; else the plain path.
     let sgWhy = null;
@@ -341,6 +382,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     const lim = device.limits;
     const layout = plan(infos, { maxBuffer: lim.maxBufferSize, maxBinding: lim.maxStorageBufferBindingSize });
     const wbufs = [];
+    failedBuffers = wbufs;
     const total = infos.reduce((n, t) => n + t.bytes, 0);
     let done = 0;
     const scope = () => device.pushErrorScope?.('out-of-memory');
@@ -378,6 +420,81 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       const t = byName.get(name) || fail(`no ${name}`);
       return { ...t, runs: layout.at[name].map((r) => ({ ...r, bind: { buffer: wbufs[r.buffer], offset: r.offset, size: r.size } })) };
     };
+
+    // Compile, compare and time candidates on this device and this model's real quantized weights. No persisted
+    // adapter verdict: a browser/driver/model change must pass again. Every buffer is temporary and freed on rejection.
+    const checkAcceleration = async (kind, available) => {
+      const verdict = acceleration[kind];
+      if (!available) return;
+      const kernel = kind === 'tensor' ? 'tensormul' : 'imatmul', tile = kind === 'tensor' ? 16 : 8;
+      verdict.reason = 'no compatible matrices';
+      for (const type of Object.keys(QUANT)) {
+        if (kind === 'tensor' && type === 'Q6_K') continue;
+        const t = infos.find((q) => q.type === type && q.rows >= 128 && q.rows <= 8192 && q.cols % 256 === 0 && !q.name.startsWith('token_embd'));
+        if (!t) continue;
+        halt();
+        const owned = [], own = (b) => (owned.push(b), b);
+        try {
+          if (!sources.quantx || !sources.iquant || !sources[kernel]) throw new Error('missing optional kernel');
+          const r = tensor(t.name).runs[0], rows = r.rows, K = t.cols, T = 128;
+          const x = new Float32Array(T * K);
+          // Ordinary normalized inputs, very uneven scales, alternating cancellation, zeros and outliers. Avoid
+          // quantization-friendly integer inputs (a broken approximate path could otherwise appear exact).
+          for (let j = 0; j < x.length; j++) {
+            const row = Math.floor(j / K), k = j % K;
+            x[j] = row % 8 === 0 ? 0 : (Math.sin(j * 0.173 + 0.1) + Math.cos(k * 0.317)) * (row % 7 === 0 ? 0.001 : 1);
+            if (row % 5 === 0 && k % 32 === 0) x[j] = 17.13 * (k % 64 ? -1 : 1);
+          }
+          const X = own(upload(x)), XQ = own(buffer(T * K * 2)), XD = own(buffer(T * K / 2));
+          const Y = own(buffer(T * rows * 4)), Z = own(buffer(T * rows * 4));
+          const words = PARAMS.matmul({ rows, K, rowBytes: t.rowBytes, T, xStride: K, ldy: rows });
+          const make = async (name, defines, entries, words, dims) => {
+            const p = await pipe(name, defines), u = own(uniform(words));
+            return { p, g: group(p, { ...entries, [paramBinding[name]]: u }), dims };
+          };
+          const big = bigTile && rows >= bigRows, z = big && split ? splits(rows, K, T) : 1;
+          const part = z > 1 ? own(buffer(z * T * rows * 4)) : Y;
+          const reference = [await make('matmul', { [type]: true, BIG: big, TF32: big && tf32 }, { 0: r.bind, 1: X, 2: part }, words, [Math.ceil(rows / (big ? 128 : 64)), Math.ceil(T / (big ? 128 : 64)), z])];
+          if (z > 1) reference.push(await make('matmul', { SUM: true }, { 1: part, 2: Y }, PARAMS.matmul({ rows, K: z, rowBytes: 0, T, xStride: 0, ldy: rows }), grid(Math.ceil(T * rows / 4 / 256))));
+          const quantize = await make('quantx', {}, { 0: X, 1: XQ, 2: XD }, u32(K, T, K, 0), grid(Math.ceil(T * K / 32 / 256)));
+          const multiply = await make(kernel, { [type]: true }, { 0: r.bind, 1: XQ, 2: Z, 4: XD }, words, [Math.ceil(rows / tile), Math.ceil(T / tile)]);
+          const run = async (ops, repeats = 1) => {
+            const enc = device.createCommandEncoder(), pass = enc.beginComputePass();
+            for (let i = 0; i < repeats; i++) for (const op of ops) { pass.setPipeline(op.p); pass.setBindGroup(0, op.g); pass.dispatchWorkgroups(...op.dims); }
+            pass.end();
+            const start = now(); device.queue.submit([enc.finish()]); await device.queue.onSubmittedWorkDone(); return now() - start;
+          };
+          // Capture asynchronous validation failures too; invalid commands must never produce a positive verdict.
+          device.pushErrorScope?.('validation');
+          let validation;
+          try { await run(reference); await run([quantize, multiply]); }
+          finally { validation = await device.popErrorScope?.(); }
+          if (validation) throw new Error(validation.message);
+          const expected = new Float32Array(await read(Y)), actual = new Float32Array(await read(Z));
+          let result = accelerationCheck(expected, actual);
+          if (result.reason !== 'timing') { verdict.types[type] = result; continue; }
+          const baseline = [], candidate = [];
+          // Alternating order and a conservative worst/best comparison avoid approving a path on one lucky sample.
+          for (let i = 0; i < 3; i++) {
+            halt();
+            if (i % 2) { candidate.push(await run([quantize, multiply], 4)); baseline.push(await run(reference, 4)); }
+            else { baseline.push(await run(reference, 4)); candidate.push(await run([quantize, multiply], 4)); }
+          }
+          result = accelerationCheck(expected, actual, baseline, candidate);
+          verdict.types[type] = { ...result, rows, K, T, baseline, candidate };
+          if (result.ok) verdict.enabled = true;
+        } catch (e) {
+          halt();
+          verdict.types[type] = { ok: false, reason: e.message };
+        } finally { for (const b of owned) b.destroy(); }
+      }
+      verdict.reason = verdict.enabled ? null : 'selfcheck';
+    };
+    await checkAcceleration('dp4a', dp4a);
+    await checkAcceleration('tensor', tensorAvailable && sg);
+    halt();
+    const freeze = (v) => { if (v && typeof v === 'object') { for (const x of Object.values(v)) freeze(x); Object.freeze(v); } return v; };
+    freeze(acceleration);
 
     // ---- a session -------------------------------------------------------------------------------------------------------
     let destroyed = false;
@@ -428,6 +545,10 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
         big: mk(chunk * hidden), up: mk(chunk * F), q: mk(chunk * H * hd), k: mk(chunk * kvHeads * hd), v: mk(chunk * kvHeads * hd), g: mk(chunk * H),
         last: mk(V), raw: mk(V), lastIds: mk(1), mask: mk(Math.ceil(V / 32)), pen: mk(64), apart: mk(H * Math.ceil(ctx / 128) * (hd + 2)), part: mk(Math.ceil(V / 4096) * 2 * chunk), cand: mk(Math.ceil(V / 2048) * 64 * 2), top: mk(64 * 2),
       };
+      if (acceleration.dp4a.enabled || acceleration.tensor.enabled) {
+        B.xq = storage(chunk * Math.max(E, F, H * hd) * 2);
+        B.xd = storage(chunk * Math.max(E, F, H * hd) / 2);
+      }
       // The splits' sums of a big-tile GEMM split along k.
       if (bigTile && chunk > 64 && split) {
         let most = 0;
@@ -455,7 +576,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
 
       // Every dispatch of a forward step owns a uniform slot; a step rewrites them all, then runs its list.
       const slots = [];
-      const P = { one: [], many: [], manyBig: [], lastOne: [], lastMany: [], allMany: [], argmax: [], topk: [] };
+      const P = { one: [], many: [], manyBig: [], fast: [], lastOne: [], lastMany: [], allMany: [], argmax: [], topk: [] };
       let params = null;
       const op = async (list, kernel, defines, entries, words, dims) => {
         const p = await pipe(kernel, defines), slot = slots.length;
@@ -468,9 +589,21 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       // y = W · x for each run of W's rows. GEMV (one token) or GEMM (T tokens, T filled per step).
       const mm = async (list, name, xOff, X, Y, yOff, { one, ldy, big: bigList = false }) => {
         const t = W(name);
+        // Only the tested prefill range is eligible. Decode, tiny matrices and Q6 tensor products retain their paths.
+        const checked = (kind) => {
+          const v = acceleration[kind].types[t.type];
+          return v?.ok && v.K === t.cols && t.runs.some((r) => r.rows === v.rows);
+        };
+        const selected = !one && bigList === 'fast' && chunk >= 128
+          ? checked('tensor') ? 'tensormul' : checked('dp4a') ? 'imatmul' : null : null;
+        const checkedRows = selected ? acceleration[selected === 'tensormul' ? 'tensor' : 'dp4a'].types[t.type].rows : 0;
+        if (selected) await op(list, 'quantx', {}, { 0: X, 1: B.xq, 2: B.xd }, (T) => u32(t.cols, T, t.cols, xOff()), (T) => grid(Math.ceil(T * t.cols / 32 / 256)));
         for (const r of t.runs) {
           if (one) await op(list, 'matvec', { [t.type]: true }, { 0: r.bind, 1: X, 2: Y }, () => PARAMS.matvec({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, xOff: xOff(), yOff: yOff + r.row }), () => grid(Math.ceil(r.rows / (256 / tpr))));
-          else {
+          else if (selected && r.rows === checkedRows) {
+            const tile = selected === 'tensormul' ? 16 : 8;
+            await op(list, selected, { [t.type]: true }, { 0: r.bind, 1: B.xq, 2: Y, 4: B.xd }, (T) => PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, ldy, yOff: yOff + r.row }), (T) => [Math.ceil(r.rows / tile), Math.ceil(T / tile)]);
+          } else {
             const big = bigList && bigTile && r.rows >= bigRows, tile = big ? 128 : 64, z = big && Y && split ? splits(r.rows, t.cols, chunk) : 1;
             const into = z > 1 ? B.split : Y;
             await op(list, 'matmul', { [t.type]: true, BIG: big, TF32: big && tf32 }, { 0: r.bind, 1: X, 2: into }, (T) => PARAMS.matmul({ rows: r.rows, K: t.cols, rowBytes: t.rowBytes, T, xStride: t.cols, xOff: xOff(), ldy: z > 1 ? r.rows : ldy, yOff: z > 1 ? 0 : yOff + r.row }), (T) => [Math.ceil(r.rows / tile), Math.ceil(T / tile), z]);
@@ -530,6 +663,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       await build(P.one, true);
       await build(P.many, false);
       if (bigTile && chunk > 64) await build(P.manyBig, false, true);
+      if (chunk >= 128 && (acceleration.dp4a.enabled || acceleration.tensor.enabled)) await build(P.fast, false, 'fast');
       let lastT = 1;
       await mm(P.lastOne, out, () => 0, B.n, B.last, 0, { one: true });
       await mm(P.lastMany, out, () => (lastT - 1) * E, B.n, B.last, 0, { one: true });
@@ -626,7 +760,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
             ensureRope(pos + T);
             device.queue.writeBuffer(B.ids, 0, Uint32Array.from(part));
             lastT = T; topK = k || 1;
-            const body = T === 1 ? P.one : T > 64 && P.manyBig.length ? P.manyBig : P.many;
+            const body = T === 1 ? P.one : T === 128 && P.fast.length ? P.fast : T > 64 && P.manyBig.length ? P.manyBig : P.many;
             const tail = [];
             if (lastChunk && (logits !== 'none' || argmax || k)) tail.push(T === 1 ? P.lastOne : P.lastMany);
             if (lastChunk && argmax) tail.push(P.argmax);
@@ -878,7 +1012,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     };
 
     return {
-      config: c, device, adapter, f16, tf32, split, subgroups: sg, subgroupsOff: sgWhy, tpr, layout, session, flash: flash(Math.max(...c.nHeadKv)),
+      config: c, device, adapter, f16, tf32, split, features: { acceleration }, subgroups: sg, subgroupsOff: sgWhy, tpr, layout, session, flash: flash(Math.max(...c.nHeadKv)),
       get lost() { return lost; },
       destroy: () => { destroyed = true; for (const close of sessions) close(); for (const b of wbufs) b.destroy(); if (own) device.destroy?.(); },
       // For the checks: the kernels one dispatch at a time, on the engine's own pipelines and weights.
@@ -886,6 +1020,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     };
     } catch (e) {
       if (!e?.reason && !opts.signal?.aborted) e = Object.assign(e instanceof Error ? e : new Error(String(e)), { reason: lost ? 'lost' : /kernel /.test(e?.message) ? 'webgpu' : 'model' });
+      for (const b of failedBuffers) b.destroy();
       bail(e);
     }
   };
@@ -1123,6 +1258,6 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     return model;
   };
 
-  return { create, load, sample, plan, preprocess, grid, splits, ropeTable, PARAMS, QUANT, KERNELS };
+  return { create, load, sample, accelerationCheck, plan, preprocess, grid, splits, ropeTable, PARAMS, QUANT, KERNELS };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_ENGINE; else GZ_AI_ENGINE;
