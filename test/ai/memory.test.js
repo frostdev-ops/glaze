@@ -167,6 +167,34 @@ test('retrieval offsets follow original Unicode text after compatibility folding
   assert.match(r.items[0].text, /acid concentration/);
 });
 
+test('search flags suffix-clipped complete course material as an excerpt', async () => {
+  const local = area(), s = make(local), markdown = 'Chemistry studies matter. '.repeat(60);
+  const saved = await s.ingest(A, { source: source({ complete: true }), markdown });
+  const out = await s.search(A, 'Chemistry', { maxChars: 600 });
+  assert.equal(out.items.length, 1); assert.equal(out.items[0].text.length, 600);
+  assert.equal(out.truncated, true); assert.equal(out.items[0].source.complete, true);
+  assert.equal(local.data[M.keyOf(A, saved.receipt.id)].markdown, markdown);
+});
+
+test('search flags anchored prefixes even when the complete record fits the character limit', async () => {
+  const s = make(area()), markdown = 'Background. '.repeat(30) + 'Titration measures acid concentration.';
+  assert.ok(markdown.length < 600);
+  await s.ingest(A, { source: source({ complete: true }), markdown });
+  const out = await s.search(A, 'Titration', { maxChars: 600 });
+  assert.match(out.items[0].text, /Titration/); assert.notEqual(out.items[0].text, markdown);
+  assert.equal(out.truncated, true); assert.equal(out.items[0].source.complete, true);
+});
+
+test('search keeps full short hits complete while retaining omitted-record truncation', async () => {
+  const s = make(area()), markdown = 'Titration measures acid concentration.';
+  await s.ingest(A, { source: source({ complete: true }), markdown });
+  const out = await s.search(A, 'Titration', { maxChars: 600 });
+  assert.equal(out.items[0].text, markdown); assert.equal(out.truncated, false);
+  assert.equal(out.items[0].source.complete, true);
+  await s.ingest(A, { source: source({ id: '9', complete: true }), markdown: 'Titration notes.' });
+  assert.equal((await s.search(A, 'Titration', { maxChars: 600, limit: 1 })).truncated, true);
+});
+
 test('aggregate caps refuse automatic memory saves without evicting any saved record', async () => {
   const initial = Object.fromEntries(Array.from({ length: M.LIMIT.memories }, (_, n) => { const r = record(n + 1); return [M.keyOf(A, r.id), r]; }));
   const local = area(initial), s = make(local);
