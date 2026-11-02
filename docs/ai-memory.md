@@ -40,7 +40,8 @@ or clearing invalidates pending producers so earlier work cannot restore removed
 
 Saved memories use Glaze's existing Drive record sync when enabled and are included in backup files. Each record syncs
 independently. Conflicting active edits converge deterministically; a content-free deletion marker wins over an older
-copy, including on first sync or backup restore. New explicit memories receive new identities. Drive acknowledgement is
+copy when the device receives both, including on first sync or backup restore. A fresh installation restoring an old
+backup cannot know about a later deletion until it receives that marker. New explicit memories receive new identities. Drive acknowledgement is
 separate from a local save receipt. Course excerpts and derived search data never enter Drive or backups.
 
 There is no timed expiry. Saved memories are bounded to 500 active records per school account, with at most 600

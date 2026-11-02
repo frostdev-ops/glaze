@@ -205,8 +205,8 @@ it does not erase existing records. You can still view, edit, delete, clear or e
 
 Saved memories are included in Glaze backups and in **Sync to Google Drive** when that existing connection and sync are
 enabled. Course excerpts and search indexes are excluded. A successful save means it is stored on this device; Drive
-sync follows its normal schedule. Deletion removes a saved record's content and retains a small deletion marker so an
-older device or restored backup cannot revive that record. Copies in earlier backup/export files, an open conversation
+sync follows its normal schedule. Deletion removes a saved record's content and retains a small deletion marker. A device
+that has that marker will not revive the record from an older device or backup. Copies in earlier backup/export files, an open conversation
 or an AI provider's records are separate; deleting a memory does not erase those copies. Nothing is sent to Frostdev.
 
 A reminder or watch you approve is also retained: Glaze keeps its time or what it watches, its few words
