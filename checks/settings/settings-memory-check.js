@@ -39,7 +39,7 @@ async function pass(scheme) {
     const ext = env.staged(root, [], scratch);
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(scratch, 'profile'), {
-      ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 1200 }, deviceScaleFactor: 1, reducedMotion: 'reduce', colorScheme: scheme,
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 1200 }, deviceScaleFactor: 1, reducedMotion: 'reduce', colorScheme: scheme,
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--disable-background-networking', '--proxy-server=http://127.0.0.1:0', '--proxy-bypass-list=<-loopback>', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });
     env.noFirstRun(context);

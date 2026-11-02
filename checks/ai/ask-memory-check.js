@@ -11,6 +11,7 @@ const results = [];
   let browser;
   fs.mkdirSync(out, { recursive: true });
   try {
+    await require('../../tools/dev/wait-for-browser.js')();
     browser = await chromium.launch({ ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true });
     for (const variant of ['dialog', 'tile']) for (const width of [1280, 320]) for (const dark of [false, true]) {
       const name = `${variant}-${width}-${dark ? 'dark' : 'light'}`, page = await browser.newPage({ viewport: { width, height: 800 }, reducedMotion: 'reduce' });
