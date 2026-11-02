@@ -193,8 +193,23 @@ omitted, and participant names supplied by Blackboard are redacted from returned
 only when a teacher or TA of the course wrote it (checked against the course's teacher and TA list, read once per page). For a file a page embeds it sends
 the file's name and type, never its address. Ask Rime's switch is that tool access:
 it needs no Agents pairing and doesn't turn agent access on. Its one change, marking a to-do done, waits for your OK in
-Glaze's window, worded by Glaze, never by the model. Nothing of the conversation is kept: it goes when the page or the
-panel closes. A reminder or watch you approve is the exception: Glaze keeps its time or what it watches, its few words
+Glaze's window, worded by Glaze, never by the model. The conversation itself goes when the page or panel closes.
+With **Memory** on (the default once Ask Rime is enabled), Rime can save useful preferences and facts from your messages
+as short Markdown records with a supporting excerpt, timestamps and a revision. These records stay on this device,
+separated by school account, until you edit or delete them in **Settings → AI → Memory** or the chat's memory controls.
+Glaze also retains bounded excerpts from successful course reads, with the source, when it was read and whether it was
+partial. This course cache stays on this device; it has no timed expiry and can be cleared in Memory settings.
+Relevant memories and cached excerpts may be included in later Ask Rime requests to the model you chose. Memory is
+used only by Ask Rime, not Writer's AI features. Turning Memory off stops recall, automatic saving and course indexing;
+it does not erase existing records. You can still view, edit, delete, clear or export them while AI is off.
+
+Saved memories are included in Glaze backups and in **Sync to Google Drive** when that existing connection and sync are
+enabled. Course excerpts and search indexes are excluded. A successful save means it is stored on this device; Drive
+sync follows its normal schedule. Deletion removes a saved record's content and retains a small deletion marker so an
+older device or restored backup cannot revive that record. Copies in earlier backup/export files, an open conversation
+or an AI provider's records are separate; deleting a memory does not erase those copies. Nothing is sent to Frostdev.
+
+A reminder or watch you approve is also retained: Glaze keeps its time or what it watches, its few words
 of what to say, and for a watch what it last read (a due date, whether work shows as handed in, a course's grade, the
 announcements' ids and titles) in extension storage on this device, at most 20 of each, until it fires and is shown on
 your next school page or you cancel it (a watch ends after 30 days); turning off **Reminders and watches** under Ask Rime stops them.

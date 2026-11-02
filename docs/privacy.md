@@ -46,8 +46,14 @@ you add it, to the model you chose for it. For a question about your own courses
 answer it: your to-dos, schedule, grades, assignments or Writer documents, as Glaze already keeps them on this device,
 and a course's announcements, content, syllabus and discussions. From a discussion it sends the prompt and your own
 replies, and only the number of your classmates' replies, never their names or posts.
-Marking a to-do done waits for your OK in Glaze's window. Nothing of the conversation is kept, except a reminder or watch
-you approve, kept on this device until it is shown or cancelled.
+Marking a to-do done waits for your OK in Glaze's window. The conversation itself is temporary. With Memory on, Ask Rime
+can keep useful preferences and facts from your messages as editable Markdown records and retain excerpts from course
+material it has read. Relevant records can be sent with later questions to your chosen model. **Settings → AI → Memory**
+lets you turn this off, view, edit, delete, clear and export records, even while AI is off. Turning it off keeps existing
+records. Saved memories join Glaze backups and existing Google Drive sync when enabled; the course cache and search
+index stay on this device. Records are separated by school account and have no timed expiry. Deletion removes active
+content and keeps a small marker against restoration; earlier exported/backed-up copies and an open conversation remain
+separate. A reminder or watch you approve is kept on this device until shown or cancelled.
 
 [Agent access](../PRIVACY.md#agent-access) (Settings → AI → Agents) is off by default. Apps on this computer connect
 through a local helper: `glaze-mcp`, or the downloaded Glaze Mac app on Safari. Glaze asks you to allow each app
