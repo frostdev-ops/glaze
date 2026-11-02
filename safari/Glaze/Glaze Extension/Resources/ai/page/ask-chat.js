@@ -693,12 +693,14 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       if (pending !== mine || !alive_) return;
       pending = null;
       if (!allowed) return onOff?.();
-      const questionLine = again ? previous?.questionLine : question(attempt ? `${q}\n\n${attempt}` : q);
+      const fullQuestion = attempt ? `${q}\n\n${attempt}` : q;
+      const questionLine = again ? previous?.questionLine : question(fullQuestion);
       // A retry of the latest open turn replaces it. An older/folded retry is a new attempt in chronological order.
       let turn = previous && previous === turns.at(-1) && turns.indexOf(previous) >= memo.folded ? previous : null;
-      const remember = (text, li = questionLine) => {
-        if (turn) Object.assign(turn, { answer: text, li });
-        else turns.push(turn = { question: q, answer: text, li, questionLine });
+      // An attempt with no visible result still ends here, even when its question was shown much earlier.
+      const remember = (text, li = put(make('li', { hidden: true }))) => {
+        if (turn) { if (turn.li?.hidden) drop(turn.li); Object.assign(turn, { answer: text, li }); }
+        else turns.push(turn = { question: fullQuestion, answer: text, li, questionLine });
       };
       sent?.();
       say(t('Thinking…'));
@@ -759,7 +761,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
           perform(queued, li);
         }
       } else if (end.error === 'off' && end.feature === 'memory') { remember(unfinished); say(t('Memory is off')); }
-      else if (['off', 'feature'].includes(end.error)) onOff?.();
+      else if (['off', 'feature'].includes(end.error)) { remember(unfinished); onOff?.(); }
       else if (end.error === 'cancelled') { remember(unfinished); say(''); }
       else {
         const text = said(end.error);
@@ -772,8 +774,8 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
         if (why) li.append(why);
         retry.addEventListener('click', (e) => {
           if (!real(e) || !activated() || current || pending) return;
-          // A folded turn still needs a connected anchor after its retry button's error row goes away.
-          if (turn.li === li) turn.li = turn.questionLine;
+          // Keep the original attempt's position when its retry button's error row goes away.
+          if (turn.li === li) { turn.li = make('li', { hidden: true }); li.before(turn.li); }
           drop(li);
           ask({ question: q, attempt, shown: true, previous: turn, fired });
         });
