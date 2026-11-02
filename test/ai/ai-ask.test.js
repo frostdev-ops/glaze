@@ -60,6 +60,25 @@ test('route: the student\'s own records go to agent.tools with the tools their t
     assert.deepEqual(K.route('What should I do first?', { level: 3, history: [...history,
       { question: 'What should I do first?', answer: 'Request failed.' }, { question: 'Are you sure?', answer: 'Request failed.' }] }).tools, expected);
   }
+  const natural = [{ question: 'what i gotta do before tomorrow', answer: 'Request failed.' }];
+  assert.ok(K.route(natural[0].question, { level: 3 }).tools.includes('schedule_list'));
+  for (const question of ['which one should i start', 'which one should i begin?', 'nah i meant bio']) {
+    assert.deepEqual(K.route(question, { level: 3, history: natural }).tools, expected, question);
+  }
+  const corrected = [...natural, { question: 'which one should i start', answer: 'Request failed.' },
+    { question: 'nah i meant bio', answer: 'Request failed.' }];
+  assert.deepEqual(K.route('ok what about next week', { level: 3, history: corrected }).tools, expected);
+  for (const question of ['which one should i start', 'nah i meant bio', 'ok what about next week']) {
+    assert.equal(K.route(question, { level: 3 }).task, 'study.help', 'no invented records antecedent');
+    assert.equal(K.route(question, { level: 3, history: [{ question: 'Help me solve this equation.', answer: 'Try undoing addition.' }] }).task, 'study.help');
+    assert.equal(K.route(question, { level: 3, history: [...natural, { question: 'Debug my Python loop.', answer: 'Show your attempt.' }] }).task, 'study.help');
+    assert.equal(K.route(question, { level: 3, history: natural, attempt: 'My answer is x = 4.' }).task, 'study.help');
+  }
+  assert.equal(K.route('"which one should i start"', { level: 3, history: natural }).task, 'study.help');
+  assert.equal(K.route('nah i meant solve 2x = 8', { level: 3, history: natural }).task, 'study.help');
+  assert.deepEqual(K.route('what i gotta do before tomorrow; debug my Python loop', { level: 3 }).task, 'study.help');
+  assert.equal(K.route('what i gotta do before tomorrow; debug my Python loop', { level: 3 }).subject, 'code');
+  assert.equal(K.route('When is my Debug Lab due?', { level: 3 }).task, 'agent.tools');
   const content = { site: 'ultra', view: 'content', course: { id: '_25_1' }, content: { id: '_7_1', kind: 'document' } };
   for (const question of ['Read the whole item and list the required materials and delivery format.', 'Read the full item and summarize its materials and later instructions.']) {
     const r = K.route(question, { level: 3, current: content });
