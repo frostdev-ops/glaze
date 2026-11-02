@@ -144,10 +144,15 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const models = async () => (await own().store.list()).filter((m) => m.state !== 'stale');
   const tiers = (list) => list.filter((m) => !m.role);
   const choose = (list, cfg) => { list = tiers(list); return (cfg.tier && list.find((m) => m.tier === cfg.tier)) || list.find((m) => m.state === 'ready') || list.find((m) => m.state === 'partial') || null; };
+  const modelOf = (list, cfg) => cfg.weights ? tiers(list).find((m) => m.id === cfg.weights) : choose(list, cfg);
   // The agent tools the model this cfg runs was trained on (models.json `tools`): 3 from the round that trains Ask Rime's own
-  // tools; Rime r5's entries say nothing, which is 1, Agents' twelve (ai/ask.js offers it no more).
-  const levelOf = (list, cfg = {}) => { const m = cfg.weights ? tiers(list).find((m) => m.id === cfg.weights) : choose(list, cfg); return Number.isSafeInteger(m?.tools) && m.tools > 0 ? m.tools : 1; };
+  // tools; an entry without a level is 1, Agents' twelve (ai/ask.js offers it no more).
+  const levelOf = (list, cfg = {}) => { const m = modelOf(list, cfg); return Number.isSafeInteger(m?.tools) && m.tools > 0 ? m.tools : 1; };
   const toolsLevel = async (cfg = {}) => levelOf(await models(), cfg);
+  // Memory is a separate training contract (`memory: 1`), never inferred from tools. Read the same pinned model as a run;
+  // a missing capability or a version this harness does not understand cannot enable memory.
+  const memoryOf = (list, cfg = {}) => modelOf(list, cfg)?.memory === 1 ? 1 : 0;
+  const memoryVersion = async (cfg = {}) => memoryOf(await models(), cfg);
   // The picture download: { model, projector, size, ready } when models.json offers it, else null.
   const pictures = (list) => {
     const model = list.find((m) => m.role === 'pictures'), projector = model && list.find((m) => m.role === 'projector' && m.id === model.projector);
@@ -222,7 +227,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
       if (!pics.ready || preparing.pictures) throw fail('provider-unavailable', 'pictures');
       return { m: pics.model, window: Math.min(cfg.context || CONTEXT, CONTEXT), projector: pics.projector.id, ...FMT().format(req, { dialect: 'chatml', images: true }) };
     }
-    const m = cfg.weights ? tiers(list).find((x) => x.id === cfg.weights) : choose(list, cfg);
+    const m = modelOf(list, cfg);
     if (!m || m.state !== 'ready') throw fail('provider-unavailable', 'assets');
     const window = Math.min(cfg.context || windowOf(m, cfg).window, windowOf(m, cfg).window);
     const think = await budget(req, m, window), sized = !m.stock && limits(req.task, window).size;
@@ -318,7 +323,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
 
   // The engine host's link, for the background model updates (ai/local/updates.js check).
   const link = () => own().link;
-  const provider = { id: 'local', config, caps, status, prepare, run, warm, count, catalog, release, remove, accept, levelOf, toolsLevel, link, windowOf, WINDOWS, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
+  const provider = { id: 'local', config, caps, status, prepare, run, warm, count, catalog, release, remove, accept, levelOf, toolsLevel, memoryOf, memoryVersion, link, windowOf, WINDOWS, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
     THINK_SIZED, ANSWER, SCALE, limits,
     _env: (e) => { env = e; preparing.text = preparing.pictures = null; broken = null; rates = null; measured.clear(); } };
   return P.add(provider);

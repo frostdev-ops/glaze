@@ -3,7 +3,8 @@
 // minGlaze and version] }, sig }, sig Ed25519 over utf8('glaze-models-1|' + canon(list)) by the key whose public half is
 // KEY (tools/vendor/model-manifest.js --sign; the owner approves every publish). A list counts only if it verifies, its
 // serial is above the one held, and every entry is in the schema; entries for a newer Glaze (minGlaze) or a higher tools
-// level than this harness runs (TOOLS) are skipped. A newer version of a model keeps its id (ai/local/store.js compose).
+// level than this harness runs (TOOLS), or an unsupported optional memory version, are skipped. A newer version of a
+// model keeps its id (ai/local/store.js compose).
 // The worker (check): only while this browser holds a downloaded Rime model and the student hasn't turned Update
 // automatically off, once a day (alarm DAILY) and a few minutes after the browser starts (START, jittered; skipped when a
 // check ran within the day unless a download waits to resume), never with Data Saver on. It fetches the list without
@@ -46,7 +47,7 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
     return 0;
   };
 
-  const FIELDS = ['id', 'name', 'repo', 'commit', 'file', 'url', 'size', 'chunk', 'sha256', 'total', 'license', 'quant', 'tier', 'tools', 'minGlaze', 'version', 'stock'];
+  const FIELDS = ['id', 'name', 'repo', 'commit', 'file', 'url', 'size', 'chunk', 'sha256', 'total', 'license', 'quant', 'tier', 'tools', 'memory', 'minGlaze', 'version', 'stock'];
   // A list entry: a models.json text model (store.js valid, a tier, no role) with its tools level, minGlaze and version.
   const entry = (m) => isObj(m) && ST().valid(m) && m.role === undefined && m.projector === undefined
     && Number.isSafeInteger(m.tier) && m.tier >= 1 && m.tier <= 9 && Number.isSafeInteger(m.tools) && m.tools >= 1 && m.tools <= 9
@@ -76,7 +77,7 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
     return { ok: true, list };
   };
   // The entries this Glaze can run.
-  const usable = (list, { glaze, tools = TOOLS }) => list.models.filter((m) => compare(m.minGlaze, glaze) <= 0 && m.tools <= tools);
+  const usable = (list, { glaze, tools = TOOLS }) => list.models.filter((m) => compare(m.minGlaze, glaze) <= 0 && m.tools <= tools && (m.memory === undefined || m.memory === 1));
 
   // ---- the state (ai/local/store.js's state file) ---------------------------------------------------------------------
   const base = (st) => ({ v: 1, serial: 0, issued: null, models: [], pins: {}, keep: {}, trial: null, failed: {}, ...(isObj(st) ? st : {}) });

@@ -52,6 +52,7 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
     && Number.isSafeInteger(m.size) && m.size > 0 && Number.isSafeInteger(m.chunk) && m.chunk > 0 && m.chunk <= 268435456
     && Array.isArray(m.sha256) && m.sha256.length === Math.ceil(m.size / m.chunk) && m.sha256.every((h) => typeof h === 'string' && HEX.test(h))
     && typeof m.total === 'string' && HEX.test(m.total)
+    && (m.memory === undefined || (Number.isSafeInteger(m.memory) && m.memory >= 1))
     // The picture download's files: its language model (role pictures, naming its projector) and the projector.
     && (m.role === undefined || m.role === 'projector' ? m.projector === undefined : m.role === 'pictures' && typeof m.projector === 'string' && ID.test(m.projector));
 
@@ -558,9 +559,9 @@ var GZ_AI_STORE = globalThis.GZ_AI_STORE || (() => {
       const cat = (await load()).entries;
       const out = [];
       for (const m of cat.values()) {
-        const { id, name, size, quant, tier, license, stock, role, projector, tools, version: v } = m;
+        const { id, name, size, quant, tier, license, stock, role, projector, tools, memory, version: v } = m;
         out.push({ id, name, size, quant, tier, license, ...(stock && { stock }), ...(role && { role }), ...(projector && { projector }), ...(Number.isSafeInteger(tools) && { tools }),
-          ...(typeof v === 'string' && { version: v }), ...(await status(id)) });
+          ...(Number.isSafeInteger(memory) && { memory }), ...(typeof v === 'string' && { version: v }), ...(await status(id)) });
       }
       let top = null;
       try { top = await (await root()).getDirectoryHandle(TOP); } catch (e) { if (!gone(e)) throw e; }
