@@ -34,6 +34,8 @@ test('strict envelope rejects unknown authority fields, wrong provenance and con
   assert.deepEqual(M.clean(gone, k), gone);
   assert.equal(M.clean({ ...gone, markdown: '' }, k), null);
   assert.equal(M.clean({ ...gone, source: r.source }, k), null);
+  assert.equal(M.clean({ ...gone, id: 'bad', kind: null }), null);
+  assert.equal(M.clean({ ...r, category: 'preference' }).category, 'preference');
 });
 
 test('merge is convergent, accepts absent records and deletion dominates all older or newer content', () => {
@@ -71,6 +73,7 @@ test('optimistic updates serialize across instances, and automatic replacement p
   assert.equal(results.filter((r) => r.ok).length, 1);
   assert.equal(results.find((r) => !r.ok).error, 'conflict');
   const current = (await first.list(A)).items[0];
+  assert.equal(current.source.evidence, current.markdown);
   const args = { id: current.id, revision: current.revision, text: 'Prefer tables.', evidence: 'Prefer tables.' };
   assert.equal((await first.save(A, args, { question: args.evidence })).error, 'conflict');
   assert.equal((await first.save(A, args, { question: args.evidence, explicitCorrection: true })).ok, true);
@@ -140,6 +143,18 @@ test('reads page safely and used revisions can be revalidated before a final ans
   assert.equal((await s.read(A, a.receipt.id, { page: 4 })).error, 'not-found');
   await s.forget(A, { id: a.receipt.id, revision: a.receipt.revision });
   assert.equal(await s.current(A, [{ id: a.receipt.id, revision: a.receipt.revision }]), false);
+});
+
+test('pre-turn recall includes a saved preference without changing ordinary lexical searches', async () => {
+  const local = area(), s = make(local), preference = 'Use short paragraphs.';
+  const a = await s.save(A, { text: preference, evidence: preference, category: 'preference' }, { question: preference });
+  await save(s, A, 'I study chemistry.');
+  assert.equal((await s.search(A, 'photosynthesis')).items.length, 0);
+  const recall = await s.search(A, 'photosynthesis', { limit: 3, includePreferences: true });
+  assert.deepEqual(recall.items.map((r) => r.id), [a.receipt.id]);
+  assert.equal(recall.items[0].category, 'preference');
+  assert.equal(recall.items.length <= 3, true);
+  assert.equal((await s.search(B, 'photosynthesis', { includePreferences: true })).items.length, 0);
 });
 
 test('aggregate caps refuse automatic memory saves without evicting any saved record', async () => {
