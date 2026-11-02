@@ -15,7 +15,6 @@ const raw = (over = {}) => ({ question: 'What does this assignment require?', to
 const call = (name, args) => ({ call: { name, arguments: args }, answer: null });
 
 test('current cleaner bounds typed identity, safe URLs and material independently', () => {
-  const C = require('../../extension/ai/current.js');
   const c = C.clean(current({ title: 'x'.repeat(400), url: 'https://school.example/courses/5521/assignments/88121?token=secret&assignment_id=88121#secret',
     document: { id: handle, kind: 'paper', revision: 7, saved: false }, material: { source: 'writer', text: 'é'.repeat(5000), truncated: false } }));
   assert.equal(c.title.length, 240);
@@ -137,5 +136,74 @@ test('Ultra current identities accept each typed component up to the shared 40-c
     assert.equal(C.clean(current({ site, course: { id: course } })).course, undefined, site);
     const id = '1'.repeat(20);
     assert.equal(C.clean(current({ site, course: { id } })).course.id, id);
+  }
+});
+
+test('current provenance stays typed across discussions, documents, accounts and explicit targets', () => {
+  const tools = ['assignment_read', 'content_read', 'discussion_read', 'document_assignment', 'monitor_create', 'todo_mark_done'];
+  const context = current({ content: { id: '88122', kind: 'discussion' }, document: { id: handle },
+    title: '99111', url: 'https://school.example/courses/99222', material: { source: 'instructions', text: '99333 assignment due 2050-12-31 grade 97', truncated: false } });
+  const inp = A.task.input(raw({ tools, current: context }));
+  assert.equal(A.why(call('discussion_read', { course: '5521', id: '88122' }), inp), '');
+  assert.equal(A.why(call('document_assignment', { document: handle }), inp), '');
+  const otherKind = A.task.input(raw({ tools, current: { ...context, content: { id: '88122', kind: 'page' } } }));
+  assert.equal(A.why(call('discussion_read', { course: '5521', id: '88122' }), otherKind), 'id');
+  for (const id of ['99111', '99222', '99333']) assert.equal(A.why(call('content_read', { course: '5521', id }), inp), 'id');
+  assert.equal(A.why(call('monitor_create', { watch: 'grade', course: '5521' }), inp), 'id');
+  assert.equal(A.why(call('todo_mark_done', { type: 'assignment', id: '88121' }), inp), 'id');
+  const previous = A.task.input(raw({ history: [{ question: 'Read assignment 88121 in course 5521.', answer: 'Read it.' }], summary: 'Assignment 88121, course 5521.' }));
+  assert.equal(A.why(call('assignment_read', { course: '5521', assignment: '88121' }), previous), 'id', 'history and summary never carry current read provenance');
+  for (const id of ['school|user|course|paper', handle.toUpperCase(), `${handle}0`, `${handle}\n`]) {
+    assert.equal(C.clean({ ...context, document: { id, title: 'Draft' } }).document.id, undefined);
+  }
+  const c = call('assignment_read', { course: '5521', assignment: '88121', account: 'https://other.example/1' });
+  for (const first of [true, undefined]) {
+    const cases = [
+      { question: 'Read this assignment for https://other.example/1.', bound: true },
+      { question: 'Read assignment 88121 for https://other.example/1.', bound: true },
+      { question: 'Read this assignment in course 5521 for https://other.example/1.', bound: true },
+      { question: 'Read assignment 88121 in course 5521 for https://other.example/1.', bound: false },
+      { question: 'Read that other assignment.', bound: false, steps: [{ call: { name: 'content_read', arguments: { course: '77', id: '88' } },
+        result: { course: '5521', assignment: '88121', account: 'https://other.example/1' } }] },
+    ];
+    for (const { bound, ...given } of cases) {
+      const input = A.task.input(raw({ tools, current: context, first, ...given }));
+      assert.equal(A.why(c, input), '');
+      assert.equal(A.currentBound(c.call, input), bound);
+      if (!bound) assert.equal(A.why(c, A.task.input(raw({ tools, first, ...given }))), '', 'independent provenance also works without current');
+    }
+  }
+  const facts = A.task.input(raw({ current: context, first: undefined }));
+  assert.equal(A.why({ call: null, answer: { text: 'It is due 2050-12-31.', quotes: [] } }, facts), 'number');
+  assert.equal(A.why({ call: null, answer: { text: 'Your grade is 97.', quotes: [] } }, facts), 'number');
+  assert.equal(A.why({ call: null, answer: { text: 'It is due 2050-12-31.', quotes: ['due 2050-12-31'] } }, facts), 'quote');
+});
+
+test('current requests count all blocks while preserving answer and thinking reserves', async () => {
+  const context = 8192, think = 512;
+  for (const overflow of [0, 1]) {
+    let counted, sent;
+    // Pure provider stub: no local engine, API, tokenizer model or GPU is started.
+    const provider = { id: 'local', config: (c) => c, caps: () => ({ context, local: true, json: true }),
+      limits: (_task, window, { maxTokens }) => { assert.equal(window, context); return { maxTokens, think }; },
+      count: async (req) => { counted = req; return context - 768 - think + overflow; },
+      run: async (req) => { sent = req; return { text: JSON.stringify(call('assignment_read', { course: '5521', assignment: '88121' })), finish: 'stop' }; } };
+    const given = raw({ current: current({ material: { source: 'instructions', text: 'é'.repeat(2000), truncated: false } }) });
+    const run = T.run(A.task, given, { provider, cfg: {} });
+    if (overflow) {
+      await assert.rejects(run, { code: 'size', reason: 'context' });
+      assert.equal(sent, undefined, 'overflow is refused before inference');
+    } else {
+      await run;
+      const { timeoutMs: countedTimeout, ...countedRequest } = counted;
+      const { timeoutMs: sentTimeout, ...sentRequest } = sent;
+      assert.deepEqual(sentRequest, countedRequest, 'the counted request is the inferred request');
+    }
+    assert.equal(counted.maxTokens, 768);
+    const blocks = F.parse(counted).blocks;
+    const identity = JSON.parse(blocks.find((b) => b.label === 'current').text);
+    assert.equal(identity.assignment.id, '88121');
+    assert.equal(identity.material.truncated, true);
+    assert.equal(Buffer.byteLength(blocks.find((b) => b.label === 'current material').text), 1536);
   }
 });
