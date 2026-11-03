@@ -60,9 +60,10 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   };
   // The window's size (format.js SIZES, its token after the task's) scales the reasoning and the answer (owner, 2026-11-01).
   // THINK_SIZED: the tasks that reason, per size; the rest answer directly. ANSWER: the answer's reserve per size; a request
-  // asking less keeps its own. SCALE: the switches, all off until a round trained with the size tokens passes the gate, so
-  // Rime r5 reads what it was gated on (no size token, THINK, the request's maxTokens): token sends the size token, answer
-  // takes ANSWER, think[task][size] lets that task reason at that size, compact enables chat.compact's new task token.
+  // asking less keeps its own. SCALE: the switches, all off, so Rime r5 and R8 read what they were gated on (no size token,
+  // THINK, the request's maxTokens): token sends the size token, answer takes ANSWER, think[task][size] lets that task
+  // reason at that size, compact enables chat.compact's new task token. SCALED: a model trained with them (models.json
+  // `scale: 1`, R9 on, owner 2026-11-03) gets token, answer and compact; its think switches stay off, adaptive as before.
   // The host caps both budgets by the room left in the window.
   const SIZE = ['4k', '8k', '16k', '32k', '64k', '128k'];
   const bySize = (f) => Object.freeze(Object.fromEntries(SIZE.map((k, i) => [k, f(i)])));
@@ -70,12 +71,17 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const THINK_SIZED = Object.freeze({ 'agent.tools': REASONS, 'study.help': REASONS });
   const ANSWER = bySize((i) => [512, 768, 1024, 1536, 2048, 2048][i]);
   const SCALE = Object.freeze({ token: false, answer: false, compact: false, think: Object.freeze({ 'agent.tools': bySize(() => false), 'study.help': bySize(() => false) }) });
+  const SCALED = Object.freeze({ ...SCALE, token: true, answer: true, compact: true });
+  // A test's own switches (_env's scale), else the model's: SCALED only for a tuned text model declaring exactly scale 1.
+  const scaleFor = (m) => env?.scale || (m && !m.stock && !m.role && m.scale === 1 ? SCALED : SCALE);
   // Adaptive reasoning is independent of the experimental size-token/answer tables. The selected window is a
   // ceiling, never a target: the model may close thought immediately. Keep the gated 4K direct profile intact.
   const EFFORT = Object.freeze({ none: 0, minimal: 0.125, low: 0.25, medium: 0.5, high: 1 });
   const adaptive = (task, window, { effort, reasoning = true } = {}) => reasoning !== false && window > TUNED &&
     ['agent.tools', 'study.help'].includes(task?.id) ? Math.floor(Math.min(32768, window / 4) * (EFFORT[effort] ?? 1)) : 0;
-  const limits = (task, window, { maxTokens, effort, reasoning, promptTokens, scale = env?.scale || SCALE } = {}) => {
+  // selected: the models.json entry that runs; without it, the one this cfg ran on in the last list read (admission's reserve).
+  const limits = (task, window, { maxTokens, effort, reasoning, promptTokens, scale, selected, ...cfg } = {}) => {
+    scale ||= scaleFor(selected || modelOf(listed, cfg));
     const token = FMT().sizeOf(window), key = token && token.slice(9, -2);
     const legacy = key && scale.think?.[task?.id]?.[key] === true && Object.hasOwn(THINK_SIZED, task.id) ? THINK_SIZED[task.id][key] : thinkFor(task);
     const think = effort === 'none' || reasoning === false ? 0 : Math.max(legacy, adaptive(task, window, { effort, reasoning }));
@@ -145,7 +151,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   };
   // The same context profile is used by admission, counting and inference; only wall time can reduce its allowance.
   const budget = async (req, m, window, cfg) => {
-    const profile = limits(req.task, window, { maxTokens: req.maxTokens, ...cfg });
+    const profile = limits(req.task, window, { maxTokens: req.maxTokens, ...cfg, selected: m });
     if (m.stock || !profile.think) return { budget: 0 };
     const rate = (await known()).get(m.id);
     if (!adaptive(req.task, window, cfg)) return { budget: rate >= THINK_TPS ? profile.think : 0 };
@@ -158,7 +164,8 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   let broken = null; // a reason the engine gave that holds until a connection changes (release)
   // The store's text models (the tiers), and the one this cfg runs: its tier's, else the one here (ready, then partial).
   // A saved tier the catalog no longer offers follows Auto, as Settings' picker does.
-  const models = async () => (await own().store.list()).filter((m) => m.state !== 'stale');
+  let listed = [];
+  const models = async () => (listed = (await own().store.list()).filter((m) => m.state !== 'stale'));
   const tiers = (list) => list.filter((m) => !m.role);
   const choose = (list, cfg) => { list = tiers(list); return (cfg.tier && list.find((m) => m.tier === cfg.tier)) || list.find((m) => m.state === 'ready') || list.find((m) => m.state === 'partial') || null; };
   const modelOf = (list, cfg) => cfg.weights ? tiers(list).find((m) => m.id === cfg.weights) : choose(list, cfg);
@@ -170,6 +177,9 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   // a missing capability or a version this harness does not understand cannot enable memory.
   const memoryOf = (list, cfg = {}) => modelOf(list, cfg)?.memory === 1 ? 1 : 0;
   const memoryVersion = async (cfg = {}) => memoryOf(await models(), cfg);
+  // Size tokens and per-size answers (SCALED) are a training contract of their own (`scale: 1`), read on the same model.
+  const scaleOf = (list, cfg = {}) => (scaleFor(modelOf(list, cfg)) === SCALED ? 1 : 0);
+  const scaleVersion = async (cfg = {}) => scaleOf(await models(), cfg);
   // Check the request again on the model selected for this operation: an update may have rolled the same id back since
   // broker admission. These are the two tasks that can carry memory; all other tasks retain their existing formatter.
   const memoryReady = (req, m) => {
@@ -258,9 +268,9 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (!m || m.state !== 'ready') throw fail('provider-unavailable', 'assets');
     const memory = memoryReady(req, m);
     const window = Math.min(cfg.context || windowOf(m, cfg).window, windowOf(m, cfg).window);
-    const reasoning = await budget(req, m, window, cfg), think = reasoning.budget, sized = !m.stock && limits(req.task, window).size;
-    // r5 never trained chat.compact's task token. Use the native prompt until its independent training gate is enabled.
-    const native = m.stock || (req.task?.id === 'chat.compact' && (env?.scale || SCALE).compact !== true);
+    const reasoning = await budget(req, m, window, cfg), think = reasoning.budget, sized = !m.stock && limits(req.task, window, { selected: m }).size;
+    // r5 and R8 never trained chat.compact's task token: the native prompt unless the model's scale enables it.
+    const native = m.stock || (req.task?.id === 'chat.compact' && scaleFor(m).compact !== true);
     return { m, ...(memory && { memory: 1 }), window, reasoning, budget: think, ...FMT().format(req, { dialect: native ? 'chatml' : 'glaze', think: !m.stock && (adaptive(req.task, window, cfg) > 0 || think > 0), ...(sized && { window }) }) };
   };
   const host = (e) => {
@@ -293,7 +303,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     let plan;
     try { plan = await ready(req, cfg); } catch (e) { if (e?.code) throw refuse(e.code, e.message); throw e; }
     if (signal?.aborted) throw signal.reason;
-    const maxTokens = plan.projector || plan.m.stock ? Math.min(req.maxTokens || MAX_TOKENS, CONTEXT) : limits(req.task, plan.window, { maxTokens: req.maxTokens, ...cfg }).maxTokens;
+    const maxTokens = plan.projector || plan.m.stock ? Math.min(req.maxTokens || MAX_TOKENS, CONTEXT) : limits(req.task, plan.window, { maxTokens: req.maxTokens, ...cfg, selected: plan.m }).maxTokens;
     let r;
     try {
       // A task in its own turns (agent.tools) is held to its answer's schema or one offered call (format.js constraint); a
@@ -352,9 +362,9 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
 
   // The engine host's link, for the background model updates (ai/local/updates.js check).
   const link = () => own().link;
-  const provider = { id: 'local', config, caps, status, prepare, run, warm, count, catalog, release, remove, accept, levelOf, toolsLevel, memoryOf, memoryVersion, link, windowOf, WINDOWS, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
-    THINK_SIZED, ANSWER, SCALE, limits, adaptive, profileWindow, CLOSE,
-    _env: (e) => { env = e; preparing.text = preparing.pictures = null; broken = null; rates = null; measured.clear(); } };
+  const provider = { id: 'local', config, caps, status, prepare, run, warm, count, catalog, release, remove, accept, levelOf, toolsLevel, memoryOf, memoryVersion, scaleOf, scaleVersion, link, windowOf, WINDOWS, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
+    THINK_SIZED, ANSWER, SCALE, SCALED, limits, adaptive, profileWindow, CLOSE,
+    _env: (e) => { env = e; listed = []; preparing.text = preparing.pictures = null; broken = null; rates = null; measured.clear(); } };
   return P.add(provider);
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_LOCAL; else GZ_AI_LOCAL;

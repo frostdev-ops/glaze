@@ -19,9 +19,9 @@ const ID = 'rime-r9-fixture';
 const PLAIN = Object.freeze({ id: ID, tier: 1, size: 1, tools: 3, state: 'ready' });
 const SCALED = Object.freeze({ ...PLAIN, scale: 1 });
 
-const setup = (model) => {
+const setup = (model, rate = 100) => {
   const calls = [];
-  const session = { get: async () => ({ aiLocalRates: { [ID]: 100 }, aiLocalMeasured: [] }), set: async () => {} };
+  const session = { get: async () => ({ aiLocalRates: { [ID]: rate }, aiLocalMeasured: [] }), set: async () => {} };
   LOCAL._env({ store: { list: async () => [model] }, gpu: () => ({}), session, link: { kind: 'worker', up: true, call: async (op, args) => {
     calls.push({ op, args });
     if (op === 'count') return { tokens: args.parts.reduce((n, p) => n + (p.text?.length || 1), 0) };
@@ -92,7 +92,7 @@ test('a scaled model caps every answer at its size\'s ANSWER reserve; a request 
   for (const [w, s] of WINDOWS) {
     const cfg = LOCAL.config({ weights: ID, window: w, context: w });
     for (const [req, want] of [[plainReq('writer.complete'), LOCAL.ANSWER[s]], [plainReq('writer.review', { maxTokens: 4096 }), LOCAL.ANSWER[s]],
-      [plainReq('study.help', { maxTokens: 300 }), 300], [plainReq('writer.review', { maxTokens: 100000 }), LOCAL.ANSWER[s]]]) {
+      [plainReq('study.help', { maxTokens: 300 }), 300], [plainReq('writer.review', { maxTokens: 32768 }), LOCAL.ANSWER[s]]]) {
       const calls = setup(SCALED);
       await LOCAL.run(req, cfg);
       assert.equal(runOf(calls).maxTokens, want, `${req.task.id} ${w}`);
@@ -115,6 +115,8 @@ test('chat.compact reads its own task token on a scaled model, and native ChatML
   assert.equal(runOf(calls).maxTokens, 777);
 });
 
+// The run's budget also leaves the deadline room for the whole answer (budget()), so a larger answer reserve may shorten it
+// on a slow machine; a fast one shows the allowance itself.
 test('scale leaves adaptive thinking budgets as they are and turns no legacy per-size think switch on', async () => {
   for (const [w] of WINDOWS) {
     for (const effort of [undefined, 'none', 'minimal', 'medium', 'high']) {
@@ -122,12 +124,13 @@ test('scale leaves adaptive thinking budgets as they are and turns no legacy per
       for (const req of [plainReq('study.help'), agentReq(cfg), plainReq('writer.review')]) {
         const budgets = [];
         for (const model of [PLAIN, SCALED]) {
-          const calls = setup(model);
+          const calls = setup(model, 1e6);
           try { await LOCAL.run(req, cfg); } catch { /* payload recorded */ }
           const { ms, ...think } = runOf(calls).think || {};
           budgets.push(think);
         }
         assert.deepEqual(budgets[1], budgets[0], `${req.task.id} ${w} ${effort}`);
+        assert.equal(LOCAL.limits(req.task, w, { ...cfg, selected: SCALED }).think, LOCAL.limits(req.task, w, { ...cfg, selected: PLAIN }).think);
         const want = effort === 'none' || req.task.id === 'writer.review' || w <= 4096 ? 0 : Math.floor(Math.min(32768, w / 4) * ({ minimal: 0.125, medium: 0.5 }[effort] ?? 1));
         assert.equal(budgets[1].budget ?? 0, want, `${req.task.id} ${w} ${effort}`);
       }

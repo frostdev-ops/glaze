@@ -716,11 +716,13 @@ Context size (round 8 format): six specials `<|gz_ctx:4k|>` … `<|gz_ctx:128k|>
 is 125055; all `[PAD]` rows of LFM3's GGUFs, never produced by text) name the window a glaze-dialect request runs with, right
 after the task token: the largest size at or under it. `SCALE` in `ai/providers/local.js` turns them on with the per-size
 think budget (`THINK_SIZED`: agent.tools and study.help 128/256/512/1024 at 4K/8K/16K/32K+) and answer reserve (`ANSWER`:
-512/768/1024/1536/2048 at 4K/8K/16K/32K/64K+), each capped by the room the window leaves. These SCALE switches remain off;
-adaptive reasoning for selected larger windows is independent and sends no size token or changed answer limit. The 4K
-direct profile remains unchanged. The independent `SCALE.compact` switch also defaults to
-false: `chat.compact` uses native ChatML on tuned r5 weights, avoiding its untrained round 8 task token. Evaluation may
-explicitly set `scale.compact: true` to send the Glaze compact task token. This only selects that task's prompt dialect;
+512/768/1024/1536/2048 at 4K/8K/16K/32K/64K+), each capped by the room the window leaves. These SCALE switches are off
+for r5 and R8. A models.json or signed-list entry with `scale: 1` (R9 on, trained with them) runs `SCALED`: the size token,
+the `ANSWER` cap and the compact task token, with the per-size think switches still off. Like `memory`, it follows the
+weights in use (pins, trial swaps, rollback); another value is refused by the store, and a list entry with a later version
+is skipped. Adaptive reasoning for selected larger windows is independent and unchanged by it. The 4K direct profile of an
+unscaled model remains unchanged. Without `scale: 1`, `chat.compact` uses native ChatML on tuned weights, avoiding its
+untrained round 8 task token. Evaluation may explicitly set `scale.compact: true` to send the Glaze compact task token. This only selects that task's prompt dialect;
 the actual model, tuned window, budgets, sampler and count/run prompt agreement stay intact. Existing trained tasks keep
 their Glaze dialect; stock and picture models keep native ChatML.
 
