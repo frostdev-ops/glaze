@@ -90,6 +90,7 @@ test('route: the student\'s own records go to agent.tools with the tools their t
     'an independently explicit new planning request keeps its route across earlier generic filters');
   for (const question of ['not the outline, the report', 'report not outline', 'exclude chapter notes']) {
     assert.deepEqual(K.route(question, { level: 3, history: [...natural,
+      { question: 'Just the report one. Not the outline', answer: 'Okay.' },
       { question: 'Skip reading notes and anything already turned in.', answer: 'Okay.' },
       { question: 'Leave gallery notes out.', answer: 'Okay.' },
       { question: 'nah i meant history', answer: 'Okay.' }] }).tools, expected,
