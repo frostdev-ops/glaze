@@ -164,8 +164,14 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   let broken = null; // a reason the engine gave that holds until a connection changes (release)
   // The store's text models (the tiers), and the one this cfg runs: its tier's, else the one here (ready, then partial).
   // A saved tier the catalog no longer offers follows Auto, as Settings' picker does.
-  let listed = [];
-  const models = async () => (listed = (await own().store.list()).filter((m) => m.state !== 'stale'));
+  let listed = [], listing = 0;
+  const readModels = async () => {
+    const read = ++listing, list = await own().store.list();
+    // Each operation keeps its own snapshot; a slow earlier read cannot undo a newer read or an environment reset.
+    if (read === listing) listed = list.filter((m) => m.state !== 'stale');
+    return list;
+  };
+  const models = async () => (await readModels()).filter((m) => m.state !== 'stale');
   const tiers = (list) => list.filter((m) => !m.role);
   const choose = (list, cfg) => { list = tiers(list); return (cfg.tier && list.find((m) => m.tier === cfg.tier)) || list.find((m) => m.state === 'ready') || list.find((m) => m.state === 'partial') || null; };
   const modelOf = (list, cfg) => cfg.weights ? tiers(list).find((m) => m.id === cfg.weights) : choose(list, cfg);
@@ -210,7 +216,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     // Safari's package carries no models.json (tools/build/safari-drop.txt): nothing to list or delete there.
     if (safari()) return { state: 'unavailable', reason: no };
     let list;
-    try { list = await own().store.list(); } catch { return { state: 'unavailable', reason: no || 'failed' }; }
+    try { list = await readModels(); } catch { return { state: 'unavailable', reason: no || 'failed' }; }
     // A replaced catalog can leave gigabytes here. Delete must remain reachable before another download, even without GPU support.
     const stale = list.some((m) => m.state === 'stale') ? { stale: true } : {};
     if (no) return { state: 'unavailable', reason: no, ...stale };
@@ -355,7 +361,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     const l = own().link, only = part === 'pictures';
     try {
       if (l.up) await l.call('remove', only ? { part: 'pictures' } : {});
-      else for (const m of await own().store.list()) if (!only || m.role) await own().store.remove(m.id);
+      else for (const m of await readModels()) if (!only || m.role) await own().store.remove(m.id);
     } catch { return { state: 'unavailable', reason: 'failed' }; }
     return status(cfg);
   };
@@ -364,7 +370,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const link = () => own().link;
   const provider = { id: 'local', config, caps, status, prepare, run, warm, count, catalog, release, remove, accept, levelOf, toolsLevel, memoryOf, memoryVersion, scaleOf, scaleVersion, link, windowOf, WINDOWS, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
     THINK_SIZED, ANSWER, SCALE, SCALED, limits, adaptive, profileWindow, CLOSE,
-    _env: (e) => { env = e; listed = []; preparing.text = preparing.pictures = null; broken = null; rates = null; measured.clear(); } };
+    _env: (e) => { env = e; listed = []; listing++; preparing.text = preparing.pictures = null; broken = null; rates = null; measured.clear(); } };
   return P.add(provider);
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_LOCAL; else GZ_AI_LOCAL;
