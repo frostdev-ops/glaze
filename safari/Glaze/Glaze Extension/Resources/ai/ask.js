@@ -337,6 +337,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const PLAN_STEP = /\bfirst (?:in|for|on|with) (?:[\p{L}-]+\s+){0,3}(?:equation|essay|code|program|paragraph|proof|problem|question)\b/iu;
   const PLAN_FOLLOW = /^(?:(?:okay|ok|so|then)[,\s]+)?(?:what (?:should|do|can) i (?:do|start|work on|tackle|begin) first|which (?:one|assignment|task) should i (?:do|start|work on|tackle|begin) first|which one should i (?:start|work on|tackle|begin))(?:\s*,?\s*(?:and\s+)?why)?[?!.\s]*$/iu;
   const RECORD_CORRECTION = /^(?:(?:no|nah|sorry|actually)[,\s]+)?i meant [\p{L}\p{N}][\p{L}\p{N} &'-]{0,59}[?!.\s]*$/iu;
+  const RECORD_FILTER = /^(?:skip|exclude|omit)\b|^leave\b.{1,120}\bout\b/iu;
+  const RECORD_SELECTION = /^(?:not\s+(?:the\s+)?[\p{L}\p{N}][\p{L}\p{N} '-]{0,79}[,;.]?\s+the\s+[\p{L}\p{N}][\p{L}\p{N} '-]{0,79}|(?:the\s+)?[\p{L}\p{N}][\p{L}\p{N} '-]{0,79}[,;.]?\s+not\s+(?:the\s+)?[\p{L}\p{N}][\p{L}\p{N} '-]{0,79})[?!.]*$/iu;
+  const recordConstraint = (text) => RECORD_FILTER.test(text) || RECORD_SELECTION.test(text) || RECORD_CORRECTION.test(text);
   const PLAN_REASON = /(?:,\s*(?:and\s+)?|\band\s+)why(?=\s*(?:[?!.;]|$))/giu;
   const PLAN_TOOLS = [...TOOLS.todo, ...TOOLS.assignments, 'accounts_list'];
   const CHAT_RECALL = /\bremind me what i (?:just|last|previously) asked(?: you)?[?!.\s]*$/iu;
@@ -388,7 +391,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const prior = history.slice(i).filter((h) => !PLAN_FOLLOW.test(String(h.question).trim())).map((h) => h.question).join('\n');
       const again = route(`${prior}\n${question}`, { locale, level });
       const intent = route(MEMORY().userText(prior), { locale, level });
-      if (history.slice(i).some((h) => PLAN_FOLLOW.test(String(h.question).trim()) || RECORD_CORRECTION.test(String(h.question).trim()))) {
+      if (!(PLAN_RECORDS.test(direct) && PLAN_INTENT.test(direct))
+        && history.slice(i).some((h) => PLAN_FOLLOW.test(String(h.question).trim()) || RECORD_CORRECTION.test(String(h.question).trim()))) {
         if (again.task !== 'agent.tools') return again;
         if (intent.task !== 'agent.tools' || !intent.tools.some((t) => ['todo_list', 'schedule_list', 'assignments_list', 'assignment_read'].includes(t))) {
           return { task: 'study.help', subject: subjectOf(`${prior}\n${q}`) };
@@ -442,7 +446,34 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const reads = level >= 3 ? [...active, ...on.filter((k) => READS.includes(k) && k !== 'mark').flatMap((k) => TOOLS[k]), ...own.filter((k) => READS.includes(k)).flatMap((k) => TOOLS3[k]), ...named] : [];
       return reads.length ? { task: 'study.help', subject: subject(), read: [...new Set(reads)].slice(0, LIMIT.tools - 1).concat('accounts_list') } : { task: 'study.help', subject: subject() };
     }
-    if (!on.length && !own.length && !active.length) return { task: 'study.help', subject: subject() };
+    if (!on.length && !own.length && !active.length) {
+      // Keep contextual uncertainty with the existing reasoning model and reads; history grants no ids or writes.
+      if (last && (subject() === 'other' || !['math', 'code'].includes(subject()) && recordConstraint(direct))
+        && direct.trim() && direct === q.replace(/\r\n?/g, '\n')
+        && !PLAN_WORK.test(direct) && !PLAN_STEP.test(direct)) {
+        for (let i = history.length - 1; i >= 0; i--) {
+          const previous = String(history[i].question).replace(/[‘’]/g, "'").replace(/\r\n?/g, '\n');
+          if (!previous.trim() || MEMORY().userText(previous) !== previous) break;
+          const before = route(previous, { locale, level });
+          if (recordConstraint(previous)) {
+            if (before.task === 'agent.tools' && before.tools.some((t) => !PLAN_TOOLS.includes(t))
+              || ['math', 'code'].includes(before.subject) || words(lists(WORK, locale)).test(previous)
+              || PLAN_WORK.test(previous) || PLAN_STEP.test(previous)) break;
+            continue;
+          }
+          if (before.task === 'agent.tools') {
+            if (before.tools.every((t) => AT().RETRY_READS.includes(t))
+              && before.tools.some((t) => ['todo_list', 'schedule_list', 'assignments_list', 'assignment_read'].includes(t))) {
+              return { task: 'agent.tools', tools: [...PLAN_TOOLS] };
+            }
+            break;
+          }
+          if (before.subject !== 'other' || before.read?.length || words(lists(WORK, locale)).test(previous)
+            || PLAN_WORK.test(previous) || PLAN_STEP.test(previous)) break;
+        }
+      }
+      return { task: 'study.help', subject: subject() };
+    }
     if (on.includes('mark') && !on.includes('todo')) on.push('todo');
     // Rime's own topics first: their tools must fit the window before records' ones fill it.
     const tools = [...Object.keys(TOOLS3).filter((k) => own.includes(k) && (k !== 'compute' || computing)).flatMap((k) => TOOLS3[k]),
