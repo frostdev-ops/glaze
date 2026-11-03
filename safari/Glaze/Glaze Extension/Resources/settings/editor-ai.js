@@ -287,7 +287,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         pick.id = 'ai-local-tier';
         pick.setAttribute('aria-label', t('Model size'));
         const opt = (value, text) => { const o = el('option', '', text); o.value = value; o.selected = String(conns[OWN]?.tier || '') === value; return o; };
-        pick.append(opt('', t('Auto')), ...ours.tiers.map((x) => opt(String(x.tier), gb(x.size, t))));
+        pick.append(opt('', t('Auto')), ...ours.tiers.map((x) => opt(String(x.tier), typeof x.name === 'string' && x.name ? `${x.name} · ${gb(x.size, t)}` : gb(x.size, t))));
         pick.disabled = ours.state === 'downloading';
         pick.addEventListener('change', () => setTier(Number(pick.value) || 0));
         parts.push(pick);

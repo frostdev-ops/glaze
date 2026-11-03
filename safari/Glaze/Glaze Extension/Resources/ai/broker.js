@@ -520,7 +520,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     const done = (st) => ({ ok: true, state: ['ready', 'download', 'downloading', 'unavailable'].includes(st?.state) ? st.state : 'unavailable', ...(typeof st?.reason === 'string' && { reason: st.reason }),
       ...(st?.stale === true && { stale: true }),
       ...(n(st?.size) && { size: st.size }), ...(n(st?.tier) && { tier: st.tier }), ...(Number.isFinite(st?.progress) && { progress: Math.min(1, Math.max(0, st.progress)) }),
-      ...(Array.isArray(st?.tiers) && { tiers: st.tiers.filter((x) => n(x?.tier) && n(x?.size)).map((x) => ({ tier: x.tier, size: x.size })) }),
+      ...(Array.isArray(st?.tiers) && { tiers: st.tiers.filter((x) => n(x?.tier) && n(x?.size)).map((x) => ({ tier: x.tier, size: x.size, ...(typeof x.name === 'string' && x.name && { name: x.name }) })) }),
       ...(isObj(st?.pictures) && ['ready', 'download', 'downloading'].includes(st.pictures.state) && n(st.pictures.size) && { pictures: { state: st.pictures.state, size: st.pictures.size,
         ...(Number.isFinite(st.pictures.progress) && { progress: Math.min(1, Math.max(0, st.pictures.progress)) }) } }) });
     const failed = () => ({ ok: true, state: 'unavailable', reason: 'failed' });

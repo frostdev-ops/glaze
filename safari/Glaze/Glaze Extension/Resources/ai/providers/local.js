@@ -208,7 +208,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     return broken;
   };
   // → { state, reason?, size?, tier?, tiers, progress?, pictures?, stale?, caps }: size and tier of the model it runs or would
-  // download (the smallest when the ladder hasn't picked yet), tiers each { tier, size }, for Settings' card; pictures, the
+  // download (the smallest when the ladder hasn't picked yet), tiers each { tier, size, name? }, for Settings' card; pictures, the
   // picture download's { state: 'ready' | 'download' | 'downloading', size, progress? } where models.json offers one; caps,
   // whether pictures can be read now.
   const status = async (cfg) => {
@@ -223,7 +223,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     list = list.filter((m) => m.state !== 'stale');
     const text = tiers(list), m = choose(list, cfg) || [...text].sort((a, b) => a.tier - b.tier)[0], pics = pictures(list);
     const job = preparing.pictures;
-    const about = { ...stale, ...(m && { size: m.size, tier: m.tier }), tiers: text.map((x) => ({ tier: x.tier, size: x.size })).sort((a, b) => a.tier - b.tier),
+    const about = { ...stale, ...(m && { size: m.size, tier: m.tier }), tiers: text.map((x) => ({ tier: x.tier, size: x.size, ...(typeof x.name === 'string' && x.name && { name: x.name }) })).sort((a, b) => a.tier - b.tier),
       ...(pics && { pictures: { state: job ? 'downloading' : pics.ready ? 'ready' : 'download', size: pics.size, ...(job && job.last !== null && { progress: job.last }) } }),
       ...(pics && { caps: { images: pics.ready && !job } }) };
     if (preparing.text) return { state: 'downloading', ...about, ...(preparing.text.last !== null && { progress: preparing.text.last }) };
