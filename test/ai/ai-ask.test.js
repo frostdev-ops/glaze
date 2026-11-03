@@ -88,6 +88,22 @@ test('route: the student\'s own records go to agent.tools with the tools their t
     history: [...natural, { question: 'Exclude chapter notes.', answer: 'Okay.' },
       { question: 'nah i meant art history', answer: 'Okay.' }] }).tools, expected,
     'an independently explicit new planning request keeps its route across earlier generic filters');
+  for (const question of ['not the outline, the report', 'report not outline', 'exclude chapter notes']) {
+    assert.deepEqual(K.route(question, { level: 3, history: [...natural,
+      { question: 'Skip reading notes and anything already turned in.', answer: 'Okay.' },
+      { question: 'Leave gallery notes out.', answer: 'Okay.' },
+      { question: 'nah i meant history', answer: 'Okay.' }] }).tools, expected,
+    'record constraints and selection nouns do not become tutoring requests');
+    assert.equal(K.route(question, { level: 3 }).task, 'study.help', 'record selection needs a prior anchor');
+    assert.equal(K.route(question, { level: 3, history: [...natural,
+      { question: 'Help me with my essay thesis.', answer: 'What is your claim?' }] }).task, 'study.help');
+    assert.equal(K.route(question, { level: 3, history: natural, attempt: 'My answer is 4.' }).task, 'study.help');
+  }
+  for (const question of ['not the outline, write my report', 'skip reading notes and solve 2x = 8',
+    'exclude chapter notes and debug my Python loop', 'not the equation the report', 'code not outline',
+    'exclude notes and implement it', 'skip notes and finish it for me']) {
+    assert.equal(K.route(question, { level: 3, history: natural }).task, 'study.help', question);
+  }
   for (const question of ['the earlier one please', "i'm still lost", 'not those, the other set',
     'same deal but only the short ones', 'uh wait, the other class']) {
     assert.deepEqual(K.route(question, { level: 3, history: natural }).tools, expected, 'the model gets reads for unfamiliar contextual intent: ' + question);
