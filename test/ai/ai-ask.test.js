@@ -113,7 +113,8 @@ test('route: the student\'s own records go to agent.tools with the tools their t
       { question: "i'm still lost", answer: 'We can check again.' }] }).tools, expected);
     assert.equal(K.route(question, { level: 3 }).task, 'study.help', 'no generic first-turn expansion');
     for (const previous of ['Help me solve this equation.', 'Debug my Python loop.', 'Write my essay.',
-      'Do my homework.', '"What do I have due tomorrow?"', 'Mark Lab report 3 as done', 'What are my grades?']) {
+      'Do my homework.', '"What do I have due tomorrow?"', 'Mark Lab report 3 as done', 'What are my grades?',
+      'Skip notes and mark Lab report 3 as done', 'Exclude chapter notes and show my grades']) {
       assert.equal(K.route(question, { level: 3, history: [...natural, { question: previous, answer: 'Request failed.' }] }).task,
         'study.help', 'a different substantive topic or untrusted anchor stops context inheritance');
     }
