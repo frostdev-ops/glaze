@@ -177,6 +177,62 @@ test('a failed memory-capable trial never replays a memory prompt on legacy roll
   assert.equal((await t.store.catalog()).entries.get(old.id).memory, undefined);
 });
 
+test('a failed scaled trial never replays new task or size tokens on legacy rollback weights', async () => {
+  const t = setup();
+  await ready(t);
+  assert.equal((await update(t, sign(listOf(3, [{ ...broken, scale: 1 }]))).done).result.state, 'swapped');
+  const request = t.run({ scale: 1, parts: [{ special: '<|gz_task:chat.compact|>' }, { special: '<|gz_ctx:4k|>' }] });
+  const result = await request.done;
+  assert.equal(result.type, 'error', JSON.stringify(result));
+  assert.equal(result.error.code, 'caps');
+  assert.deepEqual(t.log.loads, ['BAD!'], 'legacy weights never load the scaled prompt');
+  assert.deepEqual(t.log.tokenized, ['BAD!']);
+  assert.equal(t.text(request.id), '');
+  assert.equal((await t.store.catalog()).entries.get(old.id).scale, undefined);
+});
+
+test('the host rechecks scale before count, warm or a queued run tokenizes the prompt', async () => {
+  for (const model of [old, { ...old, scale: 2 }, { ...old, stock: true, scale: 1 }]) {
+    const t = setup({ models: [model] });
+    await ready(t);
+    for (const op of ['count', 'warm', 'run']) {
+      const result = await t.call(op, { model: old.id, scale: 1, parts: [{ special: '<|gz_ctx:4k|>' }], stable: 0, sampler: {}, maxTokens: 32 }).done;
+      assert.equal(result.type, 'error', `${op}: ${JSON.stringify(result)}`);
+      assert.equal(result.error.code, 'caps', op);
+    }
+    assert.deepEqual(t.log.loads, []);
+    assert.deepEqual(t.log.tokenized, []);
+  }
+});
+
+test('a scaled prompt can retry a failed trial when the rollback weights also declare scale', async () => {
+  const t = setup({ models: [{ ...old, scale: 1 }] });
+  await ready(t);
+  assert.equal((await update(t, sign(listOf(3, [{ ...broken, scale: 1 }]))).done).result.state, 'swapped');
+  const request = t.run({ scale: 1, parts: [{ special: '<|gz_ctx:4k|>' }] });
+  assert.equal((await request.done).type, 'done');
+  assert.equal(t.text(request.id), 'answer from OLD!');
+  assert.deepEqual(t.log.loads, ['BAD!', 'OLD!']);
+});
+
+test('a scaled count waits for trial rollback and checks the resulting weights', async () => {
+  let reached, release;
+  const loading = new Promise((resolve) => { reached = resolve; }), held = new Promise((resolve) => { release = resolve; });
+  const t = setup({ onLoad: async (version) => { if (version === 'BAD!') { reached(); await held; } } });
+  await ready(t);
+  assert.equal((await update(t, sign(listOf(3, [{ ...broken, scale: 1 }]))).done).result.state, 'swapped');
+  const request = t.run({ scale: 1 });
+  await loading;
+  const counted = t.call('count', { model: old.id, scale: 1, parts: [{ special: '<|gz_ctx:4k|>' }] });
+  await new Promise(setImmediate);
+  release();
+  assert.equal((await request.done).error.code, 'caps');
+  const result = await counted.done;
+  assert.equal(result.type, 'error', JSON.stringify(result));
+  assert.equal(result.error.code, 'caps');
+  assert.deepEqual(t.log.tokenized, ['BAD!']);
+});
+
 test('host rechecks memory support before count, warm-up or a queued run consumes the prompt', async () => {
   const t = setup();
   await ready(t);

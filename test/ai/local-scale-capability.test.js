@@ -232,6 +232,18 @@ test('stock payloads ignore scale and evaluation switches replace the tuned mode
   }
 });
 
+test('count, warm and run mark model-scaled prompts for the host execution-time capability check', async () => {
+  const cfg = LOCAL.config({ weights: ID, window: 8192, context: 8192 });
+  for (const [model, override, expected] of [[SCALED, undefined, 1], [PLAIN, undefined, undefined],
+    [{ ...SCALED, stock: true }, undefined, undefined], [PLAIN, LOCAL.SCALED, undefined], [SCALED, LOCAL.SCALE, undefined]]) {
+    const calls = setup(model, 100, override);
+    const req = compactReq();
+    await LOCAL.count(req, cfg); await LOCAL.warm(req, cfg); await LOCAL.run(req, cfg);
+    assert.deepEqual(calls.map(({ op }) => op), ['count', 'warm', 'run']);
+    for (const { op, args } of calls) assert.equal(args.scale, expected, `${op}: ${model.id}, stock ${!!model.stock}, override ${!!override}`);
+  }
+});
+
 // ---- the signed model list and the store ------------------------------------------------------------------------------
 const OLD = bytes(1300, 7), NEW = bytes(1500, 9);
 const old = entry(OLD, { tools: 3, memory: 1, version: 'r8', minGlaze: '4.0.1' });
