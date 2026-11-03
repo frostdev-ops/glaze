@@ -383,19 +383,26 @@ test('the shipped manifest is well formed and pinned', () => {
 
 test('the shipped text models are Rime\'s published files, pinned to their commit', () => {
   const M = require('../../extension/ai/local/models.json');
-  const COMMIT = 'f9e6936f5a8cc802bbdf4efafa942e518fc43071';
+  const COMMIT = { r8: 'f9e6936f5a8cc802bbdf4efafa942e518fc43071', r9: '029e386afc82e217e7324c5022da55337b71785b' };
   const want = [
     ['rime-1.7b-r8-q4_k_m', 'Rime R8 test Q4_K_M', 'r8-test-20261102/r8-Q4_K_M.gguf', 1099627232, '706183e0b05dd3efab9bd7c1cefa3c6adad3c82e51e5bf9748dabab55c91b8ff'],
     ['rime-1.7b-r8-q5_k_m', 'Rime R8 test Q5_K_M', 'r8-test-20261102/r8-Q5_K_M.gguf', 1258662624, '17932cbe27f5a98fd4e3a434f3a2fd2a7876518a0d364e54a3a7b5250dcb9168'],
     ['rime-1.7b-r8-q6_k', 'Rime R8 test Q6_K', 'r8-test-20261102/r8-Q6_K.gguf', 1427637728, '888fd91bbaad114916623efd5550de1403486f28009805a4722ab0519bc8cdb6'],
     ['rime-1.7b-r8-q8_0', 'Rime R8 test Q8_0', 'r8-test-20261102/r8-Q8_0.gguf', 1846237920, 'c310897f026e9b3a07a9ab2968e7ad78aaf3091c2ff4241816b040528f7792d5'],
+    ['rime-1.7b-r9-q4_k_m', 'Rime R9 test Q4_K_M', 'r9-test-20261103/r9-Q4_K_M.gguf', 1099627232, '93f5a989dfcc09653b3970eac05550591d8ed8fcea186f9b293b8ae26b812f3b'],
+    ['rime-1.7b-r9-q5_k_m', 'Rime R9 test Q5_K_M', 'r9-test-20261103/r9-Q5_K_M.gguf', 1258662624, 'b957ec3bf885030579b69629e49232e6e3135954c5104e616a0e41e33deffcc1'],
+    ['rime-1.7b-r9-q6_k', 'Rime R9 test Q6_K', 'r9-test-20261103/r9-Q6_K.gguf', 1427637728, '4675dc914b3acd91d0fbb69f1c5d689d85b64dd3bcd82487d78e63ef563bfbb7'],
+    ['rime-1.7b-r9-q8_0', 'Rime R9 test Q8_0', 'r9-test-20261103/r9-Q8_0.gguf', 1846237920, '2713c2dfc05793b2122c6a1d835d11c3e13ca42b4049f2017d28843f471a9179'],
   ];
   const text = M.models.filter((m) => !m.role);
   assert.deepEqual(text.map((m) => [m.id, m.name, m.file, m.size, m.total]), want);
   for (const m of text) {
     assert.equal(m.repo, 'frostdev-ops/Rime-1.7B-GGUF');
-    assert.equal(m.commit, COMMIT);
+    assert.equal(m.commit, COMMIT[m.id.slice(10, 12)]);
     assert.equal(m.license, 'lfm1.0');
+    // R9 is trained for size tokens; R8 is not.
+    assert.equal(m.scale, m.id.startsWith('rime-1.7b-r9-') ? 1 : undefined, m.id);
+    assert.equal(m.memory, 1, m.id);
   }
 });
 
