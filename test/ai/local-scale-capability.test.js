@@ -19,10 +19,10 @@ const ID = 'rime-r9-fixture';
 const PLAIN = Object.freeze({ id: ID, tier: 1, size: 1, tools: 3, state: 'ready' });
 const SCALED = Object.freeze({ ...PLAIN, scale: 1 });
 
-const setup = (model, rate = 100) => {
+const setup = (model, rate = 100, scale) => {
   const calls = [];
   const session = { get: async () => ({ aiLocalRates: { [ID]: rate }, aiLocalMeasured: [] }), set: async () => {} };
-  LOCAL._env({ store: { list: async () => [model] }, gpu: () => ({}), session, link: { kind: 'worker', up: true, call: async (op, args) => {
+  LOCAL._env({ store: { list: async () => Array.isArray(model) ? model : [model] }, gpu: () => ({}), session, ...(scale && { scale }), link: { kind: 'worker', up: true, call: async (op, args) => {
     calls.push({ op, args });
     if (op === 'count') return { tokens: args.parts.reduce((n, p) => n + (p.text?.length || 1), 0) };
     return op === 'warm' ? { ok: true } : { text: '{"text":"Checked.","quotes":[]}', finish: 'stop' };
@@ -184,6 +184,52 @@ test('a list read from a released environment cannot populate its replacement en
   finish([SCALED]);
   await pending;
   assert.equal(LOCAL.limits({ id: 'writer.review' }, 4096, { weights: ID, maxTokens: 3000 }).maxTokens, 3000);
+});
+
+test('picture admission reserves the picture run answer even when the text model declares scale', async () => {
+  const pictures = { ...SCALED, id: 'rime-pictures', role: 'pictures', projector: 'projector', stock: true };
+  const projector = { id: 'projector', role: 'projector', state: 'ready', size: 1 };
+  const cfg = LOCAL.config({ weights: ID, window: 4096, context: 4096, images: true });
+  const req = Q.clean({ ...FIXED.request({ system: 'Read the picture.', data: [{ label: 'question', text: 'What does it say?' }],
+    images: [{ type: 'image', mime: 'image/png', data: Buffer.from('89504e47', 'hex').toString('base64') }] }),
+  task: { id: 'writer.image', version: 1 }, maxTokens: 3000 });
+  const sent = [];
+  for (const model of [PLAIN, SCALED]) {
+    const calls = setup([model, pictures, projector]);
+    await LOCAL.catalog(cfg);
+    await LOCAL.run(req, cfg);
+    const run = runOf(calls);
+    assert.equal(run.model, pictures.id);
+    assert.equal(run.maxTokens, 3000);
+    assert.equal(T.reserved(LOCAL, req, 4096, cfg, 100), run.maxTokens + 1024, 'picture answer plus its image reserve');
+    sent.push(run);
+  }
+  assert.deepEqual(sent[1], sent[0], 'scale on the text model cannot change any picture payload byte');
+});
+
+test('stock payloads ignore scale and evaluation switches replace the tuned model profile', async () => {
+  const cfg = LOCAL.config({ weights: ID, window: 8192, context: 8192 });
+  const req = compactReq(), stock = [];
+  for (const model of [{ ...PLAIN, stock: true }, { ...SCALED, stock: true }]) {
+    const calls = setup(model);
+    await LOCAL.catalog(cfg);
+    await LOCAL.count(req, cfg); await LOCAL.warm(req, cfg); await LOCAL.run(req, cfg);
+    assert.equal(T.reserved(LOCAL, req, 8192, cfg, 100), 777);
+    stock.push(calls);
+  }
+  assert.deepEqual(stock[1], stock[0]);
+  for (const [model, scale] of [[SCALED, LOCAL.SCALE], [PLAIN, LOCAL.SCALED], [SCALED, { compact: true }]]) {
+    const calls = setup(model, 100, scale);
+    await LOCAL.catalog(cfg);
+    await LOCAL.count(req, cfg); await LOCAL.warm(req, cfg); await LOCAL.run(req, cfg);
+    const run = runOf(calls);
+    assert.deepEqual(calls.find((c) => c.op === 'count').args.parts, run.parts);
+    assert.deepEqual(calls.find((c) => c.op === 'warm').args.parts, run.parts);
+    assert.equal(text(run.parts).includes('gz_ctx:'), scale.token === true);
+    assert.equal(text(run.parts).includes('gz_task:chat.compact'), scale.compact === true);
+    assert.equal(run.maxTokens, scale.answer ? 768 : 777);
+    assert.equal(T.reserved(LOCAL, req, 8192, cfg, 100), run.maxTokens);
+  }
 });
 
 // ---- the signed model list and the store ------------------------------------------------------------------------------
