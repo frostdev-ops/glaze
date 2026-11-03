@@ -878,7 +878,7 @@ test('Glaze\'s own model is a card after On this device, where the browser offer
 });
 
 test('Glaze\'s model\'s card: its state and size, Download from the click, its progress, Delete; nothing downloads without the click', async () => {
-  const TIERS = [{ tier: 1, size: 1099627808 }, { tier: 2, size: 1846238496 }];
+  const TIERS = [{ tier: 1, size: 1099627808, name: 'Rime <Q4>' }, { tier: 2, size: 1846238496 }];
   let state = 'download', tier, deleted = 0;
   const sent = [];
   const local = async (m, gesture) => {
@@ -917,7 +917,7 @@ test('Glaze\'s model\'s card: its state and size, Download from the click, its p
   // Advanced: the size to use, Auto by default; a choice is the connection's.
   await p.change('ai-mode-advanced', true);
   const pick = p.$('ai-local-tier');
-  assert.deepEqual([pick.tagName, pick.attrs['aria-label'], pick.children.map((o) => o.textContent)], ['SELECT', 'Model size', ['Auto', '1.1 GB', '1.8 GB']]);
+  assert.deepEqual([pick.tagName, pick.attrs['aria-label'], pick.children.map((o) => o.textContent)], ['SELECT', 'Model size', ['Auto', 'Rime <Q4> · 1.1 GB', '1.8 GB']]);
   pick.value = '2'; p.fire(pick, 'change'); await settle();
   assert.ok(sent.some((m) => m.op === 'set' && m.cfg.tier === 2 && m.gesture === true), JSON.stringify(sent));
   assert.equal(p.note().textContent, 'Needs a download · 1.8 GB');

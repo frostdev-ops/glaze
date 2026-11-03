@@ -152,7 +152,7 @@ test('the local provider is registered, and Settings offers it everywhere but Sa
 
 test('status asks nothing of the host: unavailable without a host, in Safari or without WebGPU; download until a model is here; ready', async () => {
   const s = setup();
-  assert.deepEqual(await LOCAL.status(LOCAL.config({})), { state: 'download', size: 1100000000, tier: 1, tiers: [{ tier: 1, size: 1100000000 }, { tier: 2, size: 1800000000 }, { tier: 3, size: 1100000000 }] });
+  assert.deepEqual(await LOCAL.status(LOCAL.config({})), { state: 'download', size: 1100000000, tier: 1, tiers: [{ tier: 1, size: 1100000000, name: 'LFM3 Q4' }, { tier: 2, size: 1800000000, name: 'LFM3 Q8' }, { tier: 3, size: 1100000000, name: 'Glaze Q4' }] });
   assert.equal(s.workers.length, 0, 'no host started for a status');
   s.st.here['lfm3-q8'] = 'partial';
   assert.equal((await LOCAL.status(LOCAL.config({}))).tier, 2, 'a partial download is the model it resumes');
@@ -643,7 +643,7 @@ test('changing the local tier invalidates writing identity and cancels admitted 
 test('Settings asks Glaze\'s model\'s state, size and tiers, downloads it from a click with progress, and deletes it', async () => {
   const s = setup();
   const e = env();
-  assert.deepEqual(await B.config({ op: 'test', provider: 'local' }, e), { ok: true, state: 'download', size: 1100000000, tier: 1, tiers: [{ tier: 1, size: 1100000000 }, { tier: 2, size: 1800000000 }, { tier: 3, size: 1100000000 }] });
+  assert.deepEqual(await B.config({ op: 'test', provider: 'local' }, e), { ok: true, state: 'download', size: 1100000000, tier: 1, tiers: [{ tier: 1, size: 1100000000, name: 'LFM3 Q4' }, { tier: 2, size: 1800000000, name: 'LFM3 Q8' }, { tier: 3, size: 1100000000, name: 'Glaze Q4' }] });
   assert.deepEqual(await B.config({ op: 'prepare', provider: 'local' }, e), { ok: true, state: 'ready' });
   assert.deepEqual(e.said, [0, 0.5, 1].map((loaded) => ({ type: 'glaze:ai-config', event: 'progress', provider: 'local', loaded })));
   assert.equal((await B.config({ op: 'test', provider: 'local' }, e)).state, 'ready');
