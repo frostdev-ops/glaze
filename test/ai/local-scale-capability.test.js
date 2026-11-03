@@ -151,6 +151,41 @@ test('scaleOf reads exactly scale: 1 on the model this cfg runs, never a stock o
   assert.equal(LOCAL.scaleOf(list, { weights: 'gone' }), 0);
 });
 
+test('an older overlapping list read cannot replace the rollback snapshot used for admission', async () => {
+  let finishOld;
+  const older = new Promise((resolve) => { finishOld = resolve; });
+  let reads = 0;
+  LOCAL._env({ store: { list: () => ++reads === 1 ? older : Promise.resolve([PLAIN]) } });
+  const cfg = LOCAL.config({ weights: ID, window: 4096, context: 4096 });
+  const pending = LOCAL.scaleVersion(cfg);
+  assert.equal(await LOCAL.scaleVersion(cfg), 0, 'the newer read sees the rolled-back weights');
+  finishOld([SCALED]);
+  assert.equal(await pending, 1, 'the older operation keeps its own snapshot');
+  assert.equal(T.reserved(LOCAL, plainReq('writer.review', { maxTokens: 3000 }), 4096, cfg, 100), 3000,
+    'admission must keep the newer unscaled answer reserve');
+});
+
+test('a status read refreshes the scale snapshot used by admission after rollback', async () => {
+  let model = SCALED;
+  LOCAL._env({ store: { list: async () => [model] }, gpu: () => ({}), link: { kind: 'worker' } });
+  const cfg = LOCAL.config({ weights: ID });
+  assert.equal(await LOCAL.scaleVersion(cfg), 1);
+  model = PLAIN;
+  assert.equal((await LOCAL.status(cfg)).state, 'ready');
+  assert.equal(T.reserved(LOCAL, plainReq('writer.review', { maxTokens: 3000 }), 4096, cfg, 100), 3000);
+});
+
+test('a list read from a released environment cannot populate its replacement environment', async () => {
+  let finish;
+  const older = new Promise((resolve) => { finish = resolve; });
+  LOCAL._env({ store: { list: () => older } });
+  const pending = LOCAL.scaleVersion({ weights: ID });
+  setup(PLAIN);
+  finish([SCALED]);
+  await pending;
+  assert.equal(LOCAL.limits({ id: 'writer.review' }, 4096, { weights: ID, maxTokens: 3000 }).maxTokens, 3000);
+});
+
 // ---- the signed model list and the store ------------------------------------------------------------------------------
 const OLD = bytes(1300, 7), NEW = bytes(1500, 9);
 const old = entry(OLD, { tools: 3, memory: 1, version: 'r8', minGlaze: '4.0.1' });
