@@ -28,10 +28,10 @@ const topmost = (el) => {
   fs.mkdirSync(out, { recursive: true });
   let ctx;
   try {
-    const ext = env.staged(root, [`${site}/*`], tmp);
+    const ext = require('../../tools/dev/check-env.js').staged(root, [`${site}/*`], tmp);
     await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      ...env.chromeLaunch(), headless: true, viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce',
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],
     });
     env.noFirstRun(ctx);
