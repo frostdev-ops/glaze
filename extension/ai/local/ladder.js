@@ -1,7 +1,7 @@
 // The local model's hardware ladder: which quant of Rime 1.7B (ai/local/models.json) this machine downloads and runs.
-// A tier ranks a quant by size, smallest 1: Q4_K_M 1, Q6_K 3, Q8_0 4; 2 is kept for a Q5_K_M, so one can be added
-// without moving the others (a student's Advanced choice is saved as its tier). pick() is the decision, pure; probe()
-// gathers its input in a page with WebGPU, bench() included.
+// A tier ranks a revision's quants by size: R8 test's Q4_K_M, Q5_K_M, Q6_K and Q8_0 at 1 to 4, R9 test's at 5 to 8, so
+// the highest fast tier is R9's and R8's stay choices (a student's Advanced choice is saved as its tier). pick() is the
+// decision, pure; probe() gathers its input in a page with WebGPU, bench() included.
 //
 // Refused, the whole machine: no WebGPU adapter; a fallback adapter (isFallbackAdapter, or SwiftShader by name: a CPU
 // emulation); maxBufferSize or maxStorageBufferBindingSize below need(). The engine keeps every buffer under 2 GiB and

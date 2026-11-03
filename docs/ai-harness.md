@@ -650,16 +650,20 @@ If the system refuses token counting, the request retains its output ceiling and
 ## Glaze's own model
 
 `ai/providers/local.js` (`local`, Settings' **Rime**) runs Rime, Frostdev's fine-tune of LiquidAI's LFM3-1.7B
-(`frostdev-ops/Rime-1.7B-GGUF`: R8 test Q4_K_M, Q5_K_M, Q6_K and Q8_0 at tiers 1, 2, 3 and 4), from
+(`frostdev-ops/Rime-1.7B-GGUF`: R8 test Q4_K_M, Q5_K_M, Q6_K and Q8_0 at tiers 1 to 4, R9 test's at 5 to 8), from
 `ai/local/models.json` on Glaze's WebGPU engine. caps: `{ text, json, stream, local: true, tools: false, images, context }` (`context`, the window
 below; `images` below), so `writer.complete`'s brief path and Feedback's local orchestration apply. Settings, `ai/settings.js`
 `HERE` and `writer-ai.js` treat `device`, `apple` and `local` alike as models on this computer: no model id, no key.
 
-The bundled text entries are the `r8-test-20261102` candidates, pinned to Hugging Face commit
-`f9e6936f5a8cc802bbdf4efafa942e518fc43071`, with distinct `rime-1.7b-r8-*` ids, `tools: 3` and `memory: 1`.
-They are available for testing: dedicated personality training is missing and full D4 evaluation is incomplete.
-The previous R5 files remain published; the picture model and projector are unchanged. No signed update feed has been
-published for these R8 candidates, so this bundled catalog does not trigger a signed-feed upgrade of an existing R5 download.
+The bundled text entries are two test revisions. `r8-test-20261102`, pinned to Hugging Face commit
+`f9e6936f5a8cc802bbdf4efafa942e518fc43071`, has `rime-1.7b-r8-*` ids, `tools: 3` and `memory: 1`; dedicated personality
+training is missing and full D4 evaluation is incomplete. `r9-test-20261103`, pinned to
+`029e386afc82e217e7324c5022da55337b71785b`, has `rime-1.7b-r9-*` ids, `tools: 3`, `memory: 1` and `scale: 1`; it is untested,
+evaluation running. R9 takes the higher tiers, so Auto's ladder pick (the highest tier fast enough) is R9 at the size R8 would
+have had; a computer where no size is fast enough, or the bench fails, gets the smallest tier, R8's Q4_K_M. A saved tier and
+a downloaded model keep their place: an existing R8 download on Auto stays R8, and Settings' Advanced lists every entry as
+`name · size`. The previous R5 files remain published; the picture model and projector are unchanged. No signed update feed
+has been published for the R8 or R9 candidates.
 
 Where it runs: Chrome, an offscreen document (`ai/local/host.html`, reason WORKERS, the `offscreen` permission) whose
 `offscreen.js` runs `ai/local/host.js` in a dedicated Worker and connects a port `glaze:local` to the worker
@@ -677,7 +681,7 @@ is replayed. The host page's CSP: `default-src 'none'; script-src 'self' 'wasm-u
 `downloading` while its prepare runs. The model: the tier Settings' Advanced keeps on the `local` connection (`{ provider:
 'local', tier }`), if the catalog still offers it; otherwise Auto: the one downloaded (ready, then partial), else at Download
 the ladder's pick. Settings' ops:
-`test { provider: 'local' }` → `{ ok, state, reason?, size, tier, tiers: [{ tier, size }], progress?, stale? }`; `stale: true`
+`test { provider: 'local' }` → `{ ok, state, reason?, size, tier, tiers: [{ tier, size, name? }], progress?, stale? }`; `stale: true`
 means files from a replaced catalog remain, and Settings offers Delete even before Download or when the model is unavailable. `prepare` from the
 Download click (progress events as the device's; it answers `downloading` after four minutes while the download goes on in
 the host); `delete { provider: 'local' }` removes every downloaded model and ends a download. A failed download answers
