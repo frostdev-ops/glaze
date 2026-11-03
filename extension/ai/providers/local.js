@@ -80,8 +80,8 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const adaptive = (task, window, { effort, reasoning = true } = {}) => reasoning !== false && window > TUNED &&
     ['agent.tools', 'study.help'].includes(task?.id) ? Math.floor(Math.min(32768, window / 4) * (EFFORT[effort] ?? 1)) : 0;
   // selected: the models.json entry that runs; without it, the one this cfg ran on in the last list read (admission's reserve).
-  const limits = (task, window, { maxTokens, effort, reasoning, promptTokens, scale, selected, ...cfg } = {}) => {
-    scale ||= scaleFor(selected || modelOf(listed, cfg));
+  const limits = (task, window, { maxTokens, effort, reasoning, promptTokens, scale, selected, pictures: withPictures = false, ...cfg } = {}) => {
+    scale ||= scaleFor(selected || (withPictures ? pictures(listed)?.model : modelOf(listed, cfg)));
     const token = FMT().sizeOf(window), key = token && token.slice(9, -2);
     const legacy = key && scale.think?.[task?.id]?.[key] === true && Object.hasOwn(THINK_SIZED, task.id) ? THINK_SIZED[task.id][key] : thinkFor(task);
     const think = effort === 'none' || reasoning === false ? 0 : Math.max(legacy, adaptive(task, window, { effort, reasoning }));

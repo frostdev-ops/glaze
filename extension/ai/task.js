@@ -247,7 +247,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     request = R().clean(request);
     if (!request) throw R().error('request');
     const effective = provider.profileWindow ? provider.profileWindow(window, cfg) : Math.min(window, cfg.context || cfg.window || provider.TUNED || window);
-    const local = provider.id === 'local' && typeof provider.limits === 'function' ? provider.limits(request.task, effective, { maxTokens: request.maxTokens, ...cfg, promptTokens }) : null;
+    const local = provider.id === 'local' && typeof provider.limits === 'function' ? provider.limits(request.task, effective, { maxTokens: request.maxTokens, ...cfg, promptTokens, pictures: R().images(request) > 0 }) : null;
     // Keep the entire configured think allowance even when a slow machine currently answers directly.
     return (local ? local.maxTokens + local.think + (local.think || provider.adaptive?.(request.task, effective, cfg) ? provider.CLOSE || 0 : 0) : request.maxTokens || 1024) + R().images(request) * 1024;
   };
