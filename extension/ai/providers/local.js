@@ -277,7 +277,8 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     const reasoning = await budget(req, m, window, cfg), think = reasoning.budget, sized = !m.stock && limits(req.task, window, { selected: m }).size;
     // r5 and R8 never trained chat.compact's task token: the native prompt unless the model's scale enables it.
     const native = m.stock || (req.task?.id === 'chat.compact' && scaleFor(m).compact !== true);
-    return { m, ...(memory && { memory: 1 }), window, reasoning, budget: think, ...FMT().format(req, { dialect: native ? 'chatml' : 'glaze', think: !m.stock && (adaptive(req.task, window, cfg) > 0 || think > 0), ...(sized && { window }) }) };
+    return { m, ...(memory && { memory: 1 }), ...(!env?.scale && scaleFor(m) === SCALED && { scale: 1 }), window, reasoning, budget: think,
+      ...FMT().format(req, { dialect: native ? 'chatml' : 'glaze', think: !m.stock && (adaptive(req.task, window, cfg) > 0 || think > 0), ...(sized && { window }) }) };
   };
   const host = (e) => {
     if (e?.category === 'cancelled') return e;
@@ -315,7 +316,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
       // A task in its own turns (agent.tools) is held to its answer's schema or one offered call (format.js constraint); a
       // span to words of its source (spans).
       const held = plan.constraint ? { schema: plan.constraint.schema, tools: plan.constraint.tools } : req.schema && (spans(req) || { schema: req.schema });
-      r = await own().link.call('run', { model: plan.m.id, ...(plan.memory && { memory: plan.memory }), parts: plan.parts, stable: plan.stable, ...(plan.images && { projector: plan.projector, images: plan.images }), ...held,
+      r = await own().link.call('run', { model: plan.m.id, ...(plan.memory && { memory: plan.memory }), ...(plan.scale && { scale: plan.scale }), parts: plan.parts, stable: plan.stable, ...(plan.images && { projector: plan.projector, images: plan.images }), ...held,
         ...(plan.think && { think: { budget: plan.budget, ...plan.think, ...(plan.reasoning.preserveAnswer && { preserveAnswer: true, rate: plan.reasoning.rate, ms: Math.max(0, plan.reasoning.ms - (Date.now() - started)) }) } }), window: plan.window, ...(req.task?.id === 'writer.complete' && { priority: 'low' }),
         sampler: { ...(req.temperature !== undefined && { temperature: req.temperature }) }, maxTokens },
       { signal, onEvent: (e) => { if (e?.type === 'delta' && typeof e.text === 'string' && e.text) onDelta?.(e.text); } });
@@ -333,7 +334,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const count = async (req, cfg, { signal } = {}) => {
     if (R.images(req) > 0) return null;
     const plan = await ready(req, cfg);
-    const r = await own().link.call('count', { model: plan.m.id, ...(plan.memory && { memory: plan.memory }), parts: plan.parts }, { signal });
+    const r = await own().link.call('count', { model: plan.m.id, ...(plan.memory && { memory: plan.memory }), ...(plan.scale && { scale: plan.scale }), parts: plan.parts }, { signal });
     return Number.isSafeInteger(r?.tokens) ? r.tokens : null;
   };
   // A warm-up: the host keeps the system turn and reads the history while the student types. Never downloads.
@@ -341,7 +342,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (R.images(req) > 0) return false;
     let plan;
     try { plan = await ready(req, cfg); } catch { return false; }
-    try { return (await own().link.call('warm', { model: plan.m.id, ...(plan.memory && { memory: plan.memory }), parts: plan.parts, stable: plan.stable, window: plan.window }, { signal }))?.ok === true; } catch { return false; }
+    try { return (await own().link.call('warm', { model: plan.m.id, ...(plan.memory && { memory: plan.memory }), ...(plan.scale && { scale: plan.scale }), parts: plan.parts, stable: plan.stable, window: plan.window }, { signal }))?.ok === true; } catch { return false; }
   };
   // vision: whether the picture download is here (the broker sets cfg.images from it for a run). context: the window of the
   // text model this cfg runs, and weights its id (the broker sets cfg.context and cfg.weights from them); pictures.context,

@@ -354,16 +354,17 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       flush();
       return { rest: Uint32Array.from(ids), slots };
     };
-    // The provider marks only requests that carry memory. Check the weights in use when the queued work actually runs,
-    // and again if a trial failure rolls back inside this host; admission in the background cannot authorize old weights.
-    const memoryReady = async (m) => {
-      if (m.memory === undefined) return;
+    // The provider marks prompts that depend on memory or the model's scale contract. Check the weights when queued
+    // work actually runs, and again after trial rollback; an already-formatted prompt cannot be replayed on legacy weights.
+    const capabilitiesReady = async (m) => {
+      if (m.memory === undefined && m.scale === undefined) return;
       let model;
       try { model = (await env.store.catalog?.())?.entries.get(m.model); } catch { /* unavailable is unsupported */ }
-      if (m.memory !== 1 || model?.memory !== 1) throw Object.assign(new Error('This model does not support memory.'), { code: 'caps' });
+      if (m.memory !== undefined && (m.memory !== 1 || model?.memory !== 1)) throw Object.assign(new Error('This model does not support memory.'), { code: 'caps' });
+      if (m.scale !== undefined && (m.scale !== 1 || model?.scale !== 1 || model.stock || model.role)) throw Object.assign(new Error('This model does not support size tokens.'), { code: 'caps' });
     };
     const answer = async (m, signal) => {
-        await memoryReady(m);
+        await capabilitiesReady(m);
         const images = Array.isArray(m.images) ? m.images : [];
         if (images.length && typeof m.projector !== 'string') throw fail('request-rejected', 'unsupported');
         if (images.length && typeof env.decode !== 'function') throw fail('provider-unavailable', 'engine');
@@ -530,7 +531,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     // The system turn (parts, or its first `stable`), kept; with stable the rest is read on after it in the live sequence.
     const warm = async (m, signal) => {
       return queued(async () => {
-        await memoryReady(m);
+        await capabilitiesReady(m);
         if ((await env.store.status(m.model)).state !== 'ready') return { ok: false };
         const job = await wait(load(m.model, null, m.window), signal);
         const stable = Number.isSafeInteger(m.stable) && m.stable > 0 && m.stable < m.parts.length ? m.stable : m.parts.length;
@@ -567,13 +568,13 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     const count = async (m, signal) => {
       if (!Array.isArray(m.parts)) throw fail('request-rejected', 'unsupported');
       const read = async () => {
-        await memoryReady(m);
+        await capabilitiesReady(m);
         // Counting must not replace or release a GPU model another feature is using.
         const tok = loaded?.id === m.model && loaded.tok || (await tokenized(m.model, signal)).tok;
         return { tokens: encode({ tok }, m.parts).length };
       };
-      // A memory prompt waits for trial settlement/swaps before its capability check; ordinary counting stays independent.
-      return m.memory === undefined ? read() : queued(read, signal);
+      // Capability-dependent prompts wait for trial settlement/swaps; ordinary counting stays independent.
+      return m.memory === undefined && m.scale === undefined ? read() : queued(read, signal);
     };
     const OPS = { prepare, run, warm, count, remove, update, release: async () => { await release(); return {}; } };
 
