@@ -205,12 +205,14 @@ const GZ_PAGE = (() => {
     return sc && label ? [[String(c.id), { label, tone: `graded-${sc.band}` }]] : [];
   }));
 
-  // Submission status overrides attempts; Canvas projects NEEDS_GRADING.
+  // Submission status overrides attempts; Canvas projects NEEDS_GRADING. Ultra opens a new attempt only once the last is
+  // handed in: a draft behind another attempt the row names follows a submission ([M] 2026-11-04).
+  const DRAFT = 'DRAFT_SAVED_STUDENT';
   const submitted = (g) => {
-    const s = g?.submissionStatus?.status, a = g?.lastAttempt;
+    const s = g?.submissionStatus?.status, a = g?.lastAttempt, d = g?.lastAttemptId || a?.id;
     if (s === 'SUBMITTED') return true;
-    if (s && s !== 'GRADED') return false;
-    if (a?.status === 'IN_PROGRESS' || g?.status === 'IN_PROGRESS') return false;
+    if (s && s !== 'GRADED' && s !== DRAFT) return false;
+    if (s === DRAFT || a?.status === 'IN_PROGRESS' || g?.status === 'IN_PROGRESS') return !!d && [g.firstAttemptId, g.highestAttemptId, g.lowestAttemptId].some((x) => x && x !== d);
     return g?.status === 'NEEDS_GRADING' || a?.status === 'NEEDS_GRADING'
       || !!a?.attemptDate && (s === 'GRADED' || a.status === 'COMPLETED');
   };

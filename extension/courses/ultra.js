@@ -194,8 +194,8 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     const handed = P.submitted(row);
     const at = (handed && !draft && ms(a?.attemptDate)) || null;
     const graded = row?.status === 'GRADED' || s === 'GRADED';
-    // Attempt ids and dates alone cannot prove a hand-in. An earlier submission behind a new draft needs Ultra's
-    // explicit SUBMITTED status; the draft's date cannot tell when that earlier submission was handed in.
+    // An earlier submission behind a new draft (P.submitted) is handed in at a time the row can't tell: the date is the
+    // draft's.
     const out = (state) => ({ state, submitted: handed, graded, draft, at, due });
     // [M] isExempt (none seen exempt); [D] EXEMPT.
     if (row?.isExempt === true || s === 'EXEMPT') return out('excused');

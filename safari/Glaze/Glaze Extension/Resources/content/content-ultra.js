@@ -94,7 +94,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   // Only submitted attempts have a hand-in date. A newer draft leaves earlier submission timing unknown.
   // Course and item due-date exceptions suppress lateness.
   const lateIn = (cid, results) => {
-    const waiting = GZ_GRADES.awaiting(results).filter(GZ_PAGE.submitted);
+    const waiting = GZ_GRADES.awaiting(results).filter((g) => GZ_PAGE.submitted(g) && g.lastAttempt?.status !== 'IN_PROGRESS' && g.submissionStatus?.status !== 'DRAFT_SAVED_STUDENT');
     if (!waiting.length || !I.settings.enhance.inline) return Promise.resolve(new Set());
     const excepted = myCourses().then((ms) => {
       const m = ms.find((x) => x.courseId === cid);
@@ -102,8 +102,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
       return api(`/courses/${cid}/gradebook/memberships/${m.id}/exceptions?columnId=${waiting.map((g) => g.columnId).join(',')}`)
         .then((j) => { const cols = new Set([].concat(j.results || []).map((x) => x?.columnId)); return (col) => cols.has(col); }, () => () => true);
     });
-    return excepted.then((exc) => new Set(waiting.filter((g) => !exc(g.columnId) && g.lastAttempt?.status !== 'IN_PROGRESS'
-      && GZ_GRADES.late(g.lastAttempt?.attemptDate, g.column.dueDate)).map((g) => g.columnId)));
+    return excepted.then((exc) => new Set(waiting.filter((g) => !exc(g.columnId) && GZ_GRADES.late(g.lastAttempt?.attemptDate, g.column.dueDate)).map((g) => g.columnId)));
   };
   // Per-course gradebook cache. Only due-date chips ask for lateness; changed answers re-tag the page. The last visit's
   // copy draws (saved) until the first answer.
