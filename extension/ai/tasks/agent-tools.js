@@ -924,11 +924,11 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       const { title, course } = same[0];
       if (!title || held.filter((v) => plainText(v.title) === title && (!course || plainText(v.course || '') === course)).length < same.length) return false;
     }
-    // The count, when the lines around the list state exactly one.
+    // The count, when the lines around the list state exactly one; section counts are not a whole-list total.
     const lead = lines.filter((l) => !ITEM_LINE.test(l)).join('\n'), words = COUNT_WORDS[inp.locale] || COUNT_WORDS.en;
-    const stated = new Set([...fold(lead).matchAll(COUNT[inp.locale] || COUNT.en)].map((m) => /^\d+$/.test(m[1]) ? Number(m[1])
-      : words.findIndex((w) => new RegExp(`^${w}$`, 'u').test(m[1])) + 1));
-    return stated.size !== 1 || stated.has(items.length);
+    const stated = [...fold(lead).matchAll(COUNT[inp.locale] || COUNT.en)].map((m) => /^\d+$/.test(m[1]) ? Number(m[1])
+      : words.findIndex((w) => new RegExp(`^${w}$`, 'u').test(m[1])) + 1);
+    return stated.length !== 1 || stated[0] === items.length;
   };
   const listAnswer = (steps, { locale = 'en' } = {}) => {
     const w = LIST[locale] || LIST.en, items = listed(steps);
