@@ -104,11 +104,11 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     });
     return excepted.then((exc) => new Set(waiting.filter((g) => !exc(g.columnId) && GZ_GRADES.late(g.lastAttempt?.attemptDate, g.column.dueDate)).map((g) => g.columnId)));
   };
-  // Per-course gradebook cache. Only due-date chips ask for lateness; changed answers re-tag the page. The last visit's
+  // Per-course gradebook cache. Due chips ask for lateness; changed answers re-tag the page. The last visit's
   // copy draws (saved) until the first answer.
   const books = new Map();
   const take = (b, rows, lateCols) => {
-    const key = JSON.stringify([rows.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade, g.submissionStatus?.status, g.lastAttempt?.status, g.lastAttempt?.attemptDate]), [...(lateCols || [])], rows.complete !== false]);
+    const key = JSON.stringify([rows.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade, g.submissionStatus?.status, g.lastAttempt?.status, g.lastAttempt?.attemptDate, GZ_PAGE.submitted(g)]), [...(lateCols || [])], rows.complete !== false]);
     b.results = rows;
     if (key === b.key) return;
     Object.assign(b, { grades: GZ_PAGE.gradesByContent(rows), overall: GZ_PAGE.overall(rows, locale()), key });
