@@ -125,6 +125,22 @@ const HARNESS = `(() => {
     check(await reply.fr.evaluate(() => document.documentElement.dataset.mode === 'compose' && document.documentElement.dataset.kind === 'reply'), 'reply box mounts in compose mode');
     check(await p.evaluate(() => !document.querySelector('.gz-draft')), 'draft backup offers nothing beside a Writer box');
     check(await p.evaluate(() => document.querySelectorAll('.form-buttons button')[2].disabled && document.querySelectorAll('.form-buttons button')[5].disabled), 'Post and Reply start disabled (empty boxes)');
+    // Live Ultra can finish its empty-editor blur after Writer takes focus. Its controls collapse even though the
+    // replacement is ready. Keep the replacement and its native actions usable through that asynchronous update.
+    await p.evaluate(() => {
+      const controls = document.querySelector('.form-buttons');
+      controls.classList.add('panel-editor-controls', 'ng-hide');
+      controls.setAttribute('aria-hidden', 'true');
+      const style = document.createElement('style');
+      style.textContent = '.ng-hide:not(.ng-hide-animate) { display:none !important; }'; document.head.prepend(style);
+    });
+    await until(() => p.evaluate(() => document.querySelector('.panel-editor-controls').getAttribute('aria-hidden') === 'false'), 'Writer retains its native actions after the collapse');
+    await post.fr.click('.ProseMirror');
+    await p.keyboard.type('A discussion draft.');
+    await until(async () => (await quillText(p, POST)) === 'A discussion draft.', 'typing after native collapse reaches Quill');
+    check(await post.el.evaluate((f) => f.isConnected) && await p.locator('.panel-editor-controls .js-text-editor-save').isVisible(), 'native empty-post collapse keeps Writer and the Post button usable');
+    await p.keyboard.press(`${MOD}+A`); await p.keyboard.press('Backspace');
+    await until(async () => (await quillText(p, POST)) === '', 'regression draft cleared');
     await reply.fr.click('.ProseMirror');
     await until(() => reply.fr.evaluate(() => document.hasFocus() && !!document.activeElement?.closest('.ProseMirror')), 'reply focused before typing');
     const typed = 'I agree that the river works as a kind of archive, but Morrison is less interested in nostalgia than in what the town chooses to forget.';

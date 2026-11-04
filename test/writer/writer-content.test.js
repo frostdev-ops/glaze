@@ -113,15 +113,44 @@ test('cancelling an empty post releases Writer so the next native activation rem
   assert.notEqual(b.root.style.display, 'none');
 });
 
-test('Ultra collapsing its empty post releases Writer even without a captured Cancel event', async () => {
+test('Ultra collapsing its empty native post during the focus handoff keeps the ready Writer', async () => {
   const c = content(); await c.start();
   const b = c.native(), frame = b.root.previousElementSibling;
   const controls = b.editor.closest('form').querySelector('.form-buttons');
   controls.className += ' panel-editor-controls ng-hide';
   controls.setAttribute('aria-hidden', 'true');
   c.ctx.GZ_WRITER.pass();
+  assert.ok(frame.isConnected, 'a native blur is not a request to close Writer');
+  assert.equal(b.root.style.display, 'none');
+  assert.equal(controls.getAttribute('aria-hidden'), 'false', 'native Post actions stay in the accessibility tree');
+  c.emit({ type: 'change', html: '<p>My discussion post</p>', text: 'My discussion post' });
+  assert.equal(b.editor.textContent, 'My discussion post');
+  assert.ok(frame.isConnected, 'typing still reaches the native editor after its empty collapse');
+  c.ctx.GZ_WRITER.drop();
+  assert.equal(controls.getAttribute('aria-hidden'), 'true', 'hand-back restores the collapsed native controls');
+});
+
+test('a post cancelled while Writer is still loading releases the pending frame', async () => {
+  const c = content(); c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
+  const b = c.native(), frame = b.root.previousElementSibling;
+  const controls = b.editor.closest('form').querySelector('.form-buttons');
+  controls.className += ' panel-editor-controls ng-hide';
+  controls.setAttribute('aria-hidden', 'true');
+  c.ctx.GZ_WRITER.pass();
   assert.ok(!frame.isConnected);
-  assert.notEqual(b.root.style.display, 'none');
+});
+
+test('an empty ready post can reopen its frame after Ultra has collapsed its native editor', async () => {
+  const c = content(); await c.start();
+  const b = c.native(), controls = b.editor.closest('form').querySelector('.form-buttons');
+  controls.className += ' panel-editor-controls ng-hide'; controls.setAttribute('aria-hidden', 'true');
+  const previous = b.root.previousElementSibling;
+  previous.dispatchEvent({ type: 'load' }); c.ctx.GZ_WRITER.pass();
+  const next = b.root.previousElementSibling;
+  assert.ok(next.isConnected && next !== previous);
+  await c.boot(next); c.ports.at(-1).onmessage({ data: { type: 'ready' } });
+  assert.equal(controls.getAttribute('aria-hidden'), 'false');
+  c.ctx.GZ_WRITER.drop();
 });
 
 test('a focused native caret is passed to Writer before hiding its editor', async () => {
