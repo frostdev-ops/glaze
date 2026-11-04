@@ -908,7 +908,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const lines = String(text).split('\n'), bullets = lines.map((l) => ITEM_LINE.exec(l)).filter(Boolean);
     const indent = Math.min(...bullets.map((m) => m[1].length));
     const items = bullets.filter((m) => m[1].length === indent).map((m) => m[2]);
-    if (items.length < 2) return true;
+    if (!items.length) return true;
     const held = listed(inp.steps), titles = [...new Set(held.map((v) => plainText(v.title)))].sort((a, b) => b.length - a.length);
     // An item's key: the result title it starts with and the course in brackets after it, else its whole line.
     const keys = items.map((line) => {
