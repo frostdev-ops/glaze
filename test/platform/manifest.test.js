@@ -48,9 +48,9 @@ test('the first content script is Glaze on each LMS\'s own hosts, and nothing ru
   assert.ok(m.content_scripts.every((c) => c.matches.every((p) => !p.startsWith('https://*/') && p !== '<all_urls>')), 'no entry on every host');
 });
 
-test('host access: LMS hosts, the two Pearson homework hosts, gallery and share relay; other sites only when granted', () => {
+test('host access: LMS hosts, gallery and share relay; other sites, Pearson too, only when granted', () => {
   assert.ok(m.permissions.includes('scripting'));
-  assert.deepEqual(m.host_permissions, ['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*', 'https://mylab.pearson.com/*', 'https://tdx.acs.pearson.com/*', 'https://socket.pearsoned.com/*', 'https://frostdev.io/*', 'https://share.frostdev.io/*']);
+  assert.deepEqual(m.host_permissions, ['https://*.instructure.com/*', 'https://*.blackboard.com/*', 'https://*.moodlecloud.com/*', 'https://frostdev.io/*', 'https://share.frostdev.io/*']);
   assert.deepEqual(m.optional_host_permissions, ['https://*/*', 'http://localhost/*', 'http://127.0.0.1/*']);
   // Every content script's host is held from the start.
   const held = (p) => m.host_permissions.some((h) => { const [, hh] = /^https:\/\/([^/]+)\//.exec(h), [, ph] = /^https:\/\/([^/]+)\//.exec(p); return hh === ph || (hh.startsWith('*.') && ph.endsWith(hh.slice(1))); });
