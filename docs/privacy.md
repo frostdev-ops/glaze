@@ -84,8 +84,9 @@ course sites (**Use Glaze on example.edu?**) before theming them, reading their 
 Privacy and data → Sites** lists your sites, with Remove, which also forgets the courses and due dates Glaze read there.
 See [Adding a school's own site](../PRIVACY.md#adding-a-schools-own-site).
 
+Pearson's switches under Course pages → Documents and quizzes start off. Turning one on asks for `mylab.pearson.com`,
+`tdx.acs.pearson.com` and `socket.pearsoned.com`; turning the last one off hands them back.
 Pearson MyLab homework is themed on `mylab.pearson.com` and its player frames on `tdx.acs.pearson.com`.
-Pearson inside Blackboard is on by default and can be switched off under Course pages → Documents and quizzes.
 The exact `socket.pearsoned.com/uiservice/opener` launcher opens Pearson's own content in a child frame. Glaze forwards
 only resolved appearance variables into that frame and its known homework children. The canonical homework address
 and selected question number stay in memory to support Open in tab; launch tokens and unrelated URL parameters are

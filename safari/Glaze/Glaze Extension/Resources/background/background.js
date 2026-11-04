@@ -112,6 +112,9 @@ const fromGlaze = (s) => s.id === chrome.runtime.id && typeof s.url === 'string'
 const switchOn = (k) => Promise.resolve().then(() => chrome.storage.sync.get(['enabled', 'enhance']))
   .then(async (raw) => { const { freshDefaults } = await chrome.storage.local.get('freshDefaults'); const s = GZ_SANITIZE(raw, freshDefaults?.fresh === true); return s.enabled && s.enhance[k]; }).catch(() => false);
 const gradescopeOn = () => switchOn('gradescope');
+// Pearson (pearson/*): any of its three switches, with Glaze on.
+const PEARSON_SWITCHES = ['pearsonViewer', 'pearsonEmbed', 'pearsonMath'];
+const pearsonOn = async () => (await Promise.all(PEARSON_SWITCHES.map(switchOn))).some(Boolean);
 const fromGradescope = (s) => s.id === chrome.runtime.id && !!s.tab && s.frameId === 0 && typeof s.url === 'string' && s.url.startsWith(`${GZ_GRADESCOPE.HOST}/`);
 const gradescopeFor = async (gid, s) => {
   const site = await fromCanvas(s), ultra = await fromUltra(s);
@@ -1579,6 +1582,8 @@ const ensure = async () => {
   const detect = !staticDetector() && await granted(ALL_SITES);
   // Gradescope's own pages get Glaze only while Glaze and enhance.gradescope are on (planner/gradescope.js, planner/page/gradescope.js).
   const gs = await gradescopeOn() && await reachable(GZ_GRADESCOPE.HOST);
+  // Pearson's homework and launch pages likewise, only while a Pearson switch is on and all three of its hosts are held.
+  const pe = await pearsonOn() && (await Promise.all(GZ_PEARSON_EMBED_LIB.hosts.map(reachable))).every(Boolean);
   // The notes app's Course notes button (planner/page/notes-home.js) on Canvas sites' course pages, only while Glaze and Notes
   // are on, so the first content script carries nothing for it, for the sites known now.
   const notes = await switchOn('notes') && notesHome(canvas);
@@ -1590,7 +1595,7 @@ const ensure = async () => {
   // A site taken off its list (Settings' Sites, Reset everything), or whose host was taken back, loses its registration here.
   const have = new Map((await chrome.scripting.getRegisteredContentScripts()).map((s) => [s.id, s]));
   if (!await still()) return;
-  await reconcile([...sites.map((id) => script(id, canvas.includes(id) ? 'canvas' : 'moodle')), ...ultra, ...detect ? [detector()] : [], ...gs ? [GRADESCOPE] : [], ...notes ? [notes] : [], ...gcal ? [gcal] : []], have, still);
+  await reconcile([...sites.map((id) => script(id, canvas.includes(id) ? 'canvas' : 'moodle')), ...ultra, ...detect ? [detector()] : [], ...gs ? [GRADESCOPE] : [], ...pe ? PEARSON : [], ...notes ? [notes] : [], ...gcal ? [gcal] : []], have, still);
   // Notes turned on: course homes already open get its button now (notesHomeInto), not at their next load.
   if (notes && !have.has(NOTES_HOME)) await notesHomeInto(notes);
 };
@@ -1609,14 +1614,28 @@ const notesHome = (canvas) => {
   return { id: NOTES_HOME, js: ['planner/page/notes-home.js'], runAt: 'document_idle', persistAcrossSessions: true, excludeMatches: first.exclude_matches || [],
     matches: [...new Set([...first.matches, ...canvas.map((p) => `${new URL(p).protocol}//${new URL(p).hostname}/*`)].map((p) => p.replace(/\/\*$/, '/courses/*')))] };
 };
+// What the manifest's Pearson entries were until Pearson became a grant the switches ask for.
+const PEARSON = [
+  { id: 'gz-pearson', matches: ['https://mylab.pearson.com/Student/PlayerHomework.aspx*', 'https://mylab.pearson.com/Student/OverviewHomework.aspx*',
+    'https://tdx.acs.pearson.com/assignment/assignmentplayer.aspx*', 'https://tdx.acs.pearson.com/Player/Player.aspx*'],
+  css: ['content/motion.css', 'looks/page/surfaces.css', 'looks/page/lookx.css', 'vendor/mathlive/mathlive-static.css', 'content/pearson.css', 'pearson/embed.css'],
+  js: ['core/color.js', 'core/i18n.js', 'core/motion.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'core/ui.js', 'looks/lookx.js',
+    'looks/lookparts.js', 'looks/motionx.js', 'pearson/adapter.js', 'content/pearson.js', 'pearson/embed.js', 'pearson/embedded.js'],
+  runAt: 'document_start', allFrames: true, persistAcrossSessions: true },
+  { id: 'gz-pearson-launch', matches: ['https://socket.pearsoned.com/uiservice/opener*'], css: ['pearson/embed.css'], js: ['pearson/embed.js', 'pearson/launch.js'],
+    runAt: 'document_start', allFrames: true, persistAcrossSessions: true },
+];
 const GRADESCOPE = { id: 'gz-gradescope', matches: ['https://www.gradescope.com/*'], js: ['core/color.js', 'core/i18n.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'planner/gradescope.js', 'planner/page/gradescope.js'], runAt: 'document_idle', persistAcrossSessions: true };
 chrome.storage.onChanged.addListener((changes, area) => { if ((area === 'sync' && (changes.enhance || changes.enabled)) || (area === 'local' && (changes.canvas || changes.moodle || changes.ultra))) serial(ensure); });
-// Gradescope's switch turned off (Settings, Reset everything, another device): its grant goes back, as no other part of Glaze
+// Gradescope's switch (or the last Pearson one) turned off (Settings, Reset everything, another device): its grant goes back, as no other part of Glaze
 // reaches it and it isn't a required host. Glaze off as a whole keeps it, for when Glaze is on again.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'sync' || !changes.enhance) return;
   const on = (v) => GZ_SANITIZE({ enhance: v }).enhance.gradescope;
   if (on(changes.enhance.oldValue) && !on(changes.enhance.newValue)) GZ_SITE.handBack(GZ_SITE.address(GZ_GRADESCOPE.HOST)).catch(() => {});
+  // The last Pearson switch off: its three hosts go back the same way.
+  const pearson = (v) => PEARSON_SWITCHES.some((k) => GZ_SANITIZE({ enhance: v }).enhance[k]);
+  if (pearson(changes.enhance.oldValue) && !pearson(changes.enhance.newValue)) for (const h of GZ_PEARSON_EMBED_LIB.hosts) GZ_SITE.handBack(GZ_SITE.address(h)).catch(() => {});
 });
 // Defaults are an install transaction, independent of whether a page already wrote its layout or migrated its dock.
 // Its local intent survives worker restarts. Navigation uses a local fallback until a real sync preference is present.
@@ -2109,7 +2128,7 @@ const granting = async (pattern) => {
   const site = siteFor(pattern);
   if (!site) return;
   const was = await askedFor(pattern);
-  if (site.origin === GZ_GRADESCOPE.HOST || was && !was.kind) { await answered(pattern); return serial(ensure); }
+  if (site.origin === GZ_GRADESCOPE.HOST || GZ_PEARSON_EMBED_LIB.hosts.includes(site.origin) || was && !was.kind) { await answered(pattern); return serial(ensure); }
   const u = new URL(site.origin);
   const tabs = was ? [await chrome.tabs.get(was.tabId).catch(() => ({}))] : await Promise.resolve().then(() => chrome.tabs.query({ url: pattern })).catch(() => []);
   let kind = was?.kind || await listedAs(u);

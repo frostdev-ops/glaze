@@ -1269,7 +1269,10 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
   the theme on Canvas, Blackboard Ultra (its `/ultra` pages) and Moodle where Instructure, Blackboard and MoodleCloud host
   them, and in Canvas's document viewer on `canvadocs.instructure.com`, where a separate small script applies the palette
   and, if you switch them on, your marks on documents. Glaze reads and restyles the page in your browser only.
-- Host access to `https://mylab.pearson.com/*` and `https://tdx.acs.pearson.com/*` — to theme MyLab's homework
+- Host access to `https://mylab.pearson.com/*`, `https://tdx.acs.pearson.com/*` and `https://socket.pearsoned.com/*`,
+  asked for only when you turn on a Pearson switch under Course pages → Documents and quizzes, and handed back when
+  you turn the last one off.
+- `mylab.pearson.com` and `tdx.acs.pearson.com` — to theme MyLab's homework
   player, its nested assignment/player frames and homework overview. The adapter reads the page's homework-mode marker
   and your existing Glaze appearance settings. The optional problem viewer rearranges the existing layout without copying
   question or answer content. Its layout switch is temporary; the Settings switch syncs with your other settings.
@@ -1281,8 +1284,8 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
   submission actions, read scores or course data, or call a Pearson API; Pearson handles the edit normally.
   MathLive and its math fonts are bundled. Chosen text
   fonts load through the existing font loader described above. The modern-math setting syncs and can be switched off.
-- Host access to `https://socket.pearsoned.com/*` — only its `/uiservice/opener` page, to open native Pearson content
-  inside an approved Blackboard Ultra site's LTI frame by default. Glaze prepares a named frame and redirects the
+- `socket.pearsoned.com` — only its `/uiservice/opener` page, to open native Pearson content
+  inside an approved Blackboard Ultra site's LTI frame. Glaze prepares a named frame and redirects the
   original launch handler's new-tab target to it. Native authentication models and callback tokens remain inside
   Pearson. Resolved appearance variables pass through source/origin-checked messages to known homework frames, which
   share Blackboard's existing Look background. The canonical homework URL and selected question number are held in

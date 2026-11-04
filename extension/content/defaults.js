@@ -101,7 +101,7 @@ const GZ_SPEC = {
     place: [true, 'bool'], coursemenu: [true, 'bool'], tabs: [true, 'bool'], prefetch: [true, 'bool'], instant: [true, 'bool'],
     // docPages: preview mode; toggles: document buttons. docTheme/docInk: Canvas viewer palette/pen.
     docPages: ['plain', ['plain', 'dim', 'dark']], toggles: [true, 'bool'], docTheme: [true, 'bool'], docInk: [false, 'bool'],
-    quizLight: [false, 'bool'], pearsonViewer: [true, 'bool'], pearsonEmbed: [true, 'bool'], pearsonMath: [true, 'bool'],
+    quizLight: [false, 'bool'], pearsonViewer: [false, 'bool'], pearsonEmbed: [false, 'bool'], pearsonMath: [false, 'bool'],
     // Card grades on hover only; Canvas's GPA, its scale and place (per-course choices: sync item gpaCourses).
     gradeHover: [false, 'bool'], gpa: [false, 'bool'], gpaPlus: [false, 'bool'], gpaWeighted: [false, 'bool'], gpaAfter: [false, 'bool'], insights: [false, 'bool'],
     // Reminders and the streak, each opt-in (planner/remind.js has the rest).
