@@ -337,3 +337,14 @@ test('openers: an honest greeting, identity answer or "we haven\'t talked yet" p
   const math = inp({ question: 'Hi! Solve 3x + 5 = 20', subject: 'math' });
   assert.equal(why(math, 'hint', "Hi! I'm Rime. So x = 5."), 'solves');
 });
+
+test('social sentences requested as coursework still face the copyable-answer rule', () => {
+  for (const [question, reply] of [
+    ['Translate "My name is Rime" into French.', "Je m'appelle Rime."],
+    ['Write a self-introduction for a character named Rime, a personal assistant for Glaze.', "I'm Rime, a personal assistant for Glaze."],
+    ['Complete the dialogue with this English sentence: We have not talked yet in this chat.', 'We have not talked yet in this chat.'],
+  ]) for (const kind of ['hint', 'concept']) {
+    const i = inp({ question, subject: 'reading' });
+    assert.equal(why(i, kind, reply), 'speaks', `${kind}: ${question}`);
+  }
+});
