@@ -130,6 +130,23 @@ test('Ultra collapsing its empty native post during the focus handoff keeps the 
   assert.equal(controls.getAttribute('aria-hidden'), 'true', 'hand-back restores the collapsed native controls');
 });
 
+test('a successful native Post releases Writer when Ultra clears and collapses the submitted composer', async () => {
+  const c = content(); await c.start();
+  const b = c.native(), form = b.editor.closest('form'), frame = b.root.previousElementSibling;
+  const controls = form.querySelector('.form-buttons');
+  controls.className += ' panel-editor-controls';
+  c.emit({ type: 'change', html: '<p>My submitted post</p>', text: 'My submitted post' });
+  b.send.disabled = false; b.send.removeAttribute('disabled');
+  c.doc.dispatchEvent({ type: 'click', target: b.send });
+  b.editor.innerHTML = '<p><br></p>';
+  controls.className += ' ng-hide'; controls.setAttribute('aria-hidden', 'true');
+  c.mutate(b.editor); c.ctx.GZ_WRITER.pass();
+  assert.equal(frame.isConnected, false, 'the completed Post must return ownership to the collapsed native composer');
+  assert.equal(form.hasAttribute('data-gz-writer-post'), false, 'native actions are no longer forced visible');
+  assert.equal(controls.getAttribute('aria-hidden'), 'true');
+  assert.notEqual(b.root.style.display, 'none');
+});
+
 test('a post cancelled while Writer is still loading releases the pending frame', async () => {
   const c = content(); c.ctx.GZ_WRITER.pass(); await new Promise(setImmediate);
   const b = c.native(), frame = b.root.previousElementSibling;
