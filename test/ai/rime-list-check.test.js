@@ -39,6 +39,11 @@ test('a list answer that repeats an item, or whose stated count is not the items
   assert.equal(A.why(answer(`Two problem sets:\n- **Problem Set 8** (MATH 110)\n- **Problem Set 8** (MATH 120)`), inputOf({ steps: [twin] })), '');
 });
 
+test('list counts use item bullets, without counting or deduplicating nested details', () => {
+  const text = 'You have two assignments due:\n- **Problem Set 8** (MATH 110)\n  - Due Friday\n  - Not submitted\n- **Lab Report 5** (BIO 101)\n  - Due Friday\n  - Not submitted';
+  assert.equal(A.why(answer(text), inputOf()), '');
+});
+
 test('in the step loop, a repeated item gets the corrective turn; a second failure shows Glaze\'s own list, each item once', async () => {
   const bad = { why: 'list', raw: '{}' };
   const call = { call: { name: 'todo_list', arguments: {}, kind: 'read' }, answer: null };
