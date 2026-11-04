@@ -328,7 +328,10 @@ const harness = ({ script = {}, approve = 'yes', allowed = true, ai = { on: true
       const next = list[seen.runs.filter((r) => r.task === m.task).length - 1];
       if (!next) return port.postMessage({ id: m.id, type: 'error', error: 'check' });
       if (next.error) return port.postMessage({ id: m.id, type: 'error', error: next.error });
-      port.postMessage({ id: m.id, type: 'end', output: typeof next === 'function' ? await next(m.input) : next });
+      // events: what the broker forwards from the run before its end (the loop's thinking, the host's phases).
+      for (const e of next.events || []) port.postMessage({ id: m.id, ...e });
+      const output = next.events ? next.then : next;
+      port.postMessage({ id: m.id, type: 'end', output: typeof output === 'function' ? await output(m.input) : output });
     });
   };
   const env = {
@@ -522,4 +525,33 @@ test('port: a follow-up carries the conversation to study.help; never to agent.t
   }
   await settle();
   assert.deepEqual(h.ends().filter((m) => m.id >= 32).map((m) => [m.id, m.error]), [[32, 'request'], [33, 'request'], [34, 'request'], [35, 'request'], [36, 'request']]);
+});
+
+// The 2026-11-04 evaluations: in a chat with history, "what did we talk about?" went to agent.tools as a follow-up of the
+// records question before it; the model answered from the history without a tool, tool-first refused it, and no tool had run
+// for a corrective turn. A question about this conversation is study.help's (its instructions answer chat metaquestions).
+test('a question about the conversation itself routes to study.help, with or without history; record follow-ups still read', () => {
+  const history = [{ question: "What's due this week?", answer: '- **Problem Set 8** (MATH 110): Friday, November 6, 11:59 PM, not submitted' }];
+  for (const question of ['what did we talk about?', 'What did we talk about so far?', 'What have we discussed?', 'What did we just talk about?',
+    'Summarize our conversation.', 'Can you summarize this chat?', 'What did I ask you earlier?', 'What was my first question?', 'What did you just say?',
+    'What did you tell me before?', 'Recap our chat so far']) {
+    for (const h of [undefined, history]) assert.equal(K.route(question, { level: 3, history: h }).task, 'study.help', `${h ? 'history' : 'fresh'}: ${question}`);
+  }
+  for (const [question, locale] of [['¿De qué hablamos?', 'es'], ['Sobre o que conversamos?', 'pt-BR'], ['De quoi avons-nous parlé ?', 'fr'],
+    ['Worüber haben wir gesprochen?', 'de'], ['Waar hebben we het over gehad?', 'nl']]) {
+    assert.equal(K.route(question, { level: 3, locale, history }).task, 'study.help', `${locale}: ${question}`);
+  }
+  // Not about this chat: a class's discussion, a records follow-up, a reminder.
+  assert.equal(K.route('What did we talk about in class this week?', { level: 3, history }).task, 'agent.tools');
+  assert.equal(K.route('What about next week?', { level: 3, history }).task, 'agent.tools');
+  assert.ok(K.route('Remind me tomorrow at 9 what we talked about.', { level: 3, history }).tools?.includes('wake_create'));
+});
+
+test('port: the host\'s reading and thinking phases reach the panel as phase events; other thinking events stay in the worker', async () => {
+  const reply = { kind: 'hint', step: null, reply: 'What could you do to both sides?', followUp: null };
+  const h = harness({ script: { 'study.help': [{ events: [{ type: 'thinking', round: 0 }, { type: 'thinking', round: 0, phase: 'reading' }, { type: 'thinking', round: 0, phase: 'thinking' }, { type: 'thinking', round: 0, phase: 'x' }], then: reply }] } });
+  h.say({ id: 1, op: 'ask', question: 'How do I solve 3x + 5 = 20?', locale: 'en' });
+  await settle();
+  assert.deepEqual(h.got.filter((m) => m.type !== 'keepalive'), [{ id: 1, type: 'route', task: 'study.help' }, { id: 1, type: 'phase', phase: 'reading' }, { id: 1, type: 'phase', phase: 'thinking' },
+    { id: 1, type: 'end', task: 'study.help', output: reply }]);
 });

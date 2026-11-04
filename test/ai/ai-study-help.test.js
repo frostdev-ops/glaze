@@ -305,3 +305,35 @@ test('history: follow-up replies are checked against the earlier student problem
   const example = inp({ question: 'And then?', history: [{ question: MATH.question, answer: 'Think of 2y + 4 = 10.' }] });
   assert.ok(H.task.check(out('concept', 'In 2y + 4 = 10, removing 4 gives 2y = 6. Which operation would undo the addition in yours?'), example), 'an assistant example does not become the student problem');
 });
+
+// Rime's fresh-chat replies from the 2026-11-04 evaluations (R8 refused 16 of 40, R10 4 of 40, rule speaks): a greeting,
+// who Rime is, and that this chat has no earlier turns are honest openers, whatever kind the model labels them.
+test('openers: an honest greeting, identity answer or "we haven\'t talked yet" passes; a statement to copy beside one still refuses', () => {
+  const fresh = [
+    ['Good morning', "Good morning! I'm Rime, the assistant for Glaze. How can I help you today?"],
+    ['Good morning Rime', "Good morning! I'm Rime, the assistant for Glaze. How can I help you today?"],
+    ['hi', "I'm Rime, the assistant for Glaze. How can I help you today?"],
+    ['who are you?', "I'm Rime, the study assistant built into Glaze."],
+    ['what did we talk about?', "We haven't talked yet in this chat. This is the start of our conversation."],
+    ['what did we talk about?', "We haven't talked about anything yet; this chat just started."],
+    ['Buenos días', '¡Buenos días! Soy Rime, el asistente de Glaze. ¿En qué te puedo ayudar hoy?'],
+    ['Bonjour', 'Bonjour ! Je suis Rime, l’assistant de Glaze. Comment puis-je t’aider ?'],
+    ['Hallo', 'Hallo! Ich bin Rime, der Assistent von Glaze. Wie kann ich dir helfen?'],
+  ];
+  for (const subject of ['other', 'essay', 'reading']) for (const [question, reply] of fresh) for (const kind of ['concept', 'hint', 'question']) {
+    if (kind === 'question' && !/[?？]/.test(reply)) continue;
+    const i = inp({ question, subject, locale: /Buenos/.test(question) ? 'es' : /Bonjour/.test(question) ? 'fr' : question === 'Hallo' ? 'de' : 'en' });
+    assert.equal(why(i, kind, reply), '', `${subject} ${kind}: ${reply}`);
+  }
+  // What the rule exists for: a copyable statement about their work, the answer, wording, beside an opener.
+  const essay = inp({ question: 'Good morning! What does the green light symbolize in The Great Gatsby?', subject: 'reading' });
+  for (const [reply, rule] of [
+    ["Good morning! The green light symbolizes Gatsby's hope of winning Daisy back.", 'speaks'],
+    ["I'm Rime, and the green light symbolizes Gatsby's hope of winning Daisy back.", 'speaks'],
+    ["We haven't talked yet, but the green light stands for the dream that Gatsby can never reach.", 'speaks'],
+    ["I'm Rime, the assistant for Glaze. The answer is that the light means hope.", 'answer'],
+    ["Hello! I'm Rime. You could write that the green light shows Gatsby's longing.", 'wording'],
+  ]) assert.equal(why(essay, 'hint', reply), rule, reply);
+  const math = inp({ question: 'Hi! Solve 3x + 5 = 20', subject: 'math' });
+  assert.equal(why(math, 'hint', "Hi! I'm Rime. So x = 5."), 'solves');
+});
