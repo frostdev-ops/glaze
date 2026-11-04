@@ -969,7 +969,7 @@ test('a download that ends Ready shows the version it brought', async () => {
   assert.equal(p.note().textContent, 'Ready · r5 · 1.1 GB');
 });
 
-test('Rime\'s context size in Advanced: 4K by default to 128K, sizes this computer can\'t hold refused with why, kept with the tier', async () => {
+test('Rime\'s context size in Advanced: 64K by default, stepped down to what this computer holds, 4K to 128K offered, refusals with why, kept with the tier', async () => {
   const sent = [];
   const local = async (m) => {
     sent.push({ op: m.op, ...(m.cfg && { cfg: { ...m.cfg } }) });
@@ -988,7 +988,9 @@ test('Rime\'s context size in Advanced: 4K by default to 128K, sizes this comput
   assert.deepEqual([pick.tagName, pick.attrs['aria-label']], ['SELECT', 'Context size']);
   const opts = pick.children.map((o) => [o.value, o.textContent, o.disabled, o.selected]);
   assert.deepEqual(opts.map((o) => o[0]), ['4096', '8192', '16384', '32768', '65536', '131072']);
-  assert.deepEqual(opts[0], ['4096', '4K', false, true], '4K, chosen by default');
+  const shown = ladder.defaultWindow({ size: 1099627200 }, { f16: false, deviceMemory: 4 });
+  assert.ok(shown > 4096 && shown < 65536, String(shown));
+  assert.deepEqual(opts.filter((o) => o[3]).map((o) => o[0]), [String(shown)], 'the size it runs at, nothing saved');
   const want = Object.fromEntries(ladder.windows({ size: 1099627200 }, { f16: false, deviceMemory: 4 }).map((w) => [String(w.size), w.refused]));
   for (const [value, words, disabled] of opts) {
     const why = want[value];
@@ -1002,7 +1004,8 @@ test('Rime\'s context size in Advanced: 4K by default to 128K, sizes this comput
   tier.value = '1'; p.fire(tier, 'change'); await settle();
   assert.deepEqual(sent.filter((m) => m.op === 'set').at(-1).cfg, { provider: 'local', tier: 1, window: 8192 }, 'the size stays');
   pick.value = '4096'; p.fire(p.$('ai-local-window'), 'change'); await settle();
-  assert.deepEqual(sent.filter((m) => m.op === 'set').at(-1).cfg, { provider: 'local', tier: 1 }, '4K is the default, never stored');
+  assert.deepEqual(sent.filter((m) => m.op === 'set').at(-1).cfg, { provider: 'local', tier: 1, window: 4096 }, '4K is kept once chosen');
+  assert.deepEqual(p.$('ai-local-window').children.filter((o) => o.selected).map((o) => o.value), ['4096']);
 });
 
 test('Rime context refusals use the high-performance GPU that runs the model', async () => {
@@ -1053,7 +1056,7 @@ test('Rime keeps tier and context changes made while the other choice is saving'
   for (const [first, second, expected] of [
     [['tier', '3'], ['window', '8192'], { tier: 3, window: 8192 }],
     [['window', '8192'], ['tier', '3'], { tier: 3, window: 8192 }],
-    [['tier', '3'], ['window', '4096'], { tier: 3 }],
+    [['tier', '3'], ['window', '4096'], { tier: 3, window: 4096 }],
     [['window', '8192'], ['tier', ''], { window: 8192 }],
   ]) await t.test(`${first.join('=')} then ${second.join('=')}`, async () => {
     let release, kept, writes = 0;

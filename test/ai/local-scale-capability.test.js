@@ -44,7 +44,8 @@ const cfgs = () => [{}, ...WINDOWS.map(([w]) => ({ window: w, context: w })), { 
 const transcript = async (model) => {
   const out = [];
   for (const raw of cfgs()) {
-    const cfg = LOCAL.config({ weights: ID, ...raw });
+    // {}: 4K chosen, which runs exactly as the 4K default did before the 64K default (owner, 2026-11-04).
+    const cfg = LOCAL.config({ weights: ID, window: LOCAL.TUNED, ...raw });
     for (const req of [plainReq('writer.complete'), plainReq('writer.review', { maxTokens: 4096 }), plainReq('study.help', { maxTokens: 300 }), plainReq('study.help'), agentReq(cfg), compactReq()]) {
       const calls = setup(model);
       await LOCAL.catalog(cfg);
