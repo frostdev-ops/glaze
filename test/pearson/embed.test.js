@@ -86,15 +86,27 @@ test('theme handoff contains only known CSS appearance tokens and rejects reques
   assert.deepEqual(L.theme({'--gz-ink':'#abcdef','--gz-font':'"Glaze Inter", sans-serif','--gz-surface-fill':'color-mix(in srgb, #123 80%, transparent)','--gz-radius':'12px','--private':'secret'}),{'--gz-ink':'#abcdef','--gz-surface-fill':'color-mix(in srgb, #123 80%, transparent)','--gz-radius':'12px','--gz-font':'"Glaze Inter", sans-serif'});
   for(const bad of ['url(https://evil.test/x)','u\\72l(https://evil.test/x)','image-set("https://evil.test/x" 1x)','-webkit-image-set("https://evil.test/x" 1x)','image("https://evil.test/x")','src("https://evil.test/x")','red;}body{color:red','red;--other:x','@import x','\nred'])assert.deepEqual(L.theme({'--gz-surface-paint':bad}),{},bad);
 });
-const worker = ({enabled=true,approved=true,probe=true,documentId='pinned',enhance={}}={})=>{
+const worker = ({enabled=true,approved=true,probe=true,documentId='pinned',enhance={pearsonEmbed:true},held=L.hosts,afterProbe=()=>{}}={})=>{
   let listener; const calls=[],opened=[];
-  const context=vm.createContext({URL,console,GZ_PEARSON_EMBED_LIB:L,addressOf:s=>s.url,fromUltra:async s=>approved&&s.url.startsWith('https://school.blackboard.com/ultra/')?'https://school.blackboard.com':null,beside:()=>({openerTabId:7}),
-    importScripts:()=>{},chrome:{runtime:{id:'own',onMessage:{addListener:f=>listener=f}},storage:{sync:{get:async()=>({enabled,enhance})}},tabs:{get:async()=>({id:7,url:host}),create:async o=>opened.push(o)},scripting:{executeScript:async o=>{calls.push(o);return [{result:probe,...(documentId?{documentId}:{})}];}}}});
+  const context=vm.createContext({URL,console,GZ_PEARSON_EMBED_LIB:L,reachable:async h=>held.includes(h),switchOn:async k=>require('../../extension/content/defaults.js').GZ_SANITIZE({enabled,enhance}).enabled&&require('../../extension/content/defaults.js').GZ_SANITIZE({enhance}).enhance[k],addressOf:s=>s.url,fromUltra:async s=>approved&&s.url.startsWith('https://school.blackboard.com/ultra/')?'https://school.blackboard.com':null,beside:()=>({openerTabId:7}),
+    importScripts:()=>{},chrome:{runtime:{id:'own',onMessage:{addListener:f=>listener=f}},storage:{sync:{get:async()=>({enabled,enhance})}},tabs:{get:async()=>({id:7,url:host}),create:async o=>opened.push(o)},scripting:{executeScript:async o=>{calls.push(o);if(o.func)afterProbe(held);return [{result:probe,...(documentId?{documentId}:{})}];}}}});
   vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../../extension/background/pearson-embed.js'),'utf8'),context);
   return {calls,opened,send:(m,s)=>new Promise(resolve=>listener(m,s,resolve))};
 };
 const socket={id:'own',tab:{id:7},frameId:4,documentId:'original',url:'https://socket.pearsoned.com/uiservice/opener'};
 const request={type:'glaze:pearson-embed',op:'launch',doc:'00000000-0000-4000-8000-000000000000'};
+test('launch authorization requires the embedding switch and every host through the final injection',async()=>{
+  for(const enhance of [{},{pearsonMath:true},{pearsonViewer:true}]){
+    const w=worker({enhance});assert.equal((await w.send(request,socket)).ok,false,'an omitted embedding switch defaults off');assert.equal(w.calls.length,0);
+  }
+  for(const missing of L.hosts){
+    const w=worker({held:L.hosts.filter(h=>h!==missing)});
+    assert.equal((await w.send(request,socket)).ok,false,missing);assert.equal(w.calls.length,0,'a surviving opener cannot inject with a partial grant');
+  }
+  const w=worker({held:[...L.hosts],afterProbe:held=>held.pop()});
+  assert.equal((await w.send(request,socket)).ok,false,'revoked while the probe awaited');
+  assert.ok(!w.calls.some(o=>o.world==='MAIN'));
+});
 test('only the approved Blackboard tab can authorize the document-pinned native opener hook',async()=>{
   const w=worker();assert.equal((await w.send(request,socket)).ok,true);
   assert.deepEqual(JSON.parse(JSON.stringify(w.calls.at(-1))),{target:{tabId:7,documentIds:['pinned']},world:'MAIN',files:['pearson/launch-main.js'],injectImmediately:true});
