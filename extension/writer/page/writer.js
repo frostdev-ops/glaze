@@ -94,6 +94,13 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.container === box.editor.closest('.ql-container') && box.editor.id === box.editorId &&
     U().kindOf(box.editor, { path: location.pathname, attempt: box.kind === 'test' ? 'test' : '' }) === box.kind &&
     (box.kind !== 'reply' || U().replyTo(box.editor) === (box.context.post?.id || ''));
+  // Ultra can finish collapsing an empty native composer after its replacement has taken focus. Once Writer is ready,
+  // its own Cancel ends that session; a native blur must leave both the Writer and its native Post action reachable.
+  const postControls = (box) => {
+    if (box.kind !== 'post' || !box.ready) return;
+    const controls = box.editor.closest('form')?.querySelector('.panel-editor-controls');
+    if (controls?.getAttribute('aria-hidden') === 'true') { box.hiddenControls = controls; controls.setAttribute('aria-hidden', 'false'); }
+  };
   // An assignment's paper key (writer/writer-papers.js keyOf: the school, the student, the course and the assignment), as
   // writer/writer-context-assignment.js builds it, from the student's id alone, so the frame opens the student's paper rather
   // than a stand-in while the rest of the context is read. null when the id isn't known within a few seconds.
@@ -252,6 +259,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     for (const k of ['position', 'opacity', 'pointer-events']) f.style.removeProperty(k);
     if (!typing && l.motion !== 'off' && !matchMedia('(prefers-reduced-motion: reduce)').matches) f.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' });
     if (typing) { f.focus(); box.port.postMessage({ type: 'focus' }); }
+    if (box.kind === 'post') box.editor.closest('form').setAttribute('data-gz-writer-post', '');
+    postControls(box);
     if (box.mode === 'paper') { X.need('writer/writer-context-assignment.js', () => globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT).then(() => GZ_WRITER_CONTEXT_ASSIGNMENT.send(X, box, () => boxes.get(ed) === box)).catch(() => {}); return; }
     // Ultra changing its own editor (a post sent and cleared, its saved draft put back): the frame shows it. Its text, not
     // its markup, says so: Quill tidies markup after each sync.
@@ -518,6 +527,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (box.display && !box.display[0]) box.root.style.removeProperty('display');
     box.root.removeAttribute('data-gz-writer');
     box.container.removeAttribute('data-gz-writer-id');
+    if (box.kind === 'post') box.editor.closest('form')?.removeAttribute('data-gz-writer-post');
+    if (box.hiddenControls?.className.split(/\s+/).includes('ng-hide')) box.hiddenControls.setAttribute('aria-hidden', 'true');
   };
   // The frame found what it can't keep in the box (writer/writer-schema.js loses) before writing anything: the box stays
   // Blackboard's as it is, nothing synced.
@@ -585,12 +596,13 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (!on()) { dropAll(); return; }
     for (const box of [...boxes.values()]) {
       if (!sameBox(box)) drop(box);
-      else if (box.kind === 'post' && !box.text && box.editor.closest('form')?.querySelector('.panel-editor-controls.ng-hide, .panel-editor-controls[aria-hidden="true"]')) drop(box);
+      else if (box.kind === 'post' && !box.display && !box.text && box.editor.closest('form')?.querySelector('.panel-editor-controls.ng-hide, .panel-editor-controls[aria-hidden="true"]')) drop(box);
       else if (box.kind === 'journal' && !U().sendOf(box.editor, 'journal')) drop(box); // its Cancel, or the entry sent
       else if (box.frame && !box.frame.isConnected) { if (box.unsynced || box.mode === 'paper') reopen(box); else drop(box); }
       // An attached PDF, deck or spreadsheet: Open in Glaze beside its link while its switch is on
       // (writer/writer-context-assignment.js).
       else if (box.mode === 'paper' && (box.files?.length || box.openers?.size)) globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT?.decorate(X, box);
+      postControls(box);
     }
     if (!U()) { X.need('writer/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA).then(() => on() && pass(), () => {}); return; }
     const at = { path: location.pathname, attempt: attempt() };
