@@ -84,8 +84,10 @@ course sites (**Use Glaze on example.edu?**) before theming them, reading their 
 Privacy and data → Sites** lists your sites, with Remove, which also forgets the courses and due dates Glaze read there.
 See [Adding a school's own site](../PRIVACY.md#adding-a-schools-own-site).
 
-Pearson's switches under Course pages → Documents and quizzes start off. Turning one on asks for `mylab.pearson.com`,
-`tdx.acs.pearson.com` and `socket.pearsoned.com`; turning the last one off hands them back.
+Pearson's switches under Course pages → Documents and quizzes start off. On browsers with optional hosts, turning one on
+asks for `mylab.pearson.com`, `tdx.acs.pearson.com` and `socket.pearsoned.com`. Turning the last one off returns grants for
+these exact hosts; a shared All sites grant stays. Safari already holds every host in its manifest, so these switches need
+no optional host grant there. Browser-menu Pearson grants skip the school-site probe; the switches still start off.
 Pearson MyLab homework is themed on `mylab.pearson.com` and its player frames on `tdx.acs.pearson.com`.
 The exact `socket.pearsoned.com/uiservice/opener` launcher opens Pearson's own content in a child frame. Glaze forwards
 only resolved appearance variables into that frame and its known homework children. The canonical homework address

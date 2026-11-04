@@ -1270,8 +1270,10 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
   them, and in Canvas's document viewer on `canvadocs.instructure.com`, where a separate small script applies the palette
   and, if you switch them on, your marks on documents. Glaze reads and restyles the page in your browser only.
 - Host access to `https://mylab.pearson.com/*`, `https://tdx.acs.pearson.com/*` and `https://socket.pearsoned.com/*`,
-  asked for only when you turn on a Pearson switch under Course pages → Documents and quizzes, and handed back when
-  you turn the last one off.
+  requested on browsers with optional hosts when you turn on a Pearson switch under Course pages → Documents and quizzes.
+  Turning the last one off returns grants for these exact hosts; a shared All sites grant stays.
+  Safari already holds every host in its manifest, so these switches need no optional host grant there.
+  Browser-menu Pearson grants skip the school-site probe; the switches still start off.
 - `mylab.pearson.com` and `tdx.acs.pearson.com` — to theme MyLab's homework
   player, its nested assignment/player frames and homework overview. The adapter reads the page's homework-mode marker
   and your existing Glaze appearance settings. The optional problem viewer rearranges the existing layout without copying
