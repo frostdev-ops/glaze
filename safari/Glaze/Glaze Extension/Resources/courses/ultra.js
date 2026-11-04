@@ -190,7 +190,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     const due = ms(row?.column?.dueDate);
     // [M] IN_PROGRESS is a saved draft, not a submission. [M] attemptDate is the submission time (equal to the
     // receipt's whenever there is one, and there often isn't).
-    const draft = a?.status === 'IN_PROGRESS' || row?.status === 'IN_PROGRESS';
+    const draft = s === 'DRAFT_SAVED_STUDENT' || a?.status === 'IN_PROGRESS' || row?.status === 'IN_PROGRESS';
     const handed = P.submitted(row);
     const at = (handed && !draft && ms(a?.attemptDate)) || null;
     const graded = row?.status === 'GRADED' || s === 'GRADED';
