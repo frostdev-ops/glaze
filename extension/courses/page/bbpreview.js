@@ -99,6 +99,7 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
     v.reading?.abort(); v.reading = null;
     v.unhello?.(); v.unhello = null;
     v.port?.close(); v.port = null;
+    if (v.original && v.gz && document.activeElement === v.gz && reason !== 'gone') v.original.button.focus();
     v.gz?.remove(); v.gz = null;
     v.bf.removeAttribute('data-gz-pv-hidden');
     v.bf.parentElement?.removeAttribute('data-gz-pv-box');
