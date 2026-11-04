@@ -3,6 +3,7 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 const defaults = require('../../extension/content/defaults.js');
 const read = f => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 const tick = () => new Promise(setImmediate);
+const L = require('../../extension/pearson/embed.js');
 
 test('an already themed homework document restores its native appearance after revocation and after all switches go off', async () => {
   const attrs = new Map(), styles = new Map(), listeners = [], math = [];
@@ -36,4 +37,51 @@ test('an already themed homework document restores its native appearance after r
   enhance = {};
   for (const f of listeners) f({ enhance: { newValue: {} } }, 'sync');
   await tick(); assert.equal(attrs.has('data-gz-pearson'), false, 'the last switch off also restores native appearance');
+});
+
+test('the host keeps native launch controls without access and restores them when a grant is revoked', async () => {
+  const events = new Map(), changes = [], messages = [];
+  const listen = (k,f) => events.set(k, [...events.get(k) || [], f]);
+  const fire = (k,e) => { for (const f of events.get(k) || []) f(e); };
+  const node = () => {
+    const attrs = new Map(), styles = new Map();
+    return { attrs, children: [], isConnected: true,
+      style: { getPropertyValue: k => styles.get(k) || '', getPropertyPriority: () => '', setProperty: (k,v) => styles.set(k,v), removeProperty: k => styles.delete(k) },
+      setAttribute: (k,v) => attrs.set(k,v), removeAttribute: k => attrs.delete(k), getAttribute: k => attrs.get(k) ?? null,
+      addEventListener() {}, removeEventListener() {}, getBoundingClientRect: () => ({ top: 0, bottom: 20 }),
+      append(...nodes) { this.children.push(...nodes); for (const n of nodes) n.parentElement = this; },
+      remove() { this.isConnected = false; },
+      get firstElementChild() { return this.children[0]; }, get lastElementChild() { return this.children.at(-1); },
+    };
+  };
+  let pearsonAccess = false;
+  const slot = node(), header = node(), exit = node(), frame = node(), controls = node();
+  controls.append(exit); header.querySelector = () => exit;
+  frame.src = 'https://school.blackboard.com/webapps/blackboard/execute/ultraFramePassThrough?redirectTo=' + encodeURIComponent('https://school.blackboard.com/webapps/blackboard/execute/blti/launchLink?course_id=_1_1&content_id=_2_1&from_ultra=true');
+  frame.parentElement = slot; frame.closest = () => ({ querySelector: () => header });
+  frame.contentWindow = { postMessage: m => messages.push(m) };
+  const c = vm.createContext({ URL, crypto: { randomUUID: () => '00000000-0000-4000-8000-000000000000' },
+    GZ_PEARSON_EMBED_LIB: L, GZ_CTX: { site: 'ultra', on: () => true, settings: () => ({ enabled: true, enhance: { pearsonEmbed: true } }), darkTheme: () => false, t: x => x },
+    location: new URL('https://school.blackboard.com/ultra/courses/_1_1/lti/launchFrame'),
+    document: { getElementById: () => frame, querySelector: () => header, createElement: node, documentElement: node(), head: node() },
+    chrome: { runtime: { getURL: x => x }, storage: { local: { get: async () => ({ pearsonAccess }) }, onChanged: { addListener: f => changes.push(f) } } },
+    MutationObserver: class { observe() {} disconnect() {} }, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
+    getComputedStyle: () => ({ getPropertyValue: () => '' }), visualViewport: { height: 800, addEventListener() {} },
+    requestAnimationFrame: () => 1, cancelAnimationFrame() {}, addEventListener: listen,
+  });
+  vm.runInContext(read('courses/page/pearson-embed.js'), c);
+  const active = () => fire('message', { source: frame.contentWindow, origin: L.socket, data: { gzPearsonEmbed: 'active', channel: '00000000-0000-4000-8000-000000000000' } });
+  c.GZ_PEARSON_EMBED.sync(); await tick(); active();
+  assert.equal(slot.attrs.has('data-gz-pearson-slot'), false, 'a synced preference cannot act without access on this device');
+  assert.ok(messages.every(m => m.enabled !== true), 'no enabled context reaches a launcher that cannot run');
+  pearsonAccess = true;
+  for (const f of changes) f({ pearsonAccess: { newValue: true } }, 'local');
+  await tick(); c.GZ_PEARSON_EMBED.sync(); active();
+  assert.equal(slot.attrs.has('data-gz-pearson-slot'), true);
+  pearsonAccess = false;
+  for (const f of changes) f({ pearsonAccess: { newValue: false } }, 'local');
+  await tick(); active();
+  assert.equal(slot.attrs.has('data-gz-pearson-slot'), false);
+  assert.equal(exit.attrs.has('data-gz-pearson-native-exit'), false, 'native Exit returns');
+  assert.equal(messages.at(-1).enabled, false, 'prepared launches lose parent consent before cleanup');
 });
