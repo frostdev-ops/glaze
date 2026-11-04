@@ -1,6 +1,6 @@
 // Blackboard Ultra's file previews in Glaze's PDF viewer (enhance.bbPreviews, and only with Settings → Writer → PDFs on),
-// loaded on demand: content.js loads this once a preview's frame is on an Ultra page and hands it each pass. Ultra converts
-// every attachment to a PDF and shows it in its own viewer, a frame at the attachment's data-bbfile viewerUrl (live probe,
+// loaded on demand: content.js loads this for attachments on an Ultra page and hands it each pass. Ultra converts
+// attachments to PDFs for its own viewer, a frame at the attachment's data-bbfile viewerUrl (live probe,
 // 2026-10-30; the shapes: scripts/ultra-mock.js PREVIEW). Expanded, or open already, the worker is asked for that PDF
 // (courses/bb-preview.js) while Blackboard's frame stays. Done: this page reads the converted PDF from its presigned S3 address
 // (the bucket lets the page's own origin read it, as the probe found; at most MAX, the worker asked again once if S3
@@ -10,6 +10,8 @@
 // Anything else, or nothing in time, keeps Blackboard's frame, and so does a viewer that fails later. Collapsing (Ultra removes its frame) or the switch off puts
 // Blackboard's back. Esc in the viewer returns to the attachment's Preview button. Dark documents never inverts Glaze's
 // frame (.gz-pv: content.js PREVIEWS, extras.css). Classic script, through GZ_CTX; a second injection keeps the first.
+// An original-only inline PDF (discussion probe, 2026-11-02) has resourceUrl and no viewerUrl or Preview control. Its own
+// toggle reads that file with the school session only on a click, through the same bounded reader and Glaze viewer.
 var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
   const X = globalThis.GZ_CTX;
   if (!X || X.site !== 'ultra') return null;
@@ -21,6 +23,7 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
   const on = () => { const s = X.settings(); return X.on() && s.enabled !== false && s.enhance?.bbPreviews !== false && s.writer?.pdf !== false; };
   const views = new Map(); // Blackboard's frame → its view
   const answers = new Map(); // a frame's address → the worker's done answer, kept until two minutes before it ends
+  const originals = new Map(); // original-only PDF attachment → its own preview toggle and optional view
 
   // The Look as the frame wears it (writer/page/writer.js look).
   const TOKENS = [...GZ_COLORS.map(([k]) => k), '--gz-radius', '--gz-font', '--gz-ground', '--gz-surface-paint', '--gz-surface-paint-2', '--gz-surface-opacity', '--gz-glass-mix', '--gz-border-line', '--gz-border-strong'];
@@ -33,12 +36,12 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
   // Blackboard's frame → its attachment: the data-bbfile whose viewerUrl it shows (else the one around it), that address on
   // this site (data, so read against the page's own address: Ultra's <base> is its CDN), its name, and the original's link
   // here. null: a frame that isn't an attachment's preview (it stays Blackboard's).
-  const own = (u) => { try { const x = new URL(u, location.href); return x.origin === location.origin ? x : null; } catch { return null; } };
+  const own = (u) => { try { const x = typeof u === 'string' && u ? new URL(u, location.href) : null; return x?.origin === location.origin && !x.username && !x.password ? x : null; } catch { return null; } };
+  const read = (x) => { try { return JSON.parse(x?.getAttribute('data-bbfile')); } catch { return null; } };
   const same = (a, b) => !!a && !!b && a.origin === b.origin && a.pathname === b.pathname && a.search === b.search;
   const fileOf = (bf) => {
     let at = null;
     try { at = new URL(bf.src); } catch { return null; }
-    const read = (x) => { try { return JSON.parse(x.getAttribute('data-bbfile')); } catch { return null; } };
     const near = bf.closest('[data-bbfile]');
     const el = same(own(read(near)?.viewerUrl), at) ? near : [...document.querySelectorAll('#site-wrap [data-bbfile]')].find((x) => same(own(read(x)?.viewerUrl), at)) || null;
     const j = el && read(el), viewer = own(j?.viewerUrl);
@@ -57,8 +60,8 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
 
   const live = (v) => views.get(v.bf) === v && v.bf.isConnected && on();
   // The converted PDF from its presigned address, as this page (no cookies), read to its end and stopped past MAX.
-  const bytesOf = async (url, signal) => {
-    const r = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'no-store', signal });
+  const bytesOf = async (url, signal, original = false) => {
+    const r = await fetch(url, { mode: 'cors', credentials: original ? 'same-origin' : 'omit', cache: 'no-store', signal });
     if (!r.ok || !r.body || +r.headers.get('content-length') > MAX) { r.body?.cancel().catch(() => {}); throw new Error(r.ok ? 'pdf:too-big' : `pdf:${r.status}`); }
     const reader = r.body.getReader(), parts = [];
     let size = 0;
@@ -70,6 +73,7 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
         parts.push(value);
       }
     } finally { reader.cancel().catch(() => {}); }
+    if (!size) throw new Error('pdf:empty');
     const out = new Uint8Array(size);
     let at = 0;
     for (const p of parts) { out.set(p, at); at += p.byteLength; }
@@ -77,6 +81,7 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
   };
   // Refused or unreachable: the worker asked again for a fresh address (the last ran out), and that one read, once.
   const pdfOf = async (v, signal) => {
+    if (v.original) return bytesOf(v.file.href, signal, true);
     try { return await bytesOf(v.answer.pdf, signal); } catch (e) {
       if (signal.aborted || e.message === 'pdf:too-big') throw e;
       const r = await asked(v.file.viewer, true);
@@ -99,9 +104,20 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
     v.bf.parentElement?.removeAttribute('data-gz-pv-box');
     v.shown = false;
     v.ended = reason;
+    if (v.original) {
+      v.original.button.removeAttribute('aria-busy');
+      if (reason !== 'gone') {
+        const said = v.bf.querySelector('[role="status"]') || document.createElement('p');
+        said.setAttribute('role', 'status'); said.textContent = X.t(reason === 'pdf:empty' ? 'This PDF is empty.' : "Couldn't open this file in Glaze.");
+        v.bf.prepend(said);
+      }
+    }
     mark(v, `ended:${reason}`);
   };
-  const drop = (v) => { fail(v, 'gone'); mark(v, ''); views.delete(v.bf); };
+  const drop = (v) => {
+    fail(v, 'gone'); mark(v, ''); views.delete(v.bf);
+    if (v.original) { v.bf.remove(); v.original.view = null; v.original.button.setAttribute('aria-expanded', 'false'); v.original.button.removeAttribute('aria-busy'); }
+  };
   // Glaze's viewer is drawn: it takes Blackboard's place, at the paper's height and the box's width.
   const swap = (v) => {
     clearTimeout(v.wait);
@@ -112,9 +128,11 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
     v.bf.parentElement?.setAttribute('data-gz-pv-box', '');
     v.gz.style.cssText = `display:block;border:0;width:100%;height:${HEIGHT};background:transparent;color-scheme:${html.hasAttribute('data-gz-dark-theme') ? 'dark' : 'light'}`;
     v.gz.removeAttribute('tabindex');
+    v.original?.button.removeAttribute('aria-busy');
   };
   // Esc in the viewer: the attachment's Preview button (aria-expanded), where the student opened it.
   const back = (v) => {
+    if (v.original) { v.original.button.focus(); return; }
     const label = `Preview File ${v.file.name}`;
     const b = v.file.el.querySelector('button[aria-expanded="true"]') || [...document.querySelectorAll('button[aria-expanded]')].find((x) => x.getAttribute('aria-label') === label);
     b?.focus();
@@ -135,7 +153,7 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
   // use), both at once; the read failing, or the two not done and drawn within SHOW, keeps Blackboard's frame.
   const load = (v) => {
     let src;
-    try { src = chrome.runtime.getURL('writer.html'); } catch { return; }
+    try { src = chrome.runtime.getURL('writer.html'); } catch { fail(v, 'extension'); return; }
     const reading = new AbortController();
     v.reading = reading;
     v.bytes = pdfOf(v, reading.signal);
@@ -183,7 +201,46 @@ var GZ_BB_PREVIEW_UI = globalThis.GZ_BB_PREVIEW_UI || (() => {
     if (v.file) { mark(v, 'asking'); ask(v); } else v.ended = 'not a file';
   };
 
+  // Discussion attachments can have only resourceUrl (no viewerUrl or native Preview action). Offer a toggle for a PDF
+  // at the school's original URL. Only its click reads the file, with the same session as a native download; external
+  // URLs and non-file paths never receive credentials. Converted previews keep their existing path above.
+  const originalOf = (el) => {
+    const j = read(el), href = own(j?.resourceUrl);
+    if (!j || j.render !== 'inline' || j.viewerUrl || !href || !/^\/(?:courses\/|bbcswebdav\/)/.test(href.pathname) ||
+      !(j.mimeType === 'application/pdf' || /\.pdf$/i.test(j.fileName || '')) || !el.querySelector('.bb-editor-file-viewer .js-file-viewer-root-controls')) return null;
+    return { el, href: href.href, name: String(j.linkName || j.displayName || j.fileName || '').replace(/\s+/g, ' ').trim().slice(0, 200) };
+  };
+  const decorate = () => {
+    for (const [el, o] of originals) {
+      const file = el.isConnected && on() && originalOf(el);
+      if (file && file.href === o.file.href && file.name === o.file.name && o.button.isConnected) continue;
+      if (o.view) drop(o.view);
+      o.button.remove(); originals.delete(el);
+    }
+    if (!on()) return;
+    for (const el of document.querySelectorAll('#site-wrap [data-bbtype="attachment"][data-bbfile]')) {
+      if (originals.has(el)) continue;
+      const file = originalOf(el);
+      if (!file) continue;
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'gz-bb-pdf'; button.textContent = X.t('Preview');
+      button.setAttribute('aria-label', `${X.t('Preview')} ${file.name}`); button.setAttribute('aria-expanded', 'false');
+      const o = { file, button, view: null }; originals.set(el, o);
+      button.addEventListener('click', () => {
+        if (o.view) { drop(o.view); return; }
+        if (!on() || originalOf(el)?.href !== file.href) return;
+        const bf = document.createElement('div'), a = document.createElement('a');
+        bf.className = 'gz-bb-pdf-fallback'; a.href = file.href; a.textContent = X.t('Open original'); a.target = '_blank'; a.rel = 'noopener'; bf.append(a);
+        const v = { bf, file, original: o, since: Date.now(), gz: null, port: null, timer: 0, wait: 0, shown: false, ended: '' };
+        o.view = v; views.set(bf, v); el.querySelector('.bb-editor-file-viewer').append(bf);
+        button.setAttribute('aria-expanded', 'true'); button.setAttribute('aria-busy', 'true'); load(v);
+      });
+      el.querySelector('.js-file-viewer-root-controls').append(button);
+    }
+  };
+
   const sync = () => {
+    decorate();
     const ok = on();
     for (const v of [...views.values()]) {
       if (!ok || !v.bf.isConnected || v.bf.src !== v.src) drop(v);

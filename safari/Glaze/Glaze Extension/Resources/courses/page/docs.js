@@ -98,7 +98,7 @@ var GZ_DOCS = globalThis.GZ_DOCS || (() => {
     tellDocs();
     // This part already loads for Ultra's preview frames, even with reading tools off. Keep their viewer hook lazy too.
     if (globalThis.GZ_BB_PREVIEW_UI) GZ_BB_PREVIEW_UI.sync();
-    else if (ultra && ctx.on() && ctx.settings().enhance.bbPreviews && ctx.settings().writer.pdf && document.querySelector(PREVIEWS)) ctx.need('courses/page/bbpreview.js', () => globalThis.GZ_BB_PREVIEW_UI).then(() => GZ_BB_PREVIEW_UI.sync(), () => {});
+    else if (ultra && ctx.on() && ctx.settings().enhance.bbPreviews && ctx.settings().writer.pdf && document.querySelector(`${PREVIEWS},[data-bbtype="attachment"][data-bbfile]`)) ctx.need('courses/page/bbpreview.js', () => globalThis.GZ_BB_PREVIEW_UI).then(() => GZ_BB_PREVIEW_UI.sync(), () => {});
     // Canvas's files in Glaze's viewers, as lazy: loaded where a preview or a file link is (content.js loads this part there).
     if (globalThis.GZ_CANVAS_OPEN) GZ_CANVAS_OPEN.sync();
     else if (!ultra && ctx.solo && ctx.on() && ctx.settings().enhance.bbPreviews && document.querySelector(CANVAS_FILES)) ctx.need('courses/page/canvasopen.js', () => globalThis.GZ_CANVAS_OPEN).then(sync, () => {});

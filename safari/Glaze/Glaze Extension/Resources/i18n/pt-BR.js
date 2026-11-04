@@ -3889,6 +3889,7 @@
   "Pages cannot be added to a password-protected PDF, or taken from one.": "Não é possível adicionar páginas a um PDF protegido por senha nem retirá-las dele.",
   "Print with notes…": "Imprimir com anotações…",
   "This file isn't available to you right now.": "Este arquivo não está disponível para você agora.",
+  "This PDF is empty.": "Este PDF está vazio.",
   "Couldn't open this file in Glaze.": "Não foi possível abrir este arquivo no Glaze.",
   "Export .xlsm": "Exportar .xlsm",
   "Attach from Documents": "Anexar de Documentos",

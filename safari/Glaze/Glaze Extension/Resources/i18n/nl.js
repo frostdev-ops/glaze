@@ -3889,6 +3889,7 @@
   "Pages cannot be added to a password-protected PDF, or taken from one.": "Aan een met een wachtwoord beveiligde pdf kunnen geen pagina's worden toegevoegd of eruit worden gehaald.",
   "Print with notes…": "Afdrukken met notities…",
   "This file isn't available to you right now.": "Dit bestand is nu niet voor je beschikbaar.",
+  "This PDF is empty.": "Deze PDF is leeg.",
   "Couldn't open this file in Glaze.": "Dit bestand kon niet in Glaze worden geopend.",
   "Export .xlsm": ".xlsm exporteren",
   "Attach from Documents": "Bijvoegen uit Documenten",

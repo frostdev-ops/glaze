@@ -361,7 +361,9 @@ html[data-gz-dark-theme][data-gz-enhance-docPages="dim"] #site-wrap :is(.js-file
 html[data-gz-dark-theme][data-gz-enhance-docPages="dark"] #site-wrap :is(.js-file-viewer-inline-preview, [class*="fileViewerContainer"]) iframe:not(.gz-pv) { filter: invert(0.9) hue-rotate(180deg); }
 /* A preview in Glaze's PDF viewer (courses/page/bbpreview.js): Blackboard's frame hidden while Glaze's shows in its place, and
    the box around them as tall as Glaze's frame. Dark documents leaves Glaze's frame alone (its pages stay print white). */
-#site-wrap iframe[data-gz-pv-hidden] { display: none !important; }
+#site-wrap [data-gz-pv-hidden] { display: none !important; }
+#site-wrap button.gz-bb-pdf { margin-inline: 0.5rem; padding: 0.35rem 0.65rem; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); color: var(--gz-ink); background: var(--gz-surface-fill, var(--gz-surface)); font: inherit; cursor: pointer; }
+#site-wrap .gz-bb-pdf-fallback { padding: 0.75rem; }
 #site-wrap [data-gz-pv-box] { height: auto !important; max-height: none !important; }
 
 /* Document buttons: a column of round buttons in the bottom-right gutter. Where the window is too
