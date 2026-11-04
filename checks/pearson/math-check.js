@@ -2,7 +2,7 @@
 const {chromium}=require('playwright');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto'),assert=require('node:assert/strict');
 const env=require('../../tools/dev/check-env.js');
-const ext=require('../../tools/dev/check-env.js').staged(process.env.EXT||path.resolve(__dirname,'../../extension'),[]);
+const ext=require('../../tools/dev/check-env.js').staged(process.env.EXT||path.resolve(__dirname,'../../extension'),require('../../tools/dev/check-env.js').PEARSON_HOSTS);
 const id=[...crypto.createHash('sha256').update(ext).digest('hex').slice(0,32)].map(c=>String.fromCharCode(97+parseInt(c,16))).join('');
 const D=require('../../extension/content/defaults.js');
 const out=process.argv[2],tmp=fs.mkdtempSync(path.join(os.tmpdir(),'glaze-math-check-')),results=[],errors=[],network=[];
@@ -35,7 +35,8 @@ const until=async(fn)=>{for(const end=Date.now()+12000;;await new Promise(r=>set
   ctx.on('page',p=>p.on('pageerror',e=>errors.push(String(e))));
   await ctx.route('**/*',r=>{const u=new URL(r.request().url());if(u.protocol==='chrome-extension:')return r.continue();if(u.origin==='https://tdx.acs.pearson.com')return r.fulfill({contentType:'text/html',body:source});network.push(u.origin+u.pathname);return r.abort()});
   const opts=await ctx.newPage();await opts.goto(`chrome-extension://${id}/options.html`);await env.installed(opts);
-  await opts.evaluate(async s=>chrome.storage.sync.set(s),{enabled:true,colors:D.GZ_DEFAULTS.colors,bg:{...D.GZ_DEFAULTS.bg,kind:'solid'},enhance:{...D.GZ_DEFAULTS.enhance,pearsonViewer:false}});
+  await opts.evaluate(async s=>chrome.storage.sync.set(s),{enabled:true,colors:D.GZ_DEFAULTS.colors,bg:{...D.GZ_DEFAULTS.bg,kind:'solid'},enhance:{...D.GZ_DEFAULTS.enhance,pearsonViewer:false,pearsonMath:true}});
+  await require('../../tools/dev/check-env.js').pearsonReady(ctx);
   const page=await ctx.newPage();await page.goto('https://tdx.acs.pearson.com/Player/Player.aspx');
   try{await page.waitForSelector('.gz-pearson-render',{timeout:12000})}catch(e){
    console.log('Math startup:',await page.evaluate(()=>({themed:document.documentElement.getAttribute('data-gz-pearson'),math:document.documentElement.hasAttribute('data-gz-pearson-math'),buttons:document.querySelectorAll('.gz-pearson-math-edit').length,html:document.querySelector('#formula').outerHTML})));

@@ -43,6 +43,8 @@ var GZ_PEARSON_EMBED_LIB = globalThis.GZ_PEARSON_EMBED_LIB || (() => {
     const u = url(value);
     return u?.origin === mylab && /^\/Service\/PlayerLaunch\.ashx$/i.test(u.pathname) ? tdx : child(value);
   };
-  return { socket, mylab, tdx, channel, homework, lti, launch, child, frameOrigin, tokens, theme };
+  // The hosts the Pearson switches ask for (settings/options.js) and the worker registers on (background/background.js).
+  const hosts = Object.freeze([mylab, tdx, socket]);
+  return { socket, mylab, tdx, hosts, channel, homework, lti, launch, child, frameOrigin, tokens, theme };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_PEARSON_EMBED_LIB;

@@ -18,7 +18,10 @@ has no part; it is themed by `content.js` and `moodle.css`. Everything else, fro
 grade calculators, loads on demand from its area's `page/` folder the first time a page needs it.
 
 Pearson MyLab homework uses a separate appearance adapter, `content/pearson.js` and `content/pearson.css`.
-`enhance.pearsonEmbed` opens its native LTI launch inside Blackboard by default. The routed
+Pearson's hosts are a grant, not manifest hosts: an update that adds a host warning makes Chrome disable Glaze until the
+student accepts it. The three `enhance.pearson*` switches start off; turning one on asks for `GZ_PEARSON_EMBED_LIB.hosts`,
+and the worker registers `gz-pearson` and `gz-pearson-launch` (background.js `PEARSON`) while one is on and all three are
+held. The last one off hands them back. `enhance.pearsonEmbed` opens its native LTI launch inside Blackboard. The routed
 `courses/page/pearson-embed.js` module owns sizing and controls, while `pearson/launch.js` checks the exact socket
 opener and asks the worker for a document-pinned MAIN-world `pearson/launch-main.js` hook. It prepares a named child
 frame before invoking the original Open Pearson click handler, changing only the launch destination. Authentication
@@ -32,7 +35,7 @@ owns a background renderer. Embedded MyLab and tdx documents never start one, in
 standalone MyLab keeps one renderer in its top-level shell, visible through transparent child canvases.
 Only the canonical homework URL and selected question ordinal travel back for Open in tab; other query parameters
 are dropped. During authentication, pop-out rebuilds a fresh same-course Blackboard LTI launch, never a consumed
-Pearson callback. Close invokes Blackboard's original Exit. Turning the default off affects later launches and keeps
+Pearson callback. Close invokes Blackboard's original Exit. Turning the switch off affects later launches and keeps
 an existing session mounted so unsent work survives. No frame/security headers or cookie settings are changed.
 `checks/pearson/embed-check.js` uses invented native launcher and homework fixtures; cold sign-in, grading submission
 and native Safari/Firefox require separate live validation.

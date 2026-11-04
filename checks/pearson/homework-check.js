@@ -4,7 +4,7 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const env = require('../../tools/dev/check-env.js');
-const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.resolve(__dirname, '../../extension'), []);
+const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.resolve(__dirname, '../../extension'), require('../../tools/dev/check-env.js').PEARSON_HOSTS);
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const D = require('../../extension/content/defaults.js');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-pearson-check-'));
@@ -85,14 +85,16 @@ const until = async (fn) => {
     const opts = await ctx.newPage();
     await opts.goto(`chrome-extension://${id}/options.html`);
     await env.installed(opts);
-    await opts.evaluate(async (s) => { await chrome.storage.sync.set(s); }, { enabled: true, colors: D.GZ_DEFAULTS.colors, auto: D.GZ_DEFAULTS.auto, look: D.GZ_DEFAULTS.look });
+    await opts.evaluate(async (s) => { await chrome.storage.sync.set(s); }, { enabled: true, colors: D.GZ_DEFAULTS.colors, auto: D.GZ_DEFAULTS.auto, look: D.GZ_DEFAULTS.look,
+      enhance: { ...D.GZ_DEFAULTS.enhance, pearsonViewer: true, pearsonEmbed: true, pearsonMath: true } });
+    await env.pearsonReady(ctx);
     const page = await ctx.newPage();
     await page.goto('https://mylab.pearson.com/Student/PlayerHomework.aspx?homeworkId=101');
     const assigned = page.frame({ url: /\/assignment\/assignmentplayer\.aspx/ });
     const play = page.frame({ url: /\/Player\/Player\.aspx/ });
     for (const f of [page, assigned, play]) await themed(f);
     await until(async()=>await color(play,'.btn-primary')===rgb(D.GZ_DEFAULTS.colors['--gz-accent']));
-    check(true, 'the real manifest themes the shell and both nested player documents');
+    check(true, 'the registered Pearson scripts theme the shell and both nested player documents');
     check(await color(page,'#dvMainRow')==='rgba(0, 0, 0, 0)', 'the inline-white native homework shell reveals the top-level saved background');
     const surface=f=>f.locator('html').evaluate(e=>getComputedStyle(e).getPropertyValue('--gz-surface').trim());
     for (const f of [page, assigned, play]) check(await surface(f) === D.GZ_DEFAULTS.colors['--gz-surface'], 'each document receives the saved Frost surface palette');

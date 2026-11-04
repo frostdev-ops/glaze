@@ -98,4 +98,16 @@ const noFirstRun = (ctx) => {
   return first;
 };
 
-module.exports = { lockPath, chromePath, chromeLaunch, staged, ultraReady, installed, noFirstRun };
+// Pearson's hosts are a grant the Pearson switches ask for; a Pearson check stages them as held (staged(src, PEARSON_HOSTS)),
+// turns a switch on, then waits here until the worker has registered Pearson's two scripts.
+const PEARSON_HOSTS = ['https://mylab.pearson.com/*', 'https://tdx.acs.pearson.com/*', 'https://socket.pearsoned.com/*'];
+async function pearsonReady(ctx, ms = 15000) {
+  const worker = ctx.serviceWorkers()[0] || await ctx.waitForEvent('serviceworker');
+  for (const end = Date.now() + ms; ; await new Promise((r) => setTimeout(r, 50))) {
+    const ids = await worker.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id)).catch(() => []);
+    if (ids.includes('gz-pearson') && ids.includes('gz-pearson-launch')) return;
+    if (Date.now() > end) throw new Error(`Pearson scripts not registered: ${JSON.stringify(ids)}`);
+  }
+}
+
+module.exports = { lockPath, chromePath, chromeLaunch, staged, ultraReady, installed, noFirstRun, PEARSON_HOSTS, pearsonReady };

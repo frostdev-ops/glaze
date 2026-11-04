@@ -2,7 +2,7 @@
 const {chromium} = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
 const env = require('../../tools/dev/check-env.js'), D = require('../../extension/content/defaults.js');
-const ext = require('../../tools/dev/check-env.js').staged(path.resolve(process.env.EXT || 'extension'), []);
+const ext = require('../../tools/dev/check-env.js').staged(path.resolve(process.env.EXT || 'extension'), require('../../tools/dev/check-env.js').PEARSON_HOSTS);
 const site = 'https://example.blackboard.com', socket = 'https://socket.pearsoned.com', mylab = 'https://mylab.pearson.com', tdx = 'https://tdx.acs.pearson.com';
 const route = '/ultra/courses/_101_1/lti/launchFrame', native = site + '/webapps/blackboard/execute/ultraFramePassThrough?redirectTo=' + encodeURIComponent(site + '/webapps/blackboard/execute/blti/launchLink?course_id=_101_1&content_id=_202_1&from_ultra=true');
 const out = process.argv[2] || '/out', tmp = fs.mkdtempSync(path.join(os.tmpdir(),'glaze-embed-')), checks = [], errors = [];
@@ -49,6 +49,7 @@ const player = `<!doctype html><html><head><style>body{margin:0;background:white
   const opts=await ctx.newPage();await opts.goto(`chrome-extension://${id}/options.html`);await env.installed(opts);
   const enhance={...Object.fromEntries(Object.keys(D.GZ_DEFAULTS.enhance).map(k=>[k,false])),pearsonEmbed:true,pearsonViewer:true};
   await opts.evaluate(async s=>chrome.storage.sync.set(s),{enabled:true,enhance,navbar:{on:false},footer:false,bg:{kind:'gradient'},colors:D.GZ_DEFAULTS.colors});
+  await env.pearsonReady(ctx);
   const page=await ctx.newPage();await page.goto(site+route); const before=ctx.pages().length;
   const launcher=()=>page.frames().find(f=>f.url()===socket+'/uiservice/opener');
   const homework=()=>page.frames().find(f=>f.url().startsWith(mylab+'/Student/OverviewHomework.aspx'));
