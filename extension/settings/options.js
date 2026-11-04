@@ -472,6 +472,7 @@ GZ_UI.load().then((s) => {
     $('[data-key="stream.relative"]').disabled = s.stream.dates === 'posted';
     $('[data-key="tabs.renew"]').disabled = !s.tabs.ahead;
     $('[data-key="nav.detailed"]').checked = s.nav.detailed;
+    pearsonControls();
     $('#auto-times').hidden = s.auto.mode !== 'schedule';
     for (const el of $$('[data-tint]')) el.hidden = !s.courses.tint;
     // A control only where it has an effect (settings/editor.js SHOW); a More options with nothing left to show goes too.
@@ -877,13 +878,26 @@ GZ_UI.load().then((s) => {
     for (const input of $$('[data-key="look.surfaceColor"]')) input.value = s.look.surfaceColor;
   };
   const PEARSON_KEYS = ['enhance.pearsonViewer', 'enhance.pearsonEmbed', 'enhance.pearsonMath'];
+  let pearsonAccess = false, pearsonRead = 0;
+  const pearsonControls = () => { for (const el of $$('[data-key]')) if (PEARSON_KEYS.includes(el.dataset.key)) el.checked = pearsonAccess && get(el.dataset.key); };
+  const readPearsonAccess = () => {
+    const at = ++pearsonRead;
+    const held = chrome.runtime.getManifest().host_permissions?.includes('<all_urls>') ? Promise.resolve(true)
+      : typeof chrome.permissions?.contains === 'function' ? chrome.permissions.contains({ origins: GZ_PEARSON_EMBED_LIB.hosts.map(h => `${h}/*`) })
+      : chrome.storage.local.get('pearsonAccess').then(v => v.pearsonAccess === true);
+    Promise.resolve(held).catch(() => false).then(value => { if (at === pearsonRead) { pearsonAccess = value === true; pearsonControls(); } });
+  };
+  chrome.permissions?.onAdded?.addListener(readPearsonAccess);
+  chrome.permissions?.onRemoved?.addListener(readPearsonAccess);
+  chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.pearsonAccess) readPearsonAccess(); });
+  readPearsonAccess();
   for (const el of $$('[data-key]')) {
     const key = el.dataset.key;
     if (key === 'nav.size') el.addEventListener('change', () => { s.nav.detailed = false; pendingNav.add('detailed'); });
     if (key === 'nav.k') el.addEventListener('change', () => { navPick++; });
     // Gradescope and Pearson aren't hosts Glaze holds from the start: switched on, they are asked for in this click; refused,
     // the switch stays off. Switched off (Pearson: its last switch), the worker hands the grant back.
-    if ((key === 'enhance.gradescope' || PEARSON_KEYS.includes(key)) && el.type === 'checkbox') { el.addEventListener('change', () => { const on = el.checked; el.checked = false; (on ? GZ_SITE.reach(key === 'enhance.gradescope' ? [GZ_GRADESCOPE.HOST] : [...GZ_PEARSON_EMBED_LIB.hosts], el) : Promise.resolve(true)).then((held) => { if (!held) return; el.checked = on; set(key, on); refresh(); save([group(key)]); }); }); continue; }
+    if ((key === 'enhance.gradescope' || PEARSON_KEYS.includes(key)) && el.type === 'checkbox') { el.addEventListener('change', () => { const on = el.checked; el.checked = false; (on ? GZ_SITE.reach(key === 'enhance.gradescope' ? [GZ_GRADESCOPE.HOST] : [...GZ_PEARSON_EMBED_LIB.hosts], el) : Promise.resolve(true)).then((held) => { if (PEARSON_KEYS.includes(key) && on) { pearsonRead++; pearsonAccess = held === true; pearsonControls(); } if (!held) return; el.checked = on; set(key, on); refresh(); save([group(key)]); }); }); continue; }
     if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); if (key === 'look.surfaceCustom' && el.checked) seedSurface(); if (key === 'enhance.coursemenu') renderCourses(); if (key === 'enhance.dashboard') renderNavItems(); refresh(); save([group(key)]); });
     else if (el.type === 'range') {
       el.addEventListener('input', () => { if (key.startsWith('nav.') && Object.hasOwn(N.dimensions(s.nav), key.slice(4))) { Object.assign(s.nav, N.dimensions(s.nav), { detailed: true }); for (const k of [...Object.keys(N.dimensions(s.nav)), 'detailed']) pendingNav.add(k); } set(key, +el.value); refresh(); save([group(key)], true); });
