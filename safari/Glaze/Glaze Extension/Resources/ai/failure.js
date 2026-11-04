@@ -108,11 +108,13 @@ var GZ_AI_FAILURE = globalThis.GZ_AI_FAILURE || (() => {
     }
     return { signal: c.signal, done: () => offs.forEach((f) => f()) };
   };
-  // A signal that aborts after ms with a TimeoutError (AbortSignal.timeout's, with a timer that can be cleared).
+  // A signal that aborts after ms with a TimeoutError (AbortSignal.timeout's, with a timer that can be cleared, and moved
+  // later by extend(more ms) while it has not fired).
   const deadline = (ms) => {
-    const c = new AbortController();
-    const t = setTimeout(() => c.abort(new DOMException('Model response timed out.', 'TimeoutError')), ms);
-    return { signal: c.signal, done: () => clearTimeout(t) };
+    const c = new AbortController(), fire = () => c.abort(new DOMException('Model response timed out.', 'TimeoutError'));
+    let at = Date.now() + ms, t = setTimeout(fire, ms);
+    return { signal: c.signal, done: () => clearTimeout(t),
+      extend: (more) => { if (c.signal.aborted || !(more > 0)) return; clearTimeout(t); at += more; t = setTimeout(fire, Math.max(0, at - Date.now())); } };
   };
   // Race even work that ignores cancellation. A function is not invoked if already aborted; late rejection is handled.
   const wait = (work, signal) => new Promise((resolve, reject) => {

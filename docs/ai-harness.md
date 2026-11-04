@@ -150,7 +150,7 @@ Ask Rime runs both (below); the worker loads them with the harness (`aiFiles`). 
   correct option, including a bare number or option letter), gives a result one step of arithmetic on the problem's numbers makes or a new equation in its
   variables, writes code with the student's own names, offers wording (`wording.js`, Feedback's rules but "for example,"),
   quotes three words no source holds, or (essay, reading, other) makes a statement that neither speaks to the student nor
-  is about their work; `why(output, input)` names the rule, and `hands(text, input)` gives only the answer-giving ones
+  is about their work (a greeting, who Rime is and "we haven't talked yet" speak to them, in six languages); `why(output, input)` names the rule, and `hands(text, input)` gives only the answer-giving ones
   (answer, solves, code, wording) for a text that isn't a tutor's reply. Symbolic rearrangements count as steps too; a number merely
   appearing in the attempt does not excuse a new result. Quotations may come from any context block shown to the model,
   including the discussion prompt.
@@ -352,7 +352,10 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   windows a student means (today, tomorrow, this week to the coming Sunday or on a weekend the next, this weekend, next
   week, due soon: a week), resolved on their clock; times in results are friendly and localized ("Monday, November 2,
   11:59 PM"; the year only when it isn't now's); an answer that says nothing is due while a result lists work not handed in
-  fails (`missed`); at 4K agent.tools takes the panel's last three turns (an `earlier` block, 300/600 characters a turn), and
+  fails (`missed`), and so does a list that repeats an item the results hold once or states a count other than the items
+  it lists (`list`), each with the corrective turn and then Glaze's own list; a whole question about the conversation itself
+  ("what did we talk about?", "summarize our chat", six languages) routes to study.help, which answers it from the chat it
+  is given, never to agent.tools, whose tool-first rule has no tool for it; at 4K agent.tools takes the panel's last three turns (an `earlier` block, 300/600 characters a turn), and
   pushback or a follow-up after an answer ("that's not true", "you missed…", "what about Monday?", six languages) routes as
   the question before it with fresh calls; the system text asks for glaze-plans' MARKDOWN.md answer format, which the
   panel renders. Reminder, notice, watch and cancel phrasings are one table (agent-tools.js `PHRASES`) the router and the
@@ -745,6 +748,14 @@ window; thought gives way first and the window never grows silently. The model m
 host closes it at its token or time allowance, then applies the answer's JSON grammar. Reasoning text is never posted or
 returned. `maxTokens` counts only the answer; `usage.output` counts thought plus answer. The fixtures in
 `test/ai/local-think.test.js` establish execution bounds, not model quality; that needs separate real-GGUF evaluation.
+
+Reading a long prompt comes first, before any token: about 98K tokens at 128K took a minute and more on some GPUs
+(2026-11-04). After counting a local request, `ai/task.js` lengthens the whole-task deadline by 1.25 times the provider's
+`readMs(tokens)` less a quarter of the task's own deadline, up to 300 seconds and never over an explicit timeout, so a
+short prompt keeps its deadline. `readMs` uses the prefill rate the host measured on this computer (`prefill` in a run's
+result for at least 4,096 new prompt tokens, kept per model in `storage.session` as `aiLocalPrefill`), else 2,000 tokens
+a second, each token costing more the deeper it sits (×(1 + tokens/32768), an estimate). While it reads such a prompt
+the host posts `phase: 'reading'`, then `'thinking'`; Ask Rime's busy line shows Reading… then Thinking….
 
 The tuned model uses the 4K–128K window selected on its local connection, else the 64K default (`DEFAULT_WINDOW`), stepped
 down to the largest size `ai/local/ladder.js` `defaultWindow` admits on this computer (never below 4K). A context override may narrow

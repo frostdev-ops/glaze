@@ -33,8 +33,11 @@
 //   ({ mime, data: base64 }), decoded here (env.decode), encoded and fed as prefill embeds between <|vision_start|> and
 //   <|vision_end|>. A projector that isn't here: provider-unavailable, reason 'pictures'.
 //   out { id, type: 'progress', loaded }  { id, type: 'delta', text }  { id, type: 'done', result } (a run's: { text, finish,
-//       model, usage: { input, output, thought }, rate? }, rate the decode tokens a second it measured over at least
-//       LIMIT.rate tokens; a text prepare's: { state, model?, reason?, tps? }, tps the ladder's estimate for its pick)
+//       model, usage: { input, output, thought }, rate?, prefill? }, rate the decode tokens a second it measured over at least
+//       LIMIT.rate tokens, prefill the tokens a second it read at least LIMIT.read new prompt tokens at; a text prepare's:
+//       { state, model?, reason?, tps? }, tps the ladder's estimate for its pick)
+//       { id, type: 'phase', phase: 'reading' | 'thinking' } (a run whose prompt holds LIMIT.read tokens or more: before its
+//       prefill, then after it)
 //       { id, type: 'error', error: { category, reason?, code?, tokens?, context? } }  { type: 'tick' } (every LIMIT.tick
 //       while anything is in flight: Chrome's worker hears it and stays)  { type: 'idle' } (LIMIT.idle with nothing in
 //       flight: the engine is released and the host may go)
@@ -46,7 +49,7 @@
 // The grammar's mask allows the end token only once the JSON is whole, so a run stops at the end token as any other.
 // Classic script; node exports (create), and in a Worker it starts itself.
 var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
-  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, maxContext: 131072, first: 8192, step: 8, bulk: 128, busy: 20, spacing: 2048, rate: 16, answer: 256, spans: 2 };
+  const LIMIT = { idle: 300000, tick: 20000, warm: 3, context: 16000, maxContext: 131072, first: 8192, step: 8, bulk: 128, busy: 20, spacing: 2048, rate: 16, answer: 256, spans: 2, read: 4096 };
   // What the Worker loads, in order, beside this file: required ones throw at its start; optional ones until they ship.
   const IMPORTS = Object.freeze({ required: Object.freeze(['../../core/doctext.js', 'store.js', 'gguf.js', 'tokenizer.js', '../schema.js', '../text.js', 'grammar.js', 'updates.js']),
     optional: Object.freeze(['quant.js', 'reference.js', 'engine.js', 'vision-reference.js', 'vision.js', 'ladder.js']) });
@@ -408,9 +411,13 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         const low = m.priority === 'low' || head.includes(tok.id('<|gz_task:writer.complete|>'));
         const yieldNow = pause;
         const pacing = low ? paced() : {};
+        // A long prompt keeps the engine reading before its first token (98K tokens: a minute and more on some GPUs). Say so
+        // to the panel, and time the read: its rate sets later runs' deadlines (providers/local.js).
+        const reading = input >= LIMIT.read, began = now();
+        if (reading) post({ id: m.id, type: 'phase', phase: 'reading' });
         const read = await prefix(job, head, signal, pacing, keeps);
         const ids = keeps ? [...head, ...rest] : null;
-        let cached = 0;
+        let cached = 0, fed = read;
         // Each picture encoded on the engine's device, fed in place of its placeholders, and its buffer freed at once.
         const encoded = [];
         try {
@@ -421,9 +428,11 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
             if (r.tokens !== s.pic.tokens) throw fail('provider-unavailable', 'engine');
             s.pic.data = null;
           }
-          if (keeps) cached = ids.length - read - (await model.extend(ids, { at: stops(job, ids, head.length), signal, ...pacing })).fed;
-          else if (rest.length) await model.prefill(rest, { signal, ...pacing, ...(slots.length && { embeds: slots.map((s, i) => ({ at: s.at, tokens: encoded[i].tokens, buffer: encoded[i].buffer })) }) });
+          if (keeps) { const more = (await model.extend(ids, { at: stops(job, ids, head.length), signal, ...pacing })).fed; cached = ids.length - read - more; fed += more; }
+          else if (rest.length) { await model.prefill(rest, { signal, ...pacing, ...(slots.length && { embeds: slots.map((s, i) => ({ at: s.at, tokens: encoded[i].tokens, buffer: encoded[i].buffer })) }) }); fed += rest.length; }
         } finally { for (const r of encoded) { try { r.drop?.(); } catch { /* gone */ } } }
+        const readMs = now() - began, prefill = fed >= LIMIT.read && readMs > 0 && !slots.length ? Math.round(fed / readMs * 10000) / 10 : null;
+        if (reading) post({ id: m.id, type: 'phase', phase: 'thinking' });
         const sampler = { ...SAMPLER, ...m.sampler };
         let spent = 0; // ms in decode, for the rate
         const step = async (mask) => {
@@ -475,7 +484,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
           const open = ids.lastIndexOf(tok.id('<think>'));
           if (open >= 0) readAhead(job, [...ids.slice(0, open), ids[open], think.end, ...said], m.id);
         }
-        return { text, finish, model: m.model, usage: { input, output: thought + n, thought, ...(keeps && { cached }) }, ...(rate && { rate }) };
+        return { text, finish, model: m.model, usage: { input, output: thought + n, thought, ...(keeps && { cached }) }, ...(rate && { rate }), ...(prefill && { prefill }) };
     };
     // A run on the model in its trial (a swapped-in update): its first good answer keeps the new version; a load or engine
     // failure brings the old one back, and the run goes again on it unless part of its answer was already sent.

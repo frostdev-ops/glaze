@@ -17,10 +17,11 @@ const setup = ({ tokens, result = {}, events = [] }) => {
   LOCAL._env({ store: { list: async () => [{ id: 'rime-q4', tier: 1, state: 'ready', tools: 3 }] }, gpu: () => ({}),
     session: { get: async (keys) => Object.fromEntries(keys.filter((k) => session.has(k)).map((k) => [k, session.get(k)])), set: async (v) => { for (const [k, x] of Object.entries(v)) session.set(k, x); } },
     link: { kind: 'worker', up: true, call: async (op, _args, { onEvent } = {}) => {
-      if (op === 'count') return { tokens: typeof tokens === 'function' ? tokens() : tokens };
+      const n = typeof tokens === 'function' ? tokens() : tokens;
+      if (op === 'count') return { tokens: n };
       seen.runs++;
       for (const e of events) onEvent?.(e);
-      return { text: REPLY, finish: 'stop', usage: { input: 10, output: 10 }, ...(typeof result === 'function' ? result() : result) };
+      return { text: REPLY, finish: 'stop', usage: { input: n, output: 10 }, ...(typeof result === 'function' ? result() : result) };
     } } });
   // The provider as registered, its run watched for the deadline each request carries.
   const provider = { ...LOCAL, run: async (req, cfg, o) => { seen.timeouts.push(req.timeoutMs); return LOCAL.run(req, cfg, o); } };

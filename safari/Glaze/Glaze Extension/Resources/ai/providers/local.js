@@ -15,6 +15,9 @@
 // Reasoning: a Glaze-tuned model (no `stock`) thinks before it answers (format.js's think mode, the host's think phase) for the
 // tasks and windows limits() permits. Adaptive thought keeps the configured answer and remaining deadline intact;
 // its model can end thought early. The 4K direct profile and stock models remain direct.
+// Reading: readMs(tokens, cfg) is how long this computer's model takes to read a prompt of that many tokens, from the prefill
+// rate the host measured here (host.js prefill), else a cautious default; ai/task.js lengthens a run's deadline by it. The
+// host's reading and thinking phases reach the run's onThinking ({ phase }).
 // cfg: { model: MODEL, tier?, context?, images?, weights?, generation? }; images, what the catalog said, and weights, the store id
 // of the text model whose window it gave (the broker sets both): a text request runs on that model only. Classic script;
 // module.exports for node.
@@ -103,6 +106,12 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const THINK_TPS = 40;
   // RATES: storage.session's { [model id]: tokens a second }, kept across the worker's restarts until the browser closes.
   const RATES = 'aiLocalRates', MEASURED = 'aiLocalMeasured';
+  // PREFILL: storage.session's { [model id]: prompt tokens a second at the window's start }, as RATES. A token costs more
+  // the deeper it sits (the attention layers read every token before it): READ_DEPTH is the depth that doubles its cost,
+  // a cautious estimate rather than a measure, so a prompt's time is tokens / rate × (1 + tokens / READ_DEPTH). READ_TPS:
+  // the rate before this computer has measured one, below the slowest the 2026-11-04 evaluations saw (an RTX PRO 4500
+  // read 98K tokens in under 60 s: over 6,000 a second at the start).
+  const PREFILL = 'aiLocalPrefill', READ_TPS = 2000, READ_DEPTH = 32768;
   const fail = (category, reason, extra = {}) => Object.assign(new Error(`local: ${reason || category}`), { category, ...(reason && { reason }), ...extra });
   const refuse = (code, message) => Object.assign(new Error(message), { code });
   const safari = () => { try { return new URL((typeof globalThis.browser?.runtime?.getURL === 'function' ? globalThis.browser.runtime : globalThis.chrome?.runtime).getURL('')).protocol === 'safari-web-extension:'; } catch { return false; } };
@@ -163,6 +172,29 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     r.set(id, !estimate && measured.has(id) ? (r.get(id) + rate) / 2 : rate);
     if (!estimate) measured.add(id);
     try { await own().session?.set({ [RATES]: Object.fromEntries(r), [MEASURED]: [...measured] }); } catch { /* kept in memory */ }
+  };
+  let reads = null; // model id → prompt tokens a second at the window's start
+  const readRates = async () => {
+    if (reads) return reads;
+    let saved = {};
+    try { saved = await own().session?.get([PREFILL]) || {}; } catch { /* none */ }
+    if (reads) return reads;
+    reads = new Map(Object.entries(R.isObj(saved[PREFILL]) ? saved[PREFILL] : {}).filter(([id, v]) => ID.test(id) && Number.isFinite(v) && v > 0));
+    return reads;
+  };
+  // A rate the host measured over a prompt of `depth` tokens, taken back to the window's start; it averages with the last.
+  const learnRead = async (id, rate, depth) => {
+    if (!ID.test(id || '') || !Number.isFinite(rate) || rate <= 0) return;
+    const r = await readRates(), start = rate * (1 + (Number.isSafeInteger(depth) && depth > 0 ? depth : 0) / READ_DEPTH);
+    r.set(id, r.has(id) ? (r.get(id) + start) / 2 : start);
+    try { await own().session?.set({ [PREFILL]: Object.fromEntries(r) }); } catch { /* kept in memory */ }
+  };
+  const readMs = async (tokens, cfg = {}) => {
+    if (!Number.isSafeInteger(tokens) || tokens <= 0) return 0;
+    let m = null;
+    try { m = modelOf(await models(), cfg); } catch { /* the default rate */ }
+    const rate = (m && (await readRates()).get(m.id)) || READ_TPS;
+    return Math.ceil(tokens / rate * (1 + tokens / READ_DEPTH) * 1000);
   };
   // The same context profile is used by admission, counting and inference; only wall time can reduce its allowance.
   const budget = async (req, m, window, cfg) => {
@@ -319,7 +351,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     }));
     return Object.keys(sources).length ? { schema: out, sources } : null;
   };
-  const run = async (req, cfg, { signal, onDelta } = {}) => {
+  const run = async (req, cfg, { signal, onDelta, onThinking } = {}) => {
     if (req.tools || req.messages.some((m) => m.role === 'tool' || m.toolCalls)) throw refuse('caps', 'Glaze\'s own model does not take tool calls.');
     const started = Date.now();
     let plan;
@@ -334,10 +366,14 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
       r = await own().link.call('run', { model: plan.m.id, ...(plan.memory && { memory: plan.memory }), ...(plan.scale && { scale: plan.scale }), parts: plan.parts, stable: plan.stable, ...(plan.images && { projector: plan.projector, images: plan.images }), ...held,
         ...(plan.think && { think: { budget: plan.budget, ...plan.think, ...(plan.reasoning.preserveAnswer && { preserveAnswer: true, rate: plan.reasoning.rate, ms: Math.max(0, plan.reasoning.ms - (Date.now() - started)) }) } }), window: plan.window, ...(req.task?.id === 'writer.complete' && { priority: 'low' }),
         sampler: { ...(req.temperature !== undefined && { temperature: req.temperature }) }, maxTokens },
-      { signal, onEvent: (e) => { if (e?.type === 'delta' && typeof e.text === 'string' && e.text) onDelta?.(e.text); } });
+      { signal, onEvent: (e) => {
+        if (e?.type === 'delta' && typeof e.text === 'string' && e.text) onDelta?.(e.text);
+        else if (e?.type === 'phase' && ['reading', 'thinking'].includes(e.phase)) onThinking?.({ phase: e.phase });
+      } });
     } catch (e) { if (signal?.aborted) throw signal.reason; throw host(e); }
     if (!R.isObj(r) || typeof r.text !== 'string') throw fail('invalid-response');
     if (!plan.projector && Number.isFinite(r.rate)) await learn(plan.m.id, r.rate);
+    if (!plan.projector && Number.isFinite(r.prefill)) await learnRead(plan.m.id, r.prefill, r.usage?.input);
     // Its turn in LFM3's own syntax (a native call, or the answer's JSON) read back as the task's JSON.
     const native = plan.constraint && AGENT().fromNative(r.text);
     if (plan.constraint && native === undefined) throw fail('invalid-response', 'native');
@@ -384,9 +420,9 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
 
   // The engine host's link, for the background model updates (ai/local/updates.js check).
   const link = () => own().link;
-  const provider = { id: 'local', config, caps, status, prepare, run, warm, count, catalog, release, remove, accept, levelOf, toolsLevel, memoryOf, memoryVersion, scaleOf, scaleVersion, link, windowOf, WINDOWS, DEFAULT_WINDOW, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
+  const provider = { id: 'local', config, caps, status, prepare, run, warm, count, readMs, catalog, release, remove, accept, levelOf, toolsLevel, memoryOf, memoryVersion, scaleOf, scaleVersion, link, windowOf, WINDOWS, DEFAULT_WINDOW, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
     THINK_SIZED, ANSWER, SCALE, SCALED, limits, adaptive, profileWindow, CLOSE,
-    _env: (e) => { env = e; listed = []; listing++; preparing.text = preparing.pictures = null; broken = null; rates = null; machined = null; measured.clear(); } };
+    _env: (e) => { env = e; listed = []; listing++; preparing.text = preparing.pictures = null; broken = null; rates = null; reads = null; machined = null; measured.clear(); } };
   return P.add(provider);
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_LOCAL; else GZ_AI_LOCAL;

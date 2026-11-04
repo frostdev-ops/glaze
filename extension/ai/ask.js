@@ -15,7 +15,8 @@
 //       model reads it; ai/tasks/study-help.js); agent.tools' trained turns hold no conversation, so it never gets it.
 //     worker → { id, type: 'route', task }, { id, type: 'step', step: { n, name, kind, state, ms? } } as each tool call
 //       runs (state run, then done or fail; a write: ask while Glaze's approval window waits, then done or no),
-//       'approve' (Glaze's approval window waits), 'keepalive', a step's detail (run_js's value or error, a place's title),
+//       'approve' (Glaze's approval window waits), 'keepalive', { id, type: 'phase', phase: 'reading' | 'thinking' } (the local
+//       host reading a long prompt, then past it), a step's detail (run_js's value or error, a place's title),
 //       { id, type: 'action', action: { kind: 'open' | 'highlight', … } } just before an answer's end (the panel performs them
 //       once it shows the answer); 'fired' → { id, type: 'end', fired: [{ id, what, watch?, say, at }] }.
 //       then { id, type: 'end', task, output (study.help's) | answer: { text } | declined: true } or { id, type: 'error',
@@ -343,6 +344,22 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const PLAN_REASON = /(?:,\s*(?:and\s+)?|\band\s+)why(?=\s*(?:[?!.;]|$))/giu;
   const PLAN_TOOLS = [...TOOLS.todo, ...TOOLS.assignments, 'accounts_list'];
   const CHAT_RECALL = /\bremind me what i (?:just|last|previously) asked(?: you)?[?!.\s]*$/iu;
+  // A whole question about this conversation ("what did we talk about?", "summarize our chat"), in six languages: study.help
+  // answers it from the chat it is given (its chat metaquestions). Routed as a records follow-up it reached agent.tools,
+  // whose tool-first rule refuses an answer no tool stands behind, with no result for a corrective turn (2026-11-04).
+  const CHAT_META = new RegExp(`^(?:${[
+    "what (?:did|have) we (?:just |already )?(?:talk(?:ed)? about|discuss(?:ed)?|cover(?:ed)?|chat(?:ted)? about)(?: (?:so far|earlier|before|today|until now|in this chat|here))*",
+    "what (?:did|have) i (?:just |already )?(?:ask(?:ed)?|say|said|tell|told)(?: you)?(?: (?:so far|earlier|before|first|last|today|in this chat))*",
+    'what was my (?:first|last|previous|earlier|original) (?:question|message)',
+    'what did you (?:just )?(?:say|tell me|answer|reply)(?: (?:before|earlier|last|just now|first))*',
+    '(?:(?:can|could|would) you (?:please )?|please )?(?:summari[sz]e|recap|sum up) (?:our|this|the) (?:chat|conversation|discussion)(?: (?:so far|until now))?',
+    '(?:what (?:is|was)|tell me what) (?:this|our) (?:chat|conversation) (?:is |was )?about',
+    'de qu[ée] (?:hemos hablado|hablamos)(?: hasta ahora)?', 'resume (?:nuestra|esta) conversaci[óo]n', 'qu[ée] te pregunt[ée](?: antes)?',
+    'sobre o que (?:n[óo]s )?(?:conversamos|falamos)(?: at[ée] agora)?', 'resuma (?:a )?(?:nossa|esta) conversa', 'o que eu (?:te )?perguntei(?: antes)?',
+    "de quoi (?:avons-nous|on a|nous avons) parl[ée](?: jusqu'ici)?", 'r[ée]sume (?:notre|cette) conversation', "qu'est-ce que (?:je t'ai|j'ai) demand[ée]",
+    'wor[üu]ber haben wir (?:bisher |gerade )?gesprochen', 'fass(?:e)? (?:unser(?:en)?|diese[ns]?) (?:chat|gespr[äa]ch) zusammen', 'was habe ich (?:dich )?(?:gefragt|gesagt)',
+    'waar(?:over)? hebben we (?:het )?(?:over )?(?:gehad|gesproken)', 'vat (?:ons|dit) gesprek samen', 'wat heb ik (?:je )?gevraagd',
+  ].join('|')})[?!.\\s]*$`, 'iu');
   const SCHEDULE_WHEN = /\b(?:tomorrow|tonight|next (?:week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|(?:at|in|on)\s+(?:\d+|noon|midnight|monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/iu;
   const FULL_ITEM_READ = /(?:^|[.!?;]\s*)(?:(?:can|could|would) you (?:please )?|please )?read\s+(?:the\s+)?(?:whole|full|entire)\s+item\b/iu;
   const RECORD_CONTINUE = /\b(?:course from my (?:previous|earlier) question|(?:keep|use|preserve) my original filters)\b/iu;
@@ -356,6 +373,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     const last = level >= 3 && Array.isArray(history) && history.length ? history[history.length - 1] : null;
     if (level >= 3 && CHAT_RECALL.test(direct) && !SCHEDULE_WHEN.test(direct)
       && !words(lists(TOPICS3.remind, locale)).test(direct.replace(CHAT_RECALL, ''))) return { task: 'study.help', subject: subjectOf(`${q}\n${attempt}`) };
+    if (level >= 3 && !String(attempt).trim() && CHAT_META.test(direct.trim().replace(/^[¿¡]\s*/u, ''))) return { task: 'study.help', subject: subjectOf(q) };
     if (last && !String(attempt).trim() && RECORD_CONTINUE.test(direct)) {
       const before = route(last.question, { locale, level });
       const intent = route(MEMORY().userText(last.question), { locale, level });
@@ -852,7 +870,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const control = new AbortController(), signal = control.signal;
       const zone = env.zone || Intl.DateTimeFormat().resolvedOptions().timeZone;
       current = { id, control, n: 0, locale, zone, actions: [], text: (m.text || '').slice(0, LIMIT.text), page: { site: m.site, url: env.page?.()?.url } };
-      const keep = (a) => { if (a.type === 'keepalive') post({ id, type: 'keepalive' }); };
+      // The host's phases (ai/local/host.js: reading a long prompt, then thinking) reach the panel's busy line.
+      const keep = (a) => {
+        if (a.type === 'keepalive') post({ id, type: 'keepalive' });
+        else if (a.type === 'thinking' && ['reading', 'thinking'].includes(a.phase)) post({ id, type: 'phase', phase: a.phase });
+      };
       let level = 1;
       let active, memory;
       const documents = []; // private read provenance; never added to the public current/task schema

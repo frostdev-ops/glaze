@@ -634,6 +634,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     };
 
     // ---- a question's run: the thinking line, its tool cards, its end ----------------------------------------------------
+    const PHASES = { reading: 'Reading…', thinking: 'Thinking…' };
     const busy = (yes) => {
       const l = log();
       drop(l?.querySelector('.gz-ask-busy'));
@@ -717,6 +718,12 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
           card(run, ev.step);
           if (ev.step?.state === 'run') say(t('Reading your courses…'));
         } else if (ev.type === 'approve') say(t('Waiting for your answer in Glaze’s window'));
+        else if (ev.type === 'phase' && Object.hasOwn(PHASES, ev.phase)) {
+          // The model on this computer reading a long prompt, then past it: the busy line says which.
+          const words = $('.gz-ask-busy-words');
+          if (words) words.textContent = t(PHASES[ev.phase]);
+          say(t(PHASES[ev.phase]));
+        }
         else if (ev.type === 'context') context(ev, first);
         else if (ev.type === 'summary') folded(ev);
         else if (ev.type === 'memory') memoryReceipt(ev.receipt);

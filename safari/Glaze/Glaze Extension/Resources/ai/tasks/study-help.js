@@ -8,7 +8,8 @@
 // output: { kind: hint | question | concept | check-my-step, step: correct | mistake | unclear | null, reply, followUp }.
 // check() refuses (null) a reply that states the answer, does the student's step, solves the exact problem given, writes
 // code with the student's own names, offers wording for their paper (wording.js) or, for essays and reading, makes a
-// statement they could copy instead of speaking to them (why() says which rule).
+// statement they could copy instead of speaking to them; a greeting, who Rime is or that the chat is new speaks to them (why()
+// says which rule).
 // Classic script; module.exports for node.
 var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
   const S = typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('../schema.js');
@@ -97,6 +98,34 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
     'frag dich', 'fragen Sie sich', 'markier', 'unterstreich', 'notier', 'geh(?:en Sie)?', 'stell dir', 'stellen Sie sich',
     'kijk', 'denk', 'lees', 'herlees', 'controleer', 'vergelijk', 'zoek', 'let op', 'bekijk', 'onderstreep', 'noteer', 'vraag je af', 'ga terug', 'stel je voor', 'tel', 'markeer', 'identificeer',
   ].join('|')})${E}`, 'iu');
+
+  // Openers that speak to no work (the 2026-11-04 evaluations refused them as speaks): a greeting, who the assistant is,
+  // that this chat has no earlier turns. A sentence passes when each of its clauses is one, with only filler words left;
+  // a clause about anything else ("I'm Rime, and the green light symbolizes…") leaves the sentence to the rules below.
+  const NAME = '(?:rime|glaze)';
+  const SOCIAL = [
+    String.raw`(?:good\s+(?:morning|afternoon|evening|day)|hello|hi|hey|welcome(?:\s+back)?|nice\s+to\s+meet\s+you|bom\s+dia|boa\s+(?:tarde|noite)|ol[áa]|oi|buen(?:os|as)\s+(?:d[íi]as|tardes|noches)|hola|bonjour|bonsoir|salut|guten\s+(?:morgen|tag|abend)|hallo|goedemorgen|goedemiddag|goedenavond|hoi)(?:\s+(?:there|again|to\s+you|too|${NAME}))*`,
+    String.raw`(?:i'?m|i\s+am|my\s+name\s+is|this\s+is|soy|me\s+llamo|(?:eu\s+)?sou(?:\s+[oa])?|je\s+suis|je\s+m'appelle|ich\s+bin|ich\s+heiße|ik\s+ben)\s+${NAME}`,
+    String.raw`(?:(?:the|your|an?|el|tu|un|o|seu|um|le|ton|der|dein|ein|de|je|een)\s+|l')?(?:(?:study|school|ai|local|personal|built-in|own|lern|studie)\s+)*(?:assistant|tutor|helper|asistente|assistente|assistent|tuteur)(?:\s+(?:de\s+estudios?|d'étude))?(?:\s+(?:for|in|inside|of|from|built\s+into|on|de|do|da|von|für|van|voor|bij)\s+${NAME})?`,
+    String.raw`we\s+(?:haven't|have\s+not|didn't|did\s+not)\s+(?:talked|chatted|spoken|talk|chat|speak|discussed)(?:\s+about\s+anything)?|(?:this|it)(?:'s|\s+is)\s+the\s+(?:start|beginning)\s+of\s+(?:our|this)\s+(?:chat|conversation)|(?:this|our)\s+(?:chat|conversation)\s+(?:has\s+)?just\s+(?:started|begun)|there(?:'s|\s+is)\s+nothing\s+(?:earlier|before|yet)`,
+    String.raw`(?:todav[íi]a\s+|a[úu]n\s+)?no\s+hemos\s+hablado(?:\s+de\s+nada)?|(?:este|nuestro)\s+chat\s+(?:acaba\s+de\s+empezar|reci[ée]n\s+empieza)|(?:esta|nuestra)\s+conversaci[óo]n\s+acaba\s+de\s+empezar|es\s+el\s+(?:inicio|comienzo|principio)\s+de\s+(?:nuestra|esta)\s+conversaci[óo]n`,
+    String.raw`(?:ainda\s+)?n[ãa]o\s+(?:conversamos|falamos)(?:\s+sobre\s+nada)?|(?:esta|nossa)\s+conversa\s+acabou\s+de\s+come[çc]ar|(?:este\s+)?[ée]\s+o\s+in[íi]cio\s+da\s+(?:nossa|desta)\s+conversa`,
+    String.raw`(?:nous\s+n'avons|on\s+n'a)\s+pas\s+encore\s+(?:parl[ée]|discut[ée])|(?:cette|notre)\s+conversation\s+(?:vient\s+de\s+commencer|commence)|c'est\s+le\s+d[ée]but\s+de\s+(?:notre|cette)\s+conversation`,
+    String.raw`wir\s+haben\s+(?:noch\s+nicht|noch\s+nichts|bisher\s+nicht)(?:\s+miteinander)?\s+(?:gesprochen|geredet|besprochen)|(?:dieser|unser)\s+chat\s+(?:hat\s+gerade\s+(?:erst\s+)?begonnen|beginnt\s+gerade)|(?:das|dies)\s+ist\s+der\s+anfang\s+(?:unseres|dieses)\s+(?:chats|gespr[äa]chs)`,
+    String.raw`we\s+hebben\s+(?:nog\s+niet|nog\s+niets)\s+(?:gesproken|besproken)|(?:dit|ons)\s+gesprek\s+is\s+(?:net|pas)\s+begonnen|dit\s+is\s+het\s+begin\s+van\s+(?:ons|dit)\s+gesprek`,
+  ].map((source) => new RegExp(String.raw`^(?:${source})${E}\s*`, 'iu'));
+  const FILLER = new Set(['yet', 'so', 'far', 'in', 'this', 'our', 'chat', 'conversation', 'today', 'here', 'now', 'just', 'again', 'there', 'too', 'still', 'before', 'earlier', 'anything',
+    'aún', 'todavía', 'en', 'este', 'esta', 'conversación', 'hoy', 'aquí', 'ainda', 'nesta', 'neste', 'conversa', 'hoje', 'aqui', 'encore', 'dans', 'cette', 'notre', 'ici', "aujourd'hui",
+    'noch', 'diesem', 'unserem', 'heute', 'hier', 'nog', 'dit', 'ons', 'gesprek', 'vandaag', 'nu']);
+  const social = (s) => {
+    let hit = false;
+    const ok = s.replace(/[’‘]/g, "'").split(/[,;:—–]|\s-\s/u).every((clause) => {
+      let t = clause.replace(/^[\s¡¿"“„«]+/u, '');
+      for (let again = true; again;) { again = false; for (const r of SOCIAL) { const m = r.exec(t); if (m?.[0].trim()) { t = t.slice(m[0].length); hit = again = true; } } }
+      return words(t).every((w) => FILLER.has(w.toLowerCase()));
+    });
+    return hit && ok;
+  };
 
   // Numbers as values: 1,000 and 1.5 and the 1,5 of the other locales alike, a minus of any kind, ½ none.
   const NUM = /[-−]?(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+(?:[.,]\d+)?)/g;
@@ -256,7 +285,7 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
       // with another text, but never with a name or three words in a row from theirs.
       if (['essay', 'reading', 'other'].includes(inp.subject)) {
         for (const s of sentences(words_)) {
-          if (asks(s) || WD.about(s) || IMPERATIVE.test(s)) continue;
+          if (asks(s) || WD.about(s) || IMPERATIVE.test(s) || social(s)) continue;
           if (out.kind !== 'concept' && words(s).length >= 5) return 'speaks';
           const names = words(s).filter((w, i) => /^\p{Lu}\p{Ll}{2,}/u.test(w) && (i > 0 || !OPENERS.test(w)));
           const triples = words(s).map((_, i, a) => a.slice(i, i + 3).join(' ')).filter((t, i, a) => i <= a.length - 3);

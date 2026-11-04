@@ -101,8 +101,20 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
     const reasoning = p.id === 'local' && p.limits?.({ id: task.id }, window, c).think > 0;
     const ms = over.timeoutMs || (reasoning ? p.LIMIT?.reasoning ?? 300000 : task.limits.ms || LIMIT.ms);
     const limits = { ...task.limits, tokens: tokenLimit, ...(reasoning || over.timeoutMs ? { ms } : {}) };
-    const expires = Date.now() + ms;
+    let expires = Date.now() + ms, lengthened = 0;
     const timer = F.deadline(ms), both = F.anySignal([signal, timer.signal]);
+    // A long prompt on this computer: its model reads it before the first token, a minute and more for ~98K tokens on some
+    // GPUs (2026-11-04). The run gains the time reading it takes here (the provider's readMs) past the quarter of its
+    // deadline that already allows for it, with a quarter more for margin; up to the loop's 300 s, never over the student's own
+    // timeout. A short prompt's deadline is unchanged.
+    const lengthen = async (tokens) => {
+      if (over.timeoutMs || typeof p.readMs !== 'function') return;
+      const read = await F.wait(() => p.readMs(tokens, c), both.signal).catch(() => 0);
+      const more = Math.min(Q.LIMIT.timeout[1] - ms - lengthened, Math.ceil((Number.isFinite(read) ? read : 0) * 1.25) - Math.floor(ms / 4));
+      if (!(more > 0)) return;
+      lengthened += more; expires += more; timer.extend(more);
+      limits.ms = ms + lengthened;
+    };
     const callProvider = (request, options) => P().run(p, { ...request, timeoutMs: Math.max(Q.LIMIT.timeout[0], Math.min(request.timeoutMs || ms, expires - Date.now())) }, c, options);
     const outputs = [], steps = [], usage = { input: 0, output: 0 };
     let rounds = 0, finish = 'stop', pending, orchestrated, calls = 0, inFlight = false, active = true, releaseImages;
@@ -180,6 +192,7 @@ var GZ_AI_TASKS = globalThis.GZ_AI_TASKS || (() => {
         if (can.local === true && room > 4096) {
           const n = await count(built);
           if (n.used + n.reserve > room) throw Object.assign(Q.error('size'), { reason: 'context' });
+          await lengthen(n.used);
         }
         const call = (r, o) => callProvider(r, { ...o, fetch });
         const res = await L().run({ request, tools: kit, call, policy, rounds: task.limits.steps, limits, count: can.local === true && room > 4096 ? (r, o) => counted(r, o) : undefined, headless, stream: task.stream, signal: both.signal, emit, ctx, confirms });

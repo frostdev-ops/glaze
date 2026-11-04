@@ -10,7 +10,7 @@
 // the policy is read again just before each (it may only narrow), a tool's error is data, and results go back in call order,
 // each within LIMIT.output characters (a bigger one becomes an omission receipt, never torn JSON). A cancel answers every
 // call of its batch { notRun }. Rounds are capped (default 24); Glaze also caps time and tokens.
-// Events (emit): thinking { round }, text_delta { id, delta, offset }, says { id, text }, step_start { id, round, tool,
+// Events (emit): thinking { round, tokens?, phase? (a local host's reading | thinking) }, text_delta { id, delta, offset }, says { id, text }, step_start { id, round, tool,
 // kind, args, reason }, step { step }, pending { pending }, usage { input, output, … }, reply { id, text }. A step:
 // AgentStep { id, round, tool, kind, args, reason, result?, error?, ms? }. Receipts the model sees: { error },
 // { declined, note }, { notRun, note }, { interrupted, note }, { resultOmitted, outcome, note }.
@@ -140,7 +140,7 @@ var GZ_AI_LOOP = globalThis.GZ_AI_LOOP || (() => {
         const result = await call({ ...request, messages, ...(offered.length && { tools: offered }), timeoutMs: Math.min(request.timeoutMs || left, left) }, {
           signal: both.signal,
           onDelta: stream ? (delta) => { if (both.signal.aborted) return; const offset = streamed.length; streamed += delta; emit({ type: 'text_delta', id: messageId, delta, offset }); } : undefined,
-          onThinking: (x) => { if (!both.signal.aborted) emit({ type: 'thinking', round, ...(Number.isSafeInteger(x?.tokens) && { tokens: x.tokens, estimated: x.estimated === true }) }); },
+          onThinking: (x) => { if (!both.signal.aborted) emit({ type: 'thinking', round, ...(Number.isSafeInteger(x?.tokens) && { tokens: x.tokens, estimated: x.estimated === true }), ...(['reading', 'thinking'].includes(x?.phase) && { phase: x.phase }) }); },
         });
         used.input += result.usage?.input ?? asked;
         used.output += result.usage?.output ?? X().estimateTokens(result.text + (result.toolCalls ? JSON.stringify(result.toolCalls) : ''));

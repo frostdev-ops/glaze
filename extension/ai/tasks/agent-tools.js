@@ -227,6 +227,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     quote: 'A quote in your answer is not in the results. Quote only exact values the results hold.',
     number: 'Your answer says a number the results do not have. Use numbers and dates only as the results give them.',
     missed: 'The results list work not handed in. Name it with its due date instead of saying nothing is due.',
+    list: 'Your list repeats an item or its count is not the number of items listed. List each item once, and count only what you list.',
     schema: 'Your answer was not in the answer format. Reply with text and quotes, or with one tool call.',
     one: 'Give either one tool call or the final answer, not both.',
     repeat: 'That call cannot repeat. Use verified results, naming unchecked parts and a next step, or a useful different read within remaining steps. Never invent causes or claim full coverage.',
@@ -822,6 +823,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (inp.first) {
       // "Nothing is due" while a result lists work not handed in (the owner's Sunday, 2026-11-01).
       if (NOTHING_DUE.test(fold(text)) && inp.steps.some((st) => open(st.result))) return 'missed';
+      if (!listHolds(text, inp)) return 'list';
       const held = inp.steps.flatMap((st) => facts(st.result));
       const sources = held.map((v) => X().source(v, { min: 2 })), singles = new Set(held.map((v) => X().norm(v)));
       const visible = X().source(text, { min: 1 });
@@ -867,20 +869,67 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     de: ['Laut dem, was Glaze gelesen hat:', 'abgegeben', 'nicht abgegeben', 'bewertet', 'verspätet', 'fehlt'],
     nl: ['Volgens wat Glaze heeft gelezen:', 'ingeleverd', 'niet ingeleverd', 'beoordeeld', 'te laat', 'ontbreekt'],
   };
-  const listAnswer = (steps, { locale = 'en' } = {}) => {
-    const w = LIST[locale] || LIST.en, items = [], seen = new Set();
-    const walk = (v, account = '', listed = false) => {
+  // The items the results list, each once: the same item in the same account and course counts once.
+  const listed = (steps) => {
+    const items = [], seen = new Set();
+    const walk = (v, account = '', inList = false) => {
       if (Array.isArray(v)) return v.forEach((x) => walk(x, account, true));
       if (!S.isObj(v) || v.ok === false || v.error != null || typeof v.missing === 'string') return;
       account = v.account ?? account;
-      if (listed && typeof v.title === 'string' && v.title.trim()) {
+      if (inList && typeof v.title === 'string' && v.title.trim()) {
         const key = JSON.stringify([account, v.courseId ?? v.course ?? '', v.type ?? '', v.id ?? v.assignment ?? v.key ?? '', v.title]);
         if (!seen.has(key)) { seen.add(key); items.push(v); }
         return;
       }
       Object.values(v).forEach((x) => walk(x, account));
     };
-    for (const st of steps || []) { try { walk(JSON.parse(st.result)); } catch { /* not a result */ } }
+    for (const st of steps || []) { try { walk(typeof st.result === 'string' ? JSON.parse(st.result) : st.result); } catch { /* not a result */ } }
+    return items;
+  };
+  // A list answer (bullets or numbered lines, MARKDOWN.md's "- **title** (course): date, status") lists each item once,
+  // unless the results hold that many items of its title, and a count its other lines state ("five things", "4
+  // assignments") is the number of items listed (the 2026-11-04 evaluations: "five things" listing Problem Set 8 twice).
+  const COUNT_WORDS = {
+    en: ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'],
+    es: ['(?:un|una|uno)', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve', 'diez', 'once', 'doce'],
+    'pt-BR': ['(?:um|uma)', '(?:dois|duas)', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze'],
+    fr: ['(?:un|une)', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix', 'onze', 'douze'],
+    de: ['(?:ein|eine|eins)', 'zwei', 'drei', 'vier', 'fünf', 'sechs', 'sieben', 'acht', 'neun', 'zehn', 'elf', 'zwölf'],
+    nl: ['(?:een|één)', 'twee', 'drie', 'vier', 'vijf', 'zes', 'zeven', 'acht', 'negen', 'tien', 'elf', 'twaalf'],
+  };
+  const COUNT_NOUNS = String.raw`(?:things?|items?|assignments?|tasks?|deadlines?|to-?dos?|quizz(?:es)?|quiz|exams?|tests?|discussions?|labs?|readings?|homeworks?|problem sets?|essays?|projects?|events?|`
+    + String.raw`cosas?|tareas?|actividades?|entregas?|elementos?|coisas?|tarefas?|atividades?|itens|item|choses?|devoirs?|tâches?|travaux|éléments?|activités?|`
+    + String.raw`dinge?|sachen?|aufgaben?|abgaben?|punkte?|elemente?|dingen|opdrachten|opdracht|taken|taak|punten)`;
+  const COUNT = Object.fromEntries(Object.entries(COUNT_WORDS).map(([locale, list]) => [locale,
+    new RegExp(String.raw`(?<![\p{L}\p{N}])(\d{1,2}|${list.join('|')})\s+(?:[\p{L}-]+\s+)?${COUNT_NOUNS}(?![\p{L}])`, 'gu')]));
+  const ITEM_LINE = /^\s*(?:[-*•+]|\d{1,2}[.)])\s+(.+)$/u;
+  const plainText = (s) => fold(String(s).replace(/[*_`~]/g, '').replace(/\\(.)/g, '$1')).replace(/\s+/g, ' ').trim();
+  const listHolds = (text, inp) => {
+    const lines = String(text).split('\n'), items = lines.map((l) => ITEM_LINE.exec(l)?.[1]).filter(Boolean);
+    if (items.length < 2) return true;
+    const held = listed(inp.steps), titles = [...new Set(held.map((v) => plainText(v.title)))].sort((a, b) => b.length - a.length);
+    // An item's key: the result title it starts with and the course in brackets after it, else its whole line.
+    const keys = items.map((line) => {
+      const plain = plainText(line), title = titles.find((t) => plain === t || plain.startsWith(t) && !/[\p{L}\p{N}]/u.test(plain[t.length]));
+      if (!title) return { key: plain };
+      const course = /^\s*\(([^)]+)\)/u.exec(plain.slice(title.length))?.[1].trim() || '';
+      return { key: `${title}\u0000${course}`, title, course };
+    });
+    const tally = new Map();
+    for (const k of keys) tally.set(k.key, [...(tally.get(k.key) || []), k]);
+    for (const same of tally.values()) {
+      if (same.length < 2) continue;
+      const { title, course } = same[0];
+      if (!title || held.filter((v) => plainText(v.title) === title && (!course || plainText(v.course || '') === course)).length < same.length) return false;
+    }
+    // The count, when the lines around the list state exactly one.
+    const lead = lines.filter((l) => !ITEM_LINE.test(l)).join('\n'), words = COUNT_WORDS[inp.locale] || COUNT_WORDS.en;
+    const stated = new Set([...fold(lead).matchAll(COUNT[inp.locale] || COUNT.en)].map((m) => /^\d+$/.test(m[1]) ? Number(m[1])
+      : words.findIndex((w) => new RegExp(`^${w}$`, 'u').test(m[1])) + 1));
+    return stated.size !== 1 || stated.has(items.length);
+  };
+  const listAnswer = (steps, { locale = 'en' } = {}) => {
+    const w = LIST[locale] || LIST.en, items = listed(steps);
     if (!items.length) return null;
     const status = (v) => (typeof v.submitted !== 'boolean' ? '' : v.graded ? w[3] : v.missing ? w[5] : v.late ? w[4] : v.submitted ? w[1] : w[2]);
     const literal = (s) => s.replace(/\s+/g, ' ').trim().replace(/[\\`*_[\]~]/g, '\\$&');
