@@ -9,6 +9,8 @@ const R = require('../../extension/ai/request.js');
 const X = require('../../extension/ai/text.js');
 const T = require('../../extension/ai/task.js');
 const A = require('../../extension/ai/tasks/agent-tools.js');
+const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+const { createRequire } = require('node:module');
 
 const Q4 = { id: 'rime-q4', tier: 1, size: 1099627232, tools: 3, memory: 1, state: 'ready' };
 const Q8 = { id: 'rime-q8', tier: 4, size: 1846237920, tools: 3, memory: 1, state: 'ready' };
@@ -105,4 +107,32 @@ test('a scale: 1 model sends the 64K size token at the default', async () => {
   const plain = setup(Q4);
   await LOCAL.run(req('writer.complete'), LOCAL.config({}), {});
   assert.ok(!JSON.stringify(runOf(plain).parts).includes('gz_ctx:'), 'a model without scale: 1 sends none');
+});
+
+test('browser smoke checks keep context sizing when they replace the hardware probe', async (t) => {
+  const root = path.join(__dirname, '../../extension');
+  const provider = path.join(root, 'ai/providers/local.js');
+  for (const check of ['local-provider-check.js', 'model-updates-check.js']) await t.test(check, async () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../checks/ai', check), 'utf8');
+    const start = source.indexOf('const LADDER =');
+    assert.ok(start >= 0, 'the check stages its ladder');
+    const staged = vm.runInNewContext(`${source.slice(start, source.indexOf('\n\n', start))}\nLADDER`, { fs, path, root });
+    const local = vm.runInNewContext(`${staged}\n${fs.readFileSync(provider, 'utf8')}`, {
+      require: createRequire(provider), GZ_AI_PROVIDERS: { add: (p) => p }, GZ_AI_REQUEST: R, navigator: { deviceMemory: 4 },
+    });
+    const calls = [];
+    local._env({ store: { list: async () => [Q4] }, gpu: () => ({ requestAdapter: async () => ({ features: new Set() }) }),
+      link: { kind: 'worker', call: async (op, args) => {
+        calls.push({ op, args });
+        return op === 'count' ? { tokens: 100 } : op === 'warm' ? { ok: true } : { text: 'done', finish: 'stop' };
+      } } });
+    const cfg = local.config({});
+    const expected = LADDER.defaultWindow(Q4, { f16: false, deviceMemory: 4 });
+    assert.equal((await local.catalog(cfg)).models[0].context.window, expected);
+    assert.equal(await local.count(req('writer.complete'), cfg), 100);
+    assert.equal(await local.warm(req('writer.complete'), cfg), true);
+    await local.run(req('writer.complete'), cfg);
+    assert.equal(calls.find((c) => c.op === 'warm').args.window, expected);
+    assert.equal(runOf(calls).window, expected);
+  });
 });
