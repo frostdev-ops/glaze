@@ -91,7 +91,9 @@ const ENGINE = `var GZ_AI_ENGINE = { load: async (g, opts) => {
     decode: async () => (i < reply.length ? reply[i++] : tok.eos), snapshot: async () => ({ drop() {} }), restore: async () => {},
     release: () => { say.postMessage({ type: 'release', version: v }); } };
 } };`;
-const LADDER = 'var GZ_AI_LADDER = { probe: async () => ({ adapter: {} }), pick: ({ models }) => ({ tier: models[0].tier, id: models[0].id, reason: \'fastest\', quants: [] }) };';
+// Keep the worker's context sizing; replace only probe and pick for the runner's GPU.
+const LADDER = `${fs.readFileSync(path.join(root, 'ai/local/ladder.js'), 'utf8')}
+Object.assign(GZ_AI_LADDER, { probe: async () => ({ adapter: {} }), pick: ({ models }) => ({ tier: models[0].tier, id: models[0].id, reason: 'fastest', quants: [] }) });`;
 
 (async () => {
   let context, profile, held = false, server, tls, ext;

@@ -139,8 +139,9 @@ const VISION = `var GZ_AI_VISION = { load: async (g, opts) => {
     encode: async (img) => { say.postMessage({ type: 'encode', width: img.width, height: img.height, pixels: Array.from(img.data) }); return { tokens: 4, width: img.width, height: img.height, buffer: {}, drop() {} }; },
     release: () => { say.postMessage({ type: 'vision-release' }); } };
 } };`;
-// The ladder (ladder.js's probe and pick): the runner's GPU is a CPU fallback, which the real one refuses.
-const LADDER = 'var GZ_AI_LADDER = { probe: async () => ({ adapter: {} }), pick: ({ models }) => ({ tier: models[0].tier, id: models[0].id, reason: \'fastest\', quants: [] }) };';
+// Keep the worker's context sizing; replace only probe and pick, since the runner's GPU is a CPU fallback.
+const LADDER = `${fs.readFileSync(path.join(root, 'ai/local/ladder.js'), 'utf8')}
+Object.assign(GZ_AI_LADDER, { probe: async () => ({ adapter: {} }), pick: ({ models }) => ({ tier: models[0].tier, id: models[0].id, reason: 'fastest', quants: [] }) });`;
 
 // ---- a document on the Documents home, as checks/documents/documents-ai-check.js seeds it --------------------------------------
 const LAST = 'When Sethe returns to the clearing, the memory is not something she owns;';
