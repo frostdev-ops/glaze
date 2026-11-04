@@ -2,11 +2,11 @@
 var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
   const X = globalThis.GZ_CTX, L = globalThis.GZ_PEARSON_EMBED_LIB;
   if (!X || !L || X.site !== 'ultra') return null;
-  let view = null, sheet = null, queued = 0;
+  let view = null, sheet = null, queued = 0, pearsonAccess = false, accessRevision = 0;
   const vars = slot => ['--gz-pearson-gap','--gz-pearson-height','--gz-pearson-scheme'].map(k => [k,slot.style.getPropertyValue(k),slot.style.getPropertyPriority(k)]);
   const restore = v => { v.slot.removeAttribute('data-gz-pearson-slot'); for (const [k,value,priority] of v.vars) { if (value) v.slot.style.setProperty(k,value,priority); else v.slot.style.removeProperty(k); } };
   const nativeExit = header => header?.querySelector('button[data-analytics-id="course.content.header.exit"]') || header?.querySelector('button:not(.gz-pearson-host-controls *)');
-  const on = () => X.on() && X.settings().enabled !== false && X.settings().enhance.pearsonEmbed !== false;
+  const on = () => pearsonAccess && X.on() && X.settings().enabled !== false && X.settings().enhance.pearsonEmbed === true;
   const context = (force = false) => {
     if (!view) return;
     const enabled = on(), key = `${enabled}:${view.lookKey}`; if (!force && view.sent === key) return;
@@ -28,7 +28,7 @@ var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
   };
   const schedule = () => { if (!queued) queued = requestAnimationFrame(size); };
   const activate = () => {
-    const v = view; if (!v) return;
+    const v = view; if (!v || !on()) return;
     if (!sheet) { sheet = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: chrome.runtime.getURL('pearson/embed.css') }); document.head.append(sheet); }
     if (!v.active) {
       v.active = true; v.slot.setAttribute('data-gz-pearson-slot', ''); v.frame.setAttribute('data-gz-pearson-frame', ''); v.exit.setAttribute('data-gz-pearson-native-exit', '');
@@ -71,6 +71,7 @@ var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
     sheet?.remove(); sheet = null;
   };
   const sync = () => {
+    if (!on()) { context(true); return off(); }
     if (!L.lti(location.href)) return off();
     const frame = document.getElementById('lti-launch-iframe'), header = frame?.closest('.routed-page')?.querySelector('content-page-header > header') || document.querySelector('content-page-header > header');
     if (view && (view.frame !== frame || !frame?.isConnected)) off();
@@ -115,6 +116,14 @@ var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
   addEventListener('resize', schedule); addEventListener('scroll', schedule, true); visualViewport?.addEventListener('resize', schedule);
   addEventListener('pagehide', e => { if (!e.persisted) off(); });
   addEventListener('pageshow', e => { if (e.persisted) sync(); });
+  const access = (value) => { pearsonAccess = value === true; sync(); };
+  const readAccess = () => {
+    const at = ++accessRevision;
+    chrome.storage.local.get('pearsonAccess').then(v => { if (at === accessRevision) access(v.pearsonAccess); }, () => { if (at === accessRevision) access(false); });
+  };
+  chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.pearsonAccess) { accessRevision++; access(c.pearsonAccess.newValue); } });
+  addEventListener('pageshow', e => { if (e.persisted) readAccess(); });
+  readAccess();
   return { sync, off };
 })();
 GZ_PEARSON_EMBED;
