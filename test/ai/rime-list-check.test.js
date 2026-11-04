@@ -49,6 +49,11 @@ test('separate section counts may be equal without claiming a total for the whol
   assert.equal(A.why(answer(text), inputOf()), '');
 });
 
+test('a stated list count is checked even when only one item is listed', () => {
+  assert.equal(A.why(answer('You have four things due:\n- **Problem Set 8**'), inputOf()), 'list');
+  assert.equal(A.why(answer('You have one assignment due:\n- **Problem Set 8**'), inputOf()), '');
+});
+
 test('in the step loop, a repeated item gets the corrective turn; a second failure shows Glaze\'s own list, each item once', async () => {
   const bad = { why: 'list', raw: '{}' };
   const call = { call: { name: 'todo_list', arguments: {}, kind: 'read' }, answer: null };
