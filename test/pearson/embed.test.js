@@ -16,15 +16,17 @@ const homeworkFrames = ({standalone=false,frames=[],mode=null,href=L.mylab+'/Stu
   const html={toggleAttribute:(key,on)=>on?attrs.set(key,''):attrs.delete(key)};
   const document={documentElement:html,getElementsByTagName:()=>frames,querySelector:selector=>selector==='#playerViewer,#assignmentViewer'?mode:null,
     createElement:()=>({isConnected:false,remove(){this.isConnected=false;}}),head:{append(node){node.isConnected=true;}}};
-  let enabled=true;
+  let enabled=true,pearsonAccess=true,enhance={pearsonViewer:true};
   const context=vm.createContext({document,parent,URL,GZ_PEARSON_EMBED_LIB:L,location:new URL(href),
     MutationObserver:class{constructor(fn){observers.push(fn);}observe(){}disconnect(){}},addEventListener:listen,
-    chrome:{storage:{sync:{get:async()=>({enabled})},onChanged:{addListener:fn=>listen('storage',()=>fn({enabled:{}},'sync'))}}}});
+    chrome:{storage:{sync:{get:async()=>({enabled,enhance})},local:{get:async()=>({pearsonAccess})},onChanged:{addListener:fn=>listen('storage',e=>fn(e.changes,e.area))}}}});
   context.window=context;context.top=standalone?context:{};
   vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../../extension/pearson/embedded.js'),'utf8'),context);
   const fire=(key,e)=>{for(const fn of events.get(key)||[])fn(e);};
   return {sent,attrs,parent,message:(data,{source=parent,origin=L.socket}={})=>fire('message',{data,source,origin}),
-    enabled:async value=>{enabled=value;fire('storage');await new Promise(setImmediate);},settle:()=>new Promise(setImmediate),event:fire,
+    enabled:async value=>{enabled=value;fire('storage',{changes:{enabled:{newValue:value}},area:'sync'});await new Promise(setImmediate);},
+    access:async value=>{pearsonAccess=value;fire('storage',{changes:{pearsonAccess:{newValue:value}},area:'local'});await new Promise(setImmediate);},
+    switches:async value=>{enhance=value;fire('storage',{changes:{enhance:{newValue:value}},area:'sync'});await new Promise(setImmediate);},settle:()=>new Promise(setImmediate),event:fire,
     mutate:()=>observers.forEach(fn=>fn([]))};
 };
 const nativeFrame = (src,original=null) => {
@@ -33,6 +35,14 @@ const nativeFrame = (src,original=null) => {
     getAttribute:key=>attrs.get(key)??null,setAttribute:(key,value)=>attrs.set(key,String(value)),removeAttribute:key=>attrs.delete(key),
     toggleAttribute:(key,on)=>on?attrs.set(key,''):attrs.delete(key)};
 };
+test('open homework restores native child frames after a host is revoked or the last switch goes off',async()=>{
+  const question=nativeFrame(L.mylab+'/Service/PlayerLaunch.ashx?synthetic_launch=one','native');
+  const h=homeworkFrames({standalone:true,frames:[question]});await h.settle();
+  assert.equal(question.getAttribute('data-gz-pearson-child'),'');
+  await h.access(false);assert.equal(question.getAttribute('data-gz-pearson-child'),'native');
+  await h.access(true);assert.equal(question.getAttribute('data-gz-pearson-child'),'');
+  await h.switches({});assert.equal(question.getAttribute('data-gz-pearson-child'),'native');
+});
 test('standalone and awaiting-context homework expose only native child canvases and restore their markers',async()=>{
   for(const standalone of [true,false]){
     const question=nativeFrame(L.mylab+'/Service/PlayerLaunch.ashx?synthetic_launch=one','native'),unrelated=nativeFrame(L.mylab+'/Service/KeepSession.aspx');
@@ -158,7 +168,7 @@ test('a prepared opener restores its native handler across back/forward-cache na
 const deferred = () => { let resolve; const promise=new Promise(r=>resolve=r); return {promise,resolve}; };
 const bridge = ({authorize=async()=>({ok:true,host:new URL(host).origin}),read}={}) => {
   const events=new Map(),docEvents=new Map(),timers=new Map(),frames=[],sent=[],configs=[],requests=[],calls=[];
-  let settings={enabled:true},serial=0;
+  let settings={enabled:true,enhance:{pearsonEmbed:true}},pearsonAccess=true,serial=0;
   const listen=(map,key,fn)=>map.set(key,[...(map.get(key)||[]),fn]),fire=(map,key,e)=>{for(const fn of map.get(key)||[])fn(e);};
   const parent={postMessage:(message,origin)=>sent.push({message,origin})},adapter={getLaunchAction(model,target){calls.push({model,target});}};
   const button={disabled:false,click(){adapter.getLaunchAction({},'_blank');}};
@@ -174,15 +184,22 @@ const bridge = ({authorize=async()=>({ok:true,host:new URL(host).origin}),read}=
   const main=vm.createContext({...shared,SocketExperienceNamespace:{Adapter:{LaunchAdapter:adapter}}});main.window=main;
   const context=vm.createContext({...shared,GZ_PEARSON_EMBED_LIB:L,crypto:{randomUUID:()=>request.doc},chrome:{
     runtime:{sendMessage:async message=>{requests.push(message);const reply=await authorize();if(reply?.ok)vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../../extension/pearson/launch-main.js'),'utf8'),main);return reply;}},
-    storage:{sync:{get:async()=>read?read():settings},onChanged:{addListener:fn=>listen(events,'storage',change=>fn(change,'sync'))}}}});context.window=context;
+    storage:{sync:{get:async()=>read?read():settings},local:{get:async()=>({pearsonAccess})},onChanged:{addListener:fn=>{listen(events,'storage',change=>fn(change,'sync'));listen(events,'local',change=>fn(change,'local'));}}}}});context.window=context;
   vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../../extension/pearson/launch.js'),'utf8'),context);
   return {parent,sent,configs,requests,calls,frames,event:(type,e)=>fire(events,type,e),
     message:(data,{source=parent,origin=new URL(host).origin}={})=>fire(events,'message',{data,source,origin}),
     settings:value=>{settings=value;fire(events,'storage',Object.fromEntries(Object.entries(value).map(([key,newValue])=>[key,{newValue}])));},
+    access:async value=>{pearsonAccess=value;fire(events,'local',{pearsonAccess:{newValue:value}});await new Promise(setImmediate);},
     changed:()=>fire(events,'storage',{enabled:{newValue:false}}),
     settle:()=>new Promise(setImmediate),flush(){for(const [id,fn]of [...timers]){timers.delete(id);fn();}}};
 };
 const hostContext={gzPearsonEmbed:'context',channel:request.doc,enabled:true,theme:{}};
+test('a prepared opener restores its native handler when any host is revoked',async()=>{
+  const h=bridge();await h.settle();h.message(hostContext);
+  await h.access(false);h.flush();
+  assert.equal(h.calls.length,0,'revocation cancels the pending native launch');
+  assert.equal(h.frames.filter(f=>f.isConnected).length,0);
+});
 test('redirect bootstrap waits for worker authorization and an enabled context from the verified direct parent',async()=>{
   const pending=deferred(),h=bridge({authorize:()=>pending.promise});await h.settle();
   h.message(hostContext);assert.equal(h.sent.length,0);assert.equal(h.configs.length,0);
@@ -222,12 +239,12 @@ test('revoking consent during bootstrap leaves the native opener and can be re-e
   const pending=deferred(),h=bridge({authorize:()=>pending.promise});await h.settle();
   h.settings({enabled:false});await h.settle();pending.resolve({ok:true,host:new URL(host).origin});await h.settle();
   h.message(hostContext);h.flush();assert.equal(h.calls.length,0);
-  h.settings({enabled:true});await h.settle();h.message(hostContext);h.flush();assert.equal(h.calls.length,1);
+  h.settings({enabled:true,enhance:{pearsonEmbed:true}});await h.settle();h.message(hostContext);h.flush();assert.equal(h.calls.length,1);
 });
 test('a disable notification blocks a pending authorization before its storage refresh finishes',async()=>{
   for(const disabled of [{enabled:false},{enhance:{pearsonEmbed:false}}]){
   const consent=deferred(),authorization=deferred();let reads=0;
-  const h=bridge({read:()=>++reads===1?Promise.resolve({enabled:true}):consent.promise,authorize:()=>authorization.promise});
+  const h=bridge({read:()=>++reads===1?Promise.resolve({enabled:true,enhance:{pearsonEmbed:true}}):consent.promise,authorize:()=>authorization.promise});
   await h.settle();h.settings(disabled);authorization.resolve({ok:true,host:new URL(host).origin});await h.settle();
   h.message(hostContext);h.flush();const launches=h.calls.length;
   consent.resolve(disabled);await h.settle();

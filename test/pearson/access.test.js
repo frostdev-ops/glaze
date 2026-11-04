@@ -41,7 +41,7 @@ test('the worker registers Pearson\'s scripts only while a switch is on and all 
     set: async (v) => { Object.assign(s, structuredClone(v)); },
     remove: async (k) => { for (const x of [].concat(k)) delete s[x]; },
   });
-  const changed = [], removed = [];
+  const changed = [], removed = [], revoked = [];
   let registered = new Map(), held = new Set();
   const context = vm.createContext({
     URL, console, TextEncoder, structuredClone, Promise, Date, setTimeout, clearTimeout, crypto: globalThis.crypto,
@@ -54,6 +54,7 @@ test('the worker registers Pearson\'s scripts only while a switch is on and all 
       },
       storage: { local: area(store.local), sync: area(store.sync), onChanged: { addListener: (f) => changed.push(f) } },
       permissions: {
+        onRemoved: { addListener: (f) => revoked.push(f) },
         contains: async ({ origins }) => origins.every((o) => held.has(o) || m.host_permissions.includes(o)),
         getAll: async () => ({ origins: [...m.host_permissions, ...held] }),
         remove: async ({ origins }) => { for (const o of origins) { removed.push(o); held.delete(o); } return true; },
@@ -81,12 +82,21 @@ test('the worker registers Pearson\'s scripts only while a switch is on and all 
 
   await set({ enhance: { ...off, pearsonEmbed: true } });
   assert.deepEqual(pearson(), [], 'on without the grant: nothing on a host Glaze does not hold');
+  assert.equal(store.local.pearsonAccess, false, 'open documents are told that this device has no access');
   held = new Set(HOSTS.slice(0, 2).map((h) => `${h}/*`));
   await set({ enhance: { ...off, pearsonEmbed: true } });
   assert.deepEqual(pearson(), [], 'two of the three hosts are not enough');
   held = new Set(HOSTS.map((h) => `${h}/*`));
   await set({ enhance: { ...off, pearsonEmbed: true } });
   assert.deepEqual(pearson(), [HOMEWORK, LAUNCH], 'held and on: the manifest\'s Pearson entries, registered');
+  assert.equal(store.local.pearsonAccess, true);
+  held.delete(`${HOSTS[1]}/*`);
+  for (const f of revoked) f({ origins: [`${HOSTS[1]}/*`] });
+  await settle();
+  assert.deepEqual(pearson(), [], 'revoking any host unregisters both scripts');
+  assert.equal(store.local.pearsonAccess, false, 'already injected documents must also lose access');
+  held.add(`${HOSTS[1]}/*`);
+  await set({ enhance: { ...off, pearsonEmbed: true } });
   await set({ enabled: false });
   assert.deepEqual(pearson(), [], 'Glaze off: unregistered');
   assert.deepEqual(removed, [], 'Glaze off keeps the grant for when it is on again');
