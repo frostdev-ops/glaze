@@ -122,7 +122,7 @@ test('the Safari staging drops Glaze\'s own model\'s engine and host and keeps t
     execFileSync('unzip', ['-q', path.join(dist, `glaze-v${m.version}.zip`), '-d', stage]);
     execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), path.join(stage, 'manifest.json')]);
     const staged = S.walk(stage);
-    assert.deepEqual(staged.filter((f) => f.startsWith('ai/local/')).sort(), ['ai/local/format.js', 'ai/local/link.js', 'ai/local/store.js', 'ai/local/updates.js']);
+    assert.deepEqual(staged.filter((f) => f.startsWith('ai/local/')).sort(), ['ai/local/format.js', 'ai/local/ladder.js', 'ai/local/link.js', 'ai/local/store.js', 'ai/local/updates.js']);
     assert.deepEqual(staged.filter(dropped), []);
     assert.deepEqual(staged.sort(), shipped.slice().sort(), 'everything else stays');
   } finally {
