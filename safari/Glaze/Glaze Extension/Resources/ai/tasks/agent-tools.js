@@ -902,10 +902,12 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     + String.raw`dinge?|sachen?|aufgaben?|abgaben?|punkte?|elemente?|dingen|opdrachten|opdracht|taken|taak|punten)`;
   const COUNT = Object.fromEntries(Object.entries(COUNT_WORDS).map(([locale, list]) => [locale,
     new RegExp(String.raw`(?<![\p{L}\p{N}])(\d{1,2}|${list.join('|')})\s+(?:[\p{L}-]+\s+)?${COUNT_NOUNS}(?![\p{L}])`, 'gu')]));
-  const ITEM_LINE = /^\s*(?:[-*•+]|\d{1,2}[.)])\s+(.+)$/u;
+  const ITEM_LINE = /^(\s*)(?:[-*•+]|\d{1,2}[.)])\s+(.+)$/u;
   const plainText = (s) => fold(String(s).replace(/[*_`~]/g, '').replace(/\\(.)/g, '$1')).replace(/\s+/g, ' ').trim();
   const listHolds = (text, inp) => {
-    const lines = String(text).split('\n'), items = lines.map((l) => ITEM_LINE.exec(l)?.[1]).filter(Boolean);
+    const lines = String(text).split('\n'), bullets = lines.map((l) => ITEM_LINE.exec(l)).filter(Boolean);
+    const indent = Math.min(...bullets.map((m) => m[1].length));
+    const items = bullets.filter((m) => m[1].length === indent).map((m) => m[2]);
     if (items.length < 2) return true;
     const held = listed(inp.steps), titles = [...new Set(held.map((v) => plainText(v.title)))].sort((a, b) => b.length - a.length);
     // An item's key: the result title it starts with and the course in brackets after it, else its whole line.
