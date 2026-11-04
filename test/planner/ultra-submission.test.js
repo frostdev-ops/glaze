@@ -82,6 +82,30 @@ test('the gradebook requests expanded submission data and redraws for each chang
   assert.equal(changed, 5, 'an identical expanded answer does not redraw');
 });
 
+test('attempt-id updates refresh submitted chips and course progress even when draft statuses and dates stay the same', () => {
+  const [draft] = require('../fixtures/ultra-grades-draft.json').results;
+  const start = source.indexOf('  const take = '), end = source.indexOf('  const bookFor = ', start);
+  for (const field of ['firstAttemptId', 'highestAttemptId', 'lowestAttemptId']) {
+    let changed = 0;
+    const take = vm.runInNewContext(`${source.slice(start, end)} take`, {
+      GZ_PAGE: P, locale: () => 'en', onBook: () => changed++,
+    });
+    const b = {}, lone = { ...draft, firstAttemptId: draft.lastAttemptId, highestAttemptId: null, lowestAttemptId: null };
+    const chip = () => P.status(new Date(draft.column.dueDate), null, b.grades.get(draft.column.contentId), new Date('2026-11-01T12:00:00Z'));
+    take(b, [structuredClone(lone)]);
+    assert.equal(chip().label, 'Past due · Not submitted');
+    take(b, [{ ...structuredClone(lone), [field]: draft.firstAttemptId }]);
+    assert.equal(chip().label, 'Submitted', field);
+    assert.equal(P.isDone('mixed', b.grades.get(draft.column.contentId)), true, field);
+    assert.equal(changed, 2, `${field} schedules a redraw`);
+    take(b, [structuredClone(lone)]);
+    assert.equal(chip().label, 'Past due · Not submitted', `${field} removal refreshes too`);
+    assert.equal(changed, 3);
+    take(b, [structuredClone(lone)]);
+    assert.equal(changed, 3, 'an identical answer still does not redraw');
+  }
+});
+
 test('course progress uses submission state while keeping native reading and external-tool completion', () => {
   const doc = {};
   doc.root = new El('main', doc);
