@@ -1138,7 +1138,7 @@ GZ_UI.load().then((s) => {
           return t("Glaze needs the calendar access on Google's screen. Connect again and leave it ticked.");
         }
         return '';
-      } catch { return t("Google didn't connect. Export calendar (.ics) works without signing in."); }
+      } catch (e) { return t(GZ_GCAL_AUTH.problem?.(e) === 'setup' ? 'Google sign-in is not configured for this copy of Glaze.' : "Google didn't connect. Export calendar (.ics) works without signing in."); }
     };
     // Only a person's click or key, while the page has their activation; one at a time.
     let gcalBusy = false;
@@ -1244,7 +1244,7 @@ GZ_UI.load().then((s) => {
           $('#gdrive-disconnect').focus();
           return hint(t('Connected.'));
         }
-        hint(r.why === 'scope' ? t('Connect again and allow Google Drive access.') : r.why === 'signin' && !native ? t('Sign in to the browser with your Google account, then connect again.')
+        hint(r.why === 'setup' && !native ? t('Google sign-in is not configured for this copy of Glaze.') : r.why === 'scope' ? t('Connect again and allow Google Drive access.') : r.why === 'signin' && !native ? t('Sign in to the browser with your Google account, then connect again.')
           : r.why === 'cancel' ? '' : t("Google Drive didn't connect. Try again in a moment."), r.why !== 'cancel');
       } finally { gdBusy = false; }
     });

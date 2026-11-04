@@ -3847,6 +3847,7 @@
   "Glaze needs the browser's sign-in permission to connect.": "O Glaze precisa da permissão de login do navegador para se conectar.",
   "Connect again and allow Google Drive access.": "Conecte de novo e permita o acesso ao Google Drive.",
   "Sign in to the browser with your Google account, then connect again.": "Entre no navegador com sua conta do Google e conecte de novo.",
+  "Google sign-in is not configured for this copy of Glaze.": "O login do Google não está configurado para esta cópia do Glaze.",
   "Google Drive didn't connect. Try again in a moment.": "O Google Drive não se conectou. Tente de novo daqui a pouco.",
   "Couldn't disconnect. Try again in a moment.": "Não foi possível desconectar. Tente de novo daqui a pouco.",
   "From Google Drive": "Do Google Drive",

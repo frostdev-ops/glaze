@@ -40,6 +40,7 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
   const EARLY = 60e3; // a held token is renewed this long before Google's expiry
 
   class Fail extends Error { constructor(why) { super(why); this.why = why; } }
+  const setupError = (error) => /bad client id|invalid_client|redirect_uri_mismatch/i.test(String(error?.message || error));
 
   // The client each flow signs in with; the Picker also needs its key and the project number (pickable).
   const NEEDS = { chrome: 'chrome', web: 'web', native: 'ios' };
@@ -190,7 +191,7 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       const details = { url, interactive };
       // Google's prompt=none answer can take a page or two: Chromium waits for it rather than giving up at the first load.
       if (!env.firefox && !interactive) Object.assign(details, { abortOnLoadForNonInteractive: false, timeoutMsForNonInteractive: 10000 });
-      try { return await i.launchWebAuthFlow(details); } catch { throw new Fail(offline() ? 'network' : interactive ? 'cancel' : 'auth'); }
+      try { return await i.launchWebAuthFlow(details); } catch (e) { throw new Fail(setupError(e) ? 'setup' : offline() ? 'network' : interactive ? 'cancel' : 'auth'); }
     };
     // The browser's redirect URL; the identity API is gone with its permission.
     const own = () => {
@@ -212,7 +213,7 @@ var GZ_GOOGLE = globalThis.GZ_GOOGLE || (() => {
       // prompt with the same answer).
       try { r = await i.getAuthToken({ interactive, scopes: c().scopes }); } catch (e) {
         const m = String(e?.message || e);
-        throw new Fail(/support/i.test(m) ? 'unsupported' : /not signed in|browser ?sign-?in/i.test(m) ? 'signin' : offline() ? 'network' : interactive ? 'cancel' : 'auth');
+        throw new Fail(setupError(e) ? 'setup' : /support/i.test(m) ? 'unsupported' : /not signed in|browser ?sign-?in/i.test(m) ? 'signin' : offline() ? 'network' : interactive ? 'cancel' : 'auth');
       }
       const token = typeof r === 'string' ? r : r?.token;
       if (typeof token !== 'string' || !token) throw new Fail('auth');
