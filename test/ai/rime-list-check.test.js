@@ -44,6 +44,11 @@ test('list counts use item bullets, without counting or deduplicating nested det
   assert.equal(A.why(answer(text), inputOf()), '');
 });
 
+test('separate section counts may be equal without claiming a total for the whole answer', () => {
+  const text = 'Two assignments due Friday:\n- **Problem Set 8**\n- **Lab Report 5**\n\nTwo assignments due Monday:\n- **Reading Response 9**\n- **Discussion: Week 10**';
+  assert.equal(A.why(answer(text), inputOf()), '');
+});
+
 test('in the step loop, a repeated item gets the corrective turn; a second failure shows Glaze\'s own list, each item once', async () => {
   const bad = { why: 'list', raw: '{}' };
   const call = { call: { name: 'todo_list', arguments: {}, kind: 'read' }, answer: null };
