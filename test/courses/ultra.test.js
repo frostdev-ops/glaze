@@ -216,6 +216,21 @@ test('a draft behind a handed-in attempt, as Ultra sends it: submitted in Better
   assert.equal(T.isDone(item, 'auto'), true);
 });
 
+test('draft submission status keeps its timestamp out of lateness and Insights when the expanded attempt has no status', async () => {
+  const [row] = clone(load('grades-draft').results);
+  delete row.lastAttempt.status;
+  const st = U.standing(row, LATER);
+  assert.deepEqual([st.state, st.submitted, st.draft, st.at], ['unknown', true, true, null]);
+  const [item] = U.due({ todo: [{ overdueItems: [{ title: 'Essay 5', dueDate: row.column.dueDate, column: { id: row.columnId, courseId: row.courseId } }] }], rows: { [row.courseId]: [row] }, now: LATER });
+  assert.equal(item.sub.submitted, true);
+  assert.equal(item.sub.late, false);
+  const [work] = U.work([row], LATER);
+  assert.deepEqual([work.a, work.s], [0, ''], 'the earlier hand-in time remains unknown');
+  const excepted = await U.excepts({ get: async () => assert.fail('a draft needs no lateness exception read') },
+    { id: '_302_1', dueDateExceptionType: 'Normal' }, row.courseId, [row], LATER);
+  assert.equal(excepted(row.columnId), false);
+});
+
 test('due items: To Do and the calendar as planner items, twins deduped, joined by column id only', () => {
   const calendar = clone(load('calendar-items').results);
   // An item no gradebook row has: a calendar entry with no grade state. Titled like a real column, it still joins nothing.
