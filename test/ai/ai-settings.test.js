@@ -969,6 +969,33 @@ test('a download that ends Ready shows the version it brought', async () => {
   assert.equal(p.note().textContent, 'Ready · r5 · 1.1 GB');
 });
 
+test('Rime\'s card before its signed list: Not available yet, no Download, no size or switch; the list arriving offers Download', async () => {
+  let listed = false, state = 'download';
+  const sent = [];
+  const local = async (m) => {
+    sent.push(m.op);
+    if (m.op === 'updates') return { ok: true, auto: true };
+    if (!listed) return { ok: true, state: 'unavailable', reason: 'pending' };
+    return { ok: true, state, size: 1099627232, tier: 1, tiers: [{ tier: 1, size: 1099627232, name: 'Rime Q4_K_M' }, { tier: 4, size: 1846237920, name: 'Rime Q8_0' }] };
+  };
+  const p = await open({ ai: { on: true, mode: 'advanced' }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
+  await p.click(p.card('Rime'));
+  assert.deepEqual(sent, ['test', 'updates']);
+  assert.equal(p.note().textContent, 'Not available yet');
+  assert.equal(p.button('Download', p.$('ai-drawer')), undefined);
+  assert.equal(p.button('Delete', p.$('ai-drawer')), undefined);
+  for (const id of ['ai-local-tier', 'ai-local-window', 'ai-local-auto', 'ai-local-pictures']) assert.equal(p.$(id).tagName, 'DIV', id);
+  listed = true;
+  await p.progress({ provider: 'local', part: 'list' });
+  assert.equal(p.note().textContent, 'Needs a download · 1.1 GB');
+  assert.ok(p.button('Download', p.$('ai-drawer')));
+  assert.equal(p.$('ai-local-tier').tagName, 'SELECT');
+  assert.equal(p.$('ai-local-auto').tagName, 'DIV', 'Update automatically shows once a model is here');
+  state = 'ready';
+  await p.progress({ provider: 'local', part: 'list' });
+  assert.equal(p.$('ai-local-auto').tagName, 'INPUT');
+});
+
 test('Rime\'s context size in Advanced: 64K by default, stepped down to what this computer holds, 4K to 128K offered, refusals with why, kept with the tier', async () => {
   const sent = [];
   const local = async (m) => {
