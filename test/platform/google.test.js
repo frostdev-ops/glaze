@@ -234,6 +234,22 @@ test('Chrome without a Google account in the browser: Connect takes the web flow
   assert.deepEqual(only.local, {});
 });
 
+test('Chrome rejecting an OAuth client is a setup failure, never a silent user cancellation', async () => {
+  for (const error of ['OAuth2 request failed: Service responded with error: bad client id', 'invalid_client', 'redirect_uri_mismatch']) {
+    const h = harness(); h.identity.fail = error;
+    assert.deepEqual(await h.g.connect(), { ok: false, why: 'setup' }, error);
+    assert.equal(h.log.launch.length, 0, 'an unregistered extension must not fall through to another unregistered redirect');
+    assert.equal(h.local.google, undefined);
+  }
+});
+
+test('a web OAuth redirect configuration error is reported rather than treated as cancellation', async () => {
+  const h = harness({ flow: 'web' });
+  h.identity.answer = () => { throw Error('redirect_uri_mismatch'); };
+  assert.deepEqual(await h.g.connect(), { ok: false, why: 'setup' });
+  assert.equal(h.local.google, undefined);
+});
+
 test('web flow: the implicit flow with the Web client, its state checked, the token only in memory', async () => {
   const h = harness({ flow: 'web' });
   assert.deepEqual(await h.g.connect(), { ok: true, email: 'student@school.edu' });
@@ -1163,6 +1179,12 @@ test('Settings on Firefox: Connect goes straight to Google, never asking Firefox
   const c = await settings({ email: null });
   await c.click('#gdrive-connect');
   assert.deepEqual(c.asked, [{ permissions: ['identity'] }], 'Chrome, Edge and Brave still ask, inside the click');
+});
+
+test('Settings explains an unregistered development build instead of silently cancelling Drive Connect', async () => {
+  const s = await settings({ email: null, connect: { ok: false, why: 'setup' } });
+  await s.click('#gdrive-connect');
+  assert.deepEqual(s.hints, [['Google sign-in is not configured for this copy of Glaze.', true]]);
 });
 
 test('Settings: a day whose backup Drive had no room for says so beside when Sync last ran', async () => {
