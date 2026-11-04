@@ -276,6 +276,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       box.text = now;
       box.latest = box.nativeHTML = ed.innerHTML;
       box.delta = null;
+      box.posted = box.kind === 'post' && box.sending && !now;
       box.sending = false;
       box.port.postMessage({ type: 'html', html: ed.innerHTML });
     });
@@ -353,7 +354,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // h: what the frame shows; d: its Quill ops, or null when it came from Ultra's editor (which then already holds it).
   const sync = (box, h, d = h === box.latest ? box.delta : null) => {
     if (!sameBox(box)) { box.latest = h; box.delta = d; box.unsynced = true; return false; }
-    if (h !== box.latest) { box.sending = false; clearTimeout(box.retry); box.retry = null; }
+    if (h !== box.latest) { box.posted = false; box.sending = false; clearTimeout(box.retry); box.retry = null; }
     if (!box.unsynced && h === box.latest && box.nativeHTML === box.editor.innerHTML && sameText(box.editor, h)) return true;
     box.latest = h;
     box.delta = d;
@@ -596,7 +597,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (!on()) { dropAll(); return; }
     for (const box of [...boxes.values()]) {
       if (!sameBox(box)) drop(box);
-      else if (box.kind === 'post' && !box.display && !box.text && box.editor.closest('form')?.querySelector('.panel-editor-controls.ng-hide, .panel-editor-controls[aria-hidden="true"]')) drop(box);
+      else if (box.kind === 'post' && (!box.display || box.posted) && !box.text && box.editor.closest('form')?.querySelector('.panel-editor-controls.ng-hide, .panel-editor-controls[aria-hidden="true"]')) drop(box);
       else if (box.kind === 'journal' && !U().sendOf(box.editor, 'journal')) drop(box); // its Cancel, or the entry sent
       else if (box.frame && !box.frame.isConnected) { if (box.unsynced || box.mode === 'paper') reopen(box); else drop(box); }
       // An attached PDF, deck or spreadsheet: Open in Glaze beside its link while its switch is on
