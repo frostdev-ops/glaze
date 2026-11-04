@@ -100,6 +100,22 @@ test('a failed PDF read leaves Open original and the native menu available, with
   p.press();
 });
 
+test('a failed original PDF viewer returns its keyboard focus to its own toggle without taking focus from native controls', async () => {
+  for (const focused of [true, false]) {
+    const p = page([FILE, FILE]); p.press(1); await settle();
+    const port = p.ports[0];
+    port.onmessage({ data: { type: 'ready' } }); await settle();
+    port.onmessage({ data: { type: 'view:shown' } });
+    const frame = p.doc.querySelector('iframe.gz-pv');
+    (focused ? frame : p.nativeMenu()).focus();
+    port.onmessage({ data: { type: 'view:failed', reason: 'draw' } });
+    assert.equal(frame.isConnected, false);
+    assert.equal(p.doc.activeElement, focused ? p.buttons()[1] : p.nativeMenu());
+    assert.ok(p.doc.querySelector('.gz-bb-pdf-fallback a'));
+    p.press(1);
+  }
+});
+
 test('a zero-byte PDF response is reported without opening an empty viewer or removing the original link', async () => {
   const p = page([FILE], async () => new Response(new Uint8Array()));
   p.press(); await settle();
