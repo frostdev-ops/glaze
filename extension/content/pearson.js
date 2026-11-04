@@ -9,7 +9,7 @@
   const keys = ['enabled', 'colors', 'look', 'auto', 'presets', 'bg', 'nav', 'motion', 'extras', 'lookX', 'enhance'];
   const darkMQ = matchMedia('(prefers-color-scheme: dark)'), calmMQ = matchMedia('(prefers-reduced-motion: reduce)');
   const t = (key) => GZ_I18N.t(key, {}, GZ_I18N.ui());
-  let settings = null, timer = 0, revision = 0, stopped = false, modeNode = null, backdrop = null, controls = null, iconFilter = null;
+  let settings = null, pearsonAccess = false, timer = 0, revision = 0, stopped = false, modeNode = null, backdrop = null, controls = null, iconFilter = null;
   let localViewer = null, navOpen = matchMedia('(min-width: 900px)').matches, pointer = '', pointerKey = '', lookPointer = '', ownPointer = '', navImage = '';
   let motionSheet = null, motionStyle = null, motionCss = '';
   const svgNS = 'http://www.w3.org/2000/svg';
@@ -64,7 +64,7 @@
   };
   const kind = () => shell ? (shell[1].toLowerCase() === 'overviewhomework' ? 'overview' : 'shell')
     : modeNode?.classList.contains('playmode-homework') ? 'player' : null;
-  const active = () => !stopped && !!chrome.runtime?.id && settings?.enabled && !!kind();
+  const active = () => !stopped && pearsonAccess && !!chrome.runtime?.id && settings?.enabled && ['pearsonViewer', 'pearsonEmbed', 'pearsonMath'].some(k => settings.enhance[k]) && !!kind();
   const restoreIcon = (node, value) => {
     node.removeAttribute('data-gz-pearson-icon');
     if (value[0]) node.style.setProperty('--gz-pearson-icon', ...value); else node.style.removeProperty('--gz-pearson-icon');
@@ -210,10 +210,10 @@
         try {
           const next = GZ_SANITIZE(raw || {}), local = GZ_XPARTS.areas(chrome).local;
           const stored = await GZ_XPARTS.stored(raw?.lookX, local), parts = await GZ_XPARTS.parse(stored);
-          const images = await local.get(['cursorImg', ...(next.nav.i ? [`cardImg:${next.nav.i}`] : [])]);
+          const images = await local.get(['pearsonAccess', 'cursorImg', ...(next.nav.i ? [`cardImg:${next.nav.i}`] : [])]);
           if (stopped || turn !== revision) return;
           if (settings?.enhance.pearsonViewer !== next.enhance.pearsonViewer) localViewer = null;
-          settings = next; lookPointer = parts?.x?.pointer || ''; ownPointer = typeof images.cursorImg === 'string' ? images.cursorImg : '';
+          settings = next; pearsonAccess = images.pearsonAccess === true; lookPointer = parts?.x?.pointer || ''; ownPointer = typeof images.cursorImg === 'string' ? images.cursorImg : '';
           motionCss = GZ_MX.compile(parts?.x?.anim);
           navImage = images[`cardImg:${next.nav.i}`] || next.nav.u; paint();
         } catch { settings = null; clear(); }
@@ -239,7 +239,8 @@
     if (active() && backdrop && e.source === backdrop.contentWindow && e.origin === new URL(chrome.runtime.getURL('')).origin && e.data?.gzPearsonBackdropReady === true) backdrop.setAttribute('data-ready','');
   });
   chrome.storage.onChanged.addListener((changes, area) => {
-    if ((area === 'sync' && keys.some((key) => changes[key])) || (area === 'local' && (changes.lookX || changes.cursorImg || Object.keys(changes).some((k) => k.startsWith('cardImg:'))))) read();
+    if (area === 'local' && changes.pearsonAccess?.newValue !== true && changes.pearsonAccess) { pearsonAccess = false; clear(); }
+    if ((area === 'sync' && keys.some((key) => changes[key])) || (area === 'local' && (changes.pearsonAccess || changes.lookX || changes.cursorImg || Object.keys(changes).some((k) => k.startsWith('cardImg:'))))) read();
   });
   darkMQ.addEventListener('change', paint); calmMQ.addEventListener('change', paint);
   addEventListener('pagehide', (e) => { if (e.persisted) { clearTimeout(timer); backdrop?.remove(); backdrop = null; } else { stopped = true; revision++; clear(); mountWatch.disconnect(); modeWatch.disconnect(); } });

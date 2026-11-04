@@ -8,10 +8,10 @@
   const from = origin === L.mylab ? L.socket : /^\/assignment\//i.test(location.pathname) ? L.mylab : L.tdx;
   const html = document.documentElement;
   const childAttrs = new Map();
-  let channel = null, enabled = true, stopped = false, nav = null, mode = null, question = null, lastQuestion = null, theme = {}, lookKey = '', sheet = null;
+  let channel = null, enabled = false, stopped = false, nav = null, mode = null, question = null, lastQuestion = null, theme = {}, lookKey = '', sheet = null;
   const emit = m => parent.postMessage(m, from);
   const place = request => {
-    if (!channel || stopped) return;
+    if (!enabled || !channel || stopped) return;
     if (origin === L.mylab) {
       const safe = L.homework(location.href); if (!safe) return;
       const url = new URL(safe); if (question && /PlayerHomework/i.test(url.pathname)) url.searchParams.set('questionId', question);
@@ -43,7 +43,7 @@
     if (!sheet.isConnected) (document.head || html).append(sheet);
   };
   const selected = () => {
-    if (origin !== L.tdx || !nav || !document.querySelector('#playerViewer.playmode-homework') || !channel) return;
+    if (!enabled || origin !== L.tdx || !nav || !document.querySelector('#playerViewer.playmode-homework') || !channel) return;
     const rows = [...nav.querySelectorAll('li')], at = rows.findIndex(row => row.classList.contains('selected'));
     if (at >= 0 && at !== lastQuestion) { lastQuestion = at; emit({ gzPearsonFrame: 'question', channel, question: at + 1 }); }
   };
@@ -69,7 +69,7 @@
       const changed = channel !== m.channel;
       channel = m.channel; theme = next; lookKey = key; mark();
       if (changed) { lastQuestion = null; place(); mount(); selected(); } else children();
-    } else if (!standalone && e.source === parent && e.origin === from && m?.channel === channel && m?.gzPearsonFrame === 'locate' && L.channel(m.request)) {
+    } else if (enabled && !standalone && e.source === parent && e.origin === from && m?.channel === channel && m?.gzPearsonFrame === 'locate' && L.channel(m.request)) {
       if (origin === L.tdx && /^\/Player\//i.test(location.pathname)) {
         const rows = [...(nav?.querySelectorAll('li') || [])], at = rows.findIndex(row=>row.classList.contains('selected'));
         emit({gzPearsonFrame:'located',channel,request:m.request,question:at>=0 ? at+1 : null});
@@ -80,7 +80,7 @@
         }
         if (!sent) place(m.request);
       }
-    } else if (channel && [L.mylab,L.tdx].includes(e.origin)) {
+    } else if (enabled && channel && [L.mylab,L.tdx].includes(e.origin)) {
       const f = [...document.getElementsByTagName('iframe')].find(f => f.contentWindow === e.source && L.frameOrigin(f.src) === e.origin);
       if (!f) return;
       if (m?.gzPearsonFrame === 'hello') children();
@@ -94,8 +94,20 @@
       }
     }
   });
-  const read = async () => { try { enabled = (await chrome.storage.sync.get('enabled')).enabled !== false; } catch { enabled = false; } mark(); children(); };
-  chrome.storage.onChanged.addListener((c,a) => { if (a === 'sync' && c.enabled) read(); });
+  let reading = 0;
+  const read = async () => {
+    const at = ++reading;
+    try {
+      const [s, local] = await Promise.all([chrome.storage.sync.get(['enabled', 'enhance']), chrome.storage.local.get('pearsonAccess')]);
+      if (at !== reading) return;
+      enabled = local.pearsonAccess === true && s.enabled !== false && ['pearsonViewer', 'pearsonEmbed', 'pearsonMath'].some(k => s.enhance?.[k] === true);
+    } catch { if (at !== reading) return; enabled = false; }
+    mark(); children(); if (enabled) { place(); selected(); }
+  };
+  chrome.storage.onChanged.addListener((c,a) => {
+    if (a === 'local' && c.pearsonAccess && c.pearsonAccess.newValue !== true) { enabled = false; mark(); children(); }
+    if (a === 'sync' && (c.enabled || c.enhance) || a === 'local' && c.pearsonAccess) read();
+  });
   addEventListener('pagehide', e => { if (!e.persisted) { stopped = true; watch.disconnect(); navWatch.disconnect(); modeWatch.disconnect(); } mark(); children(); });
   addEventListener('pageshow', e => { if (e.persisted) { read(); children(); place(); } });
   if (!standalone) parent.postMessage({ gzPearsonFrame: 'hello' }, '*');

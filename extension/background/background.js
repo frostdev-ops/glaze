@@ -1583,7 +1583,8 @@ const ensure = async () => {
   // Gradescope's own pages get Glaze only while Glaze and enhance.gradescope are on (planner/gradescope.js, planner/page/gradescope.js).
   const gs = await gradescopeOn() && await reachable(GZ_GRADESCOPE.HOST);
   // Pearson's homework and launch pages likewise, only while a Pearson switch is on and all three of its hosts are held.
-  const pe = await pearsonOn() && (await Promise.all(GZ_PEARSON_EMBED_LIB.hosts.map(reachable))).every(Boolean);
+  const pearsonAccess = (await Promise.all(GZ_PEARSON_EMBED_LIB.hosts.map(reachable))).every(Boolean);
+  const pe = await pearsonOn() && pearsonAccess;
   // The notes app's Course notes button (planner/page/notes-home.js) on Canvas sites' course pages, only while Glaze and Notes
   // are on, so the first content script carries nothing for it, for the sites known now.
   const notes = await switchOn('notes') && notesHome(canvas);
@@ -1595,6 +1596,8 @@ const ensure = async () => {
   // A site taken off its list (Settings' Sites, Reset everything), or whose host was taken back, loses its registration here.
   const have = new Map((await chrome.scripting.getRegisteredContentScripts()).map((s) => [s.id, s]));
   if (!await still()) return;
+  // Unregistering does not remove scripts already in a document. Those documents follow this device's grant too.
+  if ((await chrome.storage.local.get('pearsonAccess')).pearsonAccess !== pearsonAccess) await chrome.storage.local.set({ pearsonAccess });
   await reconcile([...sites.map((id) => script(id, canvas.includes(id) ? 'canvas' : 'moodle')), ...ultra, ...detect ? [detector()] : [], ...gs ? [GRADESCOPE] : [], ...pe ? PEARSON : [], ...notes ? [notes] : [], ...gcal ? [gcal] : []], have, still);
   // Notes turned on: course homes already open get its button now (notesHomeInto), not at their next load.
   if (notes && !have.has(NOTES_HOME)) await notesHomeInto(notes);

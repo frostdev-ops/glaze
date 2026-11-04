@@ -9,7 +9,7 @@
   const send = (op, extra = {}) => { if (!ended && ready && context) parent.postMessage({ gzPearsonEmbed: op, channel: context.channel, ...extra }, host); };
   const tell = () => document.dispatchEvent(new CustomEvent('glaze:pearson-launch-config', { detail: JSON.stringify({ channel: context?.channel, enabled: !ended && ready && enabled && context?.enabled === true }) }));
   const ownFrame = () => document.getElementById('gz-pearson-embedded');
-  const childContext = () => { if (!ended && ready && context) ownFrame()?.contentWindow?.postMessage({ gzPearsonFrame: 'context', channel: context.channel, theme: context.theme }, L.mylab); };
+  const childContext = () => { if (!ended && ready && enabled && context?.enabled) ownFrame()?.contentWindow?.postMessage({ gzPearsonFrame: 'context', channel: context.channel, theme: context.theme }, L.mylab); };
   const start = async () => {
     if (ended) return;
     if (ready) { if (context) { tell(); childContext(); } return; }
@@ -28,9 +28,11 @@
   const read = async () => {
     const at = generation, order = ++reading;
     try {
-      const s = await chrome.storage.sync.get(['enabled','enhance']);
+      const [s, local] = await Promise.all([chrome.storage.sync.get(['enabled','enhance']), chrome.storage.local.get('pearsonAccess')]);
       if (ended || at !== generation || order !== reading) return;
-      enabled = s.enabled !== false && s.enhance?.pearsonEmbed !== false; start();
+      enabled = local.pearsonAccess === true && s.enabled !== false && s.enhance?.pearsonEmbed === true;
+      if (!enabled && ready && context) tell();
+      start();
     } catch { if (!ended && at === generation && order === reading) { enabled = false; if (ready && context) tell(); } }
   };
   document.addEventListener('glaze:pearson-launch-state', e => {
@@ -48,9 +50,9 @@
       if (context?.channel === m.channel && context.enabled === (m.enabled === true) && context.lookKey === lookKey) return;
       context = { channel: m.channel, enabled: m.enabled === true, theme, lookKey };
       document.documentElement.style.setProperty('--gz-pearson-scheme', theme['--gz-pearson-scheme'] || 'normal'); start();
-    } else if (e.source === parent && e.origin === host && context && m?.channel === context.channel && m.gzPearsonEmbed === 'locate' && L.channel(m.request)) {
+    } else if (enabled && e.source === parent && e.origin === host && context && m?.channel === context.channel && m.gzPearsonEmbed === 'locate' && L.channel(m.request)) {
       ownFrame()?.contentWindow?.postMessage({gzPearsonFrame:'locate',channel:context.channel,request:m.request},L.mylab);
-    } else if (context && e.source === ownFrame()?.contentWindow && e.origin === L.mylab) {
+    } else if (enabled && context && e.source === ownFrame()?.contentWindow && e.origin === L.mylab) {
       if (m?.gzPearsonFrame === 'hello') childContext();
       if (m?.gzPearsonFrame === 'place' && m.channel === context.channel) {
         const url = L.homework(m.url); if (url) send('place', { url, ...(L.channel(m.request) ? {request:m.request} : {}) });
@@ -58,8 +60,8 @@
     }
   });
   chrome.storage.onChanged.addListener((c, a) => {
-    if (a !== 'sync' || (!c.enabled && !c.enhance)) return;
-    if (c.enabled?.newValue === false || c.enhance?.newValue?.pearsonEmbed === false) {
+    if (!(a === 'sync' && (c.enabled || c.enhance) || a === 'local' && c.pearsonAccess)) return;
+    if (a === 'local' && c.pearsonAccess?.newValue !== true || a === 'sync' && (c.enabled?.newValue === false || c.enhance && c.enhance.newValue?.pearsonEmbed !== true)) {
       enabled = false; if (ready && context) tell();
     }
     read();
