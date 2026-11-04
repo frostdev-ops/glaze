@@ -730,8 +730,8 @@ untrained round 8 task token. Evaluation may explicitly set `scale.compact: true
 the actual model, tuned window, budgets, sampler and count/run prompt agreement stay intact. Existing trained tasks keep
 their Glaze dialect; stock and picture models keep native ChatML.
 
-Think mode (FORMAT-v2): the default 4K tuned profile answers directly. For tuned `agent.tools` and `study.help`, selecting
-a larger window enables an independent thought ceiling of one quarter of that window, capped at 32768 tokens (8K: 2048;
+Think mode (FORMAT-v2): the 4K tuned profile answers directly. For tuned `agent.tools` and `study.help`, a larger window
+(the 64K default included) enables an independent thought ceiling of one quarter of that window, capped at 32768 tokens (8K: 2048;
 16K: 4096; 32K: 8192; 64K: 16384; 128K: 32768). Other tasks and stock models remain direct. This does not enable SCALE's
 experimental tokens or answer limits. An absent stored local effort means automatic; explicit `none` turns thought off.
 Minimal, low and medium use one eighth, one quarter and one half of the automatic ceiling. Ordinary task effort does not
@@ -746,7 +746,8 @@ host closes it at its token or time allowance, then applies the answer's JSON gr
 returned. `maxTokens` counts only the answer; `usage.output` counts thought plus answer. The fixtures in
 `test/ai/local-think.test.js` establish execution bounds, not model quality; that needs separate real-GGUF evaluation.
 
-The tuned model uses 4K by default or the 8K–128K window selected on its local connection. A context override may narrow
+The tuned model uses the 4K–128K window selected on its local connection, else the 64K default (`DEFAULT_WINDOW`), stepped
+down to the largest size `ai/local/ladder.js` `defaultWindow` admits on this computer (never below 4K). A context override may narrow
 that window and cannot enlarge it. Stock models retain their 131072-token ceiling and 90% input limit. Admission,
 counting and inference use the same effective selected window.
 `catalog` says the window of the text model the connection runs (its tier's, else the one here) and that model's store id
@@ -756,10 +757,12 @@ only (undiscovered, missing or not ready: `provider-unavailable`, `assets`), so 
 another. A catalog without a selected text model is not cached; the next run discovers a completed download or a recovered
 store read. A picture request goes to the picture model whatever the window: its own is the larger. In Advanced a feature's
 context replaces the window up to the model's own. The model's own is the context size Settings → AI → Rime's Advanced
-keeps on the `local` connection (`window`: 8K, 16K, 32K, 64K or 128K; 4K, the default, isn't stored, so a 4K run sends
-what it always did): `windowOf(m, cfg)` makes it the tuned model's window and input limit in the catalog, `caps.context`
+keeps on the `local` connection (`window`: 4K, 8K, 16K, 32K, 64K or 128K, every choice stored; a chosen 4K run sends what
+the 4K default sent before 64K became the default; nothing stored is the default): `windowOf(m, cfg, fit)` makes it the tuned model's window and input limit in the catalog, `caps.context`
 holds it, and each run sends it as `window`. A changed size is a new connection generation, so the broker's kept catalog
-goes. Settings refuses a size this computer can't hold with `ai/local/ladder.js` `windows` (its `footprint` at that size
+goes. The worker reads `fit` once (`navigator.deviceMemory` and the high-performance adapter's `shader-f16`; no adapter
+counts as no f16) for the default only; a stored size is kept whatever the machine. Settings shows the stored size, else
+the default this computer gets, and refuses a size this computer can't hold with `ai/local/ladder.js` `windows` (its `footprint` at that size
 against half of `navigator.deviceMemory`: `memory`, or `no-f16` when only the f16 cache fits); the tier pick is unchanged.
 The engine host opens its session at the selected size when it exceeds the default 16,000 positions; a warm-up uses the
 same size, and changing it releases the earlier session. A status and a

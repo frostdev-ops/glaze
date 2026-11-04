@@ -235,7 +235,7 @@ test('a saved tier no longer offered by the catalog follows Auto through Downloa
   try {
     const st = await B.status({ feature: 'writing' }, e);
     assert.equal(st.ready, true);
-    assert.equal(st.caps.context, 4096);
+    assert.equal(st.caps.context, LOCAL.DEFAULT_WINDOW, 'nothing saved: the default window');
     p.say({ id: 1, op: 'run', feature: 'writing', task: TEXT.id, input: { text: 'Hello' } });
     await settle(80);
     assert.ok(p.posted.some((m) => m.type === 'end'), JSON.stringify(p.posted));

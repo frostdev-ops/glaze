@@ -7,6 +7,8 @@ const LADDER = require('../../extension/ai/local/ladder.js');
 const LOCAL = require('../../extension/ai/providers/local.js');
 const R = require('../../extension/ai/request.js');
 const X = require('../../extension/ai/text.js');
+const T = require('../../extension/ai/task.js');
+const A = require('../../extension/ai/tasks/agent-tools.js');
 
 const Q4 = { id: 'rime-q4', tier: 1, size: 1099627232, tools: 3, memory: 1, state: 'ready' };
 const Q8 = { id: 'rime-q8', tier: 4, size: 1846237920, tools: 3, memory: 1, state: 'ready' };
@@ -21,6 +23,7 @@ const setup = (model, machine) => {
 test.afterEach(() => LOCAL._env(null));
 const FIXED = { ...X, request: (o) => X.request({ ...o, fence: X.fence('DATA-000000000000') }) };
 const req = (id) => ({ ...R.clean(FIXED.request({ system: 'Help the student.', data: [{ label: 'note', text: 'hello' }] })), task: { id, version: 1 } });
+const agentReq = (cfg) => R.clean({ ...T.prepare(A.task, { question: 'What is due this week?', tools: ['run_js'], now: Date.UTC(2026, 10, 3), zone: 'UTC' }, { provider: LOCAL, cfg }), task: { id: 'agent.tools', version: 1 } });
 const runOf = (calls) => calls.filter((c) => c.op === 'run').at(-1).args;
 const window = async (model, machine, raw = {}) => {
   setup(model, machine);
@@ -82,7 +85,7 @@ test('the default plans and runs exactly as a saved 64K', async () => {
       const calls = setup(Q4);
       const cat = await LOCAL.catalog(LOCAL.config(raw));
       const cfg = LOCAL.config({ ...raw, context: cat.models[0].context.window });
-      await LOCAL.run(req(id), cfg, {});
+      try { await LOCAL.run(id === 'agent.tools' ? agentReq(cfg) : req(id), cfg, {}); } catch { /* the payload is what matters */ }
       const run = runOf(calls);
       if (run.think) delete run.think.ms;
       ran.push(run);

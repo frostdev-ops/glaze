@@ -291,8 +291,9 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         pick.disabled = ours.state === 'downloading';
         pick.addEventListener('change', () => setTier(Number(pick.value) || 0));
         parts.push(pick);
-        // The context size: 4K by default to 128K; a size this computer's memory can't hold refused, with why (the ladder's).
-        const size = el('select'), chosen = conns[OWN]?.window || 4096;
+        // The context size, 4K to 128K: the saved one, else the one it runs at (the ladder's default); a size this computer's
+        // memory can't hold refused, with why (the ladder's).
+        const size = el('select'), chosen = conns[OWN]?.window || fit?.default || DEFAULT_WINDOW;
         size.id = 'ai-local-window';
         size.setAttribute('aria-label', t('Context size'));
         const why = Object.fromEntries((fit?.windows || []).map((w) => [w.size, w.refused]));
@@ -302,7 +303,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
           size.append(o);
         }
         size.disabled = ours.state === 'downloading';
-        size.addEventListener('change', () => setWindow(Number(size.value) || 4096));
+        size.addEventListener('change', () => setWindow(Number(size.value) || DEFAULT_WINDOW));
         parts.push(size);
         if (!fit || fit.size !== ours.size) measure(ours.size);
         const label = el('label', 'ai-outline'), box = el('input');
@@ -731,8 +732,9 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     // Glaze's own model: its status (the connection kept first, as On this device's is), Download from the click, Delete,
     // and the tier Advanced sets (the connection's).
     let fetching = false, fetchingPics = false, localPoll = null, updates = null; // updates: { auto, version?, update? }
-    // The context sizes for the model's size on this computer: { size, windows } (ai/local/ladder.js windows), read once a size.
-    const WINDOWS = [4096, 8192, 16384, 32768, 65536, 131072];
+    // The context sizes for the model's size on this computer: { size, windows, default } (ai/local/ladder.js windows and
+    // defaultWindow), read once a size; DEFAULT_WINDOW until then.
+    const WINDOWS = [4096, 8192, 16384, 32768, 65536, 131072], DEFAULT_WINDOW = 65536;
     let fit = null, measuring = null;
     const ladder = () => globalThis.GZ_AI_LADDER || (measuring ||= new Promise((resolve, reject) => {
       const sc = document.createElement('script');
@@ -746,7 +748,8 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         const adapter = await globalThis.navigator?.gpu?.requestAdapter?.({ powerPreference: 'high-performance' }).catch(() => null);
         if (ours?.size !== bytes) return;
         const f16 = !!adapter?.features?.has?.('shader-f16');
-        const next = { size: bytes, windows: L.windows({ size: bytes }, { f16, deviceMemory: globalThis.navigator?.deviceMemory }) };
+        const machine = { f16, deviceMemory: globalThis.navigator?.deviceMemory };
+        const next = { size: bytes, windows: L.windows({ size: bytes }, machine), default: L.defaultWindow({ size: bytes }, machine) };
         if (JSON.stringify(next) !== JSON.stringify(fit)) { fit = next; render(); }
       } catch { /* no ladder here: every size offered */ }
     };
@@ -816,7 +819,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       busy = true;
       send({ op: 'delete', provider: OWN, part: 'pictures' }).then(localResult).finally(() => { busy = false; });
     };
-    // The local connection: its tier and context size, each kept when the other changes (4K, the default, never stored).
+    // The local connection: its tier and context size, each kept when the other changes (nothing saved: the default).
     let localWriting = null;
     const setLocal = (patch) => {
       const save = async () => {
@@ -825,7 +828,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         // Merge after the previous save has reloaded the connection, so a second choice keeps the first.
         const { tier, window } = { ...conns[OWN], ...patch };
         try {
-          const r = await send({ op: 'set', id: OWN, cfg: { provider: OWN, ...(tier && { tier }), ...(window && window !== 4096 && { window }) } });
+          const r = await send({ op: 'set', id: OWN, cfg: { provider: OWN, ...(tier && { tier }), ...(window && { window }) } });
           if (!r.ok) return say(t('Could not save. Try again.'), true);
           await load();
           await localStatus();

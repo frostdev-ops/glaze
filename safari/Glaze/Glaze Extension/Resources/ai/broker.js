@@ -164,7 +164,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   // The cfg a task runs with on a connection, given its catalog: → { chosen (M().select's), cfg }. Glaze's own model: the
   // window of the text model its catalog chose, which then runs the text requests (weights); a task that only reads pictures
   // plans for the picture model's. Advanced's context replaces the window, but never past that model's own (a Glaze-tuned
-  // model's trained 4,096; a stock one's 16,000, which its caps hold anyway). Throws as select does, or 'pictures'/'assets'.
+  // model's chosen size or 64K default; a stock one's 16,000, which its caps hold anyway). Throws as select does, or 'pictures'/'assets'.
   const sized = (use, list, task) => {
     const pics = task.caps?.images === true;
     const chosen = M().select(use.cfg.model, list, { tools: !!task.tools, images: pics });

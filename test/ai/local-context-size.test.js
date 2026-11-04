@@ -1,7 +1,8 @@
-// Rime's context size (Settings → AI → Rime, Advanced; docs/ai-harness.md "Glaze's own model"): 4K by default, up to 128K.
+// Rime's context size (Settings → AI → Rime, Advanced; docs/ai-harness.md "Glaze's own model"): 4K to 128K, 64K by default
+// (test/ai/local-default-window.test.js).
 // The ladder refuses a size this computer's memory can't hold (ai/local/ladder.js windows, from footprint); the size the
 // student chose is kept on the local connection, as the tier is, and becomes the tuned model's window and input limit in
-// the catalog and the window each run sends; 4K sends exactly what Glaze sent before the setting.
+// the catalog and the window each run sends; a chosen 4K sends exactly what Glaze sent before the setting.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const LADDER = require('../../extension/ai/local/ladder.js');
@@ -45,25 +46,25 @@ const setup = () => {
 const R = require('../../extension/ai/request.js');
 const req = () => ({ ...R.clean(X.request({ system: 'Copy the text.', data: [{ label: 'note', text: 'hello' }] })), task: { id: 'writer.complete', version: 1 } });
 
-test('the size is kept on the local connection: 8K to 128K, 4K or none the default', () => {
+test('the size is kept on the local connection: 4K to 128K, none the default', () => {
   assert.equal(LOCAL.config({ window: 32768 }).window, 32768);
-  assert.equal(LOCAL.config({ window: 4096 }).window, undefined, '4K is the default, never stored');
+  assert.equal(LOCAL.config({ window: 4096 }).window, 4096, 'a chosen 4K is kept');
   assert.equal(LOCAL.config({}).window, undefined);
   for (const bad of [5000, 262144, '8192', 0]) assert.equal(LOCAL.config({ window: bad }), null, String(bad));
   assert.equal(LOCAL.windowOf(MODEL, { window: 65536 }).window, 65536);
-  assert.deepEqual(LOCAL.windowOf(MODEL, {}), { window: 4096, inputLimit: 4096 });
+  assert.deepEqual(LOCAL.windowOf(MODEL, {}), { window: 65536, inputLimit: 65536 });
   assert.deepEqual(LOCAL.windowOf({ ...MODEL, stock: true }, { window: 65536 }), { window: 131072, inputLimit: 117964 }, 'a stock model keeps its own');
 });
 
 test('the catalog\'s window and input limit follow the size, and caps hold it', async () => {
   setup();
-  for (const size of [8192, 32768, 131072]) {
+  for (const size of [4096, 8192, 32768, 131072]) {
     const cfg = LOCAL.config({ window: size });
     const cat = await LOCAL.catalog(cfg);
     assert.deepEqual(cat.models[0].context, { window: size, inputLimit: size }, String(size));
     assert.equal(LOCAL.caps({ ...cfg, context: size }).context, size);
   }
-  assert.deepEqual((await LOCAL.catalog(LOCAL.config({}))).models[0].context, { window: 4096, inputLimit: 4096 });
+  assert.deepEqual((await LOCAL.catalog(LOCAL.config({}))).models[0].context, { window: 65536, inputLimit: 65536 });
   assert.equal(LOCAL.caps(LOCAL.config({})).context, 131072);
 });
 

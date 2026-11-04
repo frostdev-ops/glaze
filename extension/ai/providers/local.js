@@ -25,17 +25,23 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const AGENT = () => (typeof GZ_AI_TASK_AGENT_TOOLS !== 'undefined' ? GZ_AI_TASK_AGENT_TOOLS : require('../tasks/agent-tools.js'));
   const TASKS = () => (typeof GZ_AI_TASKS !== 'undefined' ? GZ_AI_TASKS : require('../task.js'));
   const SCHEMA = () => (typeof GZ_AI_SCHEMA !== 'undefined' ? GZ_AI_SCHEMA : require('../schema.js'));
+  const LADDER = () => (typeof GZ_AI_LADDER !== 'undefined' ? GZ_AI_LADDER : require('../local/ladder.js'));
   const MODEL = 'glaze-local', NAME = 'Rime';
   // A stock model's window; TUNED, a Glaze-tuned model's (no `stock`): the one its training data was planned for
   // (glaze-plans/lfm-tune FORMAT.md, caps.context 4096), which a request then plans for exactly.
   const CONTEXT = 131072, TUNED = 4096, MAX_TOKENS = 1024;
   const ID = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-  // A tuned model's window is the context size Settings' Advanced keeps on the connection (cfg.window: WINDOWS), else TUNED.
-  const WINDOWS = Object.freeze([8192, 16384, 32768, 65536, 131072]);
-  const windowOf = (m, cfg = {}) => (m && !m.stock ? { window: cfg.window || TUNED, inputLimit: cfg.window || TUNED } : { window: CONTEXT, inputLimit: Math.floor(CONTEXT * 0.9) });
+  // A tuned model's window is the context size Settings' Advanced keeps on the connection (cfg.window: TUNED or WINDOWS),
+  // else DEFAULT_WINDOW, stepped down to the largest size the ladder admits for it on this computer (fit: machine()'s).
+  const WINDOWS = Object.freeze([8192, 16384, 32768, 65536, 131072]), DEFAULT_WINDOW = LADDER().DEFAULT_WINDOW;
+  const windowOf = (m, cfg = {}, fit) => {
+    if (!m || m.stock) return { window: CONTEXT, inputLimit: Math.floor(CONTEXT * 0.9) };
+    const window = cfg.window || (fit ? LADDER().defaultWindow(m, fit) : DEFAULT_WINDOW);
+    return { window, inputLimit: window };
+  };
   // Admission has the catalog's trusted stock marker, while inference also checks the actual model. A context
   // override can narrow the selected window, but cannot enlarge it; stock models retain their own window.
-  const profileWindow = (window, cfg = {}) => Math.min(window, cfg.context || window, cfg.reasoning === false ? CONTEXT : cfg.window || TUNED);
+  const profileWindow = (window, cfg = {}) => Math.min(window, cfg.context || window, cfg.reasoning === false ? CONTEXT : cfg.window || DEFAULT_WINDOW);
   const LIMIT = { prepare: 240000, reasoning: 300000 };
   // Tokens a task's request may reason in before its answer; 0 answers directly. A task with calls (its requests'
   // task.call, ai/task.js ask) has a row per call, and a request without one answers directly. Each row is D4's p3dpo,
@@ -110,6 +116,15 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
       keep: () => (globalThis.browser?.runtime || globalThis.chrome?.runtime).getPlatformInfo() }),
     gpu: () => globalThis.navigator?.gpu || null,
   });
+  // What the ladder's windows() reads of this computer, once: { deviceMemory, f16 } (the high-performance adapter's, as
+  // Settings asks; no adapter here counts as no shader-f16, the smaller default).
+  let machined = null;
+  const machine = () => machined || (machined = (async () => {
+    if (env?.machine) return env.machine();
+    const adapter = await Promise.resolve(own().gpu()?.requestAdapter?.({ powerPreference: 'high-performance' })).catch(() => null);
+    return { deviceMemory: globalThis.navigator?.deviceMemory, f16: !!adapter?.features?.has?.('shader-f16') };
+  })().catch(() => ({ f16: false })));
+  const fitFor = async (m, cfg) => (m && !m.stock && !cfg.window ? machine() : undefined);
   // A port from the host page (background/background.js has checked its sender).
   const accept = (port) => own().link.accept(port);
 
@@ -124,7 +139,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (raw.images !== undefined && typeof raw.images !== 'boolean') return null;
     if (raw.weights !== undefined && !(typeof raw.weights === 'string' && ID.test(raw.weights))) return null;
     if (raw.generation !== undefined && (typeof raw.generation !== 'string' || !/^[\w-]{1,64}$/.test(raw.generation))) return null;
-    return { model: MODEL, ...(raw.effort !== undefined && { effort: raw.effort }), ...(raw.reasoning !== undefined && { reasoning: raw.reasoning }), ...(raw.tier && { tier: raw.tier }), ...(raw.context && { context: raw.context }), ...(raw.images !== undefined && { images: raw.images }), ...(raw.weights && { weights: raw.weights }), ...(raw.generation && { generation: raw.generation }), ...(WINDOWS.includes(raw.window) && { window: raw.window }) };
+    return { model: MODEL, ...(raw.effort !== undefined && { effort: raw.effort }), ...(raw.reasoning !== undefined && { reasoning: raw.reasoning }), ...(raw.tier && { tier: raw.tier }), ...(raw.context && { context: raw.context }), ...(raw.images !== undefined && { images: raw.images }), ...(raw.weights && { weights: raw.weights }), ...(raw.generation && { generation: raw.generation }), ...(raw.window !== undefined && { window: raw.window }) };
   };
   const caps = (cfg) => ({ text: true, json: true, stream: true, tools: false, images: cfg.images === true, local: true, context: Math.min(cfg.context || CONTEXT, Math.max(CONTEXT, cfg.window || 0)) });
 
@@ -273,7 +288,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     const m = modelOf(list, cfg);
     if (!m || m.state !== 'ready') throw fail('provider-unavailable', 'assets');
     const memory = memoryReady(req, m);
-    const window = Math.min(cfg.context || windowOf(m, cfg).window, windowOf(m, cfg).window);
+    const tuned = windowOf(m, cfg, await fitFor(m, cfg)).window, window = Math.min(cfg.context || tuned, tuned);
     const reasoning = await budget(req, m, window, cfg), think = reasoning.budget, sized = !m.stock && limits(req.task, window, { selected: m }).size;
     // r5 and R8 never trained chat.compact's task token: the native prompt unless the model's scale enables it.
     const native = m.stock || (req.task?.id === 'chat.compact' && scaleFor(m).compact !== true);
@@ -351,7 +366,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     let list = [];
     try { list = await models(); } catch { /* none */ }
     const m = choose(list, cfg), pics = pictures(list), vision = !preparing.pictures && !!pics?.ready;
-    return { models: [{ id: MODEL, name: NAME, json: true, tools: false, vision, context: windowOf(m, cfg), ...(m && { weights: m.id, reasoning: !m.stock }),
+    return { models: [{ id: MODEL, name: NAME, json: true, tools: false, vision, context: windowOf(m, cfg, await fitFor(m, cfg)), ...(m && { weights: m.id, reasoning: !m.stock }),
       ...(vision && { pictures: { context: windowOf(pics.model) } }) }], source: 'live', at: Date.now() };
   };
   // A connection changed: the host lets the model go (it loads again at the next run). Starts no host.
@@ -369,9 +384,9 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
 
   // The engine host's link, for the background model updates (ai/local/updates.js check).
   const link = () => own().link;
-  const provider = { id: 'local', config, caps, status, prepare, run, warm, count, catalog, release, remove, accept, levelOf, toolsLevel, memoryOf, memoryVersion, scaleOf, scaleVersion, link, windowOf, WINDOWS, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
+  const provider = { id: 'local', config, caps, status, prepare, run, warm, count, catalog, release, remove, accept, levelOf, toolsLevel, memoryOf, memoryVersion, scaleOf, scaleVersion, link, windowOf, WINDOWS, DEFAULT_WINDOW, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
     THINK_SIZED, ANSWER, SCALE, SCALED, limits, adaptive, profileWindow, CLOSE,
-    _env: (e) => { env = e; listed = []; listing++; preparing.text = preparing.pictures = null; broken = null; rates = null; measured.clear(); } };
+    _env: (e) => { env = e; listed = []; listing++; preparing.text = preparing.pictures = null; broken = null; rates = null; machined = null; measured.clear(); } };
   return P.add(provider);
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_LOCAL; else GZ_AI_LOCAL;

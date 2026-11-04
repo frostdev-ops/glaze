@@ -49,7 +49,8 @@ const setup = (here, answers = []) => {
   return { runs, seen, done: () => { T.run = plain; LOCAL._env(null); } };
 };
 const env = (more = {}) => {
-  const vault = new Map([['connections', { local: { provider: 'local', generation: 'gen-1' } }]]), data = {};
+  // The 4K training window, chosen: the default is 64K (test/ai/local-default-window.test.js).
+  const vault = new Map([['connections', { local: { provider: 'local', window: 4096, generation: 'gen-1' } }]]), data = {};
   return { who: '7', allowed: Promise.resolve(true), local: { get: async (k) => ({ [k]: data[k] }), set: async (v) => { Object.assign(data, v); return true; } },
     settings: async () => ({ on: true, model: { use: 'local', model: '' }, features: { writing: true, syllabus: true }, ...more }), enabled: async () => true,
     vault: { get: async (k) => structuredClone(vault.get(k)), set: async (k, v) => { vault.set(k, structuredClone(v)); return true; }, remove: async (k) => vault.delete(k) },

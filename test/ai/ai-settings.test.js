@@ -1003,7 +1003,8 @@ test('Rime\'s context size in Advanced: 64K by default, stepped down to what thi
   const tier = p.$('ai-local-tier');
   tier.value = '1'; p.fire(tier, 'change'); await settle();
   assert.deepEqual(sent.filter((m) => m.op === 'set').at(-1).cfg, { provider: 'local', tier: 1, window: 8192 }, 'the size stays');
-  pick.value = '4096'; p.fire(p.$('ai-local-window'), 'change'); await settle();
+  const now = p.$('ai-local-window');
+  now.value = '4096'; p.fire(now, 'change'); await settle();
   assert.deepEqual(sent.filter((m) => m.op === 'set').at(-1).cfg, { provider: 'local', tier: 1, window: 4096 }, '4K is kept once chosen');
   assert.deepEqual(p.$('ai-local-window').children.filter((o) => o.selected).map((o) => o.value), ['4096']);
 });

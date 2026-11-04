@@ -30,8 +30,9 @@ var GZ_AI_LADDER = globalThis.GZ_AI_LADDER || (() => {
   // Rime 1.7B, LFM3-1.7B's shape (C0 §6), and the engine's default session (C3's createSession: ctx 4096, chunk 128).
   const SHAPE = { vocab: 128000, embed: 2048, ffn: 7680, heads: 16, kvWidth: 4 * 128, headDim: 128, full: 6, sliding: 5, window: 256 };
   const CTX = 4096, CHUNK = 128;
-  // The context sizes Settings offers for a tuned model (Advanced, ai/providers/local.js window): 4K, the default, to 128K.
-  const WINDOWS = Object.freeze([4096, 8192, 16384, 32768, 65536, 131072]);
+  // The context sizes Settings offers for a tuned model (Advanced, ai/providers/local.js window): 4K to 128K. DEFAULT_WINDOW:
+  // the one it runs at with none saved (owner, 2026-11-04: "Make 64k default").
+  const WINDOWS = Object.freeze([4096, 8192, 16384, 32768, 65536, 131072]), DEFAULT_WINDOW = 65536;
   // Least squares over the four C3 speeds, with the C7 bench medians (M5 Pro 175.5 GB/s, 1.2 ms; RTX 3080 Ti 410.4 GB/s,
   // 2.5 ms): predicted 113 / 76 (M5 Pro) and 126 / 102 tok/s (3080 Ti), within 10% of the measured.
   const K_OVER = 2.08, K_BW = 0.985;
@@ -57,6 +58,9 @@ var GZ_AI_LADDER = globalThis.GZ_AI_LADDER || (() => {
       return { size, refused: !f16 && footprint(model, { f16: true, ctx: size }) <= budget ? 'no-f16' : 'memory' };
     });
   };
+
+  // The size `model` runs at with none saved: DEFAULT_WINDOW, else the largest smaller size windows() admits, else 4K.
+  const defaultWindow = (model, opts) => Math.max(WINDOWS[0], ...windows(model, opts).filter((w) => !w.refused && w.size <= DEFAULT_WINDOW).map((w) => w.size));
 
   // Estimated decode tokens a second for a quant, from a bench result.
   const decodeSpeed = (model, bench) => {
@@ -225,6 +229,6 @@ var GZ_AI_LADDER = globalThis.GZ_AI_LADDER || (() => {
     return out;
   };
 
-  return { MIN_TPS, HEADROOM, CTX, CHUNK, WINDOWS, need, footprint, windows, decodeSpeed, pick, bench, probe };
+  return { MIN_TPS, HEADROOM, CTX, CHUNK, WINDOWS, DEFAULT_WINDOW, need, footprint, windows, defaultWindow, decodeSpeed, pick, bench, probe };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_LADDER; else GZ_AI_LADDER;

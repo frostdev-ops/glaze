@@ -206,11 +206,11 @@ test('Firefox\'s event page loads every file of the harness the worker would imp
   // tools/build/package-firefox.sh: the files named in the worker's importScripts calls, as it reads them.
   const bg = fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8');
   const named = new Set([...bg.matchAll(/importScripts\(([^)]*)\)/g)].flatMap(([, a]) => [...a.matchAll(/'([^']+)'/g)].map(([, f]) => path.posix.normalize(`background/${f}`))));
-  // Glaze's own model: the worker loads its provider, the store (status), the formatter and the link to the engine host;
-  // the host (ai/local/host.js, a Worker of Chrome's offscreen document or of Firefox's event page) loads the engine's
-  // files itself, and the worker never does.
-  const host = ['local/host.js', 'local/offscreen.js', 'local/tokenizer.js', 'local/gguf.js', 'local/quant.js', 'local/reference.js', 'local/engine.js', 'local/grammar.js', 'local/ladder.js', 'local/vision-reference.js', 'local/vision.js'];
-  for (const f of ['ai/local/store.js', 'ai/local/format.js', 'ai/local/link.js', 'ai/providers/local.js']) assert.ok(named.has(f), f);
+  // Glaze's own model: the worker loads its provider, the store (status), the formatter, the link to the engine host and
+  // the ladder (the default context size this computer holds); the host (ai/local/host.js, a Worker of Chrome's offscreen
+  // document or of Firefox's event page) loads the engine's files itself, and the worker never does.
+  const host = ['local/host.js', 'local/offscreen.js', 'local/tokenizer.js', 'local/gguf.js', 'local/quant.js', 'local/reference.js', 'local/engine.js', 'local/grammar.js', 'local/vision-reference.js', 'local/vision.js'];
+  for (const f of ['ai/local/store.js', 'ai/local/format.js', 'ai/local/link.js', 'ai/local/ladder.js', 'ai/providers/local.js']) assert.ok(named.has(f), f);
   // Ask Rime runs study.help and agent.tools (ai/ask.js): the worker loads them with the harness. Its panel (ai/page/) runs
   // on the school's page, loaded on demand (background/background.js LOADABLE), never in the worker.
   for (const f of ['tasks/study-help.js', 'tasks/agent-tools.js', 'tasks/wording.js', 'ask.js']) assert.ok(named.has(`ai/${f}`), `${f} is the worker's`);

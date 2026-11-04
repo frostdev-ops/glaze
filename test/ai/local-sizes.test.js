@@ -123,7 +123,8 @@ test('adaptive reasoning grows independently of the size switches, with explicit
   assert.equal(LOCAL.SCALE.token, false);
   assert.equal(LOCAL.SCALE.answer, false);
   assert.equal(LOCAL.profileWindow(16000, { context: 16000, window: 8192 }), 8192);
-  assert.equal(LOCAL.profileWindow(16000, { context: 16000 }), 4096);
+  assert.equal(LOCAL.profileWindow(16000, { context: 16000 }), 16000, 'nothing saved: the 64K default, narrowed by the context');
+  assert.equal(LOCAL.profileWindow(131072, {}), LOCAL.DEFAULT_WINDOW);
   assert.equal(LOCAL.profileWindow(16000, { context: 16000, window: 8192, reasoning: false }), 16000);
   assert.equal(T.reserved(LOCAL, agentReq(A.task.input(raw())), 16000, { context: 16000, window: 4096 }, 100), 768, 'admission keeps the selected direct window and its direct prelude');
   assert.equal(T.reserved(LOCAL, agentReq(A.task.input(raw())), 16000, { context: 16000, window: 8192 }, 100), 768 + 2048 + 2, 'context cannot enlarge the selected adaptive profile');
@@ -154,7 +155,8 @@ const setup = (scale) => {
   return runs;
 };
 test.afterEach(() => LOCAL._env(null));
-const agentRun = (weights) => T.run(A.task, raw(), { provider: LOCAL, cfg: { model: 'glaze-local', weights } });
+// The 4K profile, chosen: the default is 64K (test/ai/local-default-window.test.js).
+const agentRun = (weights) => T.run(A.task, raw(), { provider: LOCAL, cfg: { model: 'glaze-local', weights, window: LOCAL.TUNED } });
 
 test('as shipped, the provider sends Rime r5\'s requests unchanged: no size token, direct, the task\'s maxTokens', async () => {
   const runs = setup(null);

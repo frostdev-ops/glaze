@@ -27,7 +27,8 @@ const setup = ({ reply, rate = 100, think = THINKS } = {}) => {
   LOCAL._env({ store: { list: async () => MODELS }, link, gpu: () => ({}), session, think });
   return runs;
 };
-const run = (weights, input = raw()) => T.run(A.task, input, { provider: LOCAL, cfg: { model: 'glaze-local', weights } });
+// The 4K profile, chosen: the default is 64K (test/ai/local-default-window.test.js).
+const run = (weights, input = raw()) => T.run(A.task, input, { provider: LOCAL, cfg: { model: 'glaze-local', weights, window: LOCAL.TUNED } });
 
 test('a tuned model: the task\'s turns, the answer or one offered call, the table\'s budget; a native call comes back as the task\'s JSON', async () => {
   const runs = setup({ reply: A.native.text({ name: 'todo_list', arguments: { days: 7 } }) });

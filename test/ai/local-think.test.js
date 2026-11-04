@@ -120,13 +120,15 @@ const REVIEW = task('writer.review'), REQS = task('writer.requirements');
 const request = (t, input) => ({ ...T.prepare(t, input, { provider: LOCAL, cfg: {} }), task: { id: t.id, version: t.version } });
 const settle = async (n = 40) => { for (let i = 0; i < n; i++) await new Promise(setImmediate); };
 const FAST = { 'glaze-q4': 100, 'glaze-q8': 100 };
+// The 4K profile these fixtures pin, chosen: the default is 64K (test/ai/local-default-window.test.js).
+const K4 = Object.freeze({ window: LOCAL.TUNED });
 const fed = (s) => TOK.decode(s.eng.log.prefills.flat(), { specials: true });
 test.afterEach(() => LOCAL._env(null));
 
 test('think mode: the prompt ends <think>\\n, the model reasons until its own </think>, and the answer follows with nothing fed between', async () => {
   const s = setup({ rates: FAST, closes: 12 });
   const deltas = [];
-  const r = await P.run('local', request(REVIEW, { text: 'the the cat' }), LOCAL.config({}), { onDelta: (d) => deltas.push(d) });
+  const r = await P.run('local', request(REVIEW, { text: 'the the cat' }), LOCAL.config(K4), { onDelta: (d) => deltas.push(d) });
   assert.deepEqual(r.json, { text: 'hello there' });
   assert.ok(fed(s).endsWith('<|im_start|>assistant\n<think>\n'), fed(s).slice(-60));
   assert.deepEqual(s.runs[0].think, { budget: MACHINERY['writer.review'], close: [{ text: '\n' }, { special: '</think>' }], after: [] });
@@ -141,7 +143,7 @@ test('think mode: the prompt ends <think>\\n, the model reasons until its own </
 
 test('at the budget the host writes \\n</think> itself and the model answers after it', async () => {
   const s = setup({ rates: FAST });
-  const r = await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({}));
+  const r = await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config(K4));
   assert.deepEqual(r.json, { text: 'hello there' });
   const think = s.eng.log.decodes.filter((d) => d.phase === 'think');
   assert.equal(think.length, 256, 'the budget, then no more reasoning');
@@ -149,12 +151,12 @@ test('at the budget the host writes \\n</think> itself and the model answers aft
   assert.deepEqual(s.eng.log.prefills.at(-1), [...ID.nl, ID.thought], 'the force-close: a line break, then </think>');
   // A large maxTokens no longer starves the reasoning: the answer gives way to it.
   const t = setup({ rates: FAST });
-  await P.run('local', request(REVIEW, { text: 'y', maxTokens: 3400 }), LOCAL.config({}));
+  await P.run('local', request(REVIEW, { text: 'y', maxTokens: 3400 }), LOCAL.config(K4));
   assert.equal(t.eng.log.decodes.filter((d) => d.phase === 'think').length, 256);
   // A prompt near the window leaves the reasoning less: it gives way only where the answer would get under H.LIMIT.answer.
   const close = ID.nl.length + 1, overhead = t.eng.log.prefills[0].length + t.eng.log.prefills[1].length - 1;
   const u = setup({ rates: FAST });
-  await P.run('local', request(REVIEW, { text: 'y'.repeat(LOCAL.TUNED - close - H.LIMIT.answer - 100 - overhead) }), LOCAL.config({}));
+  await P.run('local', request(REVIEW, { text: 'y'.repeat(LOCAL.TUNED - close - H.LIMIT.answer - 100 - overhead) }), LOCAL.config(K4));
   assert.equal(u.eng.log.prefills[0].length + u.eng.log.prefills[1].length, LOCAL.TUNED - close - H.LIMIT.answer - 100);
   assert.equal(u.eng.log.decodes.filter((d) => d.phase === 'think').length, 100);
 });
@@ -166,7 +168,7 @@ test('a request asking the whole window (writer.review\'s 4,096) thinks at its b
   const real = RV.task.build(RV.task.input({ text: 'The the cat sat on the mat. It were happy.', context: {} }), { text: X, caps: LOCAL.caps({}) });
   assert.equal(real.maxTokens, 4096);
   const s = setup({ rates: FAST, reply: '{"issues":[]}' });
-  const r = await P.run('local', { ...real, schema: RV.OUTPUT, task: { id: 'writer.review', version: RV.task.version } }, LOCAL.config({}));
+  const r = await P.run('local', { ...real, schema: RV.OUTPUT, task: { id: 'writer.review', version: RV.task.version } }, LOCAL.config(K4));
   assert.deepEqual(r.json, { issues: [] });
   assert.equal(s.runs[0].think.budget, 256);
   assert.equal(s.runs[0].window, LOCAL.TUNED);
@@ -176,7 +178,7 @@ test('a request asking the whole window (writer.review\'s 4,096) thinks at its b
     build: (input, { text }) => text.request({ system: 'Answer.', data: [{ label: 'text', text: input.text }], maxTokens: 4096 }) });
   for (const text of ['x', 'x'.repeat(2500)]) {
     const t = setup({ rates: FAST, reply: 'a'.repeat(5000) });
-    const out = await P.run('local', request(LONG, { text }), LOCAL.config({}));
+    const out = await P.run('local', request(LONG, { text }), LOCAL.config(K4));
     const fed = t.eng.log.prefills.flat().length, thought = t.eng.log.decodes.filter((d) => d.phase === 'think').length;
     assert.equal(thought, 256);
     assert.equal(out.finish, 'length');
@@ -184,7 +186,7 @@ test('a request asking the whole window (writer.review\'s 4,096) thinks at its b
   }
   // A stock model has no trained window to share: its answer keeps the whole maxTokens.
   const st = setup({ here: { 'lfm3-q4': 'ready' }, rates: FAST, reply: 'a'.repeat(5000) });
-  await P.run('local', request(LONG, { text: 'x' }), LOCAL.config({}));
+  await P.run('local', request(LONG, { text: 'x' }), LOCAL.config(K4));
   assert.equal(st.eng.log.decodes.length, 4096);
 });
 
@@ -197,7 +199,7 @@ test('think mode holds the forced close inside the engine\'s room before any pre
   // An engine room smaller than the trained window: a close that would pass it is refused, the model untouched.
   for (const maxTokens of [1024 - prompt + 1, 1024 - prompt - close + 1]) {
     const s = setup({ rates: FAST, context: 1024 });
-    await assert.rejects(P.run('local', { ...req, maxTokens }, LOCAL.config({})),
+    await assert.rejects(P.run('local', { ...req, maxTokens }, LOCAL.config(K4)),
       (e) => e.code === 'request-rejected' && e.reason === 'context' && e.context === 1024);
     assert.equal(s.eng.log.prefills.length, 0, 'an oversized run never mutates the model');
     assert.equal(s.eng.log.decodes.length, 0);
@@ -205,14 +207,14 @@ test('think mode holds the forced close inside the engine\'s room before any pre
   // A maxTokens that fills the window: the reasoning keeps its budget, and the answer gives way to it.
   for (const context of [16000, 1024]) {
     const window = Math.min(context, LOCAL.TUNED), s = setup({ rates: FAST, context, reply: `{"text":"${'a'.repeat(5000)}` }), maxTokens = window - prompt - close;
-    await assert.rejects(P.run('local', { ...req, maxTokens }, LOCAL.config({})));
+    await assert.rejects(P.run('local', { ...req, maxTokens }, LOCAL.config(K4)));
     assert.equal(s.eng.log.decodes.filter((d) => d.phase === 'think').length, Math.min(256, maxTokens - H.LIMIT.answer), `${context}`);
     assert.deepEqual(s.eng.log.prefills.at(-1), [...ID.nl, ID.thought]);
     assert.equal(s.eng.log.prefills.flat().length + s.eng.log.decodes.length, window, 'the answer cut where the window ends');
   }
   // A request planned up to the trained window still runs in think mode, the close inside it.
   const s = setup({ rates: FAST });
-  assert.deepEqual((await P.run('local', { ...req, maxTokens: LOCAL.TUNED - prompt }, LOCAL.config({}))).json, { text: 'hello there' });
+  assert.deepEqual((await P.run('local', { ...req, maxTokens: LOCAL.TUNED - prompt }, LOCAL.config(K4))).json, { text: 'hello there' });
   assert.equal(s.eng.log.decodes.filter((d) => d.phase === 'think').length, 256);
 });
 
@@ -223,7 +225,7 @@ test('switched on, the 4k think budget and answer reserve are capped by the room
     build: (input, { text }) => text.request({ system: 'Answer.', data: [{ label: 'text', text: input.text }] }) }), all = (v) => ({ '4k': v, '8k': v, '16k': v, '32k': v, '64k': v, '128k': v });
   const scale = { token: true, answer: true, think: { 'agent.tools': all(true), 'study.help': all(true) } };
   const short = setup({ rates: FAST, scale, reply: 'a'.repeat(5000) });
-  await P.run('local', request(HELP, { text: 'x' }), LOCAL.config({}));
+  await P.run('local', request(HELP, { text: 'x' }), LOCAL.config(K4));
   assert.equal(short.runs[0].think.budget, 128);
   assert.equal(short.runs[0].maxTokens, 512);
   assert.ok(fed(short).includes('<|gz_task:study.help|><|gz_ctx:4k|>'));
@@ -233,7 +235,7 @@ test('switched on, the 4k think budget and answer reserve are capped by the room
   // H.LIMIT.answer left, no reasoning, and the answer runs as planned in the engine's room (host.js).
   for (const n of [3300, 3420, 3500]) {
     const s = setup({ rates: FAST, scale, reply: 'a'.repeat(5000) });
-    await P.run('local', request(HELP, { text: 'x'.repeat(n) }), LOCAL.config({}));
+    await P.run('local', request(HELP, { text: 'x'.repeat(n) }), LOCAL.config(K4));
     const input = s.eng.log.prefills.slice(0, -1).flat().length, close = ID.nl.length + 1;
     const thought = s.eng.log.decodes.filter((d) => d.phase === 'think').length, answer = s.eng.log.decodes.length - thought;
     const space = LOCAL.TUNED - input - close, floor = Math.min(512, H.LIMIT.answer);
@@ -263,23 +265,23 @@ test('the speed gate keeps measured versus estimated rates across worker restart
   // A measured rate is smoothed with the next measurement, even after the worker restarts.
   let ms = 10;
   const s = setup({ rates: null, ms: () => ms });
-  await P.run('local', request(REQS, { text: 'x' }), LOCAL.config({}));
+  await P.run('local', request(REQS, { text: 'x' }), LOCAL.config(K4));
   assert.equal(s.saved.at(-1).aiLocalRates['glaze-q4'], 100);
   LOCAL._env(s.env);
   ms = 50;
-  await P.run('local', request(REQS, { text: 'x' }), LOCAL.config({}));
+  await P.run('local', request(REQS, { text: 'x' }), LOCAL.config(K4));
   assert.equal(s.saved.at(-1).aiLocalRates['glaze-q4'], 60, 'the saved measurement still participates in smoothing');
-  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({}));
+  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config(K4));
   assert.ok(s.runs.at(-1).think, 'one slow sample does not discard the earlier measured speed');
 
   // A saved ladder estimate is replaced outright by the first real measurement after a restart.
   const t = setup({ here: {}, rates: null, ladder: { probe: async () => ({ adapter: {} }),
     pick: ({ models }) => ({ id: models[0].id, quants: [{ id: models[0].id, tps: 120 }] }) }, ms: 50 });
-  await LOCAL.prepare(LOCAL.config({}));
+  await LOCAL.prepare(LOCAL.config(K4));
   LOCAL._env(t.env);
-  await P.run('local', request(REQS, { text: 'x' }), LOCAL.config({}));
+  await P.run('local', request(REQS, { text: 'x' }), LOCAL.config(K4));
   assert.equal(t.saved.at(-1).aiLocalRates['glaze-q4'], 20, 'a ladder estimate is not an earlier measurement');
-  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({}));
+  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config(K4));
   assert.equal(t.runs.at(-1).think, undefined);
 });
 
@@ -288,7 +290,7 @@ test('the grammar masks the answer only: the reasoning is free text and </think>
   const grammar = { vocab: (bytes) => ({ n: bytes.length }), compile: (schema, V) => ({ matcher: () => ({
     mask: () => { const m = new Uint32Array(Math.ceil(V.n / 32)).fill(0xffffffff); masks.push(m); return m; }, advance: (id) => advanced.push(id), complete: false, done: false }) }) };
   const s = setup({ rates: FAST, closes: 5, grammar });
-  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({}));
+  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config(K4));
   const think = s.eng.log.decodes.filter((d) => d.phase === 'think'), answer = s.eng.log.decodes.filter((d) => d.phase === 'answer');
   assert.ok(think.every((d) => d.mask && !masks.includes(d.mask)), 'reasoning tokens are not the grammar\'s');
   assert.ok(answer.every((d) => masks.includes(d.mask)), 'every answer token is');
@@ -303,7 +305,7 @@ test('the reasoning never reaches a delta, a host message or the result', async 
   for (const closes of [7, null]) {
     const s = setup({ rates: FAST, closes, reply: '{"text":"fine"}' });
     const deltas = [];
-    const r = await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({}), { onDelta: (d) => deltas.push(d) });
+    const r = await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config(K4), { onDelta: (d) => deltas.push(d) });
     assert.equal(deltas.join(''), '{"text":"fine"}');
     assert.equal(r.text, '{"text":"fine"}');
     const words = JSON.stringify(s.posted);
@@ -317,7 +319,7 @@ test('a cancel ends the reasoning or the answer: nothing after it, and the next 
     const gate = (signal, n, phase) => (phase === at && !release && (at === 'think' ? n === 4 : true) ? new Promise((r) => { release = r; signal?.addEventListener('abort', r); }) : null);
     const s = setup({ rates: FAST, closes: 8, gate, reply: '{"text":"a long answer"}' });
     const c = new AbortController(), deltas = [];
-    const run = P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({}), { signal: c.signal, onDelta: (d) => deltas.push(d) });
+    const run = P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config(K4), { signal: c.signal, onDelta: (d) => deltas.push(d) });
     await settle();
     assert.equal(typeof release, 'function', at);
     const n = s.eng.log.decodes.length, before = deltas.length;
@@ -328,7 +330,7 @@ test('a cancel ends the reasoning or the answer: nothing after it, and the next 
     assert.equal(deltas.length, before, `${at}: no delta after the cancel`);
     if (at === 'think') assert.equal(deltas.length, 0);
     assert.ok(s.posted.some((m) => m.type === 'error' && m.error.category === 'cancelled'));
-    assert.equal((await P.run('local', request(REQS, { text: 'x' }), LOCAL.config({}))).finish, 'stop');
+    assert.equal((await P.run('local', request(REQS, { text: 'x' }), LOCAL.config(K4))).finish, 'stop');
   }
 });
 
@@ -336,35 +338,35 @@ test('the policy: a task the table names thinks on a fast enough tier; other tas
   const mode = (s) => (s.runs.at(-1).think ? 'think' : 'direct');
   // Per task.
   let s = setup({ rates: FAST });
-  await P.run('local', request(REQS, { text: 'x' }), LOCAL.config({}));
+  await P.run('local', request(REQS, { text: 'x' }), LOCAL.config(K4));
   assert.equal(mode(s), 'direct');
   assert.ok(fed(s).endsWith('<|im_start|>assistant\n<think></think>'), 'direct: LFM3\'s empty think block');
-  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({}));
+  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config(K4));
   assert.equal(mode(s), 'think');
   // Per tier: the slower tier's own rate.
   s = setup({ rates: { 'glaze-q4': 100, 'glaze-q8': LOCAL.THINK_TPS - 1 } });
-  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({ tier: 1 }));
+  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({ ...K4, tier: 1 }));
   assert.equal(mode(s), 'think');
-  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({ tier: 2 }));
+  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({ ...K4, tier: 2 }));
   assert.equal(mode(s), 'direct');
   // Unmeasured: direct; the run's measure (100 tokens a second) is kept, in storage.session too, and the next run thinks.
   s = setup({ rates: null });
-  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({ tier: 1 }));
+  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({ ...K4, tier: 1 }));
   assert.equal(mode(s), 'direct');
   assert.equal(s.saved.at(-1).aiLocalRates['glaze-q4'], 100);
-  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({ tier: 1 }));
+  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({ ...K4, tier: 1 }));
   assert.equal(mode(s), 'think');
   // A slow computer's measure: direct from then on.
   s = setup({ rates: null, ms: 100 });
-  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({ tier: 1 }));
+  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({ ...K4, tier: 1 }));
   assert.equal(s.saved.at(-1).aiLocalRates['glaze-q4'], 10);
-  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({ tier: 1 }));
+  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({ ...K4, tier: 1 }));
   assert.equal(mode(s), 'direct');
   // The ladder's estimate at download stands until a run measures.
   s = setup({ here: {}, rates: null, ladder: { probe: async () => ({ adapter: {} }), pick: ({ models }) => ({ id: models[0].id, reason: 'fastest', quants: [{ id: models[0].id, tps: 120 }] }) } });
-  assert.equal((await LOCAL.prepare(LOCAL.config({}))).state, 'ready');
+  assert.equal((await LOCAL.prepare(LOCAL.config(K4))).state, 'ready');
   assert.deepEqual(s.saved.at(-1).aiLocalRates, { 'glaze-q4': 120 });
-  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({}));
+  await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config(K4));
   assert.equal(mode(s), 'think');
 });
 
@@ -373,7 +375,7 @@ test('the 4K direct profile stays intact; larger selected windows reason with un
   const s = setup({ rates: FAST, think: null });
   const asked = async (t, call) => {
     const req = request(t, { text: 'x' });
-    await P.run('local', { ...req, task: { ...req.task, ...(call && { call }) } }, LOCAL.config({}));
+    await P.run('local', { ...req, task: { ...req.task, ...(call && { call }) } }, LOCAL.config(K4));
     return s.runs.at(-1).think ? 'think' : 'direct';
   };
   for (const call of ['decide', 'explain', 'summary', 'scan', undefined, 'constructor']) assert.equal(await asked(FEEDBACK, call), 'direct', String(call));
@@ -431,7 +433,7 @@ test('a per-call table thinks per call: a call with a budget thinks, another cal
   const s = setup({ rates: FAST, think: { ...LOCAL.THINK, 'writer.feedback': { decide: 256, explain: 0, summary: 0, scan: 0 } } });
   const asked = async (call) => {
     const req = request(FEEDBACK, { text: 'x' });
-    await P.run('local', { ...req, task: { ...req.task, ...(call && { call }) } }, LOCAL.config({}));
+    await P.run('local', { ...req, task: { ...req.task, ...(call && { call }) } }, LOCAL.config(K4));
     return s.runs.at(-1).think ? s.runs.at(-1).think.budget : 0;
   };
   assert.equal(await asked('decide'), 256);
@@ -440,7 +442,7 @@ test('a per-call table thinks per call: a call with a budget thinks, another cal
 
 test('a stock model never thinks: its own template\'s <think></think>, however fast', async () => {
   const s = setup({ here: { 'lfm3-q4': 'ready' }, rates: { 'lfm3-q4': 500 }, reply: '{"text":"ok"}' });
-  const r = await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config({}));
+  const r = await P.run('local', request(REVIEW, { text: 'x' }), LOCAL.config(K4));
   assert.deepEqual(r.json, { text: 'ok' });
   assert.equal(s.runs[0].think, undefined);
   assert.equal(s.runs[0].window, LOCAL.CONTEXT);
@@ -451,11 +453,11 @@ test('a stock model never thinks: its own template\'s <think></think>, however f
 test('count: the prompt tokens of a request, exactly as the host feeds them (Glaze\'s tokenizer), before it runs', async () => {
   const s = setup({ rates: FAST });
   const req = request(REQS, { text: 'the cat sat on the mat' });
-  const n = await P.count('local', req, LOCAL.config({}));
+  const n = await P.count('local', req, LOCAL.config(K4));
   assert.equal(n.exact, true);
-  await P.run('local', req, LOCAL.config({}));
+  await P.run('local', req, LOCAL.config(K4));
   assert.equal(n.tokens, s.eng.log.prefills.flat().length, 'the same tokens the run prefilled');
-  const longer = await P.count('local', request(REQS, { text: 'the cat sat on the mat '.repeat(20) }), LOCAL.config({}));
+  const longer = await P.count('local', request(REQS, { text: 'the cat sat on the mat '.repeat(20) }), LOCAL.config(K4));
   assert.ok(longer.tokens > n.tokens);
 });
 
@@ -463,12 +465,12 @@ test('counting another model cannot unload a model while it is decoding', async 
   let release, entered;
   const gate = new Promise((r) => { release = r; }), started = new Promise((r) => { entered = r; });
   const s = setup({ rates: FAST, think: null, gate: async (_signal, n) => { if (n === 1) { entered(); await gate; } } });
-  const run = P.run('local', request(REQS, { text: 'the cat' }), LOCAL.config({ weights: 'glaze-q4' }));
+  const run = P.run('local', request(REQS, { text: 'the cat' }), LOCAL.config({ ...K4, weights: 'glaze-q4' }));
   // Observe rejection too, so a count-triggered cancellation is reported by the assertion below.
   const ended = run.then((v) => ({ v }), (error) => ({ error }));
   try {
     await started;
-    const n = await P.count('local', request(REQS, { text: 'the dog' }), LOCAL.config({ weights: 'glaze-q8' }));
+    const n = await P.count('local', request(REQS, { text: 'the dog' }), LOCAL.config({ ...K4, weights: 'glaze-q8' }));
     assert.equal(n.exact, true);
     assert.equal(s.eng.log.loads, 1, 'count needs the tokenizer, not a GPU model replacement');
   } finally { release(); }
