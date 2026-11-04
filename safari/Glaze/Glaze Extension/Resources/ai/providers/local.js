@@ -191,8 +191,8 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   };
   const readMs = async (tokens, cfg = {}) => {
     if (!Number.isSafeInteger(tokens) || tokens <= 0) return 0;
-    let m = null;
-    try { m = modelOf(await models(), cfg); } catch { /* the default rate */ }
+    // The model the last store read named (the count before this read it), without another read.
+    const m = modelOf(listed, cfg);
     const rate = (m && (await readRates()).get(m.id)) || READ_TPS;
     return Math.ceil(tokens / rate * (1 + tokens / READ_DEPTH) * 1000);
   };
