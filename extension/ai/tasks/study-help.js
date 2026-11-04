@@ -126,6 +126,26 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
     });
     return hit && ok;
   };
+  // Only a direct conversational request grants this exception. The same sentences can be the student's translation,
+  // dialogue or writing exercise, where the original name/overlap checks must still apply.
+  const SOCIAL_QUESTION = new RegExp(`^(?:${[
+    "who (?:are you|is (?:rime|glaze))(?: and what (?:do you do|can you do))?|what(?:'s| is) your name|what are you",
+    "what (?:did|have) we (?:just |already )?(?:talk(?:ed)? about|discuss(?:ed)?|cover(?:ed)?|chat(?:ted)? about)(?: (?:so far|earlier|before|today|until now|in this chat|here))*",
+    "what (?:did|have) i (?:just |already )?(?:ask(?:ed)?|say|said|tell|told)(?: you)?(?: (?:so far|earlier|before|first|last|today|in this chat))*",
+    'what was my (?:first|last|previous|earlier|original) (?:question|message)',
+    'what did you (?:just )?(?:say|tell me|answer|reply)(?: (?:before|earlier|last|just now|first))*',
+    '(?:(?:can|could|would) you (?:please )?|please )?(?:summari[sz]e|recap|sum up) (?:our|this|the) (?:chat|conversation|discussion)(?: (?:so far|until now))?',
+    '(?:what (?:is|was)|tell me what) (?:this|our) (?:chat|conversation) (?:is |was )?about',
+    'qui[ée]n eres|c[óo]mo te llamas|de qu[ée] (?:hemos hablado|hablamos)(?: hasta ahora)?|resume (?:nuestra|esta) conversaci[óo]n|qu[ée] te pregunt[ée](?: antes)?',
+    'quem [ée] voc[êe]|qual [ée] (?:o )?seu nome|sobre o que (?:n[óo]s )?(?:conversamos|falamos)(?: at[ée] agora)?|resuma (?:a )?(?:nossa|esta) conversa|o que eu (?:te )?perguntei(?: antes)?',
+    "qui es-tu|qui [êe]tes-vous|comment t'appelles-tu|de quoi (?:avons-nous|on a|nous avons) parl[ée](?: jusqu'ici)?|r[ée]sume (?:notre|cette) conversation|qu'est-ce que (?:je t'ai|j'ai) demand[ée]",
+    'wer bist du|wie hei(?:ß|ss)t du|wor[üu]ber haben wir (?:bisher |gerade )?gesprochen|fass(?:e)? (?:unser(?:en)?|diese[ns]?) (?:chat|gespr[äa]ch) zusammen|was habe ich (?:dich )?(?:gefragt|gesagt)',
+    'wie ben (?:je|jij)|hoe heet je|waar(?:over)? hebben we (?:het )?(?:over )?(?:gehad|gesproken)|vat (?:ons|dit) gesprek samen|wat heb ik (?:je )?gevraagd',
+  ].join('|')})[?!.\\s]*$`, 'iu');
+  const socialRequest = (inp) => !inp.attempt && sentences(inp.question).flatMap((s) => s.split(/[,;:—–]|\s-\s/u)).every((s) => {
+    const q = s.trim().replace(/[’‘]/g, "'").replace(/^[¿¡]\s*/u, '');
+    return social(q.replace(/^(?:please\s+)?say\s+/iu, '')) || /^(?:rime|glaze)[?!.\s]*$/iu.test(q) || SOCIAL_QUESTION.test(q);
+  });
 
   // Numbers as values: 1,000 and 1.5 and the 1,5 of the other locales alike, a minus of any kind, ½ none.
   const NUM = /[-−]?(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+(?:[.,]\d+)?)/g;
@@ -285,7 +305,7 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
       // with another text, but never with a name or three words in a row from theirs.
       if (['essay', 'reading', 'other'].includes(inp.subject)) {
         for (const s of sentences(words_)) {
-          if (asks(s) || WD.about(s) || IMPERATIVE.test(s) || social(s)) continue;
+          if (asks(s) || WD.about(s) || IMPERATIVE.test(s) || social(s) && socialRequest(inp)) continue;
           if (out.kind !== 'concept' && words(s).length >= 5) return 'speaks';
           const names = words(s).filter((w, i) => /^\p{Lu}\p{Ll}{2,}/u.test(w) && (i > 0 || !OPENERS.test(w)));
           const triples = words(s).map((_, i, a) => a.slice(i, i + 3).join(' ')).filter((t, i, a) => i <= a.length - 3);
