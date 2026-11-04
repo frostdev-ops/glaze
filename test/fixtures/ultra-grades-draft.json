@@ -1,0 +1,121 @@
+{
+ "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. Measured 2026-11-04: a draft saved on attempt 2 of an unlimited-attempts assignment after attempt 1 was submitted on time and scored. Ultra's attempt list (public/v2 columns/:id/attempts) gives attempt 1 Completed with a receipt, attempt 2 InProgress without one; its page says 1 submitted, 0 late.",
+ "paging": { "limit": 200, "nextPage": "", "previousPage": "", "count": 1, "offset": 0 },
+ "results": [
+  {
+   "manualGrade": null,
+   "columnId": "_615_1",
+   "courseId": "_102_1",
+   "userId": "_900_1",
+   "pointsPossible": 10,
+   "displayGrade": {
+    "isOverride": false,
+    "requiresSchemaKnowledgeToDisplay": false,
+    "score": 10
+   },
+   "lowestAttemptId": "_815_1",
+   "highestAttemptId": "_815_1",
+   "submissionStatus": {
+    "actionCount": null,
+    "status": "DRAFT_SAVED_STUDENT"
+   },
+   "studentReviewedTimestamp": "2026-10-22T06:00:00.000Z",
+   "lastAttempt": {
+    "override": false,
+    "courseId": "_102_1",
+    "userId": "_900_1",
+    "overrideStatus": "NO_OVERRIDE",
+    "gradeId": "_915_1",
+    "exempt": false,
+    "modifiedDate": "2026-10-31T00:25:00.000Z",
+    "attemptDate": "2026-10-31T00:25:00.000Z",
+    "studentSubmission": {
+     "rawText": "<p>Second draft</p>",
+     "displayText": "<p>Second draft</p>",
+     "webLocation": "https://lms.example.edu/bbcswebdav/xid-1_1",
+     "fileLocation": "synthetic"
+    },
+    "readyToPost": false,
+    "creationDate": "2026-10-31T00:25:00.000Z",
+    "submissionHasFilePartsWithErrors": false,
+    "id": "_816_1",
+    "displayGrade": {
+     "requiresSchemaKnowledgeToDisplay": false
+    },
+    "status": "IN_PROGRESS",
+    "@id": "https://lms.example.edu/learn/api/v1/courses/_102_1/gradebook/attempts/_816_1"
+   },
+   "isExempt": false,
+   "isCalculatedColumnGrade": false,
+   "gradeScoreDesignation": "-",
+   "manualStatus": "NO_OVERRIDE",
+   "isCorrupt": false,
+   "hasBeenViewedByStudent": true,
+   "hasAllAttemptsExcluded": false,
+   "effectiveScore": 10,
+   "id": "_915_1",
+   "version": 1,
+   "firstAttemptId": "_815_1",
+   "lastAttemptId": "_816_1",
+   "averageScore": 10,
+   "column": {
+    "calculationType": "NON_CALCULATED",
+    "gradebookCategoryId": "_201_1",
+    "courseId": "_102_1",
+    "scoreProviderHandle": "resource/x-bb-assessment",
+    "visible": true,
+    "peerGrading": false,
+    "gradingSchemaId": "_401_1",
+    "contentId": "_715_1",
+    "dueDate": "2026-10-15T03:59:00.000Z",
+    "anonymousGrading": false,
+    "deleted": false,
+    "columnName": "Essay 5",
+    "userCreatedColumn": false,
+    "permanentAnonymous": false,
+    "scorable": true,
+    "aggregationModel": "LAST",
+    "visibleInBook": true,
+    "ltiDomainId": null,
+    "gradesReleased": true,
+    "enforceDueDate": false,
+    "possible": 10,
+    "multipleAttempts": 0,
+    "gradebookCategory": {
+     "description": "",
+     "courseId": "_102_1",
+     "title": "Assignment",
+     "localizableTitle": {
+      "languageKey": "gradebook.category.assignment",
+      "bundle": "common"
+     },
+     "isUserDefined": false,
+     "id": "_201_1"
+    },
+    "learningOutcome": {
+     "columnScale": [],
+     "isSignature": false,
+     "entityScale": []
+    },
+    "localizedColumnName": {
+     "languageKey": "",
+     "bundle": ""
+    },
+    "effectiveColumnName": "Essay 5",
+    "isAttemptBased": true,
+    "gradeScoreDesignation": "-",
+    "isFormative": false,
+    "id": "_615_1",
+    "position": 4,
+    "groupContent": false
+   },
+   "status": "NEEDS_GRADING",
+   "columnUrl": "https://lms.example.edu/learn/api/v1/courses/_102_1/gradebook/columns/_615_1",
+   "highestAttemptUrl": "https://lms.example.edu/learn/api/v1/courses/_102_1/gradebook/attempts/_815_1",
+   "lowestAttemptUrl": "https://lms.example.edu/learn/api/v1/courses/_102_1/gradebook/attempts/_815_1",
+   "lastAttemptUrl": "https://lms.example.edu/learn/api/v1/courses/_102_1/gradebook/attempts/_816_1",
+   "firstAttemptUrl": "https://lms.example.edu/learn/api/v1/courses/_102_1/gradebook/attempts/_815_1"
+  }
+ ],
+ "permissions": {}
+}

@@ -274,6 +274,25 @@ test('saved Ultra drafts and attempt metadata do not prove submission or complet
   }
 });
 
+test("a draft behind a handed-in attempt, as Ultra sends it, is submitted, and lone or unsubmitted drafts aren't", () => {
+  const [row] = require('../fixtures/ultra-grades-draft.json').results;
+  const later = new Date(2026, 9, 24, 12);
+  assert.equal(P.submitted(row), true);
+  assert.equal(P.isDone(null, row), true);
+  assert.deepEqual(P.status(new Date(row.column.dueDate), null, row, later), { label: 'Submitted', tone: 'done' });
+  const lone = { ...row, firstAttemptId: row.lastAttemptId, lowestAttemptId: null, highestAttemptId: null };
+  const said = { ...row, submissionStatus: { status: 'NOT_SUBMITTED' } };
+  const unnamed = { ...lone, lastAttemptId: undefined, lastAttempt: { ...row.lastAttempt, id: undefined } };
+  for (const g of [lone, said, unnamed]) {
+    assert.equal(P.submitted(g), false, JSON.stringify([g.firstAttemptId, g.submissionStatus]));
+    assert.deepEqual(P.status(new Date(row.column.dueDate), null, g, later), { label: 'Past due · Not submitted', tone: 'overdue' });
+  }
+  // The scored attempt alone names the earlier hand-in; a graded row whose newer draft is open stays submitted.
+  assert.equal(P.submitted({ ...lone, highestAttemptId: '_815_1' }), true);
+  assert.equal(P.submitted({ ...row, submissionStatus: { status: 'GRADED' } }), true);
+  assert.equal(P.submitted({ status: 'IN_PROGRESS', firstAttemptId: '_1_1', lastAttemptId: '_2_1' }), true);
+});
+
 test('explicit submission survives a newer draft, and projected Canvas submissions still work', () => {
   const g = { submissionStatus: { status: 'SUBMITTED' }, lastAttempt: { status: 'IN_PROGRESS', attemptDate: '2026-10-10T12:00:00Z' } };
   assert.equal(P.submitted(g), true);

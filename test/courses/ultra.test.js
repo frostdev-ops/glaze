@@ -181,13 +181,14 @@ test('where work stands: a table of measured and synthetic rows ([I] rules, unkn
 test('saved drafts stay open in Better To Do despite attempt dates or multiple attempt ids', () => {
   const T = require('../../extension/planner/todo.js');
   const column = { dueDate: '2026-10-20T12:00:00Z', contentId: '_703_1' };
-  const base = { columnId: '_603_1', column, firstAttemptId: '_810_1', lastAttemptId: '_813_1', lastAttempt: { status: 'IN_PROGRESS', attemptDate: '2026-10-21T12:00:00Z' } };
+  const base = { columnId: '_603_1', column, firstAttemptId: '_813_1', lastAttemptId: '_813_1', lastAttempt: { status: 'IN_PROGRESS', attemptDate: '2026-10-21T12:00:00Z' } };
   const cases = [
     base,
     { ...base, status: 'NEEDS_GRADING' },
-    { ...base, submissionStatus: { status: 'NOT_SUBMITTED' } },
+    { ...base, status: 'NEEDS_GRADING', submissionStatus: { status: 'DRAFT_SAVED_STUDENT' } },
+    { ...base, firstAttemptId: '_810_1', submissionStatus: { status: 'NOT_SUBMITTED' } },
     { ...base, status: 'IN_PROGRESS', lastAttempt: { attemptDate: base.lastAttempt.attemptDate } },
-    { ...base, lastAttempt: { attemptDate: base.lastAttempt.attemptDate } },
+    { ...base, firstAttemptId: '_810_1', lastAttempt: { attemptDate: base.lastAttempt.attemptDate } },
   ];
   for (const row of cases) {
     const st = U.standing(row, LATER);
@@ -203,6 +204,16 @@ test('saved drafts stay open in Better To Do despite attempt dates or multiple a
   }
   const prior = U.standing({ ...base, submissionStatus: { status: 'SUBMITTED' } }, LATER);
   assert.deepEqual([prior.state, prior.submitted, prior.draft, prior.at], ['unknown', true, true, null]);
+});
+
+test('a draft behind a handed-in attempt, as Ultra sends it: submitted in Better To Do, its time unknown', () => {
+  const T = require('../../extension/planner/todo.js');
+  const [row] = clone(load('grades-draft').results);
+  const st = U.standing(row, LATER);
+  assert.deepEqual([st.state, st.submitted, st.draft, st.at], ['unknown', true, true, null]);
+  const [item] = U.due({ todo: [{ overdueItems: [{ title: 'Essay 5', dueDate: row.column.dueDate, column: { id: row.columnId, courseId: row.courseId } }] }], rows: { [row.courseId]: [row] }, now: LATER });
+  assert.deepEqual(item.sub, { submitted: true, excused: false, graded: false, late: false, missing: false, redo: false });
+  assert.equal(T.isDone(item, 'auto'), true);
 });
 
 test('due items: To Do and the calendar as planner items, twins deduped, joined by column id only', () => {
