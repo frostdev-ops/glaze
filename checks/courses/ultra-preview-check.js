@@ -19,6 +19,8 @@ const PDF = require('../../tools/fidelity/pdf-fixtures.js');
 const { PREVIEW: P, SITE: site, ME } = require('../mocks/ultra-mock.js');
 const out = process.argv[2] || path.join(os.tmpdir(), 'gz-ultra-preview-check');
 const [SLIDES, LAB] = P.FILES;
+const ORIGINAL = { name: 'Speaking rubric.pdf', at: '/courses/1/202640001/db/_900_1/embedded/Speaking%20rubric.pdf' };
+const DISCUSSION = '/ultra/courses/_101_1/discussion/_19_1';
 const checks = [], errors = [];
 let passed = false;
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -56,6 +58,8 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
       const req = r.request(), u = new URL(req.url());
       if (u.protocol === 'chrome-extension:') return r.continue();
       if (!['GET', 'OPTIONS'].includes(req.method())) return r.abort();
+      if (u.origin === site && u.pathname === DISCUSSION) return r.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"><base href="/ultra/"><title>Discussion</title></head><body><div id="site-wrap"><div class="course-discussion"><div class="ql-editor" contenteditable="false"><p>Use this rubric for the presentation.</p><div data-bbtype="attachment" data-bbfile='${JSON.stringify({ displayName: ORIGINAL.name, fileName: ORIGINAL.name, linkName: ORIGINAL.name, mimeType: 'application/pdf', render: 'inline', resourceUrl: site + ORIGINAL.at })}'><div class="bb-editor-file-viewer"><div><div class="js-file-viewer-root-controls"><div class="js-file-viewer-attachment-meta">${ORIGINAL.name}</div><div class="js-file-viewer-attachment-widgets"><button type="button" aria-label="More options" aria-haspopup="menu" aria-expanded="false" onclick="this.setAttribute('aria-expanded',this.getAttribute('aria-expanded')!=='true');this.nextElementSibling.hidden=!this.nextElementSibling.hidden">…</button><ul role="menu" hidden><li role="menuitem">Download original file</li></ul></div></div></div></div></div></div></div></div></body></html>` });
+      if (u.origin === site && u.pathname === ORIGINAL.at) { originals.push({ path: u.pathname, cookie: req.headers().cookie || '' }); return r.fulfill({ contentType: 'application/pdf', body: Buffer.from(pdfs[LAB.hash]) }); }
       if (await mock.handle(r)) return;
       if (u.origin !== site) return r.abort();
       const file = P.FILES.find((f) => f.at === u.pathname);
@@ -114,6 +118,36 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
     const shot = async (name) => { const f = path.join(out, name); await p.screenshot({ path: f }); return f; };
 
     const reviewCase = process.env.PREVIEW_REVIEW_CASE;
+    if (!reviewCase || reviewCase === 'original') {
+      await context.addCookies([{ name: 'original-pdf-session', value: 'synthetic', url: site }]);
+      await p.goto(`${site}${DISCUSSION}`);
+      const button = p.locator('button.gz-bb-pdf');
+      await button.waitFor();
+      check(await button.getAttribute('aria-expanded') === 'false' && originals.length === 0, 'original-only discussion PDF has a collapsed preview control and is not fetched before a click');
+      await p.getByRole('button', { name: 'More options', exact: true }).click();
+      check(await p.getByRole('menuitem', { name: 'Download original file' }).isVisible(), 'the native attachment menu stays reachable beside the PDF preview control');
+      await button.click();
+      await until(async () => await p.locator('iframe.gz-pv').isVisible() && await button.getAttribute('aria-expanded') === 'true', 'original PDF preview shown');
+      const fr = await until(async () => (await p.$('iframe.gz-pv'))?.contentFrame(), 'original PDF frame loaded', 20000, async () => ({ originals, errors, state: await p.locator('[data-gz-pv]').evaluateAll((els) => els.map((e) => e.getAttribute('data-gz-pv'))) }));
+      await until(async () => (await pageText(fr)).includes('Alpha page one'), 'original PDF first page drawn', 20000, async () => ({ state: await p.locator('[data-gz-pv]').evaluateAll((els) => els.map((e) => e.getAttribute('data-gz-pv'))), originals }));
+      check(originals.some((r) => r.path === ORIGINAL.at && r.cookie.includes('original-pdf-session=synthetic')), 'original-only PDFs use the school session and draw their real text in Glaze');
+      await shot('discussion-original-pdf.png');
+      await fr.focus('#gq-find-b'); await p.keyboard.press('Escape');
+      check(await button.evaluate((b) => b === document.activeElement), 'Escape from an original PDF returns to its own preview toggle');
+      await button.click();
+      await until(async () => await p.locator('iframe.gz-pv').count() === 0, 'original PDF collapsed');
+      check(await button.getAttribute('aria-expanded') === 'false', 'the original PDF toggle collapses the preview');
+      await button.click();
+      await until(async () => await p.locator('iframe.gz-pv').isVisible(), 'original PDF reopened');
+      await set({ writer: { pdf: false } });
+      await until(async () => await p.locator('iframe.gz-pv').count() === 0 && await button.count() === 0, 'PDF switch removes original-only preview');
+      check(await p.getByRole('button', { name: 'More options', exact: true }).isVisible(), 'PDFs off removes Glaze controls and preserves the native attachment');
+      await set({});
+      await button.waitFor();
+      await p.evaluate(() => { const el = document.querySelector('[data-bbfile]'), data = JSON.parse(el.dataset.bbfile); data.resourceUrl = 'https://foreign.example/private.pdf'; el.dataset.bbfile = JSON.stringify(data); el.classList.add('updated'); });
+      await until(async () => await button.count() === 0, 'foreign original URL leaves no preview control');
+      check(true, 'a foreign original PDF URL is never fetched with the school session');
+    }
     if (!reviewCase) {
     // ---- an expanded preview: Blackboard's frame first, then Glaze's with page 1's text, read by Range from the frame
     await load();
@@ -439,7 +473,7 @@ const quiet = async (fn, label, ms = 1500) => { const end = Date.now() + ms; whi
       check(v.bbShown && !v.gz && v.state === 'ended:viewer:draw', `a failed PDF draw keeps Blackboard's frame (${v.state})`);
     }
 
-    check(mock.seen.origins.size === 1 && [...mock.seen.origins].every((o) => o === site) && mock.seen.cookies === 0, 'every S3 request uses the page Origin and omits cookies, including retries');
+    if (reviewCase !== 'original') check(mock.seen.origins.size === 1 && [...mock.seen.origins].every((o) => o === site) && mock.seen.cookies === 0, 'every S3 request uses the page Origin and omits cookies, including retries');
     check(errors.length === 0, `no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`);
     passed = true;
   } catch (e) {
