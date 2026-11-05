@@ -68,7 +68,7 @@
     if (a === 'local' && c.pearsonAccess?.newValue !== true || a === 'sync' && (c.enabled?.newValue === false || c.enhance && c.enhance.newValue?.pearsonEmbed !== true)) {
       enabled = false; if (ready && context) tell();
     }
-    if (a === 'local' && c.pearsonAccess?.newValue !== true || a === 'sync' && c.enabled?.newValue === false) live = false;
+    if (a === 'local' && c.pearsonAccess?.newValue !== true || a === 'sync' && (c.enabled?.newValue === false || c.enhance && !['pearsonViewer', 'pearsonEmbed', 'pearsonMath'].some(k => c.enhance.newValue?.[k] === true))) live = false;
     read();
   });
   addEventListener('pagehide', () => {
