@@ -717,7 +717,6 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     return { ...step, id: args.id || r?.id, receipt: r, ok };
   };
   const memoryGrounded = (text, inp) => {
-    if (!memoryOn(inp) && !inp.steps.some((s) => s.call.name.startsWith('memory_'))) return true;
     if (R().synced(text)) return false;
     const attempts = inp.steps.filter((s) => M().isWrite(s.call.name)).map(memoryAttempt);
     return R().claims(text).every(({ clause, operation, present }) => {
@@ -794,6 +793,31 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const data = values([...(inp.fired ? [inp.fired] : []), ...inp.steps.map((s) => s.result)], inp.first === true);
     return IDS.some((key) => typeof call.arguments[key] === 'string' && !heldId(call.arguments[key], inp, data) && currentId(call.name, call.arguments, key, inp.current));
   };
+  // Match the student's possessive to Rime's, within the same language and grammatical form. Keep the other
+  // words literal: a possessive alone is not an item, and no character in the answer acts as a wildcard.
+  const PERSON = {
+    en: [['my', 'your'], ['mine', 'yours'], ['myself', 'yourself']],
+    es: [['mi', 'tu'], ['mis', 'tus']],
+    'pt-BR': [['meu', 'teu', 'seu'], ['minha', 'tua', 'sua'], ['meus', 'teus', 'seus'], ['minhas', 'tuas', 'suas']],
+    fr: [['mon', 'ton'], ['ma', 'ta'], ['mes', 'tes'], ['votre'], ['vos']],
+    de: [['mein', 'dein'], ['meine', 'deine'], ['meinen', 'deinen'], ['meinem', 'deinem'], ['meiner', 'deiner'], ['meines', 'deines']],
+    nl: [['mijn', 'jouw', 'uw']],
+  };
+  const visibleFact = (text, quote, locale) => {
+    const q = X().norm(quote), t = X().norm(text);
+    if (t.includes(q)) return true;
+    const groups = PERSON[locale] || [], lookup = new Map(groups.flatMap((g) => g.map((w) => [w, g])));
+    const parts = q.split(/([\p{L}\p{N}_]+)/u);
+    if (!parts.some((part) => /[\p{L}\p{N}]/u.test(part) && !lookup.has(part))) return false;
+    const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = parts.map((part) => lookup.has(part)
+      ? `(?<![\\p{L}\\p{N}_])(?:${lookup.get(part).map(escape).join('|')})(?![\\p{L}\\p{N}_])` : escape(part)).join('');
+    return new RegExp(pattern, 'u').test(t);
+  };
+  // A receipt for a write or confirmation proves the action, not an unrelated school status.
+  const SCHOOL_STATUS = /(?:\b(?:is|are|was|were|will be) (?:currently |now |still )?(?:due|overdue|missing|submitted|graded)|\b(?:grade|score) (?:is|was|:)|\b(?:you have|you've got) (?:an? |the )?(?:[\p{L}-]+ ){0,3}(?:assignment|homework|quiz|exam|test|lab report)|\b(?:vence|vencen|pendiente|entregad[oa]|nota es|está para entregar|pendente|nota é|à rendre|en retard|note est|fällig|abgegeben|note ist|in te leveren|cijfer is)\b)/iu;
+  const SCHOOL_ITEM = /(?<![\p{L}\p{N}])(?:assignments?|homework|quizzes|quiz|exams?|tests?|discussions?|projects?|reports?|grades?|scores?|tareas?|deberes|ex[áa]menes?|pruebas?|trabajos?|calificaciones?|deveres|provas?|trabalhos?|notas?|devoirs?|examens?|dissertations?|notes?|hausaufgaben|pr[üu]fungen|klausuren?|aufgaben|noten|huiswerk|toetsen?|opdrachten?|cijfers?)(?![\p{L}\p{N}])/iu;
+  const SCHOOL_ASSERTION = /(?<![\p{L}\p{N}])(?:due|overdue|missing|submitted|graded|you have|you've got|there is|there are|vence|vencen|pendiente|entregado|entregada|pendente|en retard|[àa] rendre|f[äa]llig|abgegeben|in te leveren)(?![\p{L}\p{N}])/iu;
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length) return 'schema';
     if ((out.call === null) === (out.answer === null)) return 'one';
@@ -824,10 +848,12 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       // "Nothing is due" while a result lists work not handed in (the owner's Sunday, 2026-11-01).
       if (NOTHING_DUE.test(fold(text)) && inp.steps.some((st) => open(st.result))) return 'missed';
       if (!listHolds(text, inp)) return 'list';
-      const held = inp.steps.flatMap((st) => facts(st.result));
+      // What reads brought back: the answer states one of them, in its own person ("Finish my essay" is "finish your
+      // essay"). A confirmation of Rime's own action (a reminder, a saved note) stands on its receipt instead.
+      const held = inp.steps.filter((st) => spec(st.call.name)?.kind === 'read').flatMap((st) => facts(st.result));
       const sources = held.map((v) => X().source(v, { min: 2 })), singles = new Set(held.map((v) => X().norm(v)));
-      const visible = X().source(text, { min: 1 });
-      if (held.length && !quotes.some((q) => visible.has(q) && ([...X().norm(q)].length === 1 ? singles.has(X().norm(q)) : sources.some((s) => s.has(q))))) return 'ground';
+      if (!held.length && inp.steps.some((st) => spec(st.call.name)?.kind !== 'read' && rich(st.result)) && (SCHOOL_STATUS.test(fold(text)) || SCHOOL_ITEM.test(fold(text)) && SCHOOL_ASSERTION.test(fold(text)))) return 'ground';
+      if (held.length && !quotes.some((q) => visibleFact(text, q, inp.locale) && ([...X().norm(q)].length === 1 ? singles.has(X().norm(q)) : sources.some((s) => s.has(q))))) return 'ground';
     }
     const sources = data.map((r) => X().source(r, { min: 2 })), singles = new Set(data.map((r) => X().norm(r)));
     if (quotes.some((q) => !q.trim() || ([...X().norm(q)].length === 1 ? !singles.has(X().norm(q)) : !sources.some((x) => x.has(q))))) return 'quote';
