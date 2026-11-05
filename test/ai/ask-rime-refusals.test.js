@@ -158,3 +158,9 @@ test('identity questions retain the coursework guard when the subject is other',
   const inp = help({ question: 'Who am I?', subject: 'other', history });
   assert.equal(H.why({ kind: 'hint', step: null, reply: 'The green light symbolizes Gatsby’s hope of winning Daisy back.', followUp: null }, inp), 'speaks');
 });
+
+test('a confirmation alone cannot introduce a different school item', () => {
+  const inp = tools('remind me to start my math homework in 2 minutes', [wake]);
+  assert.equal(A.why(answer('Done. A biology project awaits you.'), inp), 'ground');
+  assert.equal(A.why(answer('Done — I’ll remind you to start your math homework.'), inp), '');
+});
