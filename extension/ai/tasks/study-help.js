@@ -313,8 +313,8 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
       && /(?<![\p{L}\p{N}])(?:preferences?|notes?|facts?|preferencias?|recuerdos?|prefer[êe]ncias?|anota[cç][ãa]o|pr[ée]f[ée]rences?|notiz|vorlieben?|voorkeur(?:en)?)(?![\p{L}\p{N}])/iu.test(inp.question)
       && !paper.test(inp.question);
     const paperWork = !socialRequest(inp) && !memoryQuestion && (['essay', 'reading'].includes(inp.subject) || [inp.question, ...(inp.history || []).map((h) => h.question), inp.context?.prompt || ''].some((t) => paper.test(t)));
-    const quotable = [...sources, ...(!paperWork ? own.map((t) => X().source(t)) : [])];
     for (const piece of [out.reply, out.followUp].filter((p) => typeof p === 'string' && p.trim())) {
+      const quotable = [...sources, ...(!paperWork && !paper.test(piece) ? own.map((t) => X().source(t)) : [])];
       const rule = hands(piece, inp);
       if (rule) return rule;
       const words_ = prose(piece);
