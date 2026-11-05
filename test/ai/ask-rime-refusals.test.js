@@ -315,3 +315,10 @@ test('page names and an empty or failed last read cannot invent school status', 
     assert.notEqual(A.why(answer('AVI 412 Biology is due tomorrow.', ['AVI 412 – Aviation Safety']), inp), '', 'a course code does not prove another item');
   }
 });
+
+test('a slipped quote cannot hide its invented identifying word in the answer', () => {
+  const todo = step('todo_list', {}, { items: [{ title: 'Prepare the chemistry laboratory report', course: 'BIO 101', due: AT, submitted: false }] });
+  const inp = at('What is due?', [todo]);
+  const text = 'Prepare the chemistry laboratory report, and your biology laboratory report is due.';
+  assert.notEqual(A.why(answer(text, ['Prepare the chemistry laboratory report', 'Prepare the biology laboratory report']), inp), '', 'the quote differs from the answer but its invented subject is visible');
+});
