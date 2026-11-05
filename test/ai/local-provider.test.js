@@ -239,6 +239,17 @@ test('Delete retires a prepare that is still reading its catalog before starting
   assert.deepEqual(await LOCAL.prepare(LOCAL.config({})), { state: 'ready' }, 'a new Download click still works');
 });
 
+test('a failed catalog read during Download reports a failure, and a later read can retry', async () => {
+  const s = setup(), list = s.st.list;
+  s.st.list = async () => { throw new Error('OPFS is temporarily unavailable'); };
+  const cfg = LOCAL.config({});
+  assert.deepEqual(await LOCAL.status(cfg), { state: 'unavailable', reason: 'failed' });
+  assert.deepEqual(await LOCAL.prepare(cfg), { state: 'unavailable', reason: 'failed' }, 'a read failure is not an unpublished Rime');
+  assert.equal(s.workers.length, 0);
+  s.st.list = list;
+  assert.deepEqual(await LOCAL.prepare(cfg), { state: 'ready' });
+});
+
 test('no ladder, a catalog of Glaze-tuned models only (Rime, no `stock`): the smallest tier downloads', async () => {
   const kept = MODELS.splice(0, MODELS.length,
     { id: 'rime-q8', name: 'Rime Q8', size: 1800000000, quant: 'Q8_0', tier: 4, license: 'lfm1.0' },

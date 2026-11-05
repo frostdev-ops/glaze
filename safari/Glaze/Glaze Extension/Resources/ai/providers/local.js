@@ -291,10 +291,13 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     const which = part === 'pictures' ? 'pictures' : 'text';
     if (which === 'text' && !preparing.text) {
       const generation = prepareGeneration;
-      const list = await models().catch(() => []);
+      const list = await models().catch(() => null);
       if (generation !== prepareGeneration) return { state: 'download' };
       // A caller whose catalog read finishes late joins the download another caller started meanwhile.
-      if (!preparing.text && !tiers(list).length) return { state: 'unavailable', reason: 'pending' };
+      if (!preparing.text) {
+        if (!list) return { state: 'unavailable', reason: 'failed' };
+        if (!tiers(list).length) return { state: 'unavailable', reason: 'pending' };
+      }
     }
     if (!preparing[which]) {
       const job = preparing[which] = { listeners: new Set(), last: null };
