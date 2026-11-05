@@ -338,3 +338,10 @@ test('honest limits on school status remain available after page context or a fa
   assert.equal(A.why(answer('I cannot verify when your assignment is due.'), at('When is my assignment due?', [courses, failed])), '');
   assert.notEqual(A.why(answer('I cannot verify assignments. Your biology exam is due tomorrow.', ['BIO 101']), at('When is my assignment due?', [courses, failed])), '', 'a limitation cannot mask a separate assertion');
 });
+
+test('a colon cannot attach an invented course title to a real code', () => {
+  const courses = step('courses_list', {}, { items: [{ id: '412', name: 'AVI 412 – Aviation Safety' }] });
+  const inp = at('What is AVI 412?', [courses]);
+  assert.notEqual(A.why(answer('AVI 412: Underwater Basket Weaving.', ['AVI 412 – Aviation Safety']), inp), '');
+  assert.equal(A.why(answer('AVI 412: no announcements found.', ['AVI 412 – Aviation Safety']), inp), '');
+});
