@@ -128,3 +128,9 @@ test('personal introductions and matching possessives work in every supported lo
     assert.equal(A.why(answer(to, [from]), inp), '', locale);
   }
 });
+
+test('a memory question cannot turn a saved phrase into thesis wording', () => {
+  const quote = 'screens delay melatonin release';
+  const inp = help({ subject: 'essay', question: 'What study preference did I save?', recall: memory(quote, quote) });
+  assert.equal(H.why({ kind: 'hint', step: null, reply: `Your thesis is stronger once it says "${quote}" instead.`, followUp: null }, inp), 'quote');
+});
