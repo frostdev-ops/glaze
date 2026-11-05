@@ -184,4 +184,7 @@ test('a reminder receipt may say when the reminder itself is due', () => {
 test('a confirmation cannot hide an unrelated item after a conjunction', () => {
   const inp = tools('remind me to start my math homework in 2 minutes', [wake]);
   assert.equal(A.why(answer('Reminder set and a biology project appears on your list.'), inp), 'ground');
+  const two = { ...wake, call: { ...wake.call, arguments: { ...wake.call.arguments, say: 'Start my math homework and finish my biology project' } }, result: { ...wake.result, say: 'Start my math homework and finish my biology project' } };
+  const both = tools('remind me to start my math homework and finish my biology project in 2 minutes', [two]);
+  assert.equal(A.why(answer('I’ll remind you to start your math homework and finish your biology project.'), both), '');
 });
