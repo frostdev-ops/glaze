@@ -210,6 +210,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   };
 
   const preparing = { text: null, pictures: null }; // a download in the host: { call, listeners, last }
+  let prepareGeneration = 0; // Delete also retires a text download still reading the catalog, before it has a host job.
   let broken = null; // a reason the engine gave that holds until a connection changes (release)
   // The store's text models (the tiers), and the one this cfg runs: its tier's, else the one here (ready, then partial).
   // A saved tier the catalog no longer offers follows Auto, as Settings' picker does.
@@ -289,7 +290,9 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     const listen = typeof onProgress === 'function' ? (p) => { if (Number.isFinite(p)) onProgress(Math.min(1, Math.max(0, p))); } : null;
     const which = part === 'pictures' ? 'pictures' : 'text';
     if (which === 'text' && !preparing.text) {
+      const generation = prepareGeneration;
       const list = await models().catch(() => []);
+      if (generation !== prepareGeneration) return { state: 'download' };
       // A caller whose catalog read finishes late joins the download another caller started meanwhile.
       if (!preparing.text && !tiers(list).length) return { state: 'unavailable', reason: 'pending' };
     }
@@ -420,6 +423,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   // in the host when it is up, else here.
   const remove = async (cfg, { part } = {}) => {
     const l = own().link, only = part === 'pictures';
+    if (!only) prepareGeneration++;
     try {
       if (l.up) await l.call('remove', only ? { part: 'pictures' } : {});
       else for (const m of await readModels()) if (!only || m.role) await own().store.remove(m.id);
@@ -431,7 +435,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
   const link = () => own().link;
   const provider = { id: 'local', config, caps, status, prepare, run, warm, count, readMs, catalog, release, remove, accept, levelOf, toolsLevel, memoryOf, memoryVersion, scaleOf, scaleVersion, link, windowOf, WINDOWS, DEFAULT_WINDOW, MODEL, NAME, CONTEXT, TUNED, LIMIT, THINK, THINK_TPS, thinkFor,
     THINK_SIZED, ANSWER, SCALE, SCALED, limits, adaptive, profileWindow, CLOSE,
-    _env: (e) => { env = e; listed = []; listing++; preparing.text = preparing.pictures = null; broken = null; rates = null; reads = null; machined = null; measured.clear(); } };
+    _env: (e) => { env = e; listed = []; listing++; prepareGeneration++; preparing.text = preparing.pictures = null; broken = null; rates = null; reads = null; machined = null; measured.clear(); } };
   return P.add(provider);
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_LOCAL; else GZ_AI_LOCAL;

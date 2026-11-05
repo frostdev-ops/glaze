@@ -225,6 +225,20 @@ test('an older empty prepare preflight joins a download started after the first 
   assert.deepEqual(s.st.log.downloads, ['lfm3-q4']);
 });
 
+test('Delete retires a prepare that is still reading its catalog before starting the host', async () => {
+  let finishRead, reads = 0;
+  const s = setup(), list = s.st.list;
+  s.st.list = async () => (++reads === 1 ? new Promise((resolve) => { finishRead = resolve; }) : list());
+  const preparing = LOCAL.prepare(LOCAL.config({}));
+  await settle();
+  await LOCAL.remove(LOCAL.config({}));
+  finishRead(await list());
+  assert.deepEqual(await preparing, { state: 'download' });
+  assert.deepEqual(s.st.log.downloads, [], 'a preflight started before Delete cannot restart the download');
+  assert.equal(s.workers.length, 0, 'the retired preflight starts no host');
+  assert.deepEqual(await LOCAL.prepare(LOCAL.config({})), { state: 'ready' }, 'a new Download click still works');
+});
+
 test('no ladder, a catalog of Glaze-tuned models only (Rime, no `stock`): the smallest tier downloads', async () => {
   const kept = MODELS.splice(0, MODELS.length,
     { id: 'rime-q8', name: 'Rime Q8', size: 1800000000, quant: 'Q8_0', tier: 4, license: 'lfm1.0' },
