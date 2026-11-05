@@ -818,6 +818,10 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const SCHOOL_STATUS = /(?:\b(?:is|are|was|were|will be) (?:currently |now |still )?(?:due|overdue|missing|submitted|graded)|\b(?:grade|score) (?:is|was|:)|\b(?:you have|you've got) (?:an? |the )?(?:[\p{L}-]+ ){0,3}(?:assignment|homework|quiz|exam|test|lab report)|\b(?:vence|vencen|pendiente|entregad[oa]|nota es|está para entregar|pendente|nota é|à rendre|en retard|note est|fällig|abgegeben|note ist|in te leveren|cijfer is)\b)/iu;
   const SCHOOL_ITEM = /(?<![\p{L}\p{N}])(?:assignments?|homework|quizzes|quiz|exams?|tests?|discussions?|projects?|reports?|grades?|scores?|tareas?|deberes|ex[áa]menes?|pruebas?|trabajos?|calificaciones?|deveres|provas?|trabalhos?|notas?|devoirs?|examens?|dissertations?|notes?|hausaufgaben|pr[üu]fungen|klausuren?|aufgaben|noten|huiswerk|toetsen?|opdrachten?|cijfers?)(?![\p{L}\p{N}])/iu;
   const SCHOOL_ASSERTION = /(?<![\p{L}\p{N}])(?:due|overdue|missing|submitted|graded|you have|you've got|there is|there are|vence|vencen|pendiente|entregado|entregada|pendente|en retard|[àa] rendre|f[äa]llig|abgegeben|in te leveren)(?![\p{L}\p{N}])/iu;
+  const ACTION_CONFIRMATION = /(?<![\p{L}\p{N}])(?:remind\p{L}*|reminder\p{L}*|wakes?|alarms?|monitor\p{L}*|watch(?:ing|ed)?|cancel\p{L}*|saved|stored|forgotten|marked|recordatorio\p{L}*|recordar\p{L}*|avisar\p{L}*|lembra\p{L}*|alarme\p{L}*|rappel\p{L}*|rappeler\p{L}*|erinner\p{L}*|wecker|herinner\p{L}*|wekker)(?![\p{L}\p{N}])/iu;
+  const ungroundedSchool = (text, inp) => text.split(/[.!?;…\n]+/u).some((part) => SCHOOL_ITEM.test(part)
+    && !ACTION_CONFIRMATION.test(part) && !inp.steps.some((st) => spec(st.call.name)?.kind !== 'read'
+      && facts(st.result).some((v) => v.length >= 8 && SCHOOL_ITEM.test(v) && visibleFact(part, v, inp.locale))));
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length) return 'schema';
     if ((out.call === null) === (out.answer === null)) return 'one';
@@ -852,7 +856,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       // essay"). A confirmation of Rime's own action (a reminder, a saved note) stands on its receipt instead.
       const held = inp.steps.filter((st) => spec(st.call.name)?.kind === 'read').flatMap((st) => facts(st.result));
       const sources = held.map((v) => X().source(v, { min: 2 })), singles = new Set(held.map((v) => X().norm(v)));
-      if (!held.length && inp.steps.some((st) => spec(st.call.name)?.kind !== 'read' && rich(st.result)) && (SCHOOL_STATUS.test(fold(text)) || SCHOOL_ITEM.test(fold(text)) && SCHOOL_ASSERTION.test(fold(text)))) return 'ground';
+      if (!held.length && inp.steps.some((st) => spec(st.call.name)?.kind !== 'read' && rich(st.result)) && (SCHOOL_STATUS.test(fold(text)) || SCHOOL_ITEM.test(fold(text)) && SCHOOL_ASSERTION.test(fold(text)) || ungroundedSchool(text, inp))) return 'ground';
       if (held.length && !quotes.some((q) => visibleFact(text, q, inp.locale) && ([...X().norm(q)].length === 1 ? singles.has(X().norm(q)) : sources.some((s) => s.has(q))))) return 'ground';
     }
     const sources = data.map((r) => X().source(r, { min: 2 })), singles = new Set(data.map((r) => X().norm(r)));
