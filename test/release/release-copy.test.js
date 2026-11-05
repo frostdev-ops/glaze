@@ -61,11 +61,18 @@ for (const [lang, expected] of Object.entries(release403)) test(`4.0.3 release n
   const context = {};
   if (lang) vm.runInNewContext(read(`i18n/${lang}.js`), context);
   const ui = (key) => lang ? context.GZ_LANGS[lang][key] : key;
-  for (const key of ['Not available yet', 'Ask Rime', 'Memory', 'Course pages', 'Documents and quizzes', 'Preview']) assert.ok(block.toLowerCase().includes(ui(key).toLowerCase()), key);
+  for (const key of ['Settings', 'AI', 'Download', 'Not available yet', 'Ask Rime', 'Memory', 'Course pages', 'Documents and quizzes', 'Pearson problem viewer', 'Pearson inside Blackboard', 'Modern Pearson equations', 'Preview']) assert.ok(block.includes(ui(key)), key);
   for (const term of expected) assert.ok(block.includes(term), term);
   const rime = block.split('\n').filter((l) => l.includes(ui('Not available yet')));
   assert.deepEqual(rime.map((l) => /^•\s*(Chrome|Firefox|Safari)\s*:/.exec(l)?.[1]), ['Chrome', 'Firefox'], 'Rime is labelled for the browsers that have it');
   assert.ok(!/\b(?:CI|audit|R\d+)\b/i.test(block), 'no internal process or model rounds in store copy');
+});
+
+test('4.0.3 access instructions account for browsers that already hold the hosts', () => {
+  const expected = { '': 'when needed', de: 'bei Bedarf', es: 'si hace falta', fr: 'si nécessaire', nl: 'als dat nodig is', 'pt-BR': 'quando necessário' };
+  for (const [lang, qualifier] of Object.entries(expected)) assert.ok(part(listing(lang), 'Release notes').includes(qualifier), `${lang || 'en'}: access is requested only when needed`);
+  const changelog = read('../CHANGELOG.md').split('## [4.0.3]')[1].split('## [4.0.2]')[0];
+  for (const key of ['Pearson problem viewer', 'Pearson inside Blackboard', 'Modern Pearson equations', 'when needed']) assert.ok(changelog.includes(key), key);
 });
 
 // Typing effects (3.3.6) draw at the caret: the listing says they never read what is typed and stay out of password fields.
