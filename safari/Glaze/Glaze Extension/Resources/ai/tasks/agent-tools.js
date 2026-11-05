@@ -817,14 +817,17 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // as a point ("84,00" is "84.00"), an hour without its leading zero ("08:05" is "8:05").
   const spelled = (s) => X().norm(s).replace(/[*_`]+/g, '').replace(/(\d),(\d)/g, '$1.$2').replace(/(?<![\d.])0(\d)(?=[:h.]\d\d)/g, '$1').replace(/\s+/g, ' ').trim();
   const WORD = /[\p{L}\p{N}]+/gu;
-  // A long fact said in other words: most of its words, and every number, in the answer ("your preference: explanations
-  // with a small sketch…" states "I prefer explanations with a small sketch…").
+  // A long fact may be introduced in another person, but its identifying words must stay together and unchanged.
   const restated = (t, q, locale) => {
-    const own = new Set((PERSON[locale] || []).flat()), tw = new Set(t.match(WORD) || []);
-    const qw = (q.match(WORD) || []).filter((w) => !own.has(w));
-    if (qw.length < 4 || qw.some((w) => /^\d/.test(w) && !tw.has(w))) return false;
-    const content = qw.filter((w) => w.length >= 3 || /^\d/.test(w));
-    return content.length >= 3 && content.filter((w) => tw.has(w)).length >= 0.8 * content.length;
+    const words = q.match(WORD) || [];
+    if (words.length < 5) return false;
+    const prefix = /^(?:i|my|me|je|mon|ma|yo|mi|eu|meu|ich|mein|ik|mijn) (?:prefer|prefero|prefiero|préfère|bevorzuge|verkies|like|love|enjoy|aime|gusta|gosto|mag)$/u;
+    for (let skip = 1; skip <= Math.min(3, words.length - 4); skip++) {
+      if (!prefix.test(words.slice(0, skip).join(' '))) continue;
+      const suffix = words.slice(skip);
+      if (suffix.length >= 4 && new RegExp(`(?<![\\p{L}\\p{N}])${suffix.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[^\\p{L}\\p{N}]+')}(?![\\p{L}\\p{N}])`, 'u').test(t)) return true;
+    }
+    return false;
   };
   const visibleFact = (text, quote, locale) => {
     const q = spelled(quote), t = spelled(text);
@@ -870,8 +873,14 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   };
   // Quotes are Glaze's evidence, never shown to the student: one that is neither in the answer nor anywhere Glaze showed
   // is dropped; one the answer says that nothing holds stays, and is refused as an invented value.
-  // A quote copied with a slip ("rendir les livres" for "rendre les livres"): most of its words in one value Glaze showed.
+  // A changed leading article can still name the same value; other changed words may identify a different item.
   const near = (pool, q) => {
+    const withoutArticle = (v) => spelled(v).replace(/^(?:a|an|the|un|une|le|la|les|el|los|las|uma?|os|as|der|die|das|ein|eine|de|het|een)\s+/u, '');
+    const c = withoutArticle(q);
+    return c !== spelled(q) && [...c].length >= 3 && pool.some((v) => withoutArticle(v) === c);
+  };
+  // A slipped, unshown quote can be discarded, but a quote stated in the reply must still be checked.
+  const slipped = (pool, q) => {
     const qw = (spelled(q).match(WORD) || []).filter((w) => w.length >= 3 || /^\d/.test(w));
     if (qw.length < 2) return false;
     return pool.some((v) => { const vw = new Set(spelled(v).match(WORD) || []); return qw.every((w) => !/^\d/.test(w) || vw.has(w)) && qw.filter((w) => vw.has(w)).length >= 0.75 * qw.length; });
@@ -879,7 +888,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const keptQuotes = (out, inp) => {
     const data = values([...(inp.fired ? [inp.fired] : []), ...inp.steps.map((s) => s.result)], inp.first === true);
     const pool = [...data.map(String), inp.question, ...shownContext(inp)], inData = holder(pool);
-    return out.answer.quotes.filter((q) => q.trim() && (inData(q) || visibleFact(out.answer.text, q, inp.locale) || !near(pool, q)));
+    return out.answer.quotes.filter((q) => q.trim() && (inData(q) || spelled(out.answer.text).includes(spelled(q)) || near(pool, q) || !slipped(pool, q)));
   };
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length) return 'schema';
