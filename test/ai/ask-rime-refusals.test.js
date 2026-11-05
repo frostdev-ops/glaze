@@ -268,3 +268,15 @@ test('study help: a kind that does not fit is relabelled, and chat with no share
   const other = help({ question: 'Here is my history answer for the quiz, is it complete? The treaty ended the war because both sides were exhausted and the economy had collapsed after years of blockade.', attempt: 'The treaty ended the war because both sides were exhausted.' });
   assert.equal(H.why({ kind: 'hint', step: null, reply: 'The treaty ended the war because both sides were exhausted and broke.', followUp: null }, other), 'speaks', 'shared work under "other" keeps the rule');
 });
+
+test('a course named by its code is named; a failed read needs no quoted fact beyond discovery', () => {
+  const courses = step('courses_list', {}, { items: [{ id: '412', name: 'AVI 412 – Sécurité aérienne et facteurs humains' }] });
+  const none = step('announcements_list', { course: '412' }, { items: [], covers: { complete: true } });
+  const fr = at('Y a-t-il des annonces pour AVI 412 ?', [courses, none], { locale: 'fr', tools: ['courses_list', 'announcements_list'] });
+  assert.equal(A.why(answer('Aucune annonce n’a été trouvée pour AVI 412.', ['AVI 412 – Sécurité aérienne et facteurs humains']), fr), '');
+  assert.equal(A.why(answer('Aucune annonce n’a été trouvée pour AVI 413.', ['AVI 412 – Sécurité aérienne et facteurs humains']), fr), 'ground', 'another code');
+  const accounts = step('accounts_list', {}, { items: [{ account: 'https://canvas.example.edu/7', origin: 'https://canvas.example.edu', lms: 'canvas' }] });
+  const failed = step('assignments_list', {}, { ok: false, error: 'The requested record is absent from this account.' });
+  const es = at('¿Puedes leer las instrucciones completas?', [accounts, failed], { locale: 'es', tools: ['accounts_list', 'assignments_list'] });
+  assert.equal(A.why(answer('No puedo leer las instrucciones completas porque no encontré el trabajo en la cuenta.'), es), '');
+});
