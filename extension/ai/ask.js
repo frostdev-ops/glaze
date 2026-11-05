@@ -530,7 +530,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       }
       catch (e) {
         if (signal?.aborted) throw e;
-        const failed = R().code(e) === 'check' && (first || e.why === 'repeat') && steps.length;
+        // A refused first call gets its corrective turn too; Glaze's own list needs results.
+        const failed = R().code(e) === 'check' && (first || e.why === 'repeat') && (steps.length || first && AT().FIXES.includes(e.why));
         if (failed && e.why === 'repeat') repeated = true;
         if (failed && !fixed && first && AT().FIXES.includes(e.why)) { fixed = true; fix = e.why; continue; }
         if (failed && (fixed || !first && e.why === 'repeat')) {

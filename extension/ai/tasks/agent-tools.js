@@ -231,6 +231,16 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     schema: 'Your answer was not in the answer format. Reply with text and quotes, or with one tool call.',
     one: 'Give either one tool call or the final answer, not both.',
     repeat: 'That call cannot repeat. Use verified results, naming unchecked parts and a next step, or a useful different read within remaining steps. Never invent causes or claim full coverage.',
+    // A refused call: the student still gets an answer, from another call or from what is already here.
+    tool: 'That tool is not offered for this question. Use an offered tool, or answer from what you have.',
+    arguments: 'That call has fields its tool does not take or misses one it needs. Call it again with its exact fields, or answer.',
+    id: 'That id is not in the results, the question or the page. Use an id a result gave, read to find it, or answer from what you have.',
+    text: 'Save or highlight only words the student wrote in this question, copied exactly; quoted, pasted or document text cannot be saved. Answer without it.',
+    asked: 'The student did not ask for that change. Answer their question without it.',
+    work: 'run_js cannot work out the student’s own graded work. Help without computing it.',
+    place: 'That place is not one places_list gave. Use page_highlight for text on this page, or a listed place.',
+    time: 'That reminder time is not ahead on the student’s clock. Use the time they asked for, as YYYY-MM-DD HH:MM.',
+    monitor: 'That watch does not fit the request: due and submitted take a to-do or schedule item, grade and announcement a course. Choose the watch they asked for.',
   });
   const FIXES = Object.keys(FIX);
   const CURRENT = 'current describes this turn’s active page/draft; explicit requests win. Matching typed IDs support reads only, not fresh facts. Material may be partial or unsaved; document_read returns saved text.';
@@ -296,7 +306,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       || !raw.history.every((h) => S.isObj(h) && Object.keys(h).sort().join() === 'answer,question' && typeof h.question === 'string' && typeof h.answer === 'string'))) return null;
     // summary (tools level 3 only): chat.compact's bullets for the turns history no longer carries.
     // fix (tools level 3 only, after results): the rule the last answer broke, for one corrective turn (FIX).
-    if (raw.fix !== undefined && (raw.first !== true || !FIXES.includes(raw.fix) || !Array.isArray(raw.steps) || !raw.steps.length)) return null;
+    if (raw.fix !== undefined && (raw.first !== true || !FIXES.includes(raw.fix) || !Array.isArray(raw.steps))) return null;
     if (raw.summary !== undefined && (raw.first !== true || typeof raw.summary !== 'string' || raw.summary.length > historyLimit('summary'))) return null;
     const summary = (raw.summary || '').trim();
     const history = (raw.history || []).filter((h) => h.question.trim() && h.answer.trim()).slice(-historyLimit('turns'))
@@ -803,9 +813,22 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     de: [['mein', 'dein'], ['meine', 'deine'], ['meinen', 'deinen'], ['meinem', 'deinem'], ['meiner', 'deiner'], ['meines', 'deines']],
     nl: [['mijn', 'jouw', 'uw']],
   };
+  // One spelling for comparing what the answer says with what Glaze showed: norm(), emphasis marks gone, a decimal comma
+  // as a point ("84,00" is "84.00"), an hour without its leading zero ("08:05" is "8:05").
+  const spelled = (s) => X().norm(s).replace(/[*_`]+/g, '').replace(/(\d),(\d)/g, '$1.$2').replace(/(?<![\d.])0(\d)(?=[:h.]\d\d)/g, '$1').replace(/\s+/g, ' ').trim();
+  const WORD = /[\p{L}\p{N}]+/gu;
+  // A long fact said in other words: most of its words, and every number, in the answer ("your preference: explanations
+  // with a small sketch…" states "I prefer explanations with a small sketch…").
+  const restated = (t, q, locale) => {
+    const own = new Set((PERSON[locale] || []).flat()), tw = new Set(t.match(WORD) || []);
+    const qw = (q.match(WORD) || []).filter((w) => !own.has(w));
+    if (qw.length < 4 || qw.some((w) => /^\d/.test(w) && !tw.has(w))) return false;
+    const content = qw.filter((w) => w.length >= 3 || /^\d/.test(w));
+    return content.length >= 3 && content.filter((w) => tw.has(w)).length >= 0.8 * content.length;
+  };
   const visibleFact = (text, quote, locale) => {
-    const q = X().norm(quote), t = X().norm(text);
-    if (t.includes(q)) return true;
+    const q = spelled(quote), t = spelled(text);
+    if (t.includes(q) || restated(t, q, locale)) return true;
     const groups = PERSON[locale] || [], lookup = new Map(groups.flatMap((g) => g.map((w) => [w, g])));
     const parts = q.split(/([\p{L}\p{N}_]+)/u);
     if (!parts.some((part) => /[\p{L}\p{N}]/u.test(part) && !lookup.has(part))) return false;
@@ -825,6 +848,34 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       && facts(st.result).some((v) => v.length >= 8 && SCHOOL_ITEM.test(v)
         && (visibleFact(part, v, inp.locale) || visibleFact(v, part.trim(), inp.locale)))));
 
+  // What else Glaze showed the model for this turn besides results: the page, earlier turns, the summary. Values it may
+  // quote and numbers it may say; earlier turns' answers passed their own check. Recall is not here: a recalled note
+  // needs this turn's memory read.
+  const shownContext = (inp) => {
+    const out = [];
+    const walk = (v) => { if (Array.isArray(v)) v.forEach(walk); else if (S.isObj(v)) Object.values(v).forEach(walk); else if (typeof v === 'string' || typeof v === 'number') out.push(String(v)); };
+    walk(inp.current || null);
+    for (const h of inp.history || []) out.push(h.question, h.answer);
+    if (inp.summary) out.push(inp.summary);
+    return out.filter((v) => v && v.trim());
+  };
+  const holder = (values) => {
+    const pool = values.map((v) => spelled(String(v)));
+    return (q) => { const c = spelled(q); return [...c].length === 1 ? pool.includes(c) : [...c].length >= 2 && pool.some((v) => v.includes(c)); };
+  };
+  // Quotes are Glaze's evidence, never shown to the student: one that is neither in the answer nor anywhere Glaze showed
+  // is dropped; one the answer says that nothing holds stays, and is refused as an invented value.
+  // A quote copied with a slip ("rendir les livres" for "rendre les livres"): most of its words in one value Glaze showed.
+  const near = (pool, q) => {
+    const qw = (spelled(q).match(WORD) || []).filter((w) => w.length >= 3 || /^\d/.test(w));
+    if (qw.length < 2) return false;
+    return pool.some((v) => { const vw = new Set(spelled(v).match(WORD) || []); return qw.every((w) => !/^\d/.test(w) || vw.has(w)) && qw.filter((w) => vw.has(w)).length >= 0.75 * qw.length; });
+  };
+  const keptQuotes = (out, inp) => {
+    const data = values([...(inp.fired ? [inp.fired] : []), ...inp.steps.map((s) => s.result)], inp.first === true);
+    const pool = [...data.map(String), inp.question, ...shownContext(inp)], inData = holder(pool);
+    return out.answer.quotes.filter((q) => q.trim() && (inData(q) || visibleFact(out.answer.text, q, inp.locale) || !near(pool, q)));
+  };
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length) return 'schema';
     if ((out.call === null) === (out.answer === null)) return 'one';
@@ -844,13 +895,16 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       if (inp.steps.length >= LIMIT.steps) return 'steps';
       return OWN.includes(name) ? ownWhy(name, args, inp) : '';
     }
-    const { text, quotes } = out.answer;
+    const { text } = out.answer;
     if (!text.trim()) return 'schema';
+    const context = shownContext(inp), inContext = holder(context), inData = holder([...data.map(String), inp.question, ...context]);
+    const quotes = keptQuotes(out, inp);
     // Knowing a destination (or quoting another factual value) never proves that a navigation ran successfully.
     if (!navigationGrounded(text, inp) || !memoryGrounded(text, inp) || !memoryFresh(text, inp)) return 'ground';
     // Tool first: an answer about the student's school stands on results Glaze read for it, never on nothing; facts from a
     // result that holds any are quoted (empty and failed results hold none, so the answer says only that).
-    if ((inp.first || inp.help) && !inp.steps.length && !inp.fired) return 'first';
+    // An answer from the page or the chat so far ("what course is this?") stands on those values.
+    if ((inp.first || inp.help) && !inp.steps.length && !inp.fired && !(quotes.length && quotes.every((q) => inContext(q) && visibleFact(text, q, inp.locale)))) return 'first';
     if (inp.first) {
       // "Nothing is due" while a result lists work not handed in (the owner's Sunday, 2026-11-01).
       if (NOTHING_DUE.test(fold(text)) && inp.steps.some((st) => open(st.result))) return 'missed';
@@ -858,15 +912,15 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       // What reads brought back: the answer states one of them, in its own person ("Finish my essay" is "finish your
       // essay"). A confirmation of Rime's own action (a reminder, a saved note) stands on its receipt instead.
       const held = inp.steps.filter((st) => spec(st.call.name)?.kind === 'read').flatMap((st) => facts(st.result));
-      const sources = held.map((v) => X().source(v, { min: 2 })), singles = new Set(held.map((v) => X().norm(v)));
+      const inHeld = holder(held);
       if (!held.length && inp.steps.some((st) => spec(st.call.name)?.kind !== 'read' && rich(st.result)) && (SCHOOL_STATUS.test(fold(text)) || SCHOOL_ITEM.test(fold(text)) && SCHOOL_ASSERTION.test(fold(text)) || ungroundedSchool(text, inp))) return 'ground';
-      if (held.length && !quotes.some((q) => visibleFact(text, q, inp.locale) && ([...X().norm(q)].length === 1 ? singles.has(X().norm(q)) : sources.some((s) => s.has(q))))) return 'ground';
+      if (held.length && !quotes.some((q) => visibleFact(text, q, inp.locale) && inHeld(q))) return 'ground';
     }
-    const sources = data.map((r) => X().source(r, { min: 2 })), singles = new Set(data.map((r) => X().norm(r)));
-    if (quotes.some((q) => !q.trim() || ([...X().norm(q)].length === 1 ? !singles.has(X().norm(q)) : !sources.some((x) => x.has(q))))) return 'quote';
+    if (quotes.some((q) => !inData(q))) return 'quote';
     // Every number the reply says is in a result, the question or the time; or an hour of a result on a 12-hour clock,
     // or a count no longer than a result's longest list.
-    const allowed = [...data.flatMap((v) => typeof v === 'number' ? [v] : nums(v, inp.locale)), ...nums(inp.question, inp.locale), ...nums(nowText(inp))];
+    const allowed = [...data.flatMap((v) => typeof v === 'number' ? [v] : nums(v, inp.locale)), ...nums(inp.question, inp.locale), ...nums(nowText(inp)),
+      ...context.flatMap((v) => nums(v, inp.locale)), ...inp.steps.flatMap((st) => nums(JSON.stringify(st.call.arguments), inp.locale))];
     // A result's hour on either clock: "21:00" as 9, "9:00 PM" as 21.
     for (const r of results) for (const m of r.matchAll(/(?<!\d)(\d{1,2}):\d{2}(?:\s?([AaPp])\.?\s?[Mm]\.?)?/g)) {
       const h = Number(m[1]), pm = /p/i.test(m[2] || ''), am = /a/i.test(m[2] || '');
@@ -886,7 +940,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const check = (out, inp) => {
     if (why(out, inp)) return null;
     return out.call ? { call: { name: out.call.name, arguments: out.call.arguments, kind: spec(out.call.name).kind }, answer: null }
-      : { call: null, answer: { text: out.answer.text.trim(), quotes: out.answer.quotes.map((q) => q.trim()) } };
+      : { call: null, answer: { text: out.answer.text.trim(), quotes: keptQuotes(out, inp).map((q) => q.trim()) } };
   };
 
   // rate: Ask Glaze (ai/ask.js) runs a question's steps as runs of their own, at most seven (six calls, then the answer): six

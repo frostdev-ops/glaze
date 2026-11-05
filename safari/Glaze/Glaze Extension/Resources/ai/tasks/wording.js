@@ -167,8 +167,10 @@ var GZ_AI_WORDING = globalThis.GZ_AI_WORDING || (() => {
   const RULES = { true: offerRules(true), false: offerRules(false) };
   // Whether text offers wording: an English rule anywhere, a locale rule outside a quotation (a quoted command word
   // describes supplied wording, as writer-feedback.js judges it). examples: false lets "for example," and its forms stand.
+  // Asking the student to tell Rime something ("você pode me dizer…", "can you tell me…") offers them no wording.
+  const ASK_ME = /(?<![\p{L}])(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:tell|say\s+to)\s+(?:me|us)|(?:pode|poderia|podia)s?\s+(?:me|nos)\s+dizer|(?:me|nos)\s+(?:pode|poderia)s?\s+dizer|(?:puedes|podrías|puede|podría|podés)\s+decir(?:me|nos)|(?:me|nos)\s+(?:puedes|podrías|puede|podría)\s+decir|(?:peux|pourrais|pouvez|pourriez)(?:-tu|-vous)?\s+(?:me|m['’]|nous)\s*dire|(?:kannst|könntest|können|könnten)\s+(?:du|Sie)\s+(?:mir|uns)(?:\s+\S+){0,3}?\s+sagen|(?:kun|kan|zou|wil)\s+(?:je|jij|u)\s+(?:me|mij|ons)(?:\s+\S+){0,3}?\s+(?:zeggen|vertellen))(?![\p{L}])/giu;
   const offers = (text, { examples = true } = {}) => {
-    const c = String(text), quoted = quotedRanges(c, true);
+    const c = String(text).replace(ASK_ME, (m) => ' '.repeat(m.length)), quoted = quotedRanges(c, true);
     return RULES[examples === true].some(({ r, quoted: anywhere }) => (anywhere ? new RegExp(r.source, r.flags.replace('g', '')).test(c)
       : [...c.matchAll(r)].some((m) => !quoted.some((q) => m.index >= q.start && m.index < q.end))));
   };

@@ -308,6 +308,11 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
     if (WD.offers(cited(words_, texts), { examples: false })) return 'wording';
     return '';
   };
+  // Work the student shared to be written about: their attempt, material, the assignment, a paper they name, or a long
+  // pasted passage. Without it, an "other" chat ("I prefer a small sketch first", "pick up from earlier") may repeat
+  // their words back to them.
+  const sharedWork = (inp) => !!(inp.attempt || inp.material || inp.context?.assignment || inp.context?.prompt)
+    || [inp.question, ...(inp.history || []).map((h) => h.question)].some((t) => PAPER.test(t)) || words(inp.question).length >= 60;
   // → '' when the reply may go to the student, else the rule it breaks: schema, kind, answer, solves, code, wording, quote, speaks.
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length || !out.reply.trim()) return 'schema';
@@ -332,7 +337,7 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
       }
       // Essays, reading and the rest: every statement speaks to the student or about their work. A concept may explain
       // with another text, but never with a name or three words in a row from theirs.
-      if (['essay', 'reading', 'other'].includes(inp.subject)) {
+      if (['essay', 'reading'].includes(inp.subject) || inp.subject === 'other' && sharedWork(inp)) {
         for (const s of sentences(words_)) {
           if (asks(s) || WD.about(s) || IMPERATIVE.test(s) || socialRequest(inp)) continue;
           if (out.kind !== 'concept' && words(s).length >= 5) return 'speaks';
@@ -345,8 +350,17 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
     return '';
   };
   // A followUp that isn't a question is dropped; anything else wrong refuses the reply.
+  // The reply's kind is a label: a mismatch is relabelled, never refused. A "question" that asks nothing, or a check of a step
+  // the student never gave, is a concept.
+  const relabel = (out, inp) => {
+    if (!S.isObj(out) || !KINDS.includes(out.kind) || typeof out.reply !== 'string') return out;
+    if (out.kind === 'check-my-step' && (!inp.attempt || !STEPS.includes(out.step))) return { ...out, kind: 'concept', step: null };
+    if (out.kind !== 'check-my-step' && out.step !== null) out = { ...out, step: null };
+    return out.kind === 'question' && !asks(out.reply) ? { ...out, kind: 'concept' } : out;
+  };
   const check = (out, inp) => {
     if (S.isObj(out) && typeof out.followUp === 'string' && (!out.followUp.trim() || !asks(out.followUp))) out = { ...out, followUp: null };
+    out = relabel(out, inp);
     if (why(out, inp)) return null;
     return { kind: out.kind, step: out.step, reply: out.reply.trim(), followUp: out.followUp === null ? null : out.followUp.trim() };
   };
