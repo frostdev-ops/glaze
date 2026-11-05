@@ -150,6 +150,7 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
     "(?:ich hei(?:ß|ss)e|mein name ist|nenn mich) [\\p{L}'’-]+(?: [\\p{L}'’-]+)?|(?:kennst|wei(?:ß|ss)t) du (?:meinen namen|wie ich hei(?:ß|ss)e|wer ich bin)|wie hei(?:ß|ss)e ich|wer bin ich|was wei(?:ß|ss)t du (?:über|ueber) mich",
     "(?:ik heet|mijn naam is|noem me) [\\p{L}'’-]+(?: [\\p{L}'’-]+)?|(?:weet|ken) je (?:mijn naam|hoe ik heet|wie ik ben)|hoe heet ik|wie ben ik|wat weet je over mij",
   ].join('|')})[?!.\\s]*$`, 'iu');
+  const PAPER = /(?<![\p{L}\p{N}])(?:essay|paper|thesis|draft|paragraph|ensayo|tesis|redacci[óo]n|redação|reda[cç][ãa]o|tese|disserta[cç][ãa]o|th[èe]se|r[ée]daction|dissertation|aufsatz|these|entwurf|werkstuk|scriptie|stelling)(?![\p{L}\p{N}])/iu;
   // An identity question may itself be a reading exercise. Explicit school material disambiguates the bare form;
   // a name-specific question can still be a personal request while coursework is open.
   const ambiguousIdentity = /^(?:who am i|qui[ée]n soy|quem sou eu|qui suis-je|wer bin ich|wie ben ik)[?!.\s]*$/iu;
@@ -159,7 +160,7 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
       .map((s) => s.trim().replace(/[’‘]/g, "'").replace(/^[¿¡]\s*/u, ''));
     const material = [inp.material, inp.context?.prompt, inp.context?.assignment?.instructions, inp.context?.assignment?.description,
       ...(inp.context?.assignment?.files || []).map((f) => f.text), ...recalled(inp)].filter(Boolean);
-    const workHistory = ['essay', 'reading'].includes(inp.subject) && inp.history?.length;
+    const workHistory = inp.history?.some((h) => ['essay', 'reading'].includes(inp.subject) || PAPER.test(h.question));
     if ((material.length || workHistory) && parts.some((q) => ambiguousIdentity.test(q))) return false;
     if (material.some((t) => X().source(t, { min: 3 }).has(inp.question))) return false;
     return parts.every((q) => social(q.replace(/^(?:please\s+)?say\s+/iu, '')) || /^(?:rime|glaze)[?!.\s]*$/iu.test(q) || SOCIAL_QUESTION.test(q));
@@ -315,13 +316,12 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
     const texts = textsOf(inp), sources = texts.map((t) => X().source(t));
     // Quoting the student's own saved note back to them offers no wording.
     const own = (inp.recall?.records || []).filter((r) => r.kind === 'memory').flatMap((r) => [r.text, r.source?.evidence]).filter((t) => typeof t === 'string');
-    const paper = /(?<![\p{L}\p{N}])(?:essay|paper|thesis|draft|paragraph|ensayo|tesis|redacci[óo]n|redação|reda[cç][ãa]o|tese|disserta[cç][ãa]o|th[èe]se|r[ée]daction|dissertation|aufsatz|these|entwurf|werkstuk|scriptie|stelling)(?![\p{L}\p{N}])/iu;
     const memoryQuestion = /(?<![\p{L}\p{N}])(?:save[ds]?|remember|memory|recall|guard[éea]s?|recuerd[ao]s?|mem[oó]ria|salv[eo]u?|lembr[ao]|souviens|m[ée]moire|enregistr[ée]|gespeichert|erinner|geheugen|opgeslagen|onthoud)(?![\p{L}\p{N}])/iu.test(inp.question)
       && /(?<![\p{L}\p{N}])(?:preferences?|notes?|facts?|preferencias?|recuerdos?|prefer[êe]ncias?|anota[cç][ãa]o|pr[ée]f[ée]rences?|notiz|vorlieben?|voorkeur(?:en)?)(?![\p{L}\p{N}])/iu.test(inp.question)
-      && !paper.test(inp.question);
-    const paperWork = !socialRequest(inp) && !memoryQuestion && (['essay', 'reading'].includes(inp.subject) || [inp.question, ...(inp.history || []).map((h) => h.question), inp.context?.prompt || ''].some((t) => paper.test(t)));
+      && !PAPER.test(inp.question);
+    const paperWork = !socialRequest(inp) && !memoryQuestion && (['essay', 'reading'].includes(inp.subject) || [inp.question, ...(inp.history || []).map((h) => h.question), inp.context?.prompt || ''].some((t) => PAPER.test(t)));
     for (const piece of [out.reply, out.followUp].filter((p) => typeof p === 'string' && p.trim())) {
-      const quotable = [...sources, ...(!paperWork && !paper.test(piece) ? own.map((t) => X().source(t)) : [])];
+      const quotable = [...sources, ...(!paperWork && !PAPER.test(piece) ? own.map((t) => X().source(t)) : [])];
       const rule = hands(piece, inp);
       if (rule) return rule;
       const words_ = prose(piece);
