@@ -1,7 +1,7 @@
 importScripts('../courses/download.js', '../core/color.js', '../looks/fonts.js', '../looks/surfaces.js', '../content/defaults.js', '../looks/lookset.js', '../looks/history.js', '../courses/cards.js', '../navigation/nav.js', '../navigation/nav-items.js', '../navigation/navlayout.js', '../looks/motionx.js', '../looks/parts.js', '../navigation/nav-store.js', '../planner/todo.js', '../pet/petbrain.js', '../pet/pet.js', '../pet/petsprites.js', '../planner/remind.js', '../core/widgets.js', '../navigation/sidebar.js', '../looks/lookparts.js', '../sharing/share.js', '../looks/lookx.js', '../looks/looks.js', '../planner/gradescope.js', '../core/doctext.js', '../courses/folders.js', '../planner/notes.js', '../planner/calexport.js', '../planner/gcal.js', '../planner/gcal-auth.js', '../core/site.js', '../navigation/coursetabs.js');
 
 importScripts('../pearson/notation.js','../pearson/native.js','../background/pearson.js');
-importScripts('../background/pearson-embed.js');
+importScripts('../pearson/embed.js', '../background/pearson-embed.js');
 
 // Cache packaged broker scripts at install; parse them on first use rather than every worker wake.
 const BROKER_FILES = {
