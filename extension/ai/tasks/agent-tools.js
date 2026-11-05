@@ -898,8 +898,9 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   };
   // Recall is a hint for finding a record, not a read. Distinctive phrases from it need an independent source.
   const unreadRecall = (text, inp, context) => {
-    if (!inp.recall?.records.length || inp.steps.some((st) => ['memory_read', 'memory_search'].includes(st.call.name))) return false;
-    const answerWords = spelled(text).match(WORD) || [], shown = spelled([inp.question, ...context].join(' '));
+    if (!inp.recall?.records.length) return false;
+    const read = inp.steps.flatMap((st) => spec(st.call.name)?.kind === 'read' ? facts(st.result) : []);
+    const answerWords = spelled(text).match(WORD) || [], shown = spelled([inp.question, ...context, ...read].join(' '));
     return inp.recall.records.some((r) => [r.text, r.source?.evidence].filter((v) => typeof v === 'string').some((v) => {
       const w = spelled(v).match(WORD) || [];
       return w.some((_, i) => [3, 2].some((n) => {
