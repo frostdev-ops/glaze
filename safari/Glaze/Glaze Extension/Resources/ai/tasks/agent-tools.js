@@ -880,15 +880,17 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     return c !== spelled(q) && [...c].length >= 3 && pool.some((v) => withoutArticle(v) === c);
   };
   // A slipped, unshown quote can be discarded, but a quote stated in the reply must still be checked.
-  const slipped = (pool, q) => {
+  const slipped = (pool, q, text) => {
     const qw = (spelled(q).match(WORD) || []).filter((w) => w.length >= 3 || /^\d/.test(w));
     if (qw.length < 2) return false;
-    return pool.some((v) => { const vw = new Set(spelled(v).match(WORD) || []); return qw.every((w) => !/^\d/.test(w) || vw.has(w)) && qw.filter((w) => vw.has(w)).length >= 0.75 * qw.length; });
+    const said = new Set(spelled(text).match(WORD) || []);
+    return pool.some((v) => { const vw = new Set(spelled(v).match(WORD) || []), changed = qw.filter((w) => !vw.has(w));
+      return changed.length && changed.every((w) => !/^\d/.test(w) && !said.has(w)) && qw.length - changed.length >= 0.75 * qw.length; });
   };
   const keptQuotes = (out, inp) => {
     const data = values([...(inp.fired ? [inp.fired] : []), ...inp.steps.map((s) => s.result)], inp.first === true);
     const pool = [...data.map(String), inp.question, ...shownContext(inp)], inData = holder(pool);
-    return out.answer.quotes.filter((q) => q.trim() && (inData(q) || spelled(out.answer.text).includes(spelled(q)) || near(pool, q) || !slipped(pool, q)));
+    return out.answer.quotes.filter((q) => q.trim() && (inData(q) || spelled(out.answer.text).includes(spelled(q)) || near(pool, q) || !slipped(pool, q, out.answer.text)));
   };
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length) return 'schema';
