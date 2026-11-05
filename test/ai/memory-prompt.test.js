@@ -227,3 +227,9 @@ test('study help with recall cannot claim memory mutations or Drive sync without
   assert.equal(H.why(reply('I could not save your preference.'), inp), '');
   assert.equal(H.why(reply('The phrase "I saved it" is not a receipt.'), inp), 'quote', 'the existing quote rule still applies');
 });
+
+test('a page name cannot carry an unread recalled preference into the answer', () => {
+  const inp = A.task.input(raw({ question: 'What course is this and what preference did I save?', recall: recall(),
+    current: { site: 'canvas', view: 'course', course: { id: '52', name: 'BIO 101' } } }));
+  assert.notEqual(A.why(answer('This is BIO 101. You prefer short paragraphs.', ['BIO 101']), inp), '', 'the current page does not authorize recall as a memory read');
+});
