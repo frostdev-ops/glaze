@@ -830,7 +830,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const q = spelled(quote), t = spelled(text);
     if (t.includes(q) || restated(t, q, locale)) return true;
     // A course or item named by its code, the part before its dash or colon ("AVI 412" for "AVI 412 – Sécurité aérienne").
-    const head = q.split(/\s+[–—-]\s+|:\s+/u)[0];
+    const head = (/^[\p{L}]{2,6}[ -]?\d{2,4}(?![\p{L}\p{N}])/u.exec(q) || [])[0] || q.split(/\s+[–—-]\s+|:\s+/u)[0];
     if (head !== q && /\d/.test(head) && [...head].length >= 3 && new RegExp(`(?<![\\p{L}\\p{N}])${head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'u').test(t)) return true;
     const groups = PERSON[locale] || [], lookup = new Map(groups.flatMap((g) => g.map((w) => [w, g])));
     const parts = q.split(/([\p{L}\p{N}_]+)/u);
@@ -920,9 +920,13 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       const held = inp.steps.filter((st) => spec(st.call.name)?.kind === 'read' && st.call.name !== 'accounts_list').flatMap((st) => facts(st.result));
       const inHeld = holder(held);
       if (!held.length && inp.steps.some((st) => spec(st.call.name)?.kind !== 'read' && rich(st.result)) && (SCHOOL_STATUS.test(fold(text)) || SCHOOL_ITEM.test(fold(text)) && SCHOOL_ASSERTION.test(fold(text)) || ungroundedSchool(text, inp))) return 'ground';
-      if (held.length && !quotes.some((q) => visibleFact(text, q, inp.locale) && inHeld(q))) return 'ground';
+      // When the last read came back empty or failed, the answer says so and quotes nothing it read before.
+      const last = inp.steps.at(-1);
+      if (held.length && !(last && spec(last.call.name)?.kind === 'read' && !rich(last.result))
+        && !quotes.some((q) => visibleFact(text, q, inp.locale) && (inHeld(q) || near(held, q)))) return 'ground';
     }
-    if (quotes.some((q) => !inData(q))) return 'quote';
+    const pool = [...data.map(String), inp.question, ...context];
+    if (quotes.some((q) => !inData(q) && !near(pool, q))) return 'quote';
     // Every number the reply says is in a result, the question or the time; or an hour of a result on a 12-hour clock,
     // or a count no longer than a result's longest list.
     const allowed = [...data.flatMap((v) => typeof v === 'number' ? [v] : nums(v, inp.locale)), ...nums(inp.question, inp.locale), ...nums(nowText(inp)),
