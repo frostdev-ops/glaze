@@ -322,3 +322,10 @@ test('a slipped quote cannot hide its invented identifying word in the answer', 
   const text = 'Prepare the chemistry laboratory report, and your biology laboratory report is due.';
   assert.notEqual(A.why(answer(text, ['Prepare the chemistry laboratory report', 'Prepare the biology laboratory report']), inp), '', 'the quote differs from the answer but its invented subject is visible');
 });
+
+test('a course code does not ground a different course title', () => {
+  const courses = step('courses_list', {}, { items: [{ id: '412', name: 'AVI 412 – Aviation Safety' }] });
+  const inp = at('What is AVI 412?', [courses]);
+  assert.equal(A.why(answer('AVI 412 is the course.', ['AVI 412 – Aviation Safety']), inp), '');
+  assert.notEqual(A.why(answer('AVI 412 – Underwater Basket Weaving is the course.', ['AVI 412 – Aviation Safety']), inp), '', 'the real code cannot prove a different course name');
+});
