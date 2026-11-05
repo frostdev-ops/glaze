@@ -834,7 +834,11 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (t.includes(q) || restated(t, q, locale)) return true;
     // A course or item named by its code, the part before its dash or colon ("AVI 412" for "AVI 412 – Sécurité aérienne").
     const head = (/^[\p{L}]{2,6}[ -]?\d{2,4}(?![\p{L}\p{N}])/u.exec(q) || [])[0] || q.split(/\s+[–—-]\s+|:\s+/u)[0];
-    if (head !== q && /\d/.test(head) && [...head].length >= 3 && new RegExp(`(?<![\\p{L}\\p{N}])${head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'u').test(t)) return true;
+    if (head !== q && /\d/.test(head) && [...head].length >= 3) {
+      const code = new RegExp(`(?<![\\p{L}\\p{N}])${head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'u').exec(t);
+      // A code on its own names the course. A different title attached to it is a different claim.
+      if (code && !/^\s*[–—-]\s+\p{L}/u.test(t.slice(code.index + code[0].length))) return true;
+    }
     const groups = PERSON[locale] || [], lookup = new Map(groups.flatMap((g) => g.map((w) => [w, g])));
     const parts = q.split(/([\p{L}\p{N}_]+)/u);
     if (!parts.some((part) => /[\p{L}\p{N}]/u.test(part) && !lookup.has(part))) return false;
