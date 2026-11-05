@@ -5,11 +5,13 @@
   const doc = globalThis.__gzPearsonLaunchDoc = crypto.randomUUID();
   // Pearson redirects can leave an interop referrer. The worker identifies the approved Ultra host.
   let host = null;
-  let context = null, enabled = false, active = false, loading = false, ready = false, ended = false, generation = 0, reading = 0;
+  // live: this device holds Pearson's hosts, Glaze and a Pearson switch are on, so a session here stays themed. enabled: also
+  // Pearson inside Blackboard, which embeds new launches; turning it off leaves a live session as it is.
+  let context = null, live = false, enabled = false, active = false, loading = false, ready = false, ended = false, generation = 0, reading = 0;
   const send = (op, extra = {}) => { if (!ended && ready && context) parent.postMessage({ gzPearsonEmbed: op, channel: context.channel, ...extra }, host); };
   const tell = () => document.dispatchEvent(new CustomEvent('glaze:pearson-launch-config', { detail: JSON.stringify({ channel: context?.channel, enabled: !ended && ready && enabled && context?.enabled === true }) }));
   const ownFrame = () => document.getElementById('gz-pearson-embedded');
-  const childContext = () => { if (!ended && ready && enabled && context?.enabled) ownFrame()?.contentWindow?.postMessage({ gzPearsonFrame: 'context', channel: context.channel, theme: context.theme }, L.mylab); };
+  const childContext = () => { if (!ended && ready && live && context) ownFrame()?.contentWindow?.postMessage({ gzPearsonFrame: 'context', channel: context.channel, theme: context.theme }, L.mylab); };
   const start = async () => {
     if (ended) return;
     if (ready) { if (context) { tell(); childContext(); } return; }
@@ -30,10 +32,12 @@
     try {
       const [s, local] = await Promise.all([chrome.storage.sync.get(['enabled','enhance']), chrome.storage.local.get('pearsonAccess')]);
       if (ended || at !== generation || order !== reading) return;
-      enabled = local.pearsonAccess === true && s.enabled !== false && s.enhance?.pearsonEmbed === true;
+      live = local.pearsonAccess === true && s.enabled !== false && ['pearsonViewer', 'pearsonEmbed', 'pearsonMath'].some(k => s.enhance?.[k] === true);
+      enabled = live && s.enhance?.pearsonEmbed === true;
       if (!enabled && ready && context) tell();
+      childContext();
       start();
-    } catch { if (!ended && at === generation && order === reading) { enabled = false; if (ready && context) tell(); } }
+    } catch { if (!ended && at === generation && order === reading) { live = false; enabled = false; if (ready && context) tell(); } }
   };
   document.addEventListener('glaze:pearson-launch-state', e => {
     let data; try { data = JSON.parse(e.detail); } catch { return; }
@@ -50,9 +54,9 @@
       if (context?.channel === m.channel && context.enabled === (m.enabled === true) && context.lookKey === lookKey) return;
       context = { channel: m.channel, enabled: m.enabled === true, theme, lookKey };
       document.documentElement.style.setProperty('--gz-pearson-scheme', theme['--gz-pearson-scheme'] || 'normal'); start();
-    } else if (enabled && e.source === parent && e.origin === host && context && m?.channel === context.channel && m.gzPearsonEmbed === 'locate' && L.channel(m.request)) {
+    } else if (live && e.source === parent && e.origin === host && context && m?.channel === context.channel && m.gzPearsonEmbed === 'locate' && L.channel(m.request)) {
       ownFrame()?.contentWindow?.postMessage({gzPearsonFrame:'locate',channel:context.channel,request:m.request},L.mylab);
-    } else if (enabled && context && e.source === ownFrame()?.contentWindow && e.origin === L.mylab) {
+    } else if (live && context && e.source === ownFrame()?.contentWindow && e.origin === L.mylab) {
       if (m?.gzPearsonFrame === 'hello') childContext();
       if (m?.gzPearsonFrame === 'place' && m.channel === context.channel) {
         const url = L.homework(m.url); if (url) send('place', { url, ...(L.channel(m.request) ? {request:m.request} : {}) });
@@ -64,11 +68,12 @@
     if (a === 'local' && c.pearsonAccess?.newValue !== true || a === 'sync' && (c.enabled?.newValue === false || c.enhance && c.enhance.newValue?.pearsonEmbed !== true)) {
       enabled = false; if (ready && context) tell();
     }
+    if (a === 'local' && c.pearsonAccess?.newValue !== true || a === 'sync' && c.enabled?.newValue === false) live = false;
     read();
   });
   addEventListener('pagehide', () => {
     // A cached document must renew both worker authorization and parent consent before resuming its hook.
-    ended = true; generation++; ready = false; loading = false; enabled = false; host = null;
+    ended = true; generation++; ready = false; loading = false; live = false; enabled = false; host = null;
     if (context) { context.enabled = false; tell(); }
   });
   addEventListener('pageshow', e => { if (e.persisted) { ended = false; read(); } });
