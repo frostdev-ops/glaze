@@ -6,14 +6,24 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [4.0.3] — 2026-11-04
+
 ### Added
 
-- Chrome and Firefox: **Rime**, Glaze's own AI model by Frostdev, built on LFM3-1.7B, runs on your computer after Download in Settings → AI (1.1 to 1.8 GB, the size picked for the computer). What you give it never leaves the computer.
+- Chrome and Firefox: **Rime**, Glaze's own AI model by Frostdev, built on LFM3-1.7B, runs on your computer. Settings → AI shows it as Not available yet until Frostdev publishes it, then offers Download (1.1 to 1.8 GB, the size picked for the computer). What you give it never leaves the computer. Newer versions download and swap in by themselves; turn off **Update automatically** in Settings → AI to stay on the one you have.
+- Chrome and Firefox: once Rime is available, an optional second download lets it read pictures on your computer.
 - **Ask Rime** (Ctrl+K or ⌘K on Canvas and Blackboard; off until you turn it on in Settings → AI) helps with coursework through hints, questions and a check of your own step, never the answer, and answers questions about your to-dos, schedule, grades, assignments and Writer documents; marking a to-do done waits for your OK.
+- Ask Rime remembers what you tell it to. Settings → AI → **Memory** lists, edits, exports and forgets what it saved, and turns saving off. With Google Drive connected, saved memories sync with your other Glaze records.
+- **Pearson MyLab**: your Look on Pearson homework, Pearson opened inside Blackboard, and modern equations you can edit and hand back to Pearson's own answer box. Turn each on in Settings → Course pages → Documents and quizzes; the first one asks your browser for access to Pearson's sites.
+- Blackboard discussions: a PDF attached to a post gets **Preview**, which opens it in Glaze.
 
 ### Fixed
 
 - Blackboard: an assignment with a saved draft of a new attempt no longer shows Past due · Not submitted when an earlier attempt was handed in.
+- Blackboard discussions: Writer keeps its Post button when Blackboard folds an empty reply box, and closes once your post is sent.
+- Blackboard discussions: Glaze's rubric view finds a discussion's rubric again, and a rubric you closed no longer comes back with the course tab.
+- Widgets stay in front of an open course tab.
+- Google Drive and Calendar: a copy of Glaze without Google sign-in set up says so instead of saying you cancelled.
 
 ## [4.0.2] — 2026-11-01
 

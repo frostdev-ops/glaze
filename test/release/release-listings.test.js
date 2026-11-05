@@ -182,7 +182,8 @@ test('AMO and Apple filter browser-labelled bullets; Chrome keeps the full listi
   assert.ok(firefox.description.includes('Beschreibung nur Firefox') && !firefox.description.includes('Beschreibung nur Chrome') && !firefox.description.includes('Beschreibung nur Safari'), 'AMO filters the description too');
   assert.ok(firefox.notes.includes('nur Firefox') && !firefox.notes.includes('nur Chrome') && !firefox.notes.includes('nur Safari'));
   assert.ok(apple.whatsNew.includes('nur Safari') && !apple.whatsNew.includes('nur Chrome') && !apple.whatsNew.includes('nur Firefox'));
-  assert.ok(firefox.notes.includes('Layout zurücksetzen') && apple.whatsNew.includes('Layout zurücksetzen'), 'unlabelled bullets go everywhere');
+  assert.ok(firefox.notes.includes('Dokumente und Tests') && apple.whatsNew.includes('Dokumente und Tests'), 'unlabelled bullets go everywhere');
+  assert.ok(firefox.notes.includes('Noch nicht verfügbar') && !apple.whatsNew.includes('Noch nicht verfügbar'), 'Rime goes to AMO, never to Safari');
   assert.ok(!listings.fr.firefox.notes.includes('seulement Safari') && listings.fr.apple.whatsNew.includes('seulement Safari'), 'French spacing before the colon');
 });
 

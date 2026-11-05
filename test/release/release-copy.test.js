@@ -46,25 +46,26 @@ for (const [lang, expected] of Object.entries(access)) test(`listing ${lang || '
   assert.ok(!/(?:ten tabs|zehn Tabs|diez pestañas|dix onglets|tien tabbladen|dez abas)/.test(listing(lang)), 'no settings editor in ten tabs');
 });
 
-// 4.0.2 is fixes only: each listing's block names the settings it fixes by their names in that language, and labels the
-// Safari-only fixes so AMO leaves them out.
-const release402 = {
-  '': ['NEW IN 4.0.2', 'course bar', 'slower laptops'],
-  de: ['NEU IN 4.0.2', 'Kursleiste', 'langsameren Laptops'],
-  es: ['NOVEDADES DE 4.0.2', 'barra del curso', 'portátiles más lentos'],
-  fr: ['NOUVEAUTÉS DE LA VERSION 4.0.2', 'barre du cours', 'portables plus lents'],
-  nl: ['NIEUW IN 4.0.2', 'cursusbalk', 'tragere laptops'],
-  'pt-BR': ['NOVO NA 4.0.2', 'barra do curso', 'notebooks mais lentos'],
+// 4.0.3: Rime (Chrome and Firefox only, so labelled, never in Safari's notes) and every new switch by its name in that
+// language; Pearson's line says where it asks for access.
+const release403 = {
+  '': ['NEW IN 4.0.3', 'Frostdev', 'Pearson'],
+  de: ['NEU IN 4.0.3', 'Frostdev', 'Pearson'],
+  es: ['NOVEDADES DE 4.0.3', 'Frostdev', 'Pearson'],
+  fr: ['NOUVEAUTÉS DE LA VERSION 4.0.3', 'Frostdev', 'Pearson'],
+  nl: ['NIEUW IN 4.0.3', 'Frostdev', 'Pearson'],
+  'pt-BR': ['NOVO NA 4.0.3', 'Frostdev', 'Pearson'],
 };
-for (const [lang, expected] of Object.entries(release402)) test(`4.0.2 release notes ${lang || 'en'} name the fixed settings and label Safari's fixes`, () => {
+for (const [lang, expected] of Object.entries(release403)) test(`4.0.3 release notes ${lang || 'en'} name Rime's state, Ask Rime, Memory and Pearson's switches, and label Rime for Chrome and Firefox`, () => {
   const text = listing(lang), block = part(text, 'Release notes');
   const context = {};
   if (lang) vm.runInNewContext(read(`i18n/${lang}.js`), context);
   const ui = (key) => lang ? context.GZ_LANGS[lang][key] : key;
-  for (const key of ['Open Blackboard on the dashboard', 'Reset layout', 'Writer']) assert.ok(block.toLowerCase().includes(ui(key).toLowerCase()), key);
-  for (const term of expected) assert.ok(block.toLowerCase().includes(term.toLowerCase()), term);
-  for (const line of block.split('\n').filter((l) => /Google|Writer/.test(l))) assert.match(line, /^•\s*Safari\s*:/, 'Safari\'s fixes are labelled');
-  assert.ok(!/\b(?:CI|audit)\b/i.test(block), 'no internal process in store copy');
+  for (const key of ['Not available yet', 'Ask Rime', 'Memory', 'Course pages', 'Documents and quizzes', 'Preview']) assert.ok(block.toLowerCase().includes(ui(key).toLowerCase()), key);
+  for (const term of expected) assert.ok(block.includes(term), term);
+  const rime = block.split('\n').filter((l) => l.includes(ui('Not available yet')));
+  assert.deepEqual(rime.map((l) => /^•\s*(Chrome|Firefox|Safari)\s*:/.exec(l)?.[1]), ['Chrome', 'Firefox'], 'Rime is labelled for the browsers that have it');
+  assert.ok(!/\b(?:CI|audit|R\d+)\b/i.test(block), 'no internal process or model rounds in store copy');
 });
 
 // Typing effects (3.3.6) draw at the caret: the listing says they never read what is typed and stay out of password fields.
@@ -81,12 +82,12 @@ for (const [lang, expected] of Object.entries(terms)) test(`listing ${lang || 'e
   for (const term of expected) assert.ok(text.includes(term), term);
 });
 
-test('4.0.2 versions agree and the exact pure notes transform fits Apple', () => {
-  assert.equal(JSON.parse(read('manifest.json')).version, '4.0.2');
-  assert.equal(JSON.parse(read('../safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.2');
-  // The helper and its Claude Desktop bundle, glaze-mcp-4.0.2.mcpb on the GitHub release, carry Glaze's version.
-  assert.equal(JSON.parse(read('../mcp/package.json')).version, '4.0.2');
-  assert.equal(JSON.parse(read('../mcp/mcpb/manifest.json')).version, '4.0.2');
+test('4.0.3 versions agree and the exact pure notes transform fits Apple', () => {
+  assert.equal(JSON.parse(read('manifest.json')).version, '4.0.3');
+  assert.equal(JSON.parse(read('../safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.3');
+  // The helper and its Claude Desktop bundle, glaze-mcp-4.0.3.mcpb on the GitHub release, carry Glaze's version.
+  assert.equal(JSON.parse(read('../mcp/package.json')).version, '4.0.3');
+  assert.equal(JSON.parse(read('../mcp/mcpb/manifest.json')).version, '4.0.3');
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
   const script = read('../tools/release/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));
@@ -98,7 +99,7 @@ test('4.0.2 versions agree and the exact pure notes transform fits Apple', () =>
   });
   const result = notes(path.join(root, '..'));
   assert.ok(result.length <= 4000, `${result.length} characters`);
-  assert.match(result, /^Fixed\n/);
+  assert.match(result, /^Added\n/);
   assert.ok(result.length <= 3000, `AMO: ${result.length} characters`);
   assert.ok(!result.includes('## [3.4.5]'));
 });

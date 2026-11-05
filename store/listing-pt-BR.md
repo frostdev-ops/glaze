@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.2 (Portuguese (Brazil))
+# Chrome Web Store listing — Glaze 4.0.3 (Portuguese (Brazil))
 
 ## Short summary (132 character maximum)
 
@@ -73,15 +73,15 @@ Canvas é uma marca da Instructure, Inc. Blackboard é uma marca da Anthology In
 
 ## Release notes
 
-NOVO NA 4.0.2
+NOVO NA 4.0.3
 
-• Blackboard Ultra: a barra do curso se recolhe na pílula e volta sem tremer, também em notebooks mais lentos.
-• Abrir uma pasta, um módulo de aprendizagem ou um menu não faz mais a página pular nem descarta as cópias salvas das suas páginas.
-• Mensagens: Responder fica visível sob a barra superior do Glaze.
-• Atividade: o nome de cada item vem primeiro, em negrito, com o curso embaixo.
-• O texto que o Blackboard deixa sem fundo sobre a sua aparência (SafeAssign, informações adicionais de uma tarefa, barras de ferramentas, filtros, notas, mensagens) ganha uma superfície legível, e as marcações de A fazer aparecem.
-• Em um computador compartilhado, o curso de outro estudante não aparece mais como um cartão vazio, cada estudante recebe os próprios primeiros cartões do Painel, e Redefinir layout move todos os cartões de curso que você vê.
-• Abrir o Blackboard no Painel nunca toma o lugar de uma página que você abriu pelo link.
-• A fazer não é mais redesenhado a cada minuto quando nada mudou.
-• Safari: digitar rápido no Writer não perde mais as últimas letras de uma palavra nem faz o cursor voltar.
-• Safari: o Google Drive e o Google Agenda continuam funcionando depois que o Google recusa um login expirado.
+• Chrome: Rime, o modelo de IA do próprio Glaze, roda no seu computador, e o que você entrega a ele fica lá. Configurações › IA mostra Ainda não disponível até a Frostdev publicá-lo e depois oferece Baixar. Versões novas chegam sozinhas.
+• Firefox: Rime, o modelo de IA do próprio Glaze, roda no seu computador, e o que você entrega a ele fica lá. Configurações › IA mostra Ainda não disponível até a Frostdev publicá-lo e depois oferece Baixar. Versões novas chegam sozinhas.
+• Pergunte ao Rime (Ctrl+K ou ⌘K; desligado até você ativá-lo em Configurações › IA) ajuda nas tarefas do curso com dicas e perguntas, nunca com a resposta, e responde sobre seus afazeres, sua agenda e suas notas.
+• Configurações › IA › Memória mostra, edita e esquece o que o Pergunte ao Rime salvou.
+• Pearson MyLab: sua Aparência nas tarefas da Pearson, Pearson dentro do Blackboard e equações modernas. Ative cada um em Configurações › Páginas do curso › Documentos e questionários; o primeiro pede acesso aos sites da Pearson.
+• Discussões do Blackboard: um PDF anexado a uma publicação ganha Visualizar, que o abre no Glaze.
+• Blackboard: uma tarefa com um rascunho salvo de uma nova tentativa não aparece mais como Atrasado quando uma tentativa anterior foi entregue.
+• O Writer mantém seu botão de publicar quando o Blackboard recolhe uma caixa de resposta vazia.
+• A visualização de rubricas do Glaze volta a encontrar a rubrica de uma discussão.
+• Os widgets ficam na frente de uma aba de curso aberta.

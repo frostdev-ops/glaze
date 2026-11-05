@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.2 (Dutch)
+# Chrome Web Store listing — Glaze 4.0.3 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -73,15 +73,15 @@ Canvas is een handelsmerk van Instructure, Inc. Blackboard is een handelsmerk va
 
 ## Release notes
 
-NIEUW IN 4.0.2
+NIEUW IN 4.0.3
 
-• Blackboard Ultra: de cursusbalk klapt zonder trillen in tot een pil en weer uit, ook op tragere laptops.
-• Een map, een leermodule of een menu openen laat de pagina niet meer springen en gooit de bewaarde kopieën van je pagina's niet meer weg.
-• Berichten: Beantwoorden blijft in beeld onder de bovenbalk van Glaze.
-• Activiteit: de naam van elk item staat voorop, vetgedrukt, met de cursus eronder.
-• Tekst die Blackboard kaal op je achtergrond laat (SafeAssign, aanvullende informatie bij een opdracht, werkbalken, filters, cijfers, berichten) krijgt een leesbaar vlak, en de vinkjes in Taken zijn te zien.
-• Op een gedeelde computer staat de cursus van een andere student niet meer als lege kaart, elke student krijgt eigen eerste dashboardkaarten, en Indeling herstellen verplaatst elke cursuskaart die je ziet.
-• Blackboard openen op het dashboard neemt nooit een pagina over die je via de link hebt geopend.
-• Taken wordt niet meer elke minuut opnieuw getekend als er niets is veranderd.
-• Safari: snel typen in Writer verliest niet meer de laatste letters van een woord en zet de cursor niet meer terug.
-• Safari: Google Drive en Agenda blijven werken nadat Google een verlopen aanmelding heeft geweigerd.
+• Chrome: Rime, het eigen AI-model van Glaze, draait op je computer, en wat je het geeft, blijft daar. Instellingen › AI toont het als Nog niet beschikbaar tot Frostdev het publiceert, en biedt dan Downloaden aan. Nieuwere versies komen vanzelf.
+• Firefox: Rime, het eigen AI-model van Glaze, draait op je computer, en wat je het geeft, blijft daar. Instellingen › AI toont het als Nog niet beschikbaar tot Frostdev het publiceert, en biedt dan Downloaden aan. Nieuwere versies komen vanzelf.
+• Vraag het Rime (Ctrl+K of ⌘K; uit tot je het aanzet in Instellingen › AI) helpt met studiewerk door hints en vragen, nooit met het antwoord, en beantwoordt vragen over je taken, rooster en cijfers.
+• Instellingen › AI › Geheugen toont, bewerkt en vergeet wat Vraag het Rime heeft bewaard.
+• Pearson MyLab: je Uiterlijk op Pearson-huiswerk, Pearson binnen Blackboard en moderne vergelijkingen. Zet ze elk aan in Instellingen › Cursuspagina's › Documenten en toetsen; de eerste vraagt toegang tot de sites van Pearson.
+• Blackboard-discussies: een pdf bij een bericht krijgt Voorbeeld, dat hem in Glaze opent.
+• Blackboard: een opdracht met een opgeslagen concept van een nieuwe poging toont niet meer Te laat als een eerdere poging is ingeleverd.
+• Writer houdt zijn knop om te plaatsen als Blackboard een leeg antwoordvak inklapt.
+• De beoordelingsschema-weergave van Glaze vindt het beoordelingsschema van een discussie weer.
+• Widgets blijven voor een geopend cursustabblad.

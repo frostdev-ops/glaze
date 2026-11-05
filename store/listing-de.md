@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.2 (German)
+# Chrome Web Store listing — Glaze 4.0.3 (German)
 
 ## Short summary (132 character maximum)
 
@@ -73,15 +73,15 @@ Canvas ist eine Marke von Instructure, Inc. Blackboard ist eine Marke von Anthol
 
 ## Release notes
 
-NEU IN 4.0.2
+NEU IN 4.0.3
 
-• Blackboard Ultra: Die Kursleiste klappt ohne Zittern zur Pille ein und wieder auf, auch auf langsameren Laptops.
-• Ein Ordner, ein Lernmodul oder ein Menü lässt beim Öffnen die Seite nicht mehr springen und verwirft nicht mehr die gespeicherten Kopien deiner Seiten.
-• Nachrichten: Antworten bleibt unter der oberen Leiste von Glaze sichtbar.
-• Aktivität: Der Name jedes Eintrags steht zuerst, fett, der Kurs darunter.
-• Text, den Blackboard ohne Fläche auf deinem Hintergrund lässt (SafeAssign, Zusätzliche Informationen einer Aufgabe, Symbolleisten, Filter, Noten, Nachrichten), bekommt eine lesbare Fläche, und die Häkchen im To-do sind zu sehen.
-• Auf einem gemeinsam genutzten Computer erscheint der Kurs eines anderen Studierenden nicht mehr als leere Karte, alle bekommen ihre eigenen ersten Dashboard-Karten, und Layout zurücksetzen verschiebt jede Kurskarte, die du siehst.
-• Blackboard auf dem Dashboard öffnen übernimmt nie eine Seite, die du über ihren Link geöffnet hast.
-• Das To-do wird nicht mehr jede Minute neu gezeichnet, wenn sich darin nichts geändert hat.
-• Safari: Schnelles Tippen in Writer verliert nicht mehr die letzten Buchstaben eines Wortes und setzt den Cursor nicht mehr zurück.
-• Safari: Google Drive und Kalender funktionieren weiter, nachdem Google eine abgelaufene Anmeldung abgelehnt hat.
+• Chrome: Rime, das eigene KI-Modell von Glaze, läuft auf deinem Computer, und was du ihm gibst, bleibt dort. Einstellungen › KI zeigt es als Noch nicht verfügbar, bis Frostdev es veröffentlicht, und bietet dann Herunterladen an. Neuere Versionen kommen von selbst.
+• Firefox: Rime, das eigene KI-Modell von Glaze, läuft auf deinem Computer, und was du ihm gibst, bleibt dort. Einstellungen › KI zeigt es als Noch nicht verfügbar, bis Frostdev es veröffentlicht, und bietet dann Herunterladen an. Neuere Versionen kommen von selbst.
+• Rime fragen (Strg+K oder ⌘K; aus, bis du es unter Einstellungen › KI einschaltest) hilft bei Kursaufgaben mit Hinweisen und Fragen, nie mit der Lösung, und beantwortet Fragen zu deinen To-dos, deinem Stundenplan und deinen Noten.
+• Einstellungen › KI › Erinnerungen zeigt, bearbeitet und löscht, was Rime fragen gespeichert hat.
+• Pearson MyLab: dein Aussehen auf Pearson-Hausaufgaben, Pearson in Blackboard und moderne Gleichungen. Schalte sie einzeln unter Einstellungen › Kursseiten › Dokumente und Tests ein; die erste fragt nach Zugriff auf die Websites von Pearson.
+• Blackboard-Diskussionen: Ein PDF im Anhang eines Beitrags bekommt Vorschau und öffnet sich damit in Glaze.
+• Blackboard: Eine Aufgabe mit gespeichertem Entwurf eines neuen Versuchs zeigt nicht mehr Überfällig, wenn ein früherer Versuch abgegeben wurde.
+• Writer behält seine Schaltfläche zum Posten, wenn Blackboard ein leeres Antwortfeld einklappt.
+• Die Bewertungsraster-Ansicht von Glaze findet das Bewertungsraster einer Diskussion wieder.
+• Widgets bleiben vor einem geöffneten Kurs-Tab.

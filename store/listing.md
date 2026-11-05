@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.2
+# Chrome Web Store listing — Glaze 4.0.3
 
 ## Name
 
@@ -81,18 +81,18 @@ Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Antholog
 
 ## Release notes
 
-NEW IN 4.0.2
+NEW IN 4.0.3
 
-• Blackboard Ultra: the course bar folds into its pill and back without jitter, even on slower laptops.
-• Opening a folder, a learning module or a menu no longer makes the page jump or throws away Glaze's saved copies of your pages.
-• Messages: Reply stays on screen under Glaze's top bar.
-• Activity: each item's name comes first, in bold, with its course under it.
-• Text Blackboard leaves bare on your Look's background (SafeAssign, an assignment's Additional Information, toolbars, filters, Grades, Messages) gets a surface you can read, and To Do's ticks show.
-• On a shared computer, another student's course no longer shows as a blank card, each student gets their own first Dashboard cards, and Reset layout moves every course card you see.
-• Open Blackboard on the dashboard never takes over a page you opened by its link.
-• To Do no longer redraws every minute when nothing in it changed.
-• Safari: typing fast in Writer no longer loses a word's last letters or moves the caret back.
-• Safari: Google Drive and Calendar keep working after Google refuses an expired sign-in.
+• Chrome: Rime, Glaze's own AI model, runs on your computer, and what you give it stays there. Settings › AI shows it as Not available yet until Frostdev publishes it, then offers Download. Newer versions arrive by themselves.
+• Firefox: Rime, Glaze's own AI model, runs on your computer, and what you give it stays there. Settings › AI shows it as Not available yet until Frostdev publishes it, then offers Download. Newer versions arrive by themselves.
+• Ask Rime (Ctrl+K or ⌘K; off until you turn it on in Settings › AI) helps with coursework through hints and questions, never the answer, and answers questions about your to-dos, schedule and grades.
+• Settings › AI › Memory lists, edits and forgets what Ask Rime saved.
+• Pearson MyLab: your Look on Pearson homework, Pearson inside Blackboard and modern equations. Turn each on in Settings › Course pages › Documents and quizzes; the first one asks for access to Pearson's sites.
+• Blackboard discussions: a PDF attached to a post gets Preview, which opens it in Glaze.
+• Blackboard: an assignment with a saved draft of a new attempt no longer shows Past due when an earlier attempt was handed in.
+• Writer keeps its post button when Blackboard folds an empty reply box.
+• Glaze's rubric view finds a discussion's rubric again.
+• Widgets stay in front of an open course tab.
 
 ## Single-purpose statement
 
@@ -110,7 +110,7 @@ Notes, their pictures and attachments, Writer's papers, spreadsheets, PDFs and d
 
 ### Host access (1,000 character maximum)
 
-Required hosts: *.instructure.com, *.blackboard.com, *.moodlecloud.com, frostdev.io and share.frostdev.io. Pearson switches request mylab.pearson.com, tdx.acs.pearson.com and socket.pearsoned.com for homework and native launches inside Blackboard; exact grants return when all Pearson switches are off. https://*/* is optional: the popup checks page markup; Settings checks LMS APIs after a grant and returns new grants if no LMS answers. Browser-menu school grants are checked; Pearson grants skip LMS probes. All sites grants HTTPS access; Glaze asks first per new school site. Other hosts are requested for downloads, Gradescope, Look media, Cite, AI providers, mods and sharing. Unknown download redirects use a native fallback. Local tests use optional http://localhost/* and http://127.0.0.1/*. School requests use the user session. Writes require a user click: planner ticks, course nicknames/colors, announcement read marks, Sign out, Moodle Edit mode and Writer Post, Reply, Send or Submit.
+Required hosts: *.instructure.com, *.blackboard.com, *.moodlecloud.com, frostdev.io and share.frostdev.io. Pearson switches request mylab.pearson.com, tdx.acs.pearson.com and socket.pearsoned.com for homework and native launches inside Blackboard, returned when all are off. https://*/* is optional: the popup checks page markup; Settings checks LMS APIs after a grant and returns new grants if no LMS answers. Browser-menu school grants are checked; Pearson grants skip LMS probes. All sites grants HTTPS access; Glaze asks the user first on each new school site. Other hosts are requested for downloads, Gradescope, Look media, Cite, AI providers, mods and sharing. Unknown download redirects use a native fallback. Local tests use optional http://localhost/* and http://127.0.0.1/*. School requests use the user session. Glaze writes only on the user's click: planner ticks, course nicknames/colors, announcement read marks, Sign out, Moodle Edit mode and Writer Post, Reply, Send or Submit.
 
 ### activeTab
 
@@ -122,7 +122,7 @@ Puts a dot on Glaze's toolbar icon on pages that look like Canvas, Blackboard Ul
 
 ### offscreen
 
-Used only when the student chooses Rime, Glaze's own AI model, in Settings → AI and clicks Download. A hidden extension page runs that model on this computer with WebGPU, in a worker of its own, and keeps it loaded between requests; it closes after five minutes unused. It downloads the model's files from Hugging Face on that click and reads nothing from any page. While the model is downloaded, Glaze checks Hugging Face about once a day for a signed list of Rime models and downloads a newer version from there in the background, sending nothing about the student; Settings → AI → Rime → Update automatically turns this off. The text Glaze's AI features give it stays on this computer and is never sent anywhere.
+Used only when the student chooses Rime, Glaze's own AI model, in Settings → AI and clicks Download. A hidden extension page runs that model on this computer with WebGPU, in a worker of its own, and keeps it loaded between requests; it closes after five minutes unused. It downloads the model's files from Hugging Face on that click and reads nothing from any page. Until a Rime model is available, opening Settings → AI checks Hugging Face, at most once a day, for a signed list of Rime models, and Download appears once the list names one. While the model is downloaded, Glaze checks that list about once a day and downloads a newer version from there in the background, sending nothing about the student; Settings → AI → Rime → Update automatically turns this off. The text Glaze's AI features give it stays on this computer and is never sent anywhere.
 
 ### alarms
 

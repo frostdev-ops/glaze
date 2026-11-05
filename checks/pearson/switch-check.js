@@ -25,7 +25,7 @@ const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].s
   const errors = [];
   try {
     await require('../../tools/dev/wait-for-browser.js')();
-    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', reducedMotion: 'reduce',
+    ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', reducedMotion: 'reduce',
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'] });
     env.noFirstRun(ctx);
     await ctx.route('**/*', (route) => (new URL(route.request().url()).protocol === 'chrome-extension:' ? route.continue() : route.abort()));

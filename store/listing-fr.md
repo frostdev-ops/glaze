@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.2 (French)
+# Chrome Web Store listing — Glaze 4.0.3 (French)
 
 ## Short summary (132 character maximum)
 
@@ -73,15 +73,15 @@ Canvas est une marque d’Instructure, Inc. Blackboard est une marque d’Anthol
 
 ## Release notes
 
-NOUVEAUTÉS DE LA VERSION 4.0.2
+NOUVEAUTÉS DE LA VERSION 4.0.3
 
-• Blackboard Ultra : la barre du cours se replie en pastille et se rouvre sans trembler, même sur les portables plus lents.
-• Ouvrir un dossier, un module d’apprentissage ou un menu ne fait plus sauter la page et ne jette plus les copies enregistrées de vos pages.
-• Messages : Répondre reste visible sous la barre supérieure de Glaze.
-• Activité : le nom de chaque élément vient d’abord, en gras, avec son cours en dessous.
-• Le texte que Blackboard laisse sans fond sur votre apparence (SafeAssign, informations supplémentaires d’un devoir, barres d’outils, filtres, notes, messages) reçoit une surface lisible, et les coches de À faire s’affichent.
-• Sur un ordinateur partagé, le cours d’un autre étudiant ne s’affiche plus comme une carte vide, chaque étudiant reçoit ses propres premières cartes du tableau de bord, et Réinitialiser la disposition déplace toutes les cartes de cours que vous voyez.
-• Ouvrir Blackboard sur le tableau de bord ne remplace jamais une page ouverte par son lien.
-• À faire ne se redessine plus chaque minute quand rien n’y a changé.
-• Safari : taper vite dans Writer ne perd plus les dernières lettres d’un mot et ne fait plus reculer le curseur.
-• Safari : Google Drive et Agenda continuent de fonctionner après que Google a refusé une connexion expirée.
+• Chrome : Rime, le modèle d’IA de Glaze, fonctionne sur votre ordinateur, et ce que vous lui donnez y reste. Réglages › IA l’affiche comme Pas encore disponible jusqu’à ce que Frostdev le publie, puis propose Télécharger. Les nouvelles versions arrivent d’elles-mêmes.
+• Firefox : Rime, le modèle d’IA de Glaze, fonctionne sur votre ordinateur, et ce que vous lui donnez y reste. Réglages › IA l’affiche comme Pas encore disponible jusqu’à ce que Frostdev le publie, puis propose Télécharger. Les nouvelles versions arrivent d’elles-mêmes.
+• Demander à Rime (Ctrl+K ou ⌘K ; désactivé tant que vous ne l’activez pas dans Réglages › IA) aide aux devoirs par des indices et des questions, jamais par la réponse, et répond sur vos tâches, votre emploi du temps et vos notes.
+• Réglages › IA › Mémoire affiche, modifie et oublie ce que Demander à Rime a enregistré.
+• Pearson MyLab : votre Apparence sur les devoirs Pearson, Pearson dans Blackboard et des équations modernes. Activez chacun dans Réglages › Pages de cours › Documents et questionnaires ; le premier demande l’accès aux sites de Pearson.
+• Discussions Blackboard : un PDF joint à un message reçoit Aperçu, qui l’ouvre dans Glaze.
+• Blackboard : un devoir avec un brouillon enregistré d’une nouvelle tentative n’affiche plus En retard quand une tentative précédente a été remise.
+• Writer garde son bouton de publication quand Blackboard replie une zone de réponse vide.
+• La vue des grilles d’évaluation de Glaze retrouve la grille d’évaluation d’une discussion.
+• Les widgets restent devant un onglet de cours ouvert.
