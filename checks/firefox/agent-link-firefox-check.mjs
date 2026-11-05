@@ -169,7 +169,7 @@ const firefox = async () => {
   fs.writeFileSync(path.join(profile, 'user.js'), Object.entries(prefs).map(([k, v]) => `user_pref(${JSON.stringify(k)}, ${JSON.stringify(v)});`).join('\n'));
   const port = 9400 + Math.floor(Math.random() * 400);
   running();
-  ff = spawn(bin, ['--headless', '--no-remote', '--profile', profile, '--remote-debugging-port', String(port), '-remote-allow-system-access', 'about:blank'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  ff = spawn(bin, ['--headless', '--no-remote', '--profile', profile, '--remote-debugging-port', String(port), '-remote-allow-system-access', 'about:blank'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, MOZ_REMOTE_ALLOW_SYSTEM_ACCESS: '1' } });
   ff.stdout.on('data', (d) => { log += d; }); ff.stderr.on('data', (d) => { log += d; });
   const at = await until(async () => /WebDriver BiDi listening on (ws:\/\/[\d.:]+)/.exec(log)?.[1], 'Firefox to listen', 30000);
   ws = new WebSocket(`${at}/session`);

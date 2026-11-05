@@ -40,7 +40,7 @@ try {
     'app.normandy.enabled': false, 'extensions.update.enabled': false, 'network.proxy.type': 1, 'network.proxy.http': '127.0.0.1', 'network.proxy.http_port': 9, 'network.proxy.ssl': '127.0.0.1', 'network.proxy.ssl_port': 9 };
   fs.writeFileSync(path.join(profile, 'user.js'), Object.entries(prefs).map(([k, v]) => `user_pref(${JSON.stringify(k)}, ${JSON.stringify(v)});`).join('\n'));
   const port = 9400 + Math.floor(Math.random() * 400);
-  ff = spawn(bin, ['--headless', '--no-remote', '--profile', profile, '--remote-debugging-port', String(port), '-remote-allow-system-access', 'about:blank'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  ff = spawn(bin, ['--headless', '--no-remote', '--profile', profile, '--remote-debugging-port', String(port), '-remote-allow-system-access', 'about:blank'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, MOZ_REMOTE_ALLOW_SYSTEM_ACCESS: '1' } });
   ff.stdout.on('data', (d) => { log += d; }); ff.stderr.on('data', (d) => { log += d; });
   for (let i = 0; i < 300 && !/WebDriver BiDi listening/.test(log); i++) await pause(100);
   assert(/WebDriver BiDi listening/.test(log), 'Firefox did not start its BiDi server');
