@@ -3182,6 +3182,7 @@
   "Use AI": "AI gebruiken",
   "Endpoint": "Endpoint",
   "Not available in this browser": "Niet beschikbaar in deze browser",
+  "Not available yet": "Nog niet beschikbaar",
   "Model": "Model",
   "Key": "Sleutel",
   "Features": "Functies",

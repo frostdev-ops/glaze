@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const L = require('../../extension/ai/local/ladder.js');
 const fs = require('node:fs');
 const vm = require('node:vm');
+// The text tiers a signed list offers (Glaze bundles none).
+const { models } = require('../fixtures/ai/rime-list-entries.json');
 
 // Isolate the browser's WebGPU constants from other Node tests.
 const context = vm.createContext({
@@ -70,8 +72,8 @@ test('probe preserves the unmeasured fallback when requesting a device fails', a
   assert.equal(out.info.vendor, 'intel');
   assert.equal(out.bench, null);
   assert.match(out.benchError, /GPU device unavailable/);
-  assert.equal(L.pick(out).reason, 'unmeasured');
-  assert.equal(L.pick(out).tier, 1);
+  assert.equal(L.pick({ ...out, models }).reason, 'unmeasured');
+  assert.equal(L.pick({ ...out, models }).tier, 1);
 });
 
 for (const filter of ['validation', 'out-of-memory', 'internal']) {
@@ -84,7 +86,7 @@ for (const filter of ['validation', 'out-of-memory', 'internal']) {
     });
     assert.equal(out.bench, null);
     assert.match(out.benchError, new RegExp(`GPU ${filter} failure`));
-    assert.equal(L.pick(out).reason, 'unmeasured');
+    assert.equal(L.pick({ ...out, models }).reason, 'unmeasured');
     assert.equal(device.destroyed, true);
     assert.ok(device.buffers.length > 0 && device.buffers.every((b) => b.destroyed));
     assert.equal(device.scopes.length, 0);
@@ -116,8 +118,8 @@ test('a clock too coarse to measure the workload produces an unmeasured fallback
   });
   assert.equal(out.bench, null);
   assert.match(out.benchError, /tim|clock/i);
-  assert.equal(L.pick(out).reason, 'unmeasured');
-  assert.equal(L.pick(out).tier, 1);
+  assert.equal(L.pick({ ...out, models }).reason, 'unmeasured');
+  assert.equal(L.pick({ ...out, models }).tier, 1);
   assert.ok(device.buffers.every((b) => b.destroyed));
   assert.equal(device.destroyed, true);
 });

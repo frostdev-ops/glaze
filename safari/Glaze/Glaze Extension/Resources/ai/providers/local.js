@@ -1,7 +1,9 @@
 // The AI harness's `local` provider (docs/ai-harness.md "Glaze's own model"): Glaze's own model on this computer, Rime
 // (Frostdev's fine-tune of LFM3-1.7B), run by Glaze's WebGPU engine in its host (ai/local/host.js, reached through
 // ai/local/link.js). Nothing goes over the network but the weights' download from Hugging Face, from Settings' Download
-// click, and, while a model is downloaded, its background updates (ai/local/updates.js).
+// click, the signed model list (ai/local/updates.js: on opening Settings' card while no Rime model is offered, and while
+// one is downloaded, its background updates). Glaze bundles no Rime: until that list names one, status is unavailable
+// with reason 'pending'.
 // status() is the worker's own and starts nothing: the browser (Safari keeps Apple Intelligence: unavailable, 'browser'),
 // WebGPU, and which model the store holds (ai/local/store.js). The model is the one with the tier Settings' Advanced
 // chose, else the one downloaded, else, at Download, the ladder's pick for this computer (host.js). prepare() downloads in
@@ -268,6 +270,8 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     const stale = list.some((m) => m.state === 'stale') ? { stale: true } : {};
     if (no) return { state: 'unavailable', reason: no, ...stale };
     list = list.filter((m) => m.state !== 'stale');
+    // Glaze bundles no Rime: until a signed list names one (ai/local/updates.js first), nothing to download.
+    if (!tiers(list).length) return { state: 'unavailable', reason: 'pending', ...stale };
     const text = tiers(list), m = choose(list, cfg) || [...text].sort((a, b) => a.tier - b.tier)[0], pics = pictures(list);
     const job = preparing.pictures;
     const about = { ...stale, ...(m && { size: m.size, tier: m.tier }), tiers: text.map((x) => ({ tier: x.tier, size: x.size, ...(typeof x.name === 'string' && x.name && { name: x.name }) })).sort((a, b) => a.tier - b.tier),
@@ -284,6 +288,7 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (no) return { state: 'unavailable', reason: no };
     const listen = typeof onProgress === 'function' ? (p) => { if (Number.isFinite(p)) onProgress(Math.min(1, Math.max(0, p))); } : null;
     const which = part === 'pictures' ? 'pictures' : 'text';
+    if (which === 'text' && !preparing.text && !tiers(await models().catch(() => [])).length) return { state: 'unavailable', reason: 'pending' };
     if (!preparing[which]) {
       const job = preparing[which] = { listeners: new Set(), last: null };
       job.call = own().link.call('prepare', which === 'pictures' ? { part: 'pictures' } : { ...(cfg.tier && { tier: cfg.tier }) }, { onEvent: (e) => {

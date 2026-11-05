@@ -196,8 +196,9 @@ const ok = (value, label, detail) => { results.push({ label, pass: !!value, ...(
     await other.close();
 
     // The shipped catalog, loaded the default way.
-    const shipped = await page.evaluate(async () => (await GZ_AI_STORE.list()).filter((m) => !m.role).map(({ id, size, state }) => ({ id, size, state })));
-    ok(shipped.map((m) => m.id).join() === 'rime-1.7b-q4_k_m,rime-1.7b-q6_k,rime-1.7b-q8_0' && shipped.every((m) => m.state === 'missing' && m.size > 1e9), 'the shipped models.json lists Rime\'s three text models, none downloaded', shipped);
+    const shipped = await page.evaluate(async () => (await GZ_AI_STORE.list()).map(({ id, role, size, state }) => ({ id, role, size, state })));
+    ok(!shipped.some((m) => !m.role && m.state !== 'stale'), 'the shipped models.json bundles no Rime text model (the signed list brings it)', shipped);
+    ok(shipped.filter((m) => m.role).map((m) => m.role).join() === 'pictures,projector' && shipped.every((m) => !m.role || (m.state === 'missing' && m.size > 1e8)), 'it lists the picture model and its projector, not downloaded', shipped);
 
     const sample = log.filter((l) => l.method === 'GET' && (l.host === 'huggingface.co' || l.host === 'us.aws.cdn.hf.co'));
     fs.writeFileSync(path.join(out, 'local-store-check.json'), JSON.stringify({ checks, results, preflights, requests: log.length, sample: sample.slice(0, 6) }, null, 2));

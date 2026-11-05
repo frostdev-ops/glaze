@@ -4,7 +4,8 @@
 // KEY (tools/vendor/model-manifest.js --sign; the owner approves every publish). A list counts only if it verifies, its
 // serial is above the one held, and every entry is in the schema; entries for a newer Glaze (minGlaze) or a higher tools
 // level than this harness runs (TOOLS), or an unsupported optional memory or scale version, are skipped. A newer version of a
-// model keeps its id (ai/local/store.js compose).
+// model keeps its id (ai/local/store.js compose). Glaze bundles no Rime: the list is where its models come from, under the
+// ids rime-1.7b-q4_k_m, -q5_k_m, -q6_k and -q8_0 at tiers 1 to 4 (first, below, fetches it before any is offered).
 // The worker (check): only while this browser holds a downloaded Rime model and the student hasn't turned Update
 // automatically off, once a day (alarm DAILY) and a few minutes after the browser starts (START, jittered; skipped when a
 // check ran within the day unless a download waits to resume), never with Data Saver on. It fetches the list without
@@ -251,6 +252,32 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
     }
   })().finally(() => { running = null; checking = null; }));
 
+  // The first list (first): while the catalog offers no Rime model (Glaze bundles none; the list brings them), Settings →
+  // AI's Rime card asks for it on opening (background.js op 'updates'): at most once a day (KEPT's `listed`), never in
+  // Safari or with Data Saver on, the same request check makes. A list that verifies and names a model this Glaze runs is
+  // kept as check's host would keep it (accept), and the card is told to read Rime's state again (say part 'list').
+  // Update automatically doesn't apply: it governs replacing a downloaded model, and shows only once one is here.
+  // → { state: 'off' | 'paused' | 'here' | 'recent' | 'offline' | 'refused' (reason) | 'none' | 'listed' }.
+  let listing = null;
+  const first = (env) => (listing ||= (async () => {
+    if (env.safari) return { state: 'off' };
+    if (env.saveData?.()) return { state: 'paused', reason: 'saveData' };
+    const cat = await env.store.catalog();
+    if ([...cat.entries.values()].some((m) => !m.role)) return { state: 'here' };
+    const kept = (await env.local.get(KEPT))?.[KEPT] || {}, now = env.now();
+    if (Number.isFinite(kept.listed) && now >= kept.listed && now - kept.listed < DAY) return { state: 'recent' };
+    await env.local.set({ [KEPT]: { ...kept, listed: now } });
+    let doc;
+    try { doc = await fetchList(env, new AbortController().signal); } catch { doc = null; }
+    if (!doc) return { state: 'offline' };
+    const r = await verify(doc, { key: env.key, serial: cat.state?.serial || 0 });
+    if (!r.ok) return { state: 'refused', reason: r.error };
+    if (!usable(r.list, { glaze: env.glaze }).length) return { state: 'none' };
+    await env.store.edit((st) => ((st?.serial || 0) >= r.list.serial ? undefined : accept(st, r.list, { glaze: env.glaze })));
+    say(env, { part: 'list' });
+    return { state: 'listed' };
+  })().finally(() => { listing = null; }));
+
   // The daily alarm, made once (its time kept); at browser start, a check 2 to 10 minutes later.
   const schedule = async ({ alarms, random = Math.random }, { startup = false } = {}) => {
     if (!alarms) return;
@@ -268,6 +295,6 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
   };
 
   return { KEY, URL: LIST, TOOLS, DAILY, START, KEPT, canon, fingerprint, compare, clean, verify, usable, accept, begin, swap, confirm, rollback, reject, fault, update, settle,
-    check, schedule, alarm, about, stop, inUse, present };
+    check, first, schedule, alarm, about, stop, inUse, present };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_MODEL_UPDATES; else GZ_AI_MODEL_UPDATES;

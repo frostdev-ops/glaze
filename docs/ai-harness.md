@@ -653,20 +653,18 @@ If the system refuses token counting, the request retains its output ceiling and
 ## Glaze's own model
 
 `ai/providers/local.js` (`local`, Settings' **Rime**) runs Rime, Frostdev's fine-tune of LiquidAI's LFM3-1.7B
-(`frostdev-ops/Rime-1.7B-GGUF`: R8 test Q4_K_M, Q5_K_M, Q6_K and Q8_0 at tiers 1 to 4, R9 test's at 5 to 8), from
-`ai/local/models.json` on Glaze's WebGPU engine. caps: `{ text, json, stream, local: true, tools: false, images, context }` (`context`, the window
+(`frostdev-ops/Rime-1.7B-GGUF`: Q4_K_M, Q5_K_M, Q6_K and Q8_0 at tiers 1 to 4), from Frostdev's signed model list (Model
+updates below) on Glaze's WebGPU engine. caps: `{ text, json, stream, local: true, tools: false, images, context }` (`context`, the window
 below; `images` below), so `writer.complete`'s brief path and Feedback's local orchestration apply. Settings, `ai/settings.js`
 `HERE` and `writer-ai.js` treat `device`, `apple` and `local` alike as models on this computer: no model id, no key.
 
-The bundled text entries are two test revisions. `r8-test-20261102`, pinned to Hugging Face commit
-`f9e6936f5a8cc802bbdf4efafa942e518fc43071`, has `rime-1.7b-r8-*` ids, `tools: 3` and `memory: 1`; dedicated personality
-training is missing and full D4 evaluation is incomplete. `r9-test-20261103`, pinned to
-`029e386afc82e217e7324c5022da55337b71785b`, has `rime-1.7b-r9-*` ids, `tools: 3`, `memory: 1` and `scale: 1`; it is untested,
-evaluation running. R9 takes the higher tiers, so Auto's ladder pick (the highest tier fast enough) is R9 at the size R8 would
-have had; a computer where no size is fast enough, or the bench fails, gets the smallest tier, R8's Q4_K_M. A saved tier and
-a downloaded model keep their place: an existing R8 download on Auto stays R8, and Settings' Advanced lists every entry as
-`name · size`. The previous R5 files remain published; the picture model and projector are unchanged. No signed update feed
-has been published for the R8 or R9 candidates.
+Glaze bundles no Rime weights: `ai/local/models.json` holds only the picture model and its projector. Until the signed list
+names a Rime model this Glaze runs, `status` is `unavailable` with reason `pending`, `prepare` answers the same, and
+Settings' card says **Not available yet** with no Download, no picture row and no Advanced size, context or switch. Opening
+the card fetches the list (Model updates, "The first list"); once one verifies, the catalog offers its entries and the card
+shows Download with their sizes. Auto's ladder pick is the highest tier fast enough; a computer where no size is fast enough,
+or the bench fails, gets the smallest tier, Q4_K_M. A saved tier and a downloaded model keep their place, and Settings'
+Advanced lists every entry as `name · size`.
 
 Where it runs: Chrome, an offscreen document (`ai/local/host.html`, reason WORKERS, the `offscreen` permission) whose
 `offscreen.js` runs `ai/local/host.js` in a dedicated Worker and connects a port `glaze:local` to the worker
@@ -785,32 +783,43 @@ prompt and output exceed the window (`request-rejected`, `context`).
 
 ### Model updates
 
-Glaze ships before Rime is final and takes newer versions without the student doing anything (`ai/local/updates.js`).
-Frostdev can publish a signed list beside the weights at `https://huggingface.co/frostdev-ops/Rime-1.7B-GGUF/resolve/main/glaze-models.json`
-(the R8 test candidates have no published signed feed). The list format is:
+Glaze ships without Rime and receives it, and every newer version, through a signed list (`ai/local/updates.js`).
+Frostdev publishes it beside the weights at `https://huggingface.co/frostdev-ops/Rime-1.7B-GGUF/resolve/main/glaze-models.json`
+(none has been published yet). The list format is:
 
 ```json
 { "list": { "v": 1, "serial": 2, "issued": "2026-11-20T09:00:00Z", "models": [
     { "id": "rime-1.7b-q4_k_m", "name": "Rime 1.7B Q4_K_M", "repo": "frostdev-ops/Rime-1.7B-GGUF", "commit": "<40-hex>",
       "file": "Rime-1.7B-Q4_K_M.gguf", "url": "https://huggingface.co/frostdev-ops/Rime-1.7B-GGUF/resolve/<commit>/Rime-1.7B-Q4_K_M.gguf",
       "size": 1099627200, "chunk": 67108864, "sha256": ["<64-hex per 64 MB chunk>"], "total": "<64-hex>", "license": "lfm1.0",
-      "quant": "Q4_K_M", "tier": 1, "tools": 3, "minGlaze": "4.0.3", "version": "r6" } ] },
+      "quant": "Q4_K_M", "tier": 1, "tools": 3, "memory": 1, "scale": 1, "minGlaze": "4.0.3", "version": "r11" } ] },
   "sig": "<Ed25519 over utf8('glaze-models-1|' + canon(list)), base64url>" }
 ```
 
 `canon` is JSON with keys sorted and no spaces. Glaze takes a list only if the signature verifies (WebCrypto Ed25519)
 against `updates.js` `KEY` (SHA-256 `070eb5374fb18fe2b5880643eb7d5c42bf517667c9d3b0c08447b338b2891e7c`), its serial is above
 the one held, and every entry is a models.json text entry with `tools`, `minGlaze` and `version`, ids and tiers once each;
-entries needing a newer Glaze or a tools level above `TOOLS` (3) are skipped. A newer version keeps its size's id (a new id
-may only add a tier models.json doesn't hold). models.json stays the starting list and the fallback; offline, or with
-Hugging Face down, everything runs on what's stored.
+entries needing a newer Glaze or a tools level above `TOOLS` (3), or a `memory` or `scale` other than 1, are skipped. The
+ids are permanent, one per size: `rime-1.7b-q4_k_m`, `rime-1.7b-q5_k_m`, `rime-1.7b-q6_k` and `rime-1.7b-q8_0` at tiers 1
+to 4. A newer version keeps its size's id and tier (a new id may only add a tier models.json doesn't hold, and models.json
+holds none). Offline, or with Hugging Face down, everything runs on what's stored.
+
+The first list (`first`): while the catalog offers no Rime model, Settings' `{ op: 'updates' }` (sent when Rime's card
+opens, or Settings opens with Rime chosen as a model) also starts a fetch of the list, not waited for: at most once a day (`storage.local` `aiModelUpdates.listed`, the
+time of the last try), never in Safari or with Data Saver on, the same request as the daily check (no cookies, no cache, no
+referrer, nothing about the student). It isn't gated by **Update automatically**, which replaces a downloaded model and
+shows only once one is here. A list that verifies and has an entry this Glaze runs is accepted into the state as the host's
+`update` accepts one (no pins: nothing is downloaded); the worker then sends a progress event with `part: 'list'` and the
+card asks `test` again, now with Download. A bad signature, a replay, or entries only for a newer Glaze, a higher tools
+level or another memory or scale version change nothing: Rime stays not available. Once the catalog offers Rime the card's
+open fetches nothing, and once a model is downloaded the daily check below takes over.
 
 State: `glaze-models/~updates.json` in OPFS beside the models (`store.js` `edit`, under the Web Lock `glaze-model-updates`):
 the accepted list's usable entries, `pins` (each downloaded id stays on its version until a swap), `keep` (versions kept
 beside it), `trial` and `failed`. `store.js` `compose` makes every context's catalog from models.json and that file; each
 version of an id is its own tag folder, so the old one stays while the new one downloads.
 
-Schedule and guards (`background/background.js`): the alarm `gz-models:daily` (every 1,440 minutes, made once), and
+Schedule and guards for a downloaded model (`background/background.js`): the alarm `gz-models:daily` (every 1,440 minutes, made once), and
 `gz-models:start` 2 to 10 minutes after the browser starts (skipped when a check ran in the last 20 hours, unless a download
 waits to resume). A check does nothing, and asks nothing of the network, unless this browser holds a downloaded Rime model,
 `ai.updates` (Settings → AI → Rime, Advanced: **Update automatically**, on by default) is on, it isn't Safari, and Data Saver
@@ -832,12 +841,14 @@ Every publish happens only after the owner's go.
 
 1. Upload the GGUFs to `frostdev-ops/Rime-1.7B-GGUF` and note the commit.
 2. Build each size's entry: `node tools/vendor/model-manifest.js --repo frostdev-ops/Rime-1.7B-GGUF --commit <sha> --file
-   Rime-1.7B-Q4_K_M.gguf --tier 1 --tools 3 --version r6 --min-glaze 4.0.3 --out ~/glaze-models/entries.json` (once per
-   quant, into the same file; keep each size's id).
+   Rime-1.7B-Q4_K_M.gguf --id rime-1.7b-q4_k_m --tier 1 --tools 3 --version r11 --min-glaze 4.0.3 --out
+   ~/glaze-models/entries.json` (once per quant, into the same file, each size's permanent id and tier above). The tool
+   writes no `memory` or `scale`: add `"memory": 1`, and `"scale": 1` for a model trained for size tokens, to each entry.
 3. Sign: `node tools/vendor/model-manifest.js --sign --entries ~/glaze-models/entries.json --key ~/.glaze-signing/models.key
    --out ~/glaze-models/glaze-models.json`. The serial is one above the published list's (`--serial` to set it, `--offline`
    without the fetch); it refuses a key other than `KEY`, a serial at or below the live one, and entries out of the schema.
-4. Upload `glaze-models.json` to the repo's `main`. Browsers with Rime take it within a day.
+4. Upload `glaze-models.json` to the repo's `main`. Browsers with Rime take it within a day; one without it, the next time
+   Settings → AI's Rime card opens (at most a day after its last try).
 
 The key pair was made with `--keygen ~/.glaze-signing/models.key` (mode 600, outside the repo); its private half is never
 printed, committed or logged.

@@ -51,10 +51,11 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     : ['os', 'device'].includes(st.reason) ? t('Not available on this device') : st.state === 'downloading' ? t('Downloading…')
       : t('Not available: {reason}', { reason: reason(st.reason, t) }));
   // Glaze's own model's status (ai/providers/local.js): { state, reason?, size?, tier?, tiers?, progress?, pictures? }, its
-  // picture download's { state, size, progress? } the same way. A download that stopped keeps Download and says why.
+  // picture download's { state, size, progress? } the same way. A download that stopped keeps Download and says why. Reason
+  // pending: no signed list has named a Rime model yet (Glaze bundles none).
   const localText = (st, t, pct) => (st.state === 'ready' ? t('Ready') : st.state === 'downloading' ? (typeof st.progress === 'number' ? pct(st.progress) : t('Downloading…'))
     : st.state === 'download' ? (st.reason ? reason(st.reason, t) : t('Needs a download'))
-      : st.reason === 'browser' ? t('Not available in this browser') : reason(st.reason, t));
+      : st.reason === 'browser' ? t('Not available in this browser') : st.reason === 'pending' ? t('Not available yet') : reason(st.reason, t));
   // A model's size, in GB to one place.
   const gb = (bytes, t) => t('{n} GB', { n: (Math.round(bytes / 1e8) / 10).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) });
   // A download's progress message: { progress } or { loaded, total? } (Chrome's downloadprogress gives a fraction) → 0 to 1, or null.
@@ -306,12 +307,15 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         size.addEventListener('change', () => setWindow(Number(size.value) || DEFAULT_WINDOW));
         parts.push(size);
         if (!fit || fit.size !== ours.size) measure(ours.size);
-        const label = el('label', 'ai-outline'), box = el('input');
-        Object.assign(box, { type: 'checkbox', id: 'ai-local-auto', checked: s.updates !== false });
-        box.setAttribute('data-local', '');
-        box.addEventListener('change', () => { const value = box.checked; write(() => ({ updates: value })); });
-        label.append(el('span', '', t('Update automatically')), box);
-        parts.push(label);
+        // Update automatically replaces a downloaded model: shown once one is here.
+        if (ours.state === 'ready') {
+          const label = el('label', 'ai-outline'), box = el('input');
+          Object.assign(box, { type: 'checkbox', id: 'ai-local-auto', checked: s.updates !== false });
+          box.setAttribute('data-local', '');
+          box.addEventListener('change', () => { const value = box.checked; write(() => ({ updates: value })); });
+          label.append(el('span', '', t('Update automatically')), box);
+          parts.push(label);
+        }
       }
       return parts;
     };
@@ -843,6 +847,8 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     const setWindow = (window) => setLocal({ window });
     c.runtime.onMessage?.addListener((m, sender) => {
       if (sender?.id !== c.runtime.id || m?.type !== TYPE || m.event !== 'progress' || m.provider !== OWN || !offers()) return;
+      // A signed list now offers Rime (ai/local/updates.js first): its state again, with Download.
+      if (m.part === 'list') { localStatus(); return; }
       if (m.part === 'update') {
         if (m.done) { if (updates) delete updates.update; localStatus(); return; }
         const u = progress(m);

@@ -161,7 +161,7 @@ test('Download fetches the ladder\'s pick with the list\'s hashes', async () => 
 test('a bad signature, a replay, or entries only for a newer Glaze or higher tools leave Rime not available', async () => {
   const cases = [
     ['signature', sign(listOf(1), STRANGER), { state: 'refused', reason: 'signature' }],
-    ['tampered', (() => { const d = sign(listOf(1)); d.list.models[0].sha256[0] = '0'.repeat(64); return d; })(), { state: 'refused', reason: 'signature' }],
+    ['tampered', (() => { const d = structuredClone(sign(listOf(1))); d.list.models[0].sha256[0] = '0'.repeat(64); return d; })(), { state: 'refused', reason: 'signature' }],
     ['newer Glaze', sign(listOf(1, R11.map((m) => ({ ...m, minGlaze: '4.0.4' })))), { state: 'none' }],
     ['higher tools', sign(listOf(1, R11.map((m) => ({ ...m, tools: U.TOOLS + 1 })))), { state: 'none' }],
     ['memory 2', sign(listOf(1, R11.map((m) => ({ ...m, memory: 2 })))), { state: 'none' }],

@@ -38,8 +38,9 @@ const CORPUS = {
 };
 
 // ---- the gate -----------------------------------------------------------------------------------------------------------
-test('gate: Rime r5\'s models.json entries run at tools level 3 (owner, untrained); a list without the flag gets level 1', () => {
-  const list = JSON.parse(fs.readFileSync(path.join(ROOT, 'extension/ai/local/models.json'), 'utf8')).models;
+test('gate: a signed list\'s Rime entries run at tools level 3; the picture model none; an entry without the flag gets level 1', () => {
+  // Glaze bundles no Rime (models.json keeps the picture model); the list's entries (test/fixtures/ai/rime-list-entries.json) join it.
+  const list = [...JSON.parse(fs.readFileSync(path.join(ROOT, 'extension/ai/local/models.json'), 'utf8')).models, ...require('../fixtures/ai/rime-list-entries.json').models];
   assert.ok(list.filter((m) => !m.role).length >= 3);
   for (const m of list.filter((m) => !m.role)) assert.equal(m.tools, 3, `${m.id}: the owner turned Rime's own tools on before a round trained them`);
   for (const m of list.filter((m) => m.role)) assert.equal(m.tools, undefined, `${m.id}: the picture model runs no tools`);

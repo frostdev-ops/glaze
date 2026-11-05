@@ -2989,6 +2989,7 @@ const aiVisualScope = async (s) => {
 // Background updates of Rime (ai/local/updates.js, docs/ai-harness.md "Model updates"): a daily alarm and one a few minutes
 // after the browser starts. Each check asks nothing of the network unless a Rime model is downloaded here and Settings'
 // Update automatically is on; a newer version downloads and swaps in through the engine host. Turning the switch off stops it.
+// Before any Rime model is offered, Settings' Rime card asks for the list instead (op 'updates' below).
 const modelUpdatesEnv = () => ({ store: GZ_AI_STORE, settings: async () => GZ_AI_SETTINGS.clean((await chrome.storage.local.get(GZ_AI_SETTINGS.KEY))[GZ_AI_SETTINGS.KEY]),
   tier: async () => { const c = ((await aiEnv().vault.get('connections')) || {}).local; return Number.isSafeInteger(c?.tier) ? c.tier : 0; },
   fetch: (u, i) => fetch(u, i), host: (op, args, o) => GZ_AI_LOCAL.link().call(op, args, o), local: chrome.storage.local, now: Date.now,
@@ -3021,8 +3022,13 @@ chrome.runtime.onConnect.addListener((p) => {
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:ai-config') return;
   if (!fromEditor(s) || s.frameId !== 0 || !extensionOrigin(s)) { reply({ ok: false, error: 'sender' }); return; }
-  // Settings' Rime card: the version in use, an update's progress, and whether Update automatically is on.
-  if (m.op === 'updates') { ai(); GZ_AI_MODEL_UPDATES.about(modelUpdatesEnv()).then((r) => reply({ ok: true, ...r }), () => reply({ ok: false, error: 'failed' })); return true; }
+  // Settings' Rime card: the version in use, an update's progress, and whether Update automatically is on. Opening it also
+  // asks for the signed list while no Rime model is offered (ai/local/updates.js first, at most daily), not waited for.
+  if (m.op === 'updates') {
+    ai(); const env = modelUpdatesEnv();
+    GZ_AI_MODEL_UPDATES.first(env).catch(() => {});
+    GZ_AI_MODEL_UPDATES.about(env).then((r) => reply({ ok: true, ...r }), () => reply({ ok: false, error: 'failed' })); return true;
+  }
   ai().config(m, aiEnv()).then(reply, () => reply({ ok: false, error: 'failed' }));
   return true;
 });
