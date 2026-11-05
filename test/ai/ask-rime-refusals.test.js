@@ -302,3 +302,16 @@ test('similar wording cannot turn a different assignment into a read fact', () =
   assert.notEqual(A.why(answer(invented, ['Prepare the chemistry laboratory report']), inp), '', 'restatement changes the subject');
   assert.notEqual(A.why(answer('Prepare the chemistry laboratory report is due, and prepare the biology laboratory report is due.', ['Prepare the biology laboratory report', 'Prepare the chemistry laboratory report']), inp), '', 'an invented quote stated beside a real one');
 });
+
+test('page names and an empty or failed last read cannot invent school status', () => {
+  const page = { current: { site: 'canvas', view: 'course', course: { id: '5', name: 'BIO 101' } } };
+  assert.equal(A.why(answer('This is BIO 101.', ['BIO 101']), at('What course is this?', [], page)), '');
+  assert.notEqual(A.why(answer('BIO 101 has an assignment due tomorrow.', ['BIO 101']), at('What is due?', [], page)), '', 'a page name does not establish a due date');
+  const courses = step('courses_list', {}, { items: [{ id: '412', name: 'AVI 412 – Aviation Safety' }] });
+  for (const result of [{ ok: false, error: 'Unavailable' }, { items: [], covers: { complete: true } }]) {
+    const last = step('announcements_list', { course: '412' }, result);
+    const inp = at('Any announcements for AVI 412?', [courses, last]);
+    assert.notEqual(A.why(answer('AVI 412 has a biology exam due tomorrow.'), inp), '', 'empty or failed read is not a receipt for an invented exam');
+    assert.notEqual(A.why(answer('AVI 412 Biology is due tomorrow.', ['AVI 412 – Aviation Safety']), inp), '', 'a course code does not prove another item');
+  }
+});
