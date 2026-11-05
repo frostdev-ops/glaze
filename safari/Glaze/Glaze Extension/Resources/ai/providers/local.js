@@ -288,7 +288,11 @@ var GZ_AI_LOCAL = globalThis.GZ_AI_LOCAL || (() => {
     if (no) return { state: 'unavailable', reason: no };
     const listen = typeof onProgress === 'function' ? (p) => { if (Number.isFinite(p)) onProgress(Math.min(1, Math.max(0, p))); } : null;
     const which = part === 'pictures' ? 'pictures' : 'text';
-    if (which === 'text' && !preparing.text && !tiers(await models().catch(() => [])).length) return { state: 'unavailable', reason: 'pending' };
+    if (which === 'text' && !preparing.text) {
+      const list = await models().catch(() => []);
+      // A caller whose catalog read finishes late joins the download another caller started meanwhile.
+      if (!preparing.text && !tiers(list).length) return { state: 'unavailable', reason: 'pending' };
+    }
     if (!preparing[which]) {
       const job = preparing[which] = { listeners: new Set(), last: null };
       job.call = own().link.call('prepare', which === 'pictures' ? { part: 'pictures' } : { ...(cfg.tier && { tier: cfg.tier }) }, { onEvent: (e) => {

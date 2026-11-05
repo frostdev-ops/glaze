@@ -208,6 +208,23 @@ test('prepare downloads in the host with progress, once for callers that ask tog
   assert.deepEqual(w.st.log.downloads, ['glaze-q4']);
 });
 
+test('an older empty prepare preflight joins a download started after the first list arrived', async () => {
+  let finishRead, finishDownload, reads = 0;
+  const s = setup({ hold: () => new Promise((resolve) => { finishDownload = resolve; }) });
+  const list = s.st.list;
+  s.st.list = async () => (++reads === 1 ? new Promise((resolve) => { finishRead = resolve; }) : list());
+  const older = LOCAL.prepare(LOCAL.config({}));
+  await settle();
+  const newer = LOCAL.prepare(LOCAL.config({}));
+  await settle();
+  assert.equal(typeof finishDownload, 'function');
+  finishRead([]);
+  await settle();
+  finishDownload();
+  assert.deepEqual(await Promise.all([older, newer]), [{ state: 'ready' }, { state: 'ready' }]);
+  assert.deepEqual(s.st.log.downloads, ['lfm3-q4']);
+});
+
 test('no ladder, a catalog of Glaze-tuned models only (Rime, no `stock`): the smallest tier downloads', async () => {
   const kept = MODELS.splice(0, MODELS.length,
     { id: 'rime-q8', name: 'Rime Q8', size: 1800000000, quant: 'Q8_0', tier: 4, license: 'lfm1.0' },
