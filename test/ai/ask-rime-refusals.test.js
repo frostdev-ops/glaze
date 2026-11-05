@@ -345,3 +345,9 @@ test('a colon cannot attach an invented course title to a real code', () => {
   assert.notEqual(A.why(answer('AVI 412: Underwater Basket Weaving.', ['AVI 412 – Aviation Safety']), inp), '');
   assert.equal(A.why(answer('AVI 412: no announcements found.', ['AVI 412 – Aviation Safety']), inp), '');
 });
+
+test('a page name cannot establish an invented exam without the word due', () => {
+  const page = { current: { site: 'canvas', view: 'course', course: { id: '5', name: 'BIO 101' } } };
+  const inp = at('What course is this and what is on my schedule?', [], page);
+  assert.notEqual(A.why(answer('BIO 101 has a biology exam tomorrow.', ['BIO 101']), inp), '');
+});
