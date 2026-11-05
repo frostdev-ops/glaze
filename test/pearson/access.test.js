@@ -82,7 +82,7 @@ test('the worker registers Pearson\'s scripts only while a switch is on and all 
 
   await set({ enhance: { ...off, pearsonEmbed: true } });
   assert.deepEqual(pearson(), [], 'on without the grant: nothing on a host Glaze does not hold');
-  assert.equal(store.local.pearsonAccess, false, 'open documents are told that this device has no access');
+  assert.notEqual(store.local.pearsonAccess, true, 'open documents are told that this device has no access');
   held = new Set(HOSTS.slice(0, 2).map((h) => `${h}/*`));
   await set({ enhance: { ...off, pearsonEmbed: true } });
   assert.deepEqual(pearson(), [], 'two of the three hosts are not enough');

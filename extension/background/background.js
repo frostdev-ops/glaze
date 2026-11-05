@@ -1597,7 +1597,8 @@ const ensure = async () => {
   const have = new Map((await chrome.scripting.getRegisteredContentScripts()).map((s) => [s.id, s]));
   if (!await still()) return;
   // Unregistering does not remove scripts already in a document. Those documents follow this device's grant too.
-  if ((await chrome.storage.local.get('pearsonAccess')).pearsonAccess !== pearsonAccess) await chrome.storage.local.set({ pearsonAccess });
+  // Written only when it changes, so a new install or Reset everything (no access, nothing stored) writes nothing.
+  if (((await chrome.storage.local.get('pearsonAccess')).pearsonAccess === true) !== pearsonAccess) await chrome.storage.local.set({ pearsonAccess });
   await reconcile([...sites.map((id) => script(id, canvas.includes(id) ? 'canvas' : 'moodle')), ...ultra, ...detect ? [detector()] : [], ...gs ? [GRADESCOPE] : [], ...pe ? PEARSON : [], ...notes ? [notes] : [], ...gcal ? [gcal] : []], have, still);
   // Notes turned on: course homes already open get its button now (notesHomeInto), not at their next load.
   if (notes && !have.has(NOTES_HOME)) await notesHomeInto(notes);

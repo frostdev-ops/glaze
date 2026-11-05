@@ -150,7 +150,7 @@ const refreshed = (s, extra = {}) => {
   const source = between(options, '  const drawLooks = ', '  // Puts every control back in line');
   const context = vm.createContext({
     s, offer: null, catalog: LC.list(), wearKept() {}, GZ_UI: { paint() {}, looks: (box, v, cb) => { picks.look = cb; }, swatches: (box, v, cb) => { picks.swatch = cb; }, pickLook: UI.pickLook, pickPreset: UI.pickPreset },
-    $: element, $$: () => [], get: () => 0, finder: { value: '' }, preview() {}, renderContrast() {}, renderMine() {}, renderHistory() {}, renderExtras() {}, renderBg() {}, renderNav() {}, showResets() {},
+    $: element, $$: () => [], get: () => 0, finder: { value: '' }, preview() {}, renderContrast() {}, renderMine() {}, renderHistory() {}, renderExtras() {}, renderBg() {}, renderNav() {}, showResets() {}, pearsonControls() {},
     navbarEditor: null, presetOptions() {}, outputs() {}, GZ_EDITOR_X: { render() {} }, GZ_XEDIT: { render() {} }, document: { body: { classList: { toggle() {} } } },
     save: (keys) => { saved.push(keys); log.push('save'); }, fill: () => log.push('fill'), hint: (...a) => { hints.push(a); log.push('hint'); }, t: say,
     leaving: () => { log.push('leaving'); return extra.undo ?? null; }, ...extra.context,

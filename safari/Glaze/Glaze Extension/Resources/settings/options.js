@@ -868,15 +868,7 @@ GZ_UI.load().then((s) => {
     return [slug, box];
   });
 
-  // ---- generic controls: data-key is the settings path; radios use it as their name ----
-  // "Use a custom surface color" paints every surface and the ground that one color. Its own default is Frost's navy whatever the
-  // palette is, so a first tick starts from the surface being worn instead, and changes nothing until a color is picked. A color
-  // the student chose before stays.
-  const seedSurface = () => {
-    if (s.look.surfaceColor !== GZ_SPEC.look.surfaceColor[0]) return;
-    s.look.surfaceColor = activeColors()['--gz-surface'];
-    for (const input of $$('[data-key="look.surfaceColor"]')) input.value = s.look.surfaceColor;
-  };
+  // ---- Pearson access: its switches show on only while this device holds Pearson's hosts ----
   const PEARSON_KEYS = ['enhance.pearsonViewer', 'enhance.pearsonEmbed', 'enhance.pearsonMath'];
   let pearsonAccess = false, pearsonRead = 0;
   const pearsonControls = () => { for (const el of $$('[data-key]')) if (PEARSON_KEYS.includes(el.dataset.key)) el.checked = pearsonAccess && get(el.dataset.key); };
@@ -891,13 +883,25 @@ GZ_UI.load().then((s) => {
   chrome.permissions?.onRemoved?.addListener(readPearsonAccess);
   chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.pearsonAccess) readPearsonAccess(); });
   readPearsonAccess();
+
+  // ---- generic controls: data-key is the settings path; radios use it as their name ----
+  // "Use a custom surface color" paints every surface and the ground that one color. Its own default is Frost's navy whatever the
+  // palette is, so a first tick starts from the surface being worn instead, and changes nothing until a color is picked. A color
+  // the student chose before stays.
+  const seedSurface = () => {
+    if (s.look.surfaceColor !== GZ_SPEC.look.surfaceColor[0]) return;
+    s.look.surfaceColor = activeColors()['--gz-surface'];
+    for (const input of $$('[data-key="look.surfaceColor"]')) input.value = s.look.surfaceColor;
+  };
   for (const el of $$('[data-key]')) {
     const key = el.dataset.key;
     if (key === 'nav.size') el.addEventListener('change', () => { s.nav.detailed = false; pendingNav.add('detailed'); });
     if (key === 'nav.k') el.addEventListener('change', () => { navPick++; });
-    // Gradescope and Pearson aren't hosts Glaze holds from the start: switched on, they are asked for in this click; refused,
-    // the switch stays off. Switched off (Pearson: its last switch), the worker hands the grant back.
-    if ((key === 'enhance.gradescope' || PEARSON_KEYS.includes(key)) && el.type === 'checkbox') { el.addEventListener('change', () => { const on = el.checked; el.checked = false; (on ? GZ_SITE.reach(key === 'enhance.gradescope' ? [GZ_GRADESCOPE.HOST] : [...GZ_PEARSON_EMBED_LIB.hosts], el) : Promise.resolve(true)).then((held) => { if (PEARSON_KEYS.includes(key) && on) { pearsonRead++; pearsonAccess = held === true; pearsonControls(); } if (!held) return; el.checked = on; set(key, on); refresh(); save([group(key)]); }); }); continue; }
+    // Gradescope isn't a host Glaze holds from the start: switched on, it is asked for in this click; refused, the switch stays
+    // off. Switched off, the worker hands its grant back. Pearson's switches ask for its three hosts the same way; the last one
+    // off hands them back.
+    if (key === 'enhance.gradescope' && el.type === 'checkbox') { el.addEventListener('change', () => { const on = el.checked; el.checked = false; (on ? GZ_SITE.reach([GZ_GRADESCOPE.HOST], el) : Promise.resolve(true)).then((held) => { if (!held) return; el.checked = on; set(key, on); refresh(); save([group(key)]); }); }); continue; }
+    if (/^enhance\.pearson(?:Viewer|Embed|Math)$/.test(key) && el.type === 'checkbox') { el.addEventListener('change', () => { const on = el.checked; el.checked = false; (on ? GZ_SITE.reach([...GZ_PEARSON_EMBED_LIB.hosts], el) : Promise.resolve(true)).then((held) => { if (on) { pearsonRead++; pearsonAccess = held === true; pearsonControls(); } if (!held) return; el.checked = on; set(key, on); refresh(); save([group(key)]); }); }); continue; }
     if (el.type === 'checkbox') el.addEventListener('change', () => { set(key, el.checked); if (key === 'look.surfaceCustom' && el.checked) seedSurface(); if (key === 'enhance.coursemenu') renderCourses(); if (key === 'enhance.dashboard') renderNavItems(); refresh(); save([group(key)]); });
     else if (el.type === 'range') {
       el.addEventListener('input', () => { if (key.startsWith('nav.') && Object.hasOwn(N.dimensions(s.nav), key.slice(4))) { Object.assign(s.nav, N.dimensions(s.nav), { detailed: true }); for (const k of [...Object.keys(N.dimensions(s.nav)), 'detailed']) pendingNav.add(k); } set(key, +el.value); refresh(); save([group(key)], true); });

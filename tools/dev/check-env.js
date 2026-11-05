@@ -68,10 +68,14 @@ const ultraReady = async (page, timeout = 10000) => {
 // seeds or compares storage first waits for each install task's last write: the starter widgets (freshDefaults settles
 // with widgetLayout and starterTouched), the tabs-auto migration and the channel-key move. Polled from Node, as ultraReady.
 // With no favorites, catalogue() writes nothing; every reader treats the missing cache as no kept Looks.
-const INSTALL_KEYS = ['freshDefaults', 'migrated', 'channelKeysMoved'];
+const INSTALL_KEYS = ['freshDefaults', 'migrated', 'channelKeysMoved', 'pearsonAccess'];
+// A browser that holds Pearson's three hosts at install (All sites, or a check's staged hosts) also records pearsonAccess.
 const installDone = async (keys) => {
   const l = await chrome.storage.local.get(keys);
-  return l.freshDefaults?.pending === false && Array.isArray(l.migrated) && l.migrated.includes('tabs-auto') && l.channelKeysMoved === true;
+  const pearson = ['https://mylab.pearson.com/*', 'https://tdx.acs.pearson.com/*', 'https://socket.pearsoned.com/*'];
+  const held = typeof chrome.permissions?.contains === 'function' && await chrome.permissions.contains({ origins: pearson }).catch(() => false);
+  return l.freshDefaults?.pending === false && Array.isArray(l.migrated) && l.migrated.includes('tabs-auto') && l.channelKeysMoved === true
+    && (!held || l.pearsonAccess === true);
 };
 // The limit only bounds a failure: on a loaded runner the install has taken more than 10 s.
 const installed = async (page, timeout = 30000) => {

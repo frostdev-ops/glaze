@@ -301,11 +301,11 @@ test('migration happens once, in the queue, against the layout stored then, befo
 test('a new install writes storage.local only what scripts/check-env.js installed() waits for', async () => {
   const { installed } = require('../../tools/dev/check-env.js');
   const w = worker(), had = Object.keys(w.store.local);
-  const done = () => installed({ evaluate: (f) => vm.runInContext(`(${f})()`, vm.createContext({ chrome: { storage: { local: { get: async () => structuredClone(w.store.local) } } } })) }, 0);
+  const done = () => installed({ evaluate: (f) => vm.runInContext(`(${f})()`, vm.createContext({ chrome: { storage: { local: { get: async () => structuredClone(w.store.local) } }, permissions: { contains: async () => true } } })) }, 0);
   await assert.rejects(done(), /install/);
   w.installed[0]({ reason: 'install' }); await settle();
   await done();
-  assert.deepEqual(Object.keys(w.store.local).filter((k) => !had.includes(k)).sort(), ['channelKeysMoved', 'freshDefaults', 'migrated', 'starterTouched', 'widgetLayout'],
+  assert.deepEqual(Object.keys(w.store.local).filter((k) => !had.includes(k)).sort(), ['channelKeysMoved', 'freshDefaults', 'migrated', 'pearsonAccess', 'starterTouched', 'widgetLayout'],
     'a new install write needs its task\'s last write in installed(), or checks that compare storage see it land late');
 });
 
