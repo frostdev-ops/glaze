@@ -233,3 +233,13 @@ test('a page name cannot carry an unread recalled preference into the answer', (
     current: { site: 'canvas', view: 'course', course: { id: '52', name: 'BIO 101' } } }));
   assert.notEqual(A.why(answer('This is BIO 101. You prefer short paragraphs.', ['BIO 101']), inp), '', 'the current page does not authorize recall as a memory read');
 });
+
+test('an empty or unrelated memory search does not verify recalled text', () => {
+  for (const result of [{ ok: false, error: 'Unavailable' }, { ok: true, items: [], truncated: false },
+    { ok: true, items: [{ id: `m-${'f'.repeat(32)}`, revision: REV, kind: 'memory', text: 'Likes green tea' }], truncated: false }]) {
+    const inp = A.task.input(raw({ question: 'What course is this and what preference did I save?', recall: recall(),
+      current: { site: 'canvas', view: 'course', course: { id: '52', name: 'BIO 101' } },
+      steps: [step('memory_search', { query: 'preference' }, result)] }));
+    assert.notEqual(A.why(answer('This is BIO 101. You prefer short paragraphs.', ['BIO 101']), inp), '', 'the search did not return this preference');
+  }
+});
