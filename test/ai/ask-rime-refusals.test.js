@@ -293,3 +293,12 @@ test('a failed or empty last read is reported plainly; a code without a dash nam
   const todo = step('todo_list', {}, { items: [{ title: 'Lab report 3', course: 'BIO 101', due: AT, submitted: false }] });
   assert.notEqual(A.why(answer('Lab report 4 is due today.', ['Lab report 4']), at('what is due?', [todo])), '', 'another item');
 });
+
+test('similar wording cannot turn a different assignment into a read fact', () => {
+  const todo = step('todo_list', {}, { items: [{ title: 'Prepare the chemistry laboratory report', course: 'BIO 101', due: AT, submitted: false }] });
+  const inp = at('What is due?', [todo]);
+  const invented = 'Prepare the biology laboratory report is due.';
+  assert.notEqual(A.why(answer(invented, ['Prepare the biology laboratory report']), inp), '', 'near quote changes the subject');
+  assert.notEqual(A.why(answer(invented, ['Prepare the chemistry laboratory report']), inp), '', 'restatement changes the subject');
+  assert.notEqual(A.why(answer('Prepare the chemistry laboratory report is due, and prepare the biology laboratory report is due.', ['Prepare the biology laboratory report', 'Prepare the chemistry laboratory report']), inp), '', 'an invented quote stated beside a real one');
+});
