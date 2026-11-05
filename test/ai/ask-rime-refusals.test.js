@@ -351,3 +351,9 @@ test('a page name cannot establish an invented exam without the word due', () =>
   const inp = at('What course is this and what is on my schedule?', [], page);
   assert.notEqual(A.why(answer('BIO 101 has a biology exam tomorrow.', ['BIO 101']), inp), '');
 });
+
+test('a limitation cannot hide a separate school claim after a colon', () => {
+  const page = { current: { site: 'canvas', view: 'course', course: { id: '5', name: 'BIO 101' } } };
+  const inp = at('What course is this and what is due?', [], page);
+  assert.notEqual(A.why(answer('BIO 101. I cannot verify your assignments: your exam is due tomorrow.', ['BIO 101']), inp), '');
+});
