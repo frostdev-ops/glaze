@@ -164,3 +164,8 @@ test('a confirmation alone cannot introduce a different school item', () => {
   assert.equal(A.why(answer('Done. A biology project awaits you.'), inp), 'ground');
   assert.equal(A.why(answer('Done — I’ll remind you to start your math homework.'), inp), '');
 });
+
+test('a reminder cannot mask a coordinated invented school item', () => {
+  const inp = tools('remind me to start my math homework in 2 minutes', [wake]);
+  for (const text of ['Reminder set, and a biology project awaits you.', 'Reminder set and a biology project awaits you.']) assert.equal(A.why(answer(text), inp), 'ground');
+});
