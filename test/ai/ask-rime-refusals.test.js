@@ -329,3 +329,12 @@ test('a course code does not ground a different course title', () => {
   assert.equal(A.why(answer('AVI 412 is the course.', ['AVI 412 – Aviation Safety']), inp), '');
   assert.notEqual(A.why(answer('AVI 412 – Underwater Basket Weaving is the course.', ['AVI 412 – Aviation Safety']), inp), '', 'the real code cannot prove a different course name');
 });
+
+test('honest limits on school status remain available after page context or a failed read', () => {
+  const page = { current: { site: 'canvas', view: 'course', course: { id: '5', name: 'BIO 101' } } };
+  assert.equal(A.why(answer('This is BIO 101. I cannot verify when your assignment is due.', ['BIO 101']), at('What course and when is my assignment due?', [], page)), '');
+  const courses = step('courses_list', {}, { items: [{ id: '5', name: 'BIO 101' }] });
+  const failed = step('assignments_list', { course: '5' }, { ok: false, error: 'Unavailable' });
+  assert.equal(A.why(answer('I cannot verify when your assignment is due.'), at('When is my assignment due?', [courses, failed])), '');
+  assert.notEqual(A.why(answer('I cannot verify assignments. Your biology exam is due tomorrow.', ['BIO 101']), at('When is my assignment due?', [courses, failed])), '', 'a limitation cannot mask a separate assertion');
+});
