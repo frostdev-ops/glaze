@@ -23,3 +23,14 @@ test('ProseMirror parses pasted HTML with DOMParser, as scripts/vendor-prosemirr
   const pm = fs.readFileSync(path.join(root, 'vendor/pm.js'), 'utf8');
   assert.match(pm, /doc3 = new globalThis\.DOMParser\(\)\.parseFromString\(maybeWrapTrusted\("<body>" \+ html\), "text\/html"\);\n {4}elt = doc3\.body;/);
 });
+
+// Pearson's scripts and the MathLive runtime they load (tools/vendor/vendor-mathlive.sh rewrites its sinks): the 4.0.3
+// Firefox package failed its lint on 23 of these.
+test('Pearson\'s scripts and MathLive write no HTML through the sinks Firefox Add-ons flags', () => {
+  const files = execFileSync('git', ['ls-files', '-z', '--', 'content/pearson.js', 'pearson', 'vendor/mathlive'], { cwd: root, encoding: 'utf8' })
+    .split('\0').filter((f) => /\.m?js$/.test(f));
+  assert.ok(files.includes('vendor/mathlive/mathlive.mjs') && files.includes('content/pearson.js') && files.includes('pearson/render.mjs'), 'the scan covers MathLive and Pearson\'s own code');
+  const found = files.flatMap((f) => fs.readFileSync(path.join(root, f), 'utf8').split('\n')
+    .map((line, i) => (SINK.test(line) ? `${f}:${i + 1}` : null)).filter(Boolean));
+  assert.deepEqual(found, []);
+});
