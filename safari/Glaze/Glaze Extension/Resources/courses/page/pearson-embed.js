@@ -31,6 +31,8 @@ var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
     const v = view; if (!v || !on()) return;
     if (!sheet) { sheet = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: chrome.runtime.getURL('pearson/embed.css') }); document.head.append(sheet); }
     if (!v.active) {
+      if (v.paused) { v.vars = vars(v.slot); v.paused = false; }
+      v.resize.observe(v.slot); v.resize.observe(v.header); v.lookWatch.observe(document.documentElement, { attributes: true }); look();
       v.active = true; v.slot.setAttribute('data-gz-pearson-slot', ''); v.frame.setAttribute('data-gz-pearson-frame', ''); v.exit.setAttribute('data-gz-pearson-native-exit', '');
     }
     if (!v.controls) {
@@ -60,21 +62,22 @@ var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
     if (v.controls.lastElementChild.getAttribute('aria-label') !== X.t('Close Pearson')) v.controls.lastElementChild.setAttribute('aria-label', X.t('Close Pearson'));
     size();
   };
-  const off = () => {
+  const pause = () => {
     cancelAnimationFrame(queued); queued = 0;
-    if (view) {
-      if (view.pending) { clearTimeout(view.pending.timer); view.pending.done(null); }
-      view.resize.disconnect(); view.lookWatch.disconnect(); view.frame.removeEventListener('load', context); view.controls?.remove();
+    if (view && !view.paused) {
+      if (view.pending) { clearTimeout(view.pending.timer); view.pending.done(null); view.pending = null; }
+      view.resize.disconnect(); view.lookWatch.disconnect(); view.controls?.remove(); view.controls = null;
       view.frame.removeAttribute('data-gz-pearson-frame'); view.exit.removeAttribute('data-gz-pearson-native-exit'); restore(view);
-      view = null;
+      view.active = false; view.paused = true;
     }
     sheet?.remove(); sheet = null;
   };
+  const off = () => { pause(); view?.frame.removeEventListener('load', context); view = null; };
   const sync = () => {
-    if (!on()) { context(true); return off(); }
     if (!L.lti(location.href)) return off();
     const frame = document.getElementById('lti-launch-iframe'), header = frame?.closest('.routed-page')?.querySelector('content-page-header > header') || document.querySelector('content-page-header > header');
     if (view && (view.frame !== frame || !frame?.isConnected)) off();
+    if (!on()) { context(); return pause(); }
     if (view && view.slot !== frame.parentElement) {
       restore(view); view.resize.unobserve(view.slot); view.slot = frame.parentElement; view.vars = vars(view.slot);
       view.resize.observe(view.slot); view.slot.style.setProperty('--gz-pearson-scheme', view.theme['--gz-pearson-scheme']);
