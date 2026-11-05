@@ -15,5 +15,6 @@ test('the Pearson permission disclosures distinguish exact grants, shared access
 test('the store describes browser-menu school checks separately from Pearson grants', () => {
   const copy = read('store/listing.md').split('### Host access (1,000 character maximum)')[1].split('### activeTab')[0].trim();
   assert.match(copy, /Pearson grants skip LMS probes/);
+  assert.match(copy, /exact grants return when all are off/, 'only exact grants can be returned; shared access stays');
   assert.ok(copy.length <= 1000, `${copy.length} characters`);
 });
