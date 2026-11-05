@@ -858,7 +858,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const ACTION_CONFIRMATION = /(?<![\p{L}\p{N}])(?:remind\p{L}*|reminder\p{L}*|wakes?|alarms?|monitor\p{L}*|watch(?:ing|ed)?|cancel\p{L}*|saved|stored|forgotten|marked|recordatorio\p{L}*|recordar\p{L}*|avisar\p{L}*|lembra\p{L}*|alarme\p{L}*|rappel\p{L}*|rappeler\p{L}*|erinner\p{L}*|wecker|herinner\p{L}*|wekker)(?![\p{L}\p{N}])/iu;
   const SCHOOL_CLAUSE = new RegExp(String.raw`[,;.!?…\n]+|(?<![\p{L}\p{N}])(?:and|but|y|pero|e|mas|et|mais|und|aber|en|maar)\s+(?=[^,;.!?…\n]{0,100}${SCHOOL_ITEM.source})`, 'iu');
   // A limitation applies only to its own clause; it cannot excuse an assertion after a conjunction.
-  const schoolClaim = (text) => text.split(SCHOOL_CLAUSE).some((part) => {
+  const schoolClaim = (text) => text.split(new RegExp(`${SCHOOL_CLAUSE.source}|:`, 'iu')).some((part) => {
     const limited = /(?<![\p{L}])(?:cannot|can't|could not|couldn't|unable to|no puedo|não posso|n[ãa]o consigo|ne peux pas|kann nicht|kan niet)\s+(?:verify|confirm|determine|check|read|see|tell|verificar|confirmar|determinar|leer|ler|vérifier|confirmer|lire|bestätigen|prüfen|lesen|bevestigen|controleren|lezen)(?![\p{L}])/iu.test(part);
     const existence = /(?<![\p{L}])(?:has|have|tiene|tienen|tem|têm|hat|haben|heeft|hebben)(?![\p{L}])/iu.test(part);
     return !limited && (SCHOOL_STATUS.test(part) || SCHOOL_ITEM.test(part) && (SCHOOL_ASSERTION.test(part) || existence));
