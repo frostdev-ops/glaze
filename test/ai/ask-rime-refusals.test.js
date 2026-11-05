@@ -357,3 +357,13 @@ test('a limitation cannot hide a separate school claim after a colon', () => {
   const inp = at('What course is this and what is due?', [], page);
   assert.notEqual(A.why(answer('BIO 101. I cannot verify your assignments: your exam is due tomorrow.', ['BIO 101']), inp), '');
 });
+
+test('a note restated after its opening words, and a title with its possessive turned into an article, still match', () => {
+  const id = `m-${'5'.padStart(32, '0')}`, note = 'Ik geef de voorkeur aan uitleg met een kleine schets vóór een genummerd voorbeeld.';
+  const read = step('memory_read', { id }, { ok: true, id, revision: 'c'.repeat(32), kind: 'memory', text: note, category: 'preference', source: { type: 'user-message', evidence: note }, page: 1, pages: 1 });
+  assert.equal(A.why(answer('Ik herinner me dat je de voorkeur geeft aan uitleg met een kleine schets vóór een genummerd voorbeeld.', [note]), at('Welke voorkeur onthoud je over mij?', [read], { locale: 'nl', tools: ['memory_read'] })), '');
+  const wakes = step('wakes_list', {}, { items: [{ id: `w-${'6'.padStart(32, '0')}`, what: 'wake', at: AT, say: 'buscar meu jaleco do laboratório' }] });
+  const pt = at('quais lembretes eu tenho?', [wakes], { locale: 'pt-BR', tools: ['wakes_list'] });
+  assert.equal(A.why(answer('Você tem um lembrete: buscar o jaleco do laboratório.', ['buscar meu jaleco do laboratório']), pt), '');
+  assert.notEqual(A.why(answer('Você tem um lembrete: buscar o caderno do laboratório.', ['buscar meu caderno do laboratório']), pt), '', 'another item');
+});
