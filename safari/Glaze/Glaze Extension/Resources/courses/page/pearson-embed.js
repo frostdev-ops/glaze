@@ -6,9 +6,9 @@ var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
   const vars = slot => ['--gz-pearson-gap','--gz-pearson-height','--gz-pearson-scheme'].map(k => [k,slot.style.getPropertyValue(k),slot.style.getPropertyPriority(k)]);
   const restore = v => { v.slot.removeAttribute('data-gz-pearson-slot'); for (const [k,value,priority] of v.vars) { if (value) v.slot.style.setProperty(k,value,priority); else v.slot.style.removeProperty(k); } };
   const nativeExit = header => header?.querySelector('button[data-analytics-id="course.content.header.exit"]') || header?.querySelector('button:not(.gz-pearson-host-controls *)');
-  // live: Glaze may act on Pearson here (Glaze on, access on this device). on: also embed new launches. Switching
+  // live: Glaze may act on Pearson here (Glaze on, access on this device, a Pearson switch on). on: also embed new launches. Switching
   // Pearson inside Blackboard off keeps a live session as it is; only later launches go native.
-  const live = () => pearsonAccess && X.on() && X.settings().enabled !== false;
+  const live = () => pearsonAccess && X.on() && X.settings().enabled !== false && ['pearsonViewer', 'pearsonEmbed', 'pearsonMath'].some(k => X.settings().enhance[k] === true);
   const on = () => live() && X.settings().enhance.pearsonEmbed === true;
   const context = (force = false) => {
     if (!view) return;
