@@ -89,3 +89,21 @@ test('introductions in assignment material remain coursework in all six locales'
     assert.equal(H.why({ kind: 'hint', step: null, reply, followUp: null }, inp), 'speaks', locale);
   }
 });
+
+test('a reminder receipt cannot prove memory actions or unpunctuated school items', () => {
+  const inp = tools('remind me to start my math homework in 2 minutes', [wake]);
+  for (const text of ['Done. I saved your preference.', 'Done. I forgot your preference.', 'Done. Chemistry lab report due tomorrow.', 'Done. You have a biology discussion.']) {
+    assert.equal(A.why(answer(text), inp), 'ground', text);
+  }
+});
+
+test('ambiguous social questions cannot bypass coursework supplied as material', () => {
+  const inp = help({ question: 'Who am I?', subject: 'reading', material: 'The Great Gatsby. The green light symbolizes Gatsby’s hope of winning Daisy back.' });
+  assert.equal(H.why({ kind: 'hint', step: null, reply: 'The green light symbolizes Gatsby’s hope of winning Daisy back.', followUp: null }, inp), 'speaks');
+});
+
+test('saved memory cannot supply new paper wording in a follow-up turn', () => {
+  const quote = 'screens delay melatonin release';
+  const inp = help({ subject: 'other', question: 'Does this sound stronger?', history: [{ question: 'Help with my thesis', answer: 'What evidence do you have?' }], recall: memory(quote, quote) });
+  assert.equal(H.why({ kind: 'hint', step: null, reply: `Your thesis is stronger once it says "${quote}" instead.`, followUp: null }, inp), 'quote');
+});
