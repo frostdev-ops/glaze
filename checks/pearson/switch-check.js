@@ -1,7 +1,7 @@
 // Settings' Pearson switches, headless: the real extension (a staged copy of the shipped manifest, which holds no Pearson
 // host) and its real Settings page and worker. A Pearson switch turned on asks the browser for Pearson's three hosts inside
 // the click; headless can't answer the prompt, so the page's chrome.permissions.request is the check's (recorded, answered
-// no, then yes), and on yes the check stands in for the grant in the worker (contains, getAll and remove for those hosts).
+// no, then yes), and on yes the check stands in for the grant in the page and the worker (contains, getAll and remove).
 // Refused: the switch stays off and nothing registers. Allowed: on, and Pearson's two scripts register. A second switch asks
 // again and keeps them. The last one off: unregistered, and the three hosts handed back.
 //   NODE_PATH=<installed playwright> nice node checks/pearson/switch-check.js [screenshots directory]
@@ -43,10 +43,13 @@ const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].s
     const stored = (k) => sw.evaluate((k) => chrome.storage.sync.get('enhance').then((r) => r.enhance?.[k] === true), k);
     const page = await ctx.newPage();
     page.on('pageerror', (e) => errors.push(String(e)));
-    await page.addInitScript(() => {
-      globalThis.__gz = { calls: [], answer: false };
-      chrome.permissions.request = (o) => { __gz.calls.push([o.origins, navigator.userActivation.isActive]); return Promise.resolve(__gz.answer); };
-    });
+    // The page's request and its own access reads: recorded, answered by the check; a yes is the grant from then on.
+    await page.addInitScript((hosts) => {
+      const P = chrome.permissions, contains = P.contains.bind(P);
+      globalThis.__gz = { calls: [], answer: false, held: false };
+      P.request = (o) => { __gz.calls.push([o.origins, navigator.userActivation.isActive]); if (__gz.answer) __gz.held = true; return Promise.resolve(__gz.answer); };
+      P.contains = (o) => (o.origins?.length && o.origins.every((x) => hosts.includes(x)) ? Promise.resolve(__gz.held) : contains(o));
+    }, HOSTS);
     await page.goto(`chrome-extension://${id}/options.html#pages/documents`);
     const sw_ = (k) => { const box = page.locator(`input[data-key="enhance.${k}"]`); return { box, label: page.locator('label.check', { has: box }) }; };
     const embed = sw_('pearsonEmbed'), math = sw_('pearsonMath'), viewer = sw_('pearsonViewer');

@@ -6,7 +6,10 @@ var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
   const vars = slot => ['--gz-pearson-gap','--gz-pearson-height','--gz-pearson-scheme'].map(k => [k,slot.style.getPropertyValue(k),slot.style.getPropertyPriority(k)]);
   const restore = v => { v.slot.removeAttribute('data-gz-pearson-slot'); for (const [k,value,priority] of v.vars) { if (value) v.slot.style.setProperty(k,value,priority); else v.slot.style.removeProperty(k); } };
   const nativeExit = header => header?.querySelector('button[data-analytics-id="course.content.header.exit"]') || header?.querySelector('button:not(.gz-pearson-host-controls *)');
-  const on = () => pearsonAccess && X.on() && X.settings().enabled !== false && X.settings().enhance.pearsonEmbed === true;
+  // live: Glaze may act on Pearson here (Glaze on, access on this device). on: also embed new launches. Switching
+  // Pearson inside Blackboard off keeps a live session as it is; only later launches go native.
+  const live = () => pearsonAccess && X.on() && X.settings().enabled !== false;
+  const on = () => live() && X.settings().enhance.pearsonEmbed === true;
   const context = (force = false) => {
     if (!view) return;
     const enabled = on(), key = `${enabled}:${view.lookKey}`; if (!force && view.sent === key) return;
@@ -28,7 +31,7 @@ var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
   };
   const schedule = () => { if (!queued) queued = requestAnimationFrame(size); };
   const activate = () => {
-    const v = view; if (!v || !on()) return;
+    const v = view; if (!v || !live()) return;
     if (!sheet) { sheet = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: chrome.runtime.getURL('pearson/embed.css') }); document.head.append(sheet); }
     if (!v.active) {
       if (v.paused) { v.vars = vars(v.slot); v.paused = false; }
@@ -77,7 +80,7 @@ var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
     if (!L.lti(location.href)) return off();
     const frame = document.getElementById('lti-launch-iframe'), header = frame?.closest('.routed-page')?.querySelector('content-page-header > header') || document.querySelector('content-page-header > header');
     if (view && (view.frame !== frame || !frame?.isConnected)) off();
-    if (!on()) { context(); return pause(); }
+    if (!live()) { context(); return pause(); }
     if (view && view.slot !== frame.parentElement) {
       restore(view); view.resize.unobserve(view.slot); view.slot = frame.parentElement; view.vars = vars(view.slot);
       view.resize.observe(view.slot); view.slot.style.setProperty('--gz-pearson-scheme', view.theme['--gz-pearson-scheme']);
