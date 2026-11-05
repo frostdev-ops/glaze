@@ -9,8 +9,8 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
     if (!['scan','open','prepare','apply','close'].includes(m.op) || typeof m.doc !== 'string' || m.doc.length > 64) return { error: 'request' };
     if (m.op !== 'close' && (!Number.isSafeInteger(m.deadline) || m.deadline > Date.now() + 10000 || m.deadline <= Date.now())) return { error: 'expired' };
     if (!globalThis.GZ_PEARSON_NATIVE) importScripts('../pearson/notation.js','../pearson/native.js');
-    const raw = await chrome.storage.sync.get(['enabled','enhance']);
-    if (m.op !== 'close' && (raw.enabled === false || raw.enhance?.pearsonMath === false)) return { error: 'inactive' };
+    const allowed = async () => m.op === 'close' || await switchOn('pearsonMath') && (await Promise.all(GZ_PEARSON_EMBED_LIB.hosts.map(reachable))).every(Boolean);
+    if (!await allowed()) return { error: 'inactive' };
     const request = { op: m.op, deadline: m.deadline };
     if (m.op === 'open') { if (typeof m.id !== 'string' || m.id.length > 200) return { error: 'request' }; request.id = m.id; }
     if (['prepare','apply','close'].includes(m.op)) { if (typeof m.token !== 'string' || m.token.length !== 36) return { error: 'request' }; request.token = m.token; }
@@ -27,6 +27,7 @@ chrome.runtime.onMessage.addListener((m, sender, reply) => {
       || (sender.documentId && probe[0].documentId !== sender.documentId)) return { error: 'expired' };
     // A frame id alone can refer to the next document after navigation. Fail closed on engines without document pinning.
     target = { tabId: sender.tab.id, documentIds: [probe[0].documentId] };
+    if (!await allowed()) return { error: 'inactive' };
     const result = await chrome.scripting.executeScript({ target, world: 'MAIN', func: GZ_PEARSON_NATIVE, args: [request] });
     return result?.[0]?.result || { error: 'unavailable' };
   };
