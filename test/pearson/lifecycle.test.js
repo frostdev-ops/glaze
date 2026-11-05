@@ -108,7 +108,7 @@ test('turning Pearson inside Blackboard off keeps a live session in step with th
       get firstElementChild() { return this.children[0]; }, get lastElementChild() { return this.children.at(-1); },
     };
   };
-  const settings = { enabled: true, enhance: { pearsonEmbed: true } };
+  const settings = { enabled: true, enhance: { pearsonEmbed: true, pearsonViewer: true } };
   const slot = node(), header = node(), exit = node(), frame = node(), controls = node();
   controls.append(exit); header.querySelector = () => exit;
   frame.src = 'https://school.blackboard.com/webapps/blackboard/execute/ultraFramePassThrough?redirectTo=' + encodeURIComponent('https://school.blackboard.com/webapps/blackboard/execute/blti/launchLink?course_id=_1_1&content_id=_2_1&from_ultra=true');
@@ -128,8 +128,13 @@ test('turning Pearson inside Blackboard off keeps a live session in step with th
   await tick(); c.GZ_PEARSON_EMBED.sync();
   fire('message', { source: frame.contentWindow, origin: L.socket, data: { gzPearsonEmbed: 'active', channel: messages.at(-1)?.channel } });
   assert.equal(slot.attrs.has('data-gz-pearson-slot'), true, 'embedded with access and the switch on');
-  settings.enhance = { pearsonEmbed: false };
+  settings.enhance = { pearsonEmbed: false, pearsonViewer: true };
   c.GZ_PEARSON_EMBED.sync();
   assert.equal(slot.attrs.has('data-gz-pearson-slot'), true, 'switched off: the live session stays where it is');
   assert.ok(watches.at(-1).on, 'and keeps following the Look, so a palette change still reaches it');
+  settings.enhance = {};
+  c.GZ_PEARSON_EMBED.sync();
+  assert.equal(slot.attrs.has('data-gz-pearson-slot'), false, 'the last switch off restores the native slot even when the device still holds the hosts');
+  assert.equal(exit.attrs.has('data-gz-pearson-native-exit'), false, 'the native Exit returns');
+  assert.equal(watches.at(-1).on, false, 'the paused session stops following the Look');
 });
