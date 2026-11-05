@@ -150,7 +150,7 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
     "(?:ich hei(?:ß|ss)e|mein name ist|nenn mich) [\\p{L}'’-]+(?: [\\p{L}'’-]+)?|(?:kennst|wei(?:ß|ss)t) du (?:meinen namen|wie ich hei(?:ß|ss)e|wer ich bin)|wie hei(?:ß|ss)e ich|wer bin ich|was wei(?:ß|ss)t du (?:über|ueber) mich",
     "(?:ik heet|mijn naam is|noem me) [\\p{L}'’-]+(?: [\\p{L}'’-]+)?|(?:weet|ken) je (?:mijn naam|hoe ik heet|wie ik ben)|hoe heet ik|wie ben ik|wat weet je over mij",
   ].join('|')})[?!.\\s]*$`, 'iu');
-  const socialRequest = (inp) => !inp.attempt && sentences(inp.question).flatMap((s) => s.split(/[,;:—–]|\s-\s/u)).every((s) => {
+  const socialRequest = (inp) => !inp.attempt && ![inp.material, inp.context?.prompt, inp.context?.assignment?.instructions, inp.context?.assignment?.description, ...(inp.context?.assignment?.files || []).map((f) => f.text), ...recalled(inp)].filter(Boolean).some((t) => X().source(t, { min: 3 }).has(inp.question)) && sentences(inp.question).flatMap((s) => s.split(/[,;:—–]|\s-\s/u)).every((s) => {
     const q = s.trim().replace(/[’‘]/g, "'").replace(/^[¿¡]\s*/u, '');
     return social(q.replace(/^(?:please\s+)?say\s+/iu, '')) || /^(?:rime|glaze)[?!.\s]*$/iu.test(q) || SOCIAL_QUESTION.test(q);
   });
@@ -305,7 +305,9 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
     const texts = textsOf(inp), sources = texts.map((t) => X().source(t));
     // Quoting the student's own saved note back to them offers no wording.
     const own = (inp.recall?.records || []).filter((r) => r.kind === 'memory').flatMap((r) => [r.text, r.source?.evidence]).filter((t) => typeof t === 'string');
-    const quotable = [...sources, ...own.map((t) => X().source(t))];
+    const paper = /(?<![\p{L}\p{N}])(?:essay|paper|thesis|draft|paragraph|ensayo|tesis|redacci[óo]n|redação|reda[cç][ãa]o|tese|disserta[cç][ãa]o|th[èe]se|r[ée]daction|dissertation|aufsatz|these|entwurf|werkstuk|scriptie|stelling)(?![\p{L}\p{N}])/iu;
+    const paperWork = !socialRequest(inp) && (['essay', 'reading'].includes(inp.subject) || paper.test(inp.question));
+    const quotable = [...sources, ...(!paperWork ? own.map((t) => X().source(t)) : [])];
     for (const piece of [out.reply, out.followUp].filter((p) => typeof p === 'string' && p.trim())) {
       const rule = hands(piece, inp);
       if (rule) return rule;
