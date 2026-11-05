@@ -79,7 +79,7 @@ NOUVEAUTÉS DE LA VERSION 4.0.3
 • Firefox : Rime, le modèle d’IA de Glaze, fonctionne sur votre ordinateur, et ce que vous lui donnez y reste. Réglages › IA l’affiche comme Pas encore disponible jusqu’à ce que Frostdev le publie, puis propose Télécharger. Les nouvelles versions arrivent d’elles-mêmes.
 • Demander à Rime (Ctrl+K ou ⌘K ; désactivé tant que vous ne l’activez pas dans Réglages › IA) aide aux devoirs par des indices et des questions, jamais par la réponse, et répond sur vos tâches, votre emploi du temps et vos notes.
 • Réglages › IA › Mémoire affiche, modifie et oublie ce que Demander à Rime a enregistré.
-• Pearson MyLab : votre Apparence sur les devoirs Pearson, Pearson dans Blackboard et des équations modernes. Activez chacun dans Réglages › Pages de cours › Documents et questionnaires ; le premier demande l’accès aux sites de Pearson.
+• Pearson MyLab : votre Apparence sur les devoirs Pearson. Activez séparément Vue des exercices Pearson, Pearson dans Blackboard et Équations modernes dans Pearson dans Réglages › Pages de cours › Documents et questionnaires ; l’accès aux sites de Pearson est demandé si nécessaire.
 • Discussions Blackboard : un PDF joint à un message reçoit Aperçu, qui l’ouvre dans Glaze.
 • Blackboard : un devoir avec un brouillon enregistré d’une nouvelle tentative n’affiche plus En retard quand une tentative précédente a été remise.
 • Writer garde son bouton de publication quand Blackboard replie une zone de réponse vide.

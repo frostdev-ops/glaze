@@ -87,7 +87,7 @@ NEW IN 4.0.3
 • Firefox: Rime, Glaze's own AI model, runs on your computer, and what you give it stays there. Settings › AI shows it as Not available yet until Frostdev publishes it, then offers Download. Newer versions arrive by themselves.
 • Ask Rime (Ctrl+K or ⌘K; off until you turn it on in Settings › AI) helps with coursework through hints and questions, never the answer, and answers questions about your to-dos, schedule and grades.
 • Settings › AI › Memory lists, edits and forgets what Ask Rime saved.
-• Pearson MyLab: your Look on Pearson homework, Pearson inside Blackboard and modern equations. Turn each on in Settings › Course pages › Documents and quizzes; the first one asks for access to Pearson's sites.
+• Pearson MyLab: your Look on Pearson homework. Turn on Pearson problem viewer, Pearson inside Blackboard and Modern Pearson equations separately in Settings › Course pages › Documents and quizzes; access to Pearson's sites is requested when needed.
 • Blackboard discussions: a PDF attached to a post gets Preview, which opens it in Glaze.
 • Blackboard: an assignment with a saved draft of a new attempt no longer shows Past due when an earlier attempt was handed in.
 • Writer keeps its post button when Blackboard folds an empty reply box.

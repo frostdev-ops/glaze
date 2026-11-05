@@ -79,7 +79,7 @@ NIEUW IN 4.0.3
 • Firefox: Rime, het eigen AI-model van Glaze, draait op je computer, en wat je het geeft, blijft daar. Instellingen › AI toont het als Nog niet beschikbaar tot Frostdev het publiceert, en biedt dan Downloaden aan. Nieuwere versies komen vanzelf.
 • Vraag het Rime (Ctrl+K of ⌘K; uit tot je het aanzet in Instellingen › AI) helpt met studiewerk door hints en vragen, nooit met het antwoord, en beantwoordt vragen over je taken, rooster en cijfers.
 • Instellingen › AI › Geheugen toont, bewerkt en vergeet wat Vraag het Rime heeft bewaard.
-• Pearson MyLab: je Uiterlijk op Pearson-huiswerk, Pearson binnen Blackboard en moderne vergelijkingen. Zet ze elk aan in Instellingen › Cursuspagina's › Documenten en toetsen; de eerste vraagt toegang tot de sites van Pearson.
+• Pearson MyLab: je Uiterlijk op Pearson-huiswerk. Zet Pearson-opgavenweergave, Pearson binnen Blackboard en Moderne Pearson-vergelijkingen elk aan in Instellingen › Cursuspagina's › Documenten en toetsen; toegang tot de sites van Pearson wordt gevraagd als dat nodig is.
 • Blackboard-discussies: een pdf bij een bericht krijgt Voorbeeld, dat hem in Glaze opent.
 • Blackboard: een opdracht met een opgeslagen concept van een nieuwe poging toont niet meer Te laat als een eerdere poging is ingeleverd.
 • Writer houdt zijn knop om te plaatsen als Blackboard een leeg antwoordvak inklapt.

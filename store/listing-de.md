@@ -79,7 +79,7 @@ NEU IN 4.0.3
 • Firefox: Rime, das eigene KI-Modell von Glaze, läuft auf deinem Computer, und was du ihm gibst, bleibt dort. Einstellungen › KI zeigt es als Noch nicht verfügbar, bis Frostdev es veröffentlicht, und bietet dann Herunterladen an. Neuere Versionen kommen von selbst.
 • Rime fragen (Strg+K oder ⌘K; aus, bis du es unter Einstellungen › KI einschaltest) hilft bei Kursaufgaben mit Hinweisen und Fragen, nie mit der Lösung, und beantwortet Fragen zu deinen To-dos, deinem Stundenplan und deinen Noten.
 • Einstellungen › KI › Erinnerungen zeigt, bearbeitet und löscht, was Rime fragen gespeichert hat.
-• Pearson MyLab: dein Aussehen auf Pearson-Hausaufgaben, Pearson in Blackboard und moderne Gleichungen. Schalte sie einzeln unter Einstellungen › Kursseiten › Dokumente und Tests ein; die erste fragt nach Zugriff auf die Websites von Pearson.
+• Pearson MyLab: dein Aussehen auf Pearson-Hausaufgaben. Schalte Pearson-Aufgabenansicht, Pearson in Blackboard und Moderne Pearson-Gleichungen einzeln unter Einstellungen › Kursseiten › Dokumente und Tests ein; der Zugriff auf Pearsons Websites wird bei Bedarf angefragt.
 • Blackboard-Diskussionen: Ein PDF im Anhang eines Beitrags bekommt Vorschau und öffnet sich damit in Glaze.
 • Blackboard: Eine Aufgabe mit gespeichertem Entwurf eines neuen Versuchs zeigt nicht mehr Überfällig, wenn ein früherer Versuch abgegeben wurde.
 • Writer behält seine Schaltfläche zum Posten, wenn Blackboard ein leeres Antwortfeld einklappt.

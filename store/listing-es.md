@@ -79,7 +79,7 @@ NOVEDADES DE 4.0.3
 • Firefox: Rime, el modelo de IA propio de Glaze, funciona en tu ordenador, y lo que le das se queda ahí. Ajustes › IA lo muestra como Aún no disponible hasta que Frostdev lo publique, y entonces ofrece Descargar. Las versiones nuevas llegan solas.
 • Pregúntale a Rime (Ctrl+K o ⌘K; desactivado hasta que lo actives en Ajustes › IA) te ayuda con el trabajo del curso con pistas y preguntas, nunca con la respuesta, y responde sobre tus tareas pendientes, tu horario y tus notas.
 • Ajustes › IA › Memoria muestra, edita y olvida lo que guardó Pregúntale a Rime.
-• Pearson MyLab: tu Aspecto en las tareas de Pearson, Pearson dentro de Blackboard y ecuaciones modernas. Activa cada uno en Ajustes › Páginas del curso › Documentos y cuestionarios; el primero pide acceso a los sitios de Pearson.
+• Pearson MyLab: tu Aspecto en las tareas de Pearson. Activa por separado Visor de problemas de Pearson, Pearson dentro de Blackboard y Ecuaciones modernas en Pearson en Ajustes › Páginas del curso › Documentos y cuestionarios; se pide acceso a los sitios de Pearson si hace falta.
 • Debates de Blackboard: un PDF adjunto a una publicación tiene Vista previa, que lo abre en Glaze.
 • Blackboard: una tarea con un borrador guardado de un nuevo intento ya no aparece como Atrasado cuando ya entregaste un intento anterior.
 • Writer conserva su botón para publicar cuando Blackboard pliega un cuadro de respuesta vacío.

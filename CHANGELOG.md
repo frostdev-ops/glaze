@@ -14,7 +14,7 @@ All notable changes to Glaze are documented here. The format follows
 - Chrome and Firefox: once Rime is available, an optional second download lets it read pictures on your computer.
 - **Ask Rime** (Ctrl+K or ⌘K on Canvas and Blackboard; off until you turn it on in Settings → AI) helps with coursework through hints, questions and a check of your own step, never the answer, and answers questions about your to-dos, schedule, grades, assignments and Writer documents; marking a to-do done waits for your OK.
 - Ask Rime remembers what you tell it to. Settings → AI → **Memory** lists, edits, exports and forgets what it saved, and turns saving off. With Google Drive connected, saved memories sync with your other Glaze records.
-- **Pearson MyLab**: your Look on Pearson homework, Pearson opened inside Blackboard, and modern equations you can edit and hand back to Pearson's own answer box. Turn each on in Settings → Course pages → Documents and quizzes; the first one asks your browser for access to Pearson's sites.
+- **Pearson MyLab**: your Look on Pearson homework, Pearson opened inside Blackboard, and modern equations you can edit and hand back to Pearson's own answer box. Turn on **Pearson problem viewer**, **Pearson inside Blackboard** and **Modern Pearson equations** separately in Settings → Course pages → Documents and quizzes; your browser asks for access to Pearson's sites when needed.
 - Blackboard discussions: a PDF attached to a post gets **Preview**, which opens it in Glaze.
 
 ### Fixed
