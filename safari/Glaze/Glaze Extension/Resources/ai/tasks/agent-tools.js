@@ -860,7 +860,8 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // A limitation applies only to its own clause; it cannot excuse an assertion after a conjunction.
   const schoolClaim = (text) => text.split(SCHOOL_CLAUSE).some((part) => {
     const limited = /(?<![\p{L}])(?:cannot|can't|could not|couldn't|unable to|no puedo|não posso|n[ãa]o consigo|ne peux pas|kann nicht|kan niet)\s+(?:verify|confirm|determine|check|read|see|tell|verificar|confirmar|determinar|leer|ler|vérifier|confirmer|lire|bestätigen|prüfen|lesen|bevestigen|controleren|lezen)(?![\p{L}])/iu.test(part);
-    return !limited && (SCHOOL_STATUS.test(part) || SCHOOL_ITEM.test(part) && SCHOOL_ASSERTION.test(part));
+    const existence = /(?<![\p{L}])(?:has|have|tiene|tienen|tem|têm|hat|haben|heeft|hebben)(?![\p{L}])/iu.test(part);
+    return !limited && (SCHOOL_STATUS.test(part) || SCHOOL_ITEM.test(part) && (SCHOOL_ASSERTION.test(part) || existence));
   });
   const ungroundedSchool = (text, inp) => text.split(SCHOOL_CLAUSE).some((part) => SCHOOL_ITEM.test(part)
     && !ACTION_CONFIRMATION.test(part) && !inp.steps.some((st) => spec(st.call.name)?.kind !== 'read'
