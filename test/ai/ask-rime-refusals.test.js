@@ -107,3 +107,24 @@ test('saved memory cannot supply new paper wording in a follow-up turn', () => {
   const inp = help({ subject: 'other', question: 'Does this sound stronger?', history: [{ question: 'Help with my thesis', answer: 'What evidence do you have?' }], recall: memory(quote, quote) });
   assert.equal(H.why({ kind: 'hint', step: null, reply: `Your thesis is stronger once it says "${quote}" instead.`, followUp: null }, inp), 'quote');
 });
+
+test('a direct memory question can quote a preference while essay help is open', () => {
+  const inp = help({ subject: 'essay', question: 'What study preference did I save?', recall: memory('I study best in the morning', 'I study best in the morning') });
+  assert.equal(H.why(concept('Your note says “I study best in the morning.”'), inp), '');
+});
+
+test('personal introductions and matching possessives work in every supported locale', () => {
+  for (const [locale, question, greeting, from, to] of [
+    ['en', 'My name is Ana', 'Nice to meet you, Ana!', 'Finish my essay', 'Finish your essay'],
+    ['es', 'Me llamo Ana', 'Encantado, Ana.', 'Terminar mi ensayo', 'Terminar tu ensayo'],
+    ['pt-BR', 'Me chamo Ana', 'Prazer, Ana.', 'Terminar meu ensaio', 'Terminar seu ensaio'],
+    ['fr', 'Je m’appelle Ana', 'Enchanté, Ana.', 'Finir mon essai', 'Finir ton essai'],
+    ['de', 'Ich heiße Ana', 'Freut mich, Ana.', 'Mein Essay beenden', 'Dein Essay beenden'],
+    ['nl', 'Ik heet Ana', 'Aangenaam, Ana.', 'Mijn essay afronden', 'Jouw essay afronden'],
+  ]) {
+    assert.equal(H.why(concept(greeting), help({ question, locale })), '', locale);
+    const todo = { call: { name: 'todo_list', arguments: {} }, result: { items: [{ title: from, submitted: false }] } };
+    const inp = A.task.input({ question: 'What is due?', tools: ['todo_list'], steps: [todo], now: NOW, zone: ZONE, locale, first: true });
+    assert.equal(A.why(answer(to, [from]), inp), '', locale);
+  }
+});
