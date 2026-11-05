@@ -776,11 +776,14 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
       conns[OWN] = { provider: OWN };
       return true;
     };
+    let localReading = 0;
     const localStatus = async () => {
+      const read = ++localReading;
       if (!offers() || !await localConn()) return;
       if (fetching && ours?.state === 'downloading') return;
       const [r] = await Promise.all([send({ op: 'test', provider: OWN }), versions()]);
-      localResult(r);
+      // A list event can start a newer read before the opening snapshot comes back.
+      if (read === localReading) localResult(r);
     };
     // The version in use and an update's progress (the worker's ai/local/updates.js about).
     const versions = async () => {
@@ -789,6 +792,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     };
     const fetchModel = (e) => {
       if (!e?.isTrusted || fetching || !offers() || ours?.state !== 'download') return;
+      localReading++;
       fetching = true;
       ours = { ...ours, state: 'downloading' };
       delete ours.reason; delete ours.progress;

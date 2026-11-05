@@ -996,6 +996,51 @@ test('Rime\'s card before its signed list: Not available yet, no Download, no si
   assert.equal(p.$('ai-local-auto').tagName, 'INPUT');
 });
 
+test('a first list arriving during the opening status read keeps Download after that older read finishes', async () => {
+  let finishOpening, reads = 0;
+  const available = { ok: true, state: 'download', size: 1099627232, tier: 1, tiers: [{ tier: 1, size: 1099627232 }] };
+  const local = async (m) => {
+    if (m.op === 'updates') return { ok: true, auto: true };
+    if (m.op === 'test' && ++reads === 1) return new Promise((resolve) => { finishOpening = resolve; });
+    return available;
+  };
+  const p = await open({ ai: { on: true }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
+  await p.click(p.card('Rime'));
+  assert.equal(typeof finishOpening, 'function');
+  await p.progress({ provider: 'local', part: 'list' });
+  assert.ok(p.button('Download', p.$('ai-drawer')));
+  finishOpening({ ok: true, state: 'unavailable', reason: 'pending' });
+  await settle();
+  assert.equal(p.note().textContent, 'Needs a download · 1.1 GB');
+  assert.ok(p.button('Download', p.$('ai-drawer')), 'the opening snapshot cannot undo the list event');
+});
+
+test('a list refresh started before Download cannot replace the active download with its older status', async () => {
+  let finishRefresh, finishDownload, reads = 0;
+  const available = { ok: true, state: 'download', size: 1099627232, tier: 1, tiers: [{ tier: 1, size: 1099627232 }] };
+  const local = async (m) => {
+    if (m.op === 'updates') return { ok: true, auto: true };
+    if (m.op === 'prepare') return new Promise((resolve) => { finishDownload = resolve; });
+    if (m.op === 'test' && ++reads === 2) return new Promise((resolve) => { finishRefresh = resolve; });
+    return available;
+  };
+  const p = await open({ ai: { on: true }, providers: ['local'], local, conns: { local: { provider: 'local' } } });
+  await p.click(p.card('Rime'));
+  await p.progress({ provider: 'local', part: 'list' });
+  assert.equal(typeof finishRefresh, 'function');
+  await p.click(p.button('Download', p.$('ai-drawer')));
+  await p.progress({ provider: 'local', loaded: 0.25 });
+  finishRefresh(available);
+  await settle();
+  try {
+    assert.equal(p.note().textContent, '25% · 1.1 GB');
+    assert.equal(p.button('Download', p.$('ai-drawer')), undefined);
+  } finally {
+    finishDownload({ ok: true, state: 'ready' });
+    await settle();
+  }
+});
+
 test('Rime\'s context size in Advanced: 64K by default, stepped down to what this computer holds, 4K to 128K offered, refusals with why, kept with the tier', async () => {
   const sent = [];
   const local = async (m) => {
