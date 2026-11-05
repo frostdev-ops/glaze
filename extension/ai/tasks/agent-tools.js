@@ -918,7 +918,10 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     // Tool first: an answer about the student's school stands on results Glaze read for it, never on nothing; facts from a
     // result that holds any are quoted (empty and failed results hold none, so the answer says only that).
     // An answer from the page or the chat so far ("what course is this?") stands on those values.
-    if ((inp.first || inp.help) && !inp.steps.length && !inp.fired && !(quotes.length && quotes.every((q) => inContext(q) && visibleFact(text, q, inp.locale)))) return 'first';
+    if ((inp.first || inp.help) && !inp.steps.length && !inp.fired) {
+      if (SCHOOL_STATUS.test(text) || SCHOOL_ITEM.test(text) && SCHOOL_ASSERTION.test(text)) return 'first';
+      if (!(quotes.length && quotes.every((q) => inContext(q) && visibleFact(text, q, inp.locale)))) return 'first';
+    }
     if (inp.first) {
       // "Nothing is due" while a result lists work not handed in (the owner's Sunday, 2026-11-01).
       if (NOTHING_DUE.test(fold(text)) && inp.steps.some((st) => open(st.result))) return 'missed';
@@ -929,9 +932,12 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       const held = inp.steps.filter((st) => spec(st.call.name)?.kind === 'read' && st.call.name !== 'accounts_list').flatMap((st) => facts(st.result));
       const inHeld = holder(held);
       if (!held.length && inp.steps.some((st) => spec(st.call.name)?.kind !== 'read' && rich(st.result)) && (SCHOOL_STATUS.test(fold(text)) || SCHOOL_ITEM.test(fold(text)) && SCHOOL_ASSERTION.test(fold(text)) || ungroundedSchool(text, inp))) return 'ground';
-      // When the last read came back empty or failed, the answer says so and quotes nothing it read before.
-      const last = inp.steps.at(-1);
-      if (held.length && !(last && spec(last.call.name)?.kind === 'read' && !rich(last.result))
+      // An empty or failed final read permits a plain report of that outcome, not a new school-status claim.
+      const last = inp.steps.at(-1), emptyLast = last && spec(last.call.name)?.kind === 'read' && !rich(last.result);
+      const freshSchool = inp.steps.some((st) => Object.values(FRESH).some((topic) => topic.tools.includes(st.call.name)) && rich(st.result));
+      if (emptyLast && !freshSchool && (SCHOOL_STATUS.test(text) || SCHOOL_ITEM.test(text) && SCHOOL_ASSERTION.test(text))) return 'ground';
+      const reportsEmpty = /(?<![\p{L}])(?:no|none|nothing|not|cannot|can't|couldn't|unable|empty|unavailable|aucun\p{L}*|pas|introuvable|geen|niet|kon|nada|nenhum\p{L}*|não|n[ãa]o|sin|ning[uú]n\p{L}*|nicht|keine?)(?![\p{L}])/iu.test(text);
+      if (held.length && !(emptyLast && reportsEmpty)
         && !quotes.some((q) => visibleFact(text, q, inp.locale) && (inHeld(q) || near(held, q)))) return 'ground';
     }
     const pool = [...data.map(String), inp.question, ...context];
