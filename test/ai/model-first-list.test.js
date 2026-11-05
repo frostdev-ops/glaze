@@ -153,6 +153,34 @@ test('first discovery writing after a daily check preserves the daily result and
   assert.deepEqual(t.kept[U.KEPT], { checked: NOW, result: 'shape', listed: NOW });
 });
 
+test('a delayed first list cannot replace the version another context is downloading or has downloaded', async (test) => {
+  for (const ready of [false, true]) await test.test(ready ? 'ready' : 'downloading', async () => {
+    const fetching = deferred(), finishFetch = deferred(), downloading = deferred(), finishDownload = deferred();
+    const next = R11.map((m) => ({ ...m, version: 'r12', total: 'b'.repeat(64) }));
+    const t = setup({ doc: sign(listOf(2, next)), hf: { onChunk: async (_, n) => {
+      if (n === 0 && !ready) { downloading.resolve(); await finishDownload.promise; }
+    } } });
+    const fetch = t.env.fetch;
+    t.env.fetch = async (...args) => { fetching.resolve(); await finishFetch.promise; return fetch(...args); };
+    const first = U.first(t.env);
+    await fetching.promise;
+    await t.store.edit((st) => U.accept(st, listOf(1), { glaze: t.env.glaze }));
+    const download = t.store.download(R11[0].id);
+    if (ready) await download; else await downloading.promise;
+    finishFetch.resolve();
+    try {
+      await first;
+      const cat = await t.store.catalog();
+      assert.equal(cat.entries.get(R11[0].id).total, R11[0].total, 'first discovery cannot switch an offered version');
+      assert.equal(cat.state.serial, 1, 'the daily update path owns subsequent lists');
+    } finally {
+      finishDownload.resolve();
+      await download;
+    }
+    assert.deepEqual(await t.store.status(R11[0].id), { state: 'ready' });
+  });
+});
+
 test('Data Saver or Safari: no fetch at all', async () => {
   for (const o of [{ saveData: true }, { safari: true }]) {
     const t = setup(o);

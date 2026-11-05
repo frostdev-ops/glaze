@@ -283,9 +283,17 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
     const r = await verify(doc, { key: env.key, serial: cat.state?.serial || 0 });
     if (!r.ok) return { state: 'refused', reason: r.error };
     if (!usable(r.list, { glaze: env.glaze }).length) return { state: 'none' };
-    await env.store.edit((st) => ((st?.serial || 0) >= r.list.serial ? undefined : accept(st, r.list, { glaze: env.glaze })));
-    say(env, { part: 'list' });
-    return { state: 'listed' };
+    let state = 'none';
+    await env.store.edit((st) => {
+      // Another context may have offered a model since the fetch began. Preserve its version, including an active download.
+      const current = ST().compose([...cat.entries.values()], st);
+      if ([...current.entries.values()].some((m) => !m.role)) { state = 'here'; return undefined; }
+      if ((st?.serial || 0) >= r.list.serial) return undefined;
+      state = 'listed';
+      return accept(st, r.list, { glaze: env.glaze });
+    });
+    if (state !== 'none') say(env, { part: 'list' });
+    return { state };
   })().finally(() => { listing = null; }));
 
   // The daily alarm, made once (its time kept); at browser start, a check 2 to 10 minutes later.
