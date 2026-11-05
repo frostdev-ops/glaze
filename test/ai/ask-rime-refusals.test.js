@@ -152,3 +152,9 @@ test('ambiguous identity questions with prior coursework or inverted punctuation
   assert.equal(H.why(out, help({ question: 'Who am I?', subject: 'reading', history })), 'speaks');
   assert.equal(H.why(out, help({ question: '¿Quién soy?', locale: 'es', subject: 'reading', material: 'The green light symbolizes Gatsby’s hope of winning Daisy back.' })), 'speaks');
 });
+
+test('identity questions retain the coursework guard when the subject is other', () => {
+  const history = [{ question: 'Help me with my essay about Gatsby and Daisy.', answer: 'What evidence supports your interpretation?' }];
+  const inp = help({ question: 'Who am I?', subject: 'other', history });
+  assert.equal(H.why({ kind: 'hint', step: null, reply: 'The green light symbolizes Gatsby’s hope of winning Daisy back.', followUp: null }, inp), 'speaks');
+});
