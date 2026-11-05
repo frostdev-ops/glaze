@@ -175,7 +175,7 @@ const bridge = ({authorize=async()=>({ok:true,host:new URL(host).origin}),read}=
   const document={referrer:'https://interop.pearson.com/synthetic/redirect',readyState:'complete',hidden:false,
     documentElement:{setAttribute(){},removeAttribute(){},style:{setProperty(){}}},
     getElementById:id=>id==='btnOpenNewTab'?button:frames.find(f=>f.id===id&&f.isConnected),
-    createElement:()=>{const f={isConnected:false,setAttribute(){},addEventListener(){},remove(){this.isConnected=false;},contentWindow:{postMessage(){}}};frames.push(f);return f;},
+    createElement:()=>{const sent=[];const f={sent,isConnected:false,setAttribute(){},addEventListener(){},remove(){this.isConnected=false;},contentWindow:{postMessage:(message,origin)=>sent.push({message,origin})}};frames.push(f);return f;},
     body:{append(f){f.isConnected=true;}},addEventListener:(key,fn)=>listen(docEvents,key,fn),
     dispatchEvent:e=>{if(e.type==='glaze:pearson-launch-config')configs.push(JSON.parse(e.detail));fire(docEvents,e.type,e);}};
   const shared={document,location:{origin:L.socket,pathname:'/uiservice/opener'},top:{},parent,URL,
@@ -194,6 +194,27 @@ const bridge = ({authorize=async()=>({ok:true,host:new URL(host).origin}),read}=
     settle:()=>new Promise(setImmediate),flush(){for(const [id,fn]of [...timers]){timers.delete(id);fn();}}};
 };
 const hostContext={gzPearsonEmbed:'context',channel:request.doc,enabled:true,theme:{}};
+test('a live opener follows the Look with only embedding off and blocks forwarding as soon as the last switch goes off',async()=>{
+  const refresh=deferred(),insideOff={enabled:true,enhance:{pearsonEmbed:false,pearsonViewer:true}};let reads=0;
+  const h=bridge({read:()=>++reads===1?Promise.resolve({enabled:true,enhance:{pearsonEmbed:true,pearsonViewer:true}}):reads===2?Promise.resolve(insideOff):refresh.promise});
+  await h.settle();h.message(hostContext);h.flush();
+  const frame=h.frames.find(f=>f.isConnected);
+  h.settings(insideOff);await h.settle();
+  h.message({...hostContext,enabled:false,theme:{'--gz-ink':'#abcdef'}});
+  assert.equal(frame.sent.at(-1).message.theme['--gz-ink'],'#abcdef','the existing frame still receives the Look');
+  assert.equal(h.configs.at(-1).enabled,false,'later launches use the native handler');
+  h.message({gzPearsonEmbed:'locate',channel:request.doc,request:request.doc});
+  assert.equal(frame.sent.at(-1).message.gzPearsonFrame,'locate','a live session can still pop out');
+  h.settings({enabled:true,enhance:{}});
+  const down=frame.sent.length,up=h.sent.length;
+  h.message({...hostContext,enabled:false,theme:{'--gz-ink':'#123456'}});
+  h.message({gzPearsonEmbed:'locate',channel:request.doc,request:request.doc});
+  h.message({gzPearsonFrame:'hello'},{source:frame.contentWindow,origin:L.mylab});
+  h.message({gzPearsonFrame:'place',channel:request.doc,url:L.mylab+'/Student/PlayerHomework.aspx?homeworkId=101'},{source:frame.contentWindow,origin:L.mylab});
+  assert.equal(frame.sent.length,down,'no context or locate is forwarded while the disabled storage refresh is pending');
+  assert.equal(h.sent.length,up,'no child navigation is forwarded after the last switch goes off');
+  refresh.resolve({enabled:true,enhance:{}});await h.settle();
+});
 test('a prepared opener restores its native handler when any host is revoked',async()=>{
   const h=bridge();await h.settle();h.message(hostContext);
   await h.access(false);h.flush();
