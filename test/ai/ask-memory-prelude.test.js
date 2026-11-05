@@ -203,7 +203,8 @@ test('a main-task validation error after a skipped save stays terminal', async (
   const h = front({ main: () => ({ output: said('No matching records were found.') }) }); t.after(h.close);
   const result = await h.ask();
   assert.equal(result.type, 'error'); assert.equal(result.error, 'check'); assert.equal(result.why, 'first');
-  assert.equal(h.mains().length, 1);
+  assert.equal(h.mains().length, 2, 'one corrective turn, then the error');
+  assert.equal(h.mains()[1].input.fix, 'first');
 });
 
 test('the existing main-task corrective turn still runs after optional rejection', async (t) => {
@@ -220,7 +221,8 @@ test('explicit memory action validation failures are never treated as optional',
   const h = front({ main: () => rejected() }); t.after(h.close);
   const result = await h.ask('Save this preference: I like wide margins.');
   assert.equal(result.type, 'error'); assert.equal(result.error, 'check'); assert.equal(result.why, 'text');
-  assert.equal(h.state.runs.length, 1); assert.ok(h.state.runs[0].input.tools.includes('memory_forget'));
+  assert.equal(h.state.runs.length, 2, 'one corrective turn, then the error'); assert.ok(h.state.runs[0].input.tools.includes('memory_forget'));
+  assert.equal(h.state.runs[1].input.fix, 'text');
   assert.equal((await h.store.list(ACC)).items.length, 0);
   assert.equal(h.state.events.some((m) => m.type === 'memory'), false);
 });

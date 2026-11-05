@@ -308,10 +308,10 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
     if (WD.offers(cited(words_, texts), { examples: false })) return 'wording';
     return '';
   };
-  // Work the student shared to be written about: their attempt, material, the assignment, a paper they name, or a long
-  // pasted passage. Without it, an "other" chat ("I prefer a small sketch first", "pick up from earlier") may repeat
-  // their words back to them.
-  const sharedWork = (inp) => !!(inp.attempt || inp.material || inp.context?.assignment || inp.context?.prompt)
+  // Work the student shared to be written about: their attempt, material, the assignment, earlier turns, a paper they
+  // name, or a long pasted passage. Without it, an "other" chat ("I prefer a small sketch first", "pick up from earlier")
+  // may repeat their words back to them.
+  const sharedWork = (inp) => !!(inp.attempt || inp.material || inp.context?.assignment || inp.context?.prompt || inp.history?.length)
     || [inp.question, ...(inp.history || []).map((h) => h.question)].some((t) => PAPER.test(t)) || words(inp.question).length >= 60;
   // → '' when the reply may go to the student, else the rule it breaks: schema, kind, answer, solves, code, wording, quote, speaks.
   const why = (out, inp) => {

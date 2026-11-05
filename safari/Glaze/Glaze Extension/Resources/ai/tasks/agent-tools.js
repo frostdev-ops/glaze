@@ -853,7 +853,9 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // needs this turn's memory read.
   const shownContext = (inp) => {
     const out = [];
-    const walk = (v) => { if (Array.isArray(v)) v.forEach(walk); else if (S.isObj(v)) Object.values(v).forEach(walk); else if (typeof v === 'string' || typeof v === 'number') out.push(String(v)); };
+    // The page by its names and titles only: its ids prove nothing, and its material may be partial, so due dates and
+    // grades in it still need a read.
+    const walk = (v, key) => { if (Array.isArray(v)) v.forEach((x) => walk(x, key)); else if (S.isObj(v)) { for (const [k, x] of Object.entries(v)) if (k !== 'material') walk(x, k); } else if (typeof v === 'string' && ['name', 'title', 'code'].includes(key)) out.push(v); };
     walk(inp.current || null);
     for (const h of inp.history || []) out.push(h.question, h.answer);
     if (inp.summary) out.push(inp.summary);
