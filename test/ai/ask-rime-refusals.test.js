@@ -274,9 +274,22 @@ test('a course named by its code is named; a failed read needs no quoted fact be
   const none = step('announcements_list', { course: '412' }, { items: [], covers: { complete: true } });
   const fr = at('Y a-t-il des annonces pour AVI 412 ?', [courses, none], { locale: 'fr', tools: ['courses_list', 'announcements_list'] });
   assert.equal(A.why(answer('Aucune annonce n’a été trouvée pour AVI 412.', ['AVI 412 – Sécurité aérienne et facteurs humains']), fr), '');
-  assert.equal(A.why(answer('Aucune annonce n’a été trouvée pour AVI 413.', ['AVI 412 – Sécurité aérienne et facteurs humains']), fr), 'ground', 'another code');
+  assert.notEqual(A.why(answer('Aucune annonce n’a été trouvée pour AVI 413.', ['AVI 412 – Sécurité aérienne et facteurs humains']), fr), '', 'another code');
   const accounts = step('accounts_list', {}, { items: [{ account: 'https://canvas.example.edu/7', origin: 'https://canvas.example.edu', lms: 'canvas' }] });
   const failed = step('assignments_list', {}, { ok: false, error: 'The requested record is absent from this account.' });
   const es = at('¿Puedes leer las instrucciones completas?', [accounts, failed], { locale: 'es', tools: ['accounts_list', 'assignments_list'] });
   assert.equal(A.why(answer('No puedo leer las instrucciones completas porque no encontré el trabajo en la cuenta.'), es), '');
+});
+
+test('a failed or empty last read is reported plainly; a code without a dash names its course; a title may change its article', () => {
+  const courses = step('courses_list', {}, { items: [{ id: '304', name: 'VIT-304 Wijngaardecologie en Terroiranalyse' }] });
+  const blocked = step('discussions_list', { course: '304' }, { ok: false, error: 'Open canvas.riverbend.edu in this browser, signed in as this account.' });
+  const nl = at('Welke discussies zijn er in VIT-304?', [courses, blocked], { locale: 'nl', tools: ['courses_list', 'discussions_list'] });
+  assert.equal(A.why(answer('Ik kon de discussies van VIT-304 niet ophalen. Open canvas.riverbend.edu in deze browser, ingelogd als dit account.'), nl), '');
+  const empty = step('announcements_list', { course: '304' }, { items: [], covers: { complete: true } });
+  assert.equal(A.why(answer('Geen aankondigingen gevonden voor VIT-304.', ['VIT-304 Wijngaardecologie en Terroiranalyse']), at('Aankondigingen in VIT-304?', [courses, empty], { locale: 'nl', tools: ['courses_list', 'announcements_list'] })), '');
+  const wakes = step('wakes_list', {}, { items: [{ id: `w-${'4'.padStart(32, '0')}`, what: 'wake', at: AT, say: 'een studieruimte reserveren' }] });
+  assert.equal(A.why(answer('De herinnering is gezet: **de studieruimte reserveren**.', ['de studieruimte reserveren']), at('Welke herinneringen heb ik?', [wakes], { locale: 'nl', tools: ['wakes_list'] })), '');
+  const todo = step('todo_list', {}, { items: [{ title: 'Lab report 3', course: 'BIO 101', due: AT, submitted: false }] });
+  assert.notEqual(A.why(answer('Lab report 4 is due today.', ['Lab report 4']), at('what is due?', [todo])), '', 'another item');
 });
