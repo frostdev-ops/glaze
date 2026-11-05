@@ -80,7 +80,9 @@ test('the corrective turn: a check block after the results naming the broken rul
   const req = require('../../extension/ai/request.js').clean({ ...A.task.build(inp, { text: X }), schema: A.OUTPUT, task: { id: 'agent.tools', version: 1 } });
   assert.equal(A.fromRequest(req).parts.map((p) => p.special ?? p.text).join(''), text);
   assert.equal(A.task.input({ question: 'q?', tools: ['schedule_list'], steps: [STEP], now: SUNDAY, zone: ZONE, locale: 'en', fix: 'ground' }), null, 'level 3 only');
-  assert.equal(inputOf({ fix: 'tool' }), null, 'only an answer\'s rules');
+  assert.equal(inputOf({ fix: 'tool' }).fix, 'tool', 'a refused call\'s rule too');
+  assert.equal(inputOf({ fix: 'nope' }), null, 'only a known rule');
+  assert.equal(A.task.input({ question: 'q?', tools: ['schedule_list'], steps: [], now: SUNDAY, zone: ZONE, locale: 'en', first: true, fix: 'first' }).fix, 'first', 'before anything was read');
   for (const code of A.FIXES) assert.ok(typeof A.FIX[code] === 'string' && A.FIX[code].length < 200);
 });
 
@@ -228,12 +230,13 @@ test('when the retry fails too and the results hold a list, Glaze\'s own list is
   assert.equal(r.built, true, 'Glaze wrote it');
   assert.deepEqual([r.why, r.raw], ['number', JSON.stringify(BAD.nodate)], 'the last failed answer and its code, for the panel');
   assert.match(r.answer.text, /- \*\*Reflection Week 11\*\* \(ENG 1100\): Monday, November 2, 11:59 PM, not submitted/);
-  const none = await loop([{ why: 'first', raw: JSON.stringify(BAD.prose) }]);
+  const none = await loop([{ why: 'first', raw: JSON.stringify(BAD.prose) }, { why: 'first', raw: JSON.stringify(BAD.prose) }]);
   assert.equal(none.r.code, 'check');
   assert.equal(none.r.why, 'first');
   assert.equal(none.r.steps, 0);
   assert.match(none.r.raw, /a few assignments/);
-  assert.equal(none.seen.length, 1, 'no retry before anything was read');
+  assert.equal(none.seen.length, 2, 'one corrective turn before anything was read');
+  assert.equal(none.seen[1].fix, 'first');
   const repeat = await loop([call, call, call]);
   assert.equal(repeat.seen[2].fix, 'repeat', 'the independent episode gate uses the single correction');
   assert.equal(repeat.r.steps.length, 1, 'neither forbidden repeat executes');

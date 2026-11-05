@@ -193,3 +193,78 @@ test('confirmation receipts cannot introduce invented presentations or worksheet
   const inp = tools('remind me to start my math homework in 2 minutes', [wake]);
   for (const text of ['Reminder set. Your biology presentation is tomorrow.', 'Reminder set. A chemistry worksheet awaits you.']) assert.equal(A.why(answer(text), inp), 'ground', text);
 });
+
+// The eval census of R11's refusals (2026-11-05): each pattern Glaze refused although the reply was right, and its guard.
+const step = (name, args, result) => ({ call: { name, arguments: args }, result });
+const at = (question, steps, over = {}) => A.task.input({ question, tools: [...new Set([...steps.map((s) => s.call.name), 'todo_list'])], steps, now: NOW, zone: ZONE, locale: 'en', first: true, ...over });
+
+test('a value written the student\'s way still matches: a decimal comma, an hour without its zero, bold marks', () => {
+  const js = step('run_js', { code: 'return ((87 + 82 + 83) / 3).toFixed(2)' }, { ok: true, value: '84.00' });
+  assert.equal(A.why(answer('La moyenne de 87, 82 et 83 est **84,00**.', ['84.00']), at('Quelle est la moyenne de 87, 82 et 83 ?', [js], { locale: 'fr' })), '');
+  const todo = step('todo_list', {}, { items: [{ title: 'Rendre les livres', course: 'LIT 200', due: Date.parse('2026-11-06T13:05:00Z'), submitted: false }] });
+  const fr = at('Qu’est-ce que je dois rendre ?', [todo], { locale: 'fr' });
+  const shown = fr.steps[0].result.match(/"due":"([^"]+)"/)[1];
+  assert.equal(A.why(answer(`**Rendre les livres** (LIT 200) : ${shown.replace(/\b0(\d):/, '$1:')}.`, ['Rendre les livres', shown.replace(/\b0(\d):/, '$1:')]), fr), '', shown);
+  assert.notEqual(A.why(answer('La moyenne est **85,00**.', ['85.00']), at('Quelle est la moyenne de 87, 82 et 83 ?', [js], { locale: 'fr' })), '', 'another value');
+});
+
+test('a slip in a quote the answer never shows is dropped; an invented one still refuses', () => {
+  const wakes = step('wakes_list', {}, { items: [{ id: `w-${'2'.padStart(32, '0')}`, what: 'wake', at: AT, say: 'rendre les livres de la bibliothèque' }] });
+  const inp = at('Est-ce que j’ai des rappels ?', [wakes], { locale: 'fr', tools: ['wakes_list'] });
+  const text = 'Oui : **Rendre les livres de la bibliothèque**.';
+  assert.equal(A.why(answer(text, ['rendir les livres de la bibliothèque', 'rendre les livres de la bibliothèque']), inp), '');
+  assert.deepEqual(A.task.check(answer(text, ['rendir les livres de la bibliothèque', 'rendre les livres de la bibliothèque']), inp).answer.quotes, ['rendre les livres de la bibliothèque']);
+  assert.equal(A.why(answer(text, ['rendre les livres de la bibliothèque', '2026-11-01']), inp), 'quote', 'a date nothing holds');
+});
+
+test('a saved note read back in other words is grounded; a different preference is not', () => {
+  const id = `m-${'3'.padStart(32, '0')}`, note = 'Ich bevorzuge Erklärungen mit einer kleinen Skizze vor einem nummerierten Beispiel.';
+  const read = step('memory_read', { id }, { ok: true, id, revision: 'b'.repeat(32), kind: 'memory', text: note, category: 'preference', source: { type: 'user-message', evidence: note }, page: 1, pages: 1 });
+  const inp = at('Welche Vorliebe hast du dir über mich gemerkt?', [read], { locale: 'de', tools: ['memory_read', 'memory_search'] });
+  assert.equal(A.why(answer('Ich erinnere mich an deine Vorliebe: Erklärungen mit einer kleinen Skizze vor einem nummerierten Beispiel.', [note]), inp), '');
+  assert.equal(A.why(answer('Deine Vorliebe: kurze Absätze ohne Beispiele.', [note]), inp), 'ground');
+});
+
+test('an answer from the page or the chat so far needs no read; one quoting nothing still does', () => {
+  const page = { current: { site: 'canvas', view: 'course', course: { id: '5521', name: 'Puppetry and Performance (PUPP 130)' } } };
+  assert.equal(A.why(answer('This is **Puppetry and Performance (PUPP 130)**.', ['Puppetry and Performance (PUPP 130)']), at('what course is this?', [], page)), '');
+  const history = { history: [{ question: 'what is due this week?', answer: 'Only **Root Zone Oxygen Notes**, due Friday, July 14, 5:00 PM.' }] };
+  assert.equal(A.why(answer('Root Zone Oxygen Notes is the one to tackle first.', ['Root Zone Oxygen Notes']), at('which one do i tackle first', [], history)), '');
+  assert.equal(A.why(answer('You have three assignments due.'), at('what is due?', [])), 'first');
+  assert.equal(A.why(answer('This is BIO 101.', ['BIO 101']), at('what course is this?', [], page)), 'first', 'a name the page never showed');
+});
+
+test('a refused first call gets one corrective turn, and the student gets its answer', async () => {
+  const K = require('../../extension/ai/ask.js');
+  const seen = [], bad = { call: { name: 'todo_mark_done', arguments: { type: 'assignment', id: '_99_1' } }, answer: null };
+  const list = { call: { name: 'todo_list', arguments: {} }, answer: null };
+  const replies = [bad, list, { call: null, answer: { text: '**Lab 3 report** is still open; nothing was marked.', quotes: ['Lab 3 report'] } }];
+  const Rq = require('../../extension/ai/request.js');
+  const run = async (task, input) => { seen.push(input); const out = replies.shift(); const why = A.why(out, A.task.input(input)); if (why) throw Object.assign(Rq.error('check'), { why }); return out; };
+  const todo = { items: [{ type: 'assignment', id: '_21_1', title: 'Lab 3 report', course: 'BIO 101', due: AT, submitted: false }] };
+  const r = await K.episode({ question: 'mark lab 3 done', tools: ['todo_list', 'todo_mark_done'], locale: 'en', now: NOW, zone: ZONE, first: true, run, call: async () => ({ result: todo }) });
+  assert.equal(seen.length, 3);
+  assert.equal(seen[1].fix, 'id', 'the refused call\'s rule, once');
+  assert.match(r.answer.text, /nothing was marked/);
+  assert.equal(seen[2].fix, undefined);
+});
+
+test('asking the student to tell Rime something is not offering wording', () => {
+  const inp = H.task.input({ question: 'Procure nas minhas memórias o horário da balsa violeta.', subject: 'math', locale: 'pt-BR' });
+  for (const t of ['Não encontrei memória com o horário. Você pode me dizer o nome completo da balsa?', '¿Puedes decirme el nombre completo?', 'Peux-tu me dire son nom complet ?', 'Kannst du mir den vollen Namen sagen?', 'Kun je me de volledige naam vertellen?'])
+    assert.equal(H.hands(t, inp), '', t);
+  assert.equal(H.hands('Você pode dizer: "A balsa sai às oito".', inp), 'wording');
+});
+
+test('study help: a kind that does not fit is relabelled, and chat with no shared work may repeat the student\'s words', () => {
+  const fresh = help({ question: 'continue where we left off' });
+  const out = H.task.check({ kind: 'question', step: null, reply: 'We haven’t discussed anything yet. Share the coursework you’d like to continue, and I’ll help.', followUp: null }, fresh);
+  assert.equal(out?.kind, 'concept');
+  assert.ok(H.task.check({ kind: 'question', step: null, reply: 'I don’t have earlier details in this chat. What are you working on?', followUp: null }, help({ question: 'pick up from earlier' })));
+  const pref = help({ question: 'Prefiero explicaciones con un pequeño dibujo antes de un ejemplo numerado.', locale: 'es' });
+  assert.ok(H.task.check(concept('Entiendo: un dibujo pequeño antes de un ejemplo numerado puede ayudar. ¿Qué tema quieres cubrir?'), pref));
+  const essay = H.task.input({ question: 'Help me with my thesis on social media and teen sleep.', attempt: 'Social media is bad.', subject: 'essay' });
+  assert.equal(H.why({ kind: 'hint', step: null, reply: 'Late-night scrolling on social media shortens how long teenagers sleep.', followUp: null }, essay), 'speaks', 'a statement for their essay still refuses');
+  const other = help({ question: 'Here is my history answer for the quiz, is it complete? The treaty ended the war because both sides were exhausted and the economy had collapsed after years of blockade.', attempt: 'The treaty ended the war because both sides were exhausted.' });
+  assert.equal(H.why({ kind: 'hint', step: null, reply: 'The treaty ended the war because both sides were exhausted and broke.', followUp: null }, other), 'speaks', 'shared work under "other" keeps the rule');
+});
