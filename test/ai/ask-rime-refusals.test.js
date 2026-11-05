@@ -134,3 +134,13 @@ test('a memory question cannot turn a saved phrase into thesis wording', () => {
   const inp = help({ subject: 'essay', question: 'What study preference did I save?', recall: memory(quote, quote) });
   assert.equal(H.why({ kind: 'hint', step: null, reply: `Your thesis is stronger once it says "${quote}" instead.`, followUp: null }, inp), 'quote');
 });
+
+test('direct Xcode Safari resources contain the same refusal checks', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  for (const name of ['agent-tools.js', 'study-help.js']) {
+    const source = path.join(__dirname, '../../extension/ai/tasks', name);
+    const safari = path.join(__dirname, '../../safari/Glaze/Glaze Extension/Resources/ai/tasks', name);
+    assert.equal(fs.readFileSync(safari, 'utf8'), fs.readFileSync(source, 'utf8'), name);
+  }
+});
