@@ -208,15 +208,30 @@ test('notation preserves control-word boundaries and refuses pathological nestin
  assert.equal(N.prepare(String.raw`x\leq2`),String.raw`x\le2`);
  for(const value of ['{'.repeat(100)+'x'+'}'.repeat(100),'\\sqrt '.repeat(200)+'x','x\\','{x','x}'])assert.equal(N.prepare(value),null);
 });
-const brokerFixture=()=>{
+const brokerFixture=({enhance={pearsonMath:true},held=[...require('../../extension/pearson/embed.js').hosts],afterProbe=()=>{}}={})=>{
  const source=fs.readFileSync(path.join(__dirname,'../../extension/background/pearson.js'),'utf8');
  const calls=[];let listener;
- const sandbox={URL,GZ_PEARSON_NATIVE:native,GZ_PEARSON_NOTATION:N,chrome:{runtime:{id:'own',onMessage:{addListener:fn=>listener=fn}},storage:{sync:{get:async()=>({enabled:true,enhance:{pearsonMath:true}})}},scripting:{executeScript:async value=>{calls.push(value);return [{frameId:2,documentId:'original',result:value.world==='MAIN'?{ok:true}:true}]}}}};
+ const sandbox={URL,GZ_PEARSON_NATIVE:native,GZ_PEARSON_NOTATION:N,GZ_PEARSON_EMBED_LIB:require('../../extension/pearson/embed.js'),reachable:async h=>held.includes(h),switchOn:async k=>require('../../extension/content/defaults.js').GZ_SANITIZE({enhance}).enhance[k],chrome:{runtime:{id:'own',onMessage:{addListener:fn=>listener=fn}},storage:{sync:{get:async()=>({enabled:true,enhance})}},scripting:{executeScript:async value=>{calls.push(value);if(value.world!=='MAIN')afterProbe(held);return [{frameId:2,documentId:'original',result:value.world==='MAIN'?{ok:true}:true}]}}}};
  vm.runInNewContext(source,sandbox);
  const sender={id:'own',tab:{id:7},frameId:2,url:'https://tdx.acs.pearson.com/Player/Player.aspx',documentId:'original'};
  const run=(s=sender,m={type:'glaze:pearson-math',op:'scan',doc:'test',deadline:Date.now()+9000})=>new Promise(resolve=>listener(m,s,resolve));
  return {calls,sandbox,sender,run};
 };
+test('math requests require their switch and all hosts through the final native operation',async()=>{
+ const hosts=require('../../extension/pearson/embed.js').hosts;
+ for(const enhance of [{},{pearsonEmbed:true},{pearsonViewer:true}]){
+  const f=brokerFixture({enhance});assert.equal((await f.run()).error,'inactive');assert.equal(f.calls.length,0);
+ }
+ for(const missing of hosts)for(const op of ['scan','open','prepare','apply']){
+  const f=brokerFixture({held:hosts.filter(h=>h!==missing)});
+  assert.equal((await f.run(f.sender,{type:'glaze:pearson-math',op,doc:'test',deadline:Date.now()+9000,id:'field',token:crypto.randomUUID(),stage:crypto.randomUUID(),latex:'x'})).error,'inactive');
+  assert.equal(f.calls.length,0,`${missing}: ${op}`);
+ }
+ const f=brokerFixture({afterProbe:held=>held.pop()});
+ assert.equal((await f.run()).error,'inactive');assert.ok(!f.calls.some(c=>c.world==='MAIN'));
+ const cleanup=brokerFixture({held:[],enhance:{}});
+ assert.equal((await cleanup.run(cleanup.sender,{type:'glaze:pearson-math',op:'close',doc:'test',token:crypto.randomUUID()})).ok,true,'cleanup can still release an existing session');
+});
 test('the broker admits only its own exact player document and pins script execution',async()=>{
  const {calls,sender,run}=brokerFixture();
  for(const bad of [{...sender,id:'foreign'},{...sender,url:'https://tdx.acs.pearson.com.evil.test/Player/Player.aspx'},{...sender,url:'https://tdx.acs.pearson.com/assignment/assignmentplayer.aspx'},{...sender,tab:null}])assert.equal((await run(bad)).error,'sender');
