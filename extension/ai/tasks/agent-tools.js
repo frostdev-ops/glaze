@@ -853,6 +853,11 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const SCHOOL_ASSERTION = /(?<![\p{L}\p{N}])(?:due|overdue|missing|submitted|graded|awaits?|you have|you've got|there is|there are|vence|vencen|pendiente|entregado|entregada|pendente|en retard|[àa] rendre|f[äa]llig|abgegeben|in te leveren)(?![\p{L}\p{N}])/iu;
   const ACTION_CONFIRMATION = /(?<![\p{L}\p{N}])(?:remind\p{L}*|reminder\p{L}*|wakes?|alarms?|monitor\p{L}*|watch(?:ing|ed)?|cancel\p{L}*|saved|stored|forgotten|marked|recordatorio\p{L}*|recordar\p{L}*|avisar\p{L}*|lembra\p{L}*|alarme\p{L}*|rappel\p{L}*|rappeler\p{L}*|erinner\p{L}*|wecker|herinner\p{L}*|wekker)(?![\p{L}\p{N}])/iu;
   const SCHOOL_CLAUSE = new RegExp(String.raw`[,;.!?…\n]+|(?<![\p{L}\p{N}])(?:and|but|y|pero|e|mas|et|mais|und|aber|en|maar)\s+(?=[^,;.!?…\n]{0,100}${SCHOOL_ITEM.source})`, 'iu');
+  // A limitation applies only to its own clause; it cannot excuse an assertion after a conjunction.
+  const schoolClaim = (text) => text.split(SCHOOL_CLAUSE).some((part) => {
+    const limited = /(?<![\p{L}])(?:cannot|can't|could not|couldn't|unable to|no puedo|não posso|n[ãa]o consigo|ne peux pas|kann nicht|kan niet)\s+(?:verify|confirm|determine|check|read|see|tell|verificar|confirmar|determinar|leer|ler|vérifier|confirmer|lire|bestätigen|prüfen|lesen|bevestigen|controleren|lezen)(?![\p{L}])/iu.test(part);
+    return !limited && (SCHOOL_STATUS.test(part) || SCHOOL_ITEM.test(part) && SCHOOL_ASSERTION.test(part));
+  });
   const ungroundedSchool = (text, inp) => text.split(SCHOOL_CLAUSE).some((part) => SCHOOL_ITEM.test(part)
     && !ACTION_CONFIRMATION.test(part) && !inp.steps.some((st) => spec(st.call.name)?.kind !== 'read'
       && facts(st.result).some((v) => v.length >= 8 && SCHOOL_ITEM.test(v)
@@ -940,7 +945,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     // result that holds any are quoted (empty and failed results hold none, so the answer says only that).
     // An answer from the page or the chat so far ("what course is this?") stands on those values.
     if ((inp.first || inp.help) && !inp.steps.length && !inp.fired) {
-      if (SCHOOL_STATUS.test(text) || SCHOOL_ITEM.test(text) && SCHOOL_ASSERTION.test(text)) return 'first';
+      if (schoolClaim(text)) return 'first';
       if (!(quotes.length && quotes.every((q) => inContext(q) && visibleFact(text, q, inp.locale)))) return 'first';
     }
     if (unreadRecall(text, inp, context)) return 'ground';
@@ -957,7 +962,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       // An empty or failed final read permits a plain report of that outcome, not a new school-status claim.
       const last = inp.steps.at(-1), emptyLast = last && spec(last.call.name)?.kind === 'read' && !rich(last.result);
       const freshSchool = inp.steps.some((st) => Object.values(FRESH).some((topic) => topic.tools.includes(st.call.name)) && rich(st.result));
-      if (emptyLast && !freshSchool && (SCHOOL_STATUS.test(text) || SCHOOL_ITEM.test(text) && SCHOOL_ASSERTION.test(text)))
+      if (emptyLast && !freshSchool && schoolClaim(text))
         return quotes.some((q) => !inData(q) && !near([...data.map(String), inp.question, ...context], q)) ? 'quote' : 'ground';
       const reportsEmpty = /(?<![\p{L}])(?:no|none|nothing|not|cannot|can't|couldn't|unable|empty|unavailable|aucun\p{L}*|pas|introuvable|geen|niet|kon|nada|nenhum\p{L}*|não|n[ãa]o|sin|ning[uú]n\p{L}*|nicht|keine?)(?![\p{L}])/iu.test(text);
       if (held.length && !(emptyLast && reportsEmpty)
