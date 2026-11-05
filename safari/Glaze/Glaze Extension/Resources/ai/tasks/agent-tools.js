@@ -896,6 +896,20 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const pool = [...data.map(String), inp.question, ...shownContext(inp)], inData = holder(pool);
     return out.answer.quotes.filter((q) => q.trim() && (inData(q) || spelled(out.answer.text).includes(spelled(q)) || near(pool, q) || !slipped(pool, q, out.answer.text)));
   };
+  // Recall is a hint for finding a record, not a read. Distinctive phrases from it need an independent source.
+  const unreadRecall = (text, inp, context) => {
+    if (!inp.recall?.records.length || inp.steps.some((st) => ['memory_read', 'memory_search'].includes(st.call.name))) return false;
+    const answerWords = spelled(text).match(WORD) || [], shown = spelled([inp.question, ...context].join(' '));
+    return inp.recall.records.some((r) => [r.text, r.source?.evidence].filter((v) => typeof v === 'string').some((v) => {
+      const w = spelled(v).match(WORD) || [];
+      return w.some((_, i) => [3, 2].some((n) => {
+        const part = w.slice(i, i + n);
+        if (part.length !== n || n === 2 && part.some((x) => x.length < 5)) return false;
+        const phrase = part.join(' ');
+        return !shown.includes(phrase) && answerWords.some((_, j) => answerWords.slice(j, j + n).join(' ') === phrase);
+      }));
+    }));
+  };
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length) return 'schema';
     if ((out.call === null) === (out.answer === null)) return 'one';
@@ -928,6 +942,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       if (SCHOOL_STATUS.test(text) || SCHOOL_ITEM.test(text) && SCHOOL_ASSERTION.test(text)) return 'first';
       if (!(quotes.length && quotes.every((q) => inContext(q) && visibleFact(text, q, inp.locale)))) return 'first';
     }
+    if (unreadRecall(text, inp, context)) return 'ground';
     if (inp.first) {
       // "Nothing is due" while a result lists work not handed in (the owner's Sunday, 2026-11-01).
       if (NOTHING_DUE.test(fold(text)) && inp.steps.some((st) => open(st.result))) return 'missed';
@@ -941,7 +956,8 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       // An empty or failed final read permits a plain report of that outcome, not a new school-status claim.
       const last = inp.steps.at(-1), emptyLast = last && spec(last.call.name)?.kind === 'read' && !rich(last.result);
       const freshSchool = inp.steps.some((st) => Object.values(FRESH).some((topic) => topic.tools.includes(st.call.name)) && rich(st.result));
-      if (emptyLast && !freshSchool && (SCHOOL_STATUS.test(text) || SCHOOL_ITEM.test(text) && SCHOOL_ASSERTION.test(text))) return 'ground';
+      if (emptyLast && !freshSchool && (SCHOOL_STATUS.test(text) || SCHOOL_ITEM.test(text) && SCHOOL_ASSERTION.test(text)))
+        return quotes.some((q) => !inData(q) && !near([...data.map(String), inp.question, ...context], q)) ? 'quote' : 'ground';
       const reportsEmpty = /(?<![\p{L}])(?:no|none|nothing|not|cannot|can't|couldn't|unable|empty|unavailable|aucun\p{L}*|pas|introuvable|geen|niet|kon|nada|nenhum\p{L}*|não|n[ãa]o|sin|ning[uú]n\p{L}*|nicht|keine?)(?![\p{L}])/iu.test(text);
       if (held.length && !(emptyLast && reportsEmpty)
         && !quotes.some((q) => visibleFact(text, q, inp.locale) && (inHeld(q) || near(held, q)))) return 'ground';
