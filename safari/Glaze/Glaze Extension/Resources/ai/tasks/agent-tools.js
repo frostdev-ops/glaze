@@ -817,21 +817,27 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // as a point ("84,00" is "84.00"), an hour without its leading zero ("08:05" is "8:05").
   const spelled = (s) => X().norm(s).replace(/[*_`]+/g, '').replace(/(\d),(\d)/g, '$1.$2').replace(/(?<![\d.])0(\d)(?=[:h.]\d\d)/g, '$1').replace(/\s+/g, ' ').trim();
   const WORD = /[\p{L}\p{N}]+/gu;
-  // A long fact may be introduced in another person, but its identifying words must stay together and unchanged.
-  const restated = (t, q, locale) => {
+  // Articles and possessives as one slot, within the student's language: "buscar o jaleco" names "buscar meu jaleco".
+  const DETS = { en: 'a|an|the|my|your', es: 'un|una|el|la|los|las|mi|mis|tu|tus', 'pt-BR': 'o|a|os|as|um|uma|meu|minha|meus|minhas|teu|tua|teus|tuas|seu|sua|seus|suas',
+    fr: 'un|une|le|la|les|mon|ma|mes|ton|ta|tes|votre|vos', de: 'der|die|das|den|dem|ein|eine|einen|einem|einer|mein|meine|meinen|meinem|meiner|dein|deine|deinen|deinem|deiner', nl: 'de|het|een|mijn|jouw|uw' };
+  const bare = (s, locale) => {
+    const det = new RegExp(`(?<![\\p{L}\\p{N}])(?:${DETS[locale] || DETS.en})(?![\\p{L}\\p{N}])`, 'gu');
+    return spelled(s).replace(/\u0000/g, '').replace(det, '\u0000').replace(/\s+/g, ' ').trim();
+  };
+  // A long fact may be introduced in another person ("I prefer X" as "your preference: X"): its opening words may change,
+  // but the rest, four words or more, stays together and unchanged.
+  const restated = (t, q) => {
     const words = q.match(WORD) || [];
     if (words.length < 5) return false;
-    const prefix = /^(?:i|my|me|je|mon|ma|yo|mi|eu|meu|ich|mein|ik|mijn) (?:prefer|prefero|prefiero|préfère|bevorzuge|verkies|like|love|enjoy|aime|gusta|gosto|mag)$/u;
-    for (let skip = 1; skip <= Math.min(3, words.length - 4); skip++) {
-      if (!prefix.test(words.slice(0, skip).join(' '))) continue;
+    for (let skip = 1; skip <= Math.min(5, words.length - 5); skip++) {
       const suffix = words.slice(skip);
-      if (suffix.length >= 4 && new RegExp(`(?<![\\p{L}\\p{N}])${suffix.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[^\\p{L}\\p{N}]+')}(?![\\p{L}\\p{N}])`, 'u').test(t)) return true;
+      if (suffix.length >= 5 && new RegExp(`(?<![\\p{L}\\p{N}])${suffix.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[^\\p{L}\\p{N}]+')}(?![\\p{L}\\p{N}])`, 'u').test(t)) return true;
     }
     return false;
   };
   const visibleFact = (text, quote, locale) => {
     const q = spelled(quote), t = spelled(text);
-    if (t.includes(q) || restated(t, q, locale)) return true;
+    if (t.includes(q) || restated(t, q) || (q.match(WORD) || []).length >= 2 && bare(t, locale).includes(bare(q, locale))) return true;
     // A course or item named by its code, the part before its dash or colon ("AVI 412" for "AVI 412 – Sécurité aérienne").
     const head = (/^[\p{L}]{2,6}[ -]?\d{2,4}(?![\p{L}\p{N}])/u.exec(q) || [])[0] || q.split(/\s+[–—-]\s+|:\s+/u)[0];
     if (head !== q && /\d/.test(head) && [...head].length >= 3) {
@@ -888,10 +894,10 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   // Quotes are Glaze's evidence, never shown to the student: one that is neither in the answer nor anywhere Glaze showed
   // is dropped; one the answer says that nothing holds stays, and is refused as an invented value.
   // A changed leading article can still name the same value; other changed words may identify a different item.
-  const near = (pool, q) => {
+  const near = (pool, q, locale) => {
     const withoutArticle = (v) => spelled(v).replace(/^(?:a|an|the|un|une|le|la|les|el|los|las|uma?|os|as|der|die|das|ein|eine|de|het|een)\s+/u, '');
     const c = withoutArticle(q);
-    return c !== spelled(q) && [...c].length >= 3 && pool.some((v) => withoutArticle(v) === c);
+    return [...c].length >= 3 && pool.some((v) => c !== spelled(q) && withoutArticle(v) === c || bare(v, locale) === bare(q, locale) && bare(q, locale).includes(' '));
   };
   // A slipped, unshown quote can be discarded, but a quote stated in the reply must still be checked.
   const slipped = (pool, q, text) => {
@@ -904,7 +910,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const keptQuotes = (out, inp) => {
     const data = values([...(inp.fired ? [inp.fired] : []), ...inp.steps.map((s) => s.result)], inp.first === true);
     const pool = [...data.map(String), inp.question, ...shownContext(inp)], inData = holder(pool);
-    return out.answer.quotes.filter((q) => q.trim() && (inData(q) || spelled(out.answer.text).includes(spelled(q)) || near(pool, q) || !slipped(pool, q, out.answer.text)));
+    return out.answer.quotes.filter((q) => q.trim() && (inData(q) || spelled(out.answer.text).includes(spelled(q)) || near(pool, q, inp.locale) || !slipped(pool, q, out.answer.text)));
   };
   // Recall is a hint for finding a record, not a read. Distinctive phrases from it need an independent source.
   const unreadRecall = (text, inp, context) => {
@@ -968,13 +974,13 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       const last = inp.steps.at(-1), emptyLast = last && spec(last.call.name)?.kind === 'read' && !rich(last.result);
       const freshSchool = inp.steps.some((st) => Object.values(FRESH).some((topic) => topic.tools.includes(st.call.name)) && rich(st.result));
       if (emptyLast && !freshSchool && schoolClaim(text))
-        return quotes.some((q) => !inData(q) && !near([...data.map(String), inp.question, ...context], q)) ? 'quote' : 'ground';
+        return quotes.some((q) => !inData(q) && !near([...data.map(String), inp.question, ...context], q, inp.locale)) ? 'quote' : 'ground';
       const reportsEmpty = /(?<![\p{L}])(?:no|none|nothing|not|cannot|can't|couldn't|unable|empty|unavailable|aucun\p{L}*|pas|introuvable|geen|niet|kon|nada|nenhum\p{L}*|não|n[ãa]o|sin|ning[uú]n\p{L}*|nicht|keine?)(?![\p{L}])/iu.test(text);
       if (held.length && !(emptyLast && reportsEmpty)
-        && !quotes.some((q) => visibleFact(text, q, inp.locale) && (inHeld(q) || near(held, q)))) return 'ground';
+        && !quotes.some((q) => visibleFact(text, q, inp.locale) && (inHeld(q) || near(held, q, inp.locale)))) return 'ground';
     }
     const pool = [...data.map(String), inp.question, ...context];
-    if (quotes.some((q) => !inData(q) && !near(pool, q))) return 'quote';
+    if (quotes.some((q) => !inData(q) && !near(pool, q, inp.locale))) return 'quote';
     // Every number the reply says is in a result, the question or the time; or an hour of a result on a 12-hour clock,
     // or a count no longer than a result's longest list.
     const allowed = [...data.flatMap((v) => typeof v === 'number' ? [v] : nums(v, inp.locale)), ...nums(inp.question, inp.locale), ...nums(nowText(inp)),
