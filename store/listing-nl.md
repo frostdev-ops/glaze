@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.3 (Dutch)
+# Chrome Web Store listing — Glaze 4.0.4 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -73,15 +73,7 @@ Canvas is een handelsmerk van Instructure, Inc. Blackboard is een handelsmerk va
 
 ## Release notes
 
-NIEUW IN 4.0.3
+NIEUW IN 4.0.4
 
-• Chrome: Rime, het eigen AI-model van Glaze, draait op je computer, en wat je het geeft, blijft daar. Instellingen › AI toont het als Nog niet beschikbaar tot Frostdev het publiceert, en biedt dan Downloaden aan. Nieuwere versies komen vanzelf.
-• Firefox: Rime, het eigen AI-model van Glaze, draait op je computer, en wat je het geeft, blijft daar. Instellingen › AI toont het als Nog niet beschikbaar tot Frostdev het publiceert, en biedt dan Downloaden aan. Nieuwere versies komen vanzelf.
-• Vraag het Rime (Ctrl+K of ⌘K; uit tot je het aanzet in Instellingen › AI) helpt met studiewerk door hints en vragen, nooit met het antwoord, en beantwoordt vragen over je taken, rooster en cijfers.
-• Instellingen › AI › Geheugen toont, bewerkt en vergeet wat Vraag het Rime heeft bewaard.
-• Pearson MyLab: je Uiterlijk op Pearson-huiswerk. Zet Pearson-opgavenweergave, Pearson binnen Blackboard en Moderne Pearson-vergelijkingen elk aan in Instellingen › Cursuspagina's › Documenten en toetsen; toegang tot de sites van Pearson wordt gevraagd als dat nodig is.
-• Blackboard-discussies: een pdf bij een bericht krijgt Voorbeeld, dat hem in Glaze opent.
-• Blackboard: een opdracht met een opgeslagen concept van een nieuwe poging toont niet meer Te laat als een eerdere poging is ingeleverd.
-• Writer houdt zijn knop om te plaatsen als Blackboard een leeg antwoordvak inklapt.
-• De beoordelingsschema-weergave van Glaze vindt het beoordelingsschema van een discussie weer.
-• Widgets blijven voor een geopend cursustabblad.
+• Vraag het Rime stopt niet meer met een fout bij een goed antwoord: je naam, een herinnering die het net heeft gezet, iets in je eigen woorden, een tijd zoals jij die schrijft, een cursus bij zijn code, of een gewoon ‘er kwam niets terug’ van je school.
+• Als een antwoord een regel van Vraag het Rime breekt, krijgt Rime nog een poging in plaats van een fout.

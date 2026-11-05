@@ -6,6 +6,14 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [4.0.4] — 2026-11-05
+
+### Fixed
+
+- Ask Rime no longer stops with an error on a right answer: your name, a reminder it just set, a fact in your own words, a time or number written your way, a course named by its code, or a plain "nothing came back" from your school.
+- When an answer breaks one of Ask Rime's rules, Rime gets one more try with the reason instead of an error.
+- Ask Rime's study help answers greetings and questions about you, and takes a question as asked instead of refusing it as the wrong kind.
+
 ## [4.0.3] — 2026-11-04
 
 ### Added

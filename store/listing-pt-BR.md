@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.3 (Portuguese (Brazil))
+# Chrome Web Store listing — Glaze 4.0.4 (Portuguese (Brazil))
 
 ## Short summary (132 character maximum)
 
@@ -73,15 +73,7 @@ Canvas é uma marca da Instructure, Inc. Blackboard é uma marca da Anthology In
 
 ## Release notes
 
-NOVO NA 4.0.3
+NOVO NA 4.0.4
 
-• Chrome: Rime, o modelo de IA do próprio Glaze, roda no seu computador, e o que você entrega a ele fica lá. Configurações › IA mostra Ainda não disponível até a Frostdev publicá-lo e depois oferece Baixar. Versões novas chegam sozinhas.
-• Firefox: Rime, o modelo de IA do próprio Glaze, roda no seu computador, e o que você entrega a ele fica lá. Configurações › IA mostra Ainda não disponível até a Frostdev publicá-lo e depois oferece Baixar. Versões novas chegam sozinhas.
-• Pergunte ao Rime (Ctrl+K ou ⌘K; desligado até você ativá-lo em Configurações › IA) ajuda nas tarefas do curso com dicas e perguntas, nunca com a resposta, e responde sobre seus afazeres, sua agenda e suas notas.
-• Configurações › IA › Memória mostra, edita e esquece o que o Pergunte ao Rime salvou.
-• Pearson MyLab: sua Aparência nas tarefas da Pearson. Ative separadamente Visualizador de problemas da Pearson, Pearson dentro do Blackboard e Equações modernas no Pearson em Configurações › Páginas do curso › Documentos e questionários; o acesso aos sites da Pearson é solicitado quando necessário.
-• Discussões do Blackboard: um PDF anexado a uma publicação ganha Visualizar, que o abre no Glaze.
-• Blackboard: uma tarefa com um rascunho salvo de uma nova tentativa não aparece mais como Atrasado quando uma tentativa anterior foi entregue.
-• O Writer mantém seu botão de publicar quando o Blackboard recolhe uma caixa de resposta vazia.
-• A visualização de rubricas do Glaze volta a encontrar a rubrica de uma discussão.
-• Os widgets ficam na frente de uma aba de curso aberta.
+• O Pergunte ao Rime não para mais com um erro diante de uma resposta certa: seu nome, um lembrete que ele acabou de criar, algo dito com suas palavras, um horário escrito do seu jeito, um curso chamado pelo código ou um simples “não veio nada” da sua escola.
+• Quando uma resposta quebra uma regra do Pergunte ao Rime, o Rime ganha mais uma tentativa em vez de um erro.

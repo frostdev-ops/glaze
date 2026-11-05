@@ -46,31 +46,23 @@ for (const [lang, expected] of Object.entries(access)) test(`listing ${lang || '
   assert.ok(!/(?:ten tabs|zehn Tabs|diez pestañas|dix onglets|tien tabbladen|dez abas)/.test(listing(lang)), 'no settings editor in ten tabs');
 });
 
-// 4.0.3: Rime (Chrome and Firefox only, so labelled, never in Safari's notes) and every new switch by its name in that
-// language; Pearson's line says where it asks for access.
-const release403 = {
-  '': ['NEW IN 4.0.3', 'Frostdev', 'Pearson'],
-  de: ['NEU IN 4.0.3', 'Frostdev', 'Pearson'],
-  es: ['NOVEDADES DE 4.0.3', 'Frostdev', 'Pearson'],
-  fr: ['NOUVEAUTÉS DE LA VERSION 4.0.3', 'Frostdev', 'Pearson'],
-  nl: ['NIEUW IN 4.0.3', 'Frostdev', 'Pearson'],
-  'pt-BR': ['NOVO NA 4.0.3', 'Frostdev', 'Pearson'],
+// 4.0.4: Ask Rime's fixes, under its name in each language, unlabelled so every store carries them.
+const release404 = {
+  '': 'NEW IN 4.0.4', de: 'NEU IN 4.0.4', es: 'NOVEDADES DE 4.0.4', fr: 'NOUVEAUTÉS DE LA VERSION 4.0.4', nl: 'NIEUW IN 4.0.4', 'pt-BR': 'NOVO NA 4.0.4',
 };
-for (const [lang, expected] of Object.entries(release403)) test(`4.0.3 release notes ${lang || 'en'} name Rime's state, Ask Rime, Memory and Pearson's switches, and label Rime for Chrome and Firefox`, () => {
+for (const [lang, heading] of Object.entries(release404)) test(`4.0.4 release notes ${lang || 'en'} name Ask Rime and go to every store`, () => {
   const text = listing(lang), block = part(text, 'Release notes');
   const context = {};
   if (lang) vm.runInNewContext(read(`i18n/${lang}.js`), context);
   const ui = (key) => lang ? context.GZ_LANGS[lang][key] : key;
-  for (const key of ['Settings', 'AI', 'Download', 'Not available yet', 'Ask Rime', 'Memory', 'Course pages', 'Documents and quizzes', 'Pearson problem viewer', 'Pearson inside Blackboard', 'Modern Pearson equations', 'Preview']) assert.ok(block.includes(ui(key)), key);
-  for (const term of expected) assert.ok(block.includes(term), term);
-  const rime = block.split('\n').filter((l) => l.includes(ui('Not available yet')));
-  assert.deepEqual(rime.map((l) => /^•\s*(Chrome|Firefox|Safari)\s*:/.exec(l)?.[1]), ['Chrome', 'Firefox'], 'Rime is labelled for the browsers that have it');
-  assert.ok(!/\b(?:CI|audit|R\d+)\b/i.test(block), 'no internal process or model rounds in store copy');
+  assert.ok(block.startsWith(heading), heading);
+  const bullets = block.split('\n').filter((l) => l.startsWith('•'));
+  assert.equal(bullets.length, 2);
+  for (const l of bullets) assert.ok(l.includes(ui('Ask Rime')) && !/^•\s*(?:Chrome|Firefox|Safari)\s*:/.test(l), l);
+  assert.ok(!/\b(?:CI|audit|eval|R\d+)\b/i.test(block), 'no internal process or model rounds in store copy');
 });
 
 test('4.0.3 access instructions account for browsers that already hold the hosts', () => {
-  const expected = { '': 'when needed', de: 'bei Bedarf', es: 'si hace falta', fr: 'si nécessaire', nl: 'als dat nodig is', 'pt-BR': 'quando necessário' };
-  for (const [lang, qualifier] of Object.entries(expected)) assert.ok(part(listing(lang), 'Release notes').includes(qualifier), `${lang || 'en'}: access is requested only when needed`);
   const changelog = read('../CHANGELOG.md').split('## [4.0.3]')[1].split('## [4.0.2]')[0];
   for (const key of ['Pearson problem viewer', 'Pearson inside Blackboard', 'Modern Pearson equations', 'when needed']) assert.ok(changelog.includes(key), key);
 });
@@ -96,12 +88,12 @@ for (const [lang, expected] of Object.entries(terms)) test(`listing ${lang || 'e
   for (const term of expected) assert.ok(text.includes(term), term);
 });
 
-test('4.0.3 versions agree and the exact pure notes transform fits Apple', () => {
-  assert.equal(JSON.parse(read('manifest.json')).version, '4.0.3');
-  assert.equal(JSON.parse(read('../safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.3');
-  // The helper and its Claude Desktop bundle, glaze-mcp-4.0.3.mcpb on the GitHub release, carry Glaze's version.
-  assert.equal(JSON.parse(read('../mcp/package.json')).version, '4.0.3');
-  assert.equal(JSON.parse(read('../mcp/mcpb/manifest.json')).version, '4.0.3');
+test('4.0.4 versions agree and the exact pure notes transform fits Apple', () => {
+  assert.equal(JSON.parse(read('manifest.json')).version, '4.0.4');
+  assert.equal(JSON.parse(read('../safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.4');
+  // The helper and its Claude Desktop bundle, glaze-mcp-4.0.4.mcpb on the GitHub release, carry Glaze's version.
+  assert.equal(JSON.parse(read('../mcp/package.json')).version, '4.0.4');
+  assert.equal(JSON.parse(read('../mcp/mcpb/manifest.json')).version, '4.0.4');
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
   const script = read('../tools/release/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));
@@ -113,7 +105,7 @@ test('4.0.3 versions agree and the exact pure notes transform fits Apple', () =>
   });
   const result = notes(path.join(root, '..'));
   assert.ok(result.length <= 4000, `${result.length} characters`);
-  assert.match(result, /^Added\n/);
+  assert.match(result, /^Fixed\n/);
   assert.ok(result.length <= 3000, `AMO: ${result.length} characters`);
   assert.ok(!result.includes('## [3.4.5]'));
 });

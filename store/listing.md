@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.3
+# Chrome Web Store listing — Glaze 4.0.4
 
 ## Name
 
@@ -81,18 +81,10 @@ Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Antholog
 
 ## Release notes
 
-NEW IN 4.0.3
+NEW IN 4.0.4
 
-• Chrome: Rime, Glaze's own AI model, runs on your computer, and what you give it stays there. Settings › AI shows it as Not available yet until Frostdev publishes it, then offers Download. Newer versions arrive by themselves.
-• Firefox: Rime, Glaze's own AI model, runs on your computer, and what you give it stays there. Settings › AI shows it as Not available yet until Frostdev publishes it, then offers Download. Newer versions arrive by themselves.
-• Ask Rime (Ctrl+K or ⌘K; off until you turn it on in Settings › AI) helps with coursework through hints and questions, never the answer, and answers questions about your to-dos, schedule and grades.
-• Settings › AI › Memory lists, edits and forgets what Ask Rime saved.
-• Pearson MyLab: your Look on Pearson homework. Turn on Pearson problem viewer, Pearson inside Blackboard and Modern Pearson equations separately in Settings › Course pages › Documents and quizzes; access to Pearson's sites is requested when needed.
-• Blackboard discussions: a PDF attached to a post gets Preview, which opens it in Glaze.
-• Blackboard: an assignment with a saved draft of a new attempt no longer shows Past due when an earlier attempt was handed in.
-• Writer keeps its post button when Blackboard folds an empty reply box.
-• Glaze's rubric view finds a discussion's rubric again.
-• Widgets stay in front of an open course tab.
+• Ask Rime no longer stops with an error on a right answer: your name, a reminder it just set, a fact in your own words, a time written your way, a course named by its code, or a plain “nothing came back” from your school.
+• When an answer breaks one of Ask Rime's rules, Rime gets one more try instead of an error.
 
 ## Single-purpose statement
 

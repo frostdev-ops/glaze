@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.3 (German)
+# Chrome Web Store listing — Glaze 4.0.4 (German)
 
 ## Short summary (132 character maximum)
 
@@ -73,15 +73,7 @@ Canvas ist eine Marke von Instructure, Inc. Blackboard ist eine Marke von Anthol
 
 ## Release notes
 
-NEU IN 4.0.3
+NEU IN 4.0.4
 
-• Chrome: Rime, das eigene KI-Modell von Glaze, läuft auf deinem Computer, und was du ihm gibst, bleibt dort. Einstellungen › KI zeigt es als Noch nicht verfügbar, bis Frostdev es veröffentlicht, und bietet dann Herunterladen an. Neuere Versionen kommen von selbst.
-• Firefox: Rime, das eigene KI-Modell von Glaze, läuft auf deinem Computer, und was du ihm gibst, bleibt dort. Einstellungen › KI zeigt es als Noch nicht verfügbar, bis Frostdev es veröffentlicht, und bietet dann Herunterladen an. Neuere Versionen kommen von selbst.
-• Rime fragen (Strg+K oder ⌘K; aus, bis du es unter Einstellungen › KI einschaltest) hilft bei Kursaufgaben mit Hinweisen und Fragen, nie mit der Lösung, und beantwortet Fragen zu deinen To-dos, deinem Stundenplan und deinen Noten.
-• Einstellungen › KI › Erinnerungen zeigt, bearbeitet und löscht, was Rime fragen gespeichert hat.
-• Pearson MyLab: dein Aussehen auf Pearson-Hausaufgaben. Schalte Pearson-Aufgabenansicht, Pearson in Blackboard und Moderne Pearson-Gleichungen einzeln unter Einstellungen › Kursseiten › Dokumente und Tests ein; der Zugriff auf Pearsons Websites wird bei Bedarf angefragt.
-• Blackboard-Diskussionen: Ein PDF im Anhang eines Beitrags bekommt Vorschau und öffnet sich damit in Glaze.
-• Blackboard: Eine Aufgabe mit gespeichertem Entwurf eines neuen Versuchs zeigt nicht mehr Überfällig, wenn ein früherer Versuch abgegeben wurde.
-• Writer behält seine Schaltfläche zum Posten, wenn Blackboard ein leeres Antwortfeld einklappt.
-• Die Bewertungsraster-Ansicht von Glaze findet das Bewertungsraster einer Diskussion wieder.
-• Widgets bleiben vor einem geöffneten Kurs-Tab.
+• Rime fragen bricht bei einer richtigen Antwort nicht mehr mit einem Fehler ab: dein Name, eine gerade gestellte Erinnerung, etwas in deinen eigenen Worten, eine Uhrzeit in deiner Schreibweise, ein Kurs mit seinem Kürzel oder ein schlichtes „nichts gefunden“ von deiner Schule.
+• Verstößt eine Antwort gegen eine Regel von Rime fragen, bekommt Rime einen weiteren Versuch statt eines Fehlers.

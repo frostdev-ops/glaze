@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.3 (Spanish)
+# Chrome Web Store listing — Glaze 4.0.4 (Spanish)
 
 ## Short summary (132 character maximum)
 
@@ -73,15 +73,7 @@ Canvas es una marca comercial de Instructure, Inc. Blackboard es una marca comer
 
 ## Release notes
 
-NOVEDADES DE 4.0.3
+NOVEDADES DE 4.0.4
 
-• Chrome: Rime, el modelo de IA propio de Glaze, funciona en tu ordenador, y lo que le das se queda ahí. Ajustes › IA lo muestra como Aún no disponible hasta que Frostdev lo publique, y entonces ofrece Descargar. Las versiones nuevas llegan solas.
-• Firefox: Rime, el modelo de IA propio de Glaze, funciona en tu ordenador, y lo que le das se queda ahí. Ajustes › IA lo muestra como Aún no disponible hasta que Frostdev lo publique, y entonces ofrece Descargar. Las versiones nuevas llegan solas.
-• Pregúntale a Rime (Ctrl+K o ⌘K; desactivado hasta que lo actives en Ajustes › IA) te ayuda con el trabajo del curso con pistas y preguntas, nunca con la respuesta, y responde sobre tus tareas pendientes, tu horario y tus notas.
-• Ajustes › IA › Memoria muestra, edita y olvida lo que guardó Pregúntale a Rime.
-• Pearson MyLab: tu Aspecto en las tareas de Pearson. Activa por separado Visor de problemas de Pearson, Pearson dentro de Blackboard y Ecuaciones modernas en Pearson en Ajustes › Páginas del curso › Documentos y cuestionarios; se pide acceso a los sitios de Pearson si hace falta.
-• Debates de Blackboard: un PDF adjunto a una publicación tiene Vista previa, que lo abre en Glaze.
-• Blackboard: una tarea con un borrador guardado de un nuevo intento ya no aparece como Atrasado cuando ya entregaste un intento anterior.
-• Writer conserva su botón para publicar cuando Blackboard pliega un cuadro de respuesta vacío.
-• La vista de rúbricas de Glaze vuelve a encontrar la rúbrica de un debate.
-• Los widgets se quedan delante de una pestaña de curso abierta.
+• Pregúntale a Rime ya no se detiene con un error ante una respuesta correcta: tu nombre, un recordatorio que acaba de crear, algo dicho con tus palabras, una hora escrita a tu manera, un curso nombrado por su código o un simple «no llegó nada» de tu centro.
+• Cuando una respuesta incumple una regla de Pregúntale a Rime, Rime tiene otro intento en lugar de un error.
