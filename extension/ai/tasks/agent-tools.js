@@ -794,6 +794,9 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const data = values([...(inp.fired ? [inp.fired] : []), ...inp.steps.map((s) => s.result)], inp.first === true);
     return IDS.some((key) => typeof call.arguments[key] === 'string' && !heldId(call.arguments[key], inp, data) && currentId(call.name, call.arguments, key, inp.current));
   };
+  // First and second person as one, in Glaze's six languages: a title the student wrote ("my essay") read back to them.
+  const PERSON = /(?<![\p{L}\p{N}_])(?:my|your|mine|yours|myself|yourself|mi|mis|tu|tus|meu|minha|meus|minhas|teu|tua|teus|tuas|seu|sua|seus|suas|mon|ma|mes|ton|ta|tes|votre|vos|mein|meine|meinen|meinem|meiner|meines|dein|deine|deinen|deinem|deiner|deines|mijn|jouw|uw)(?![\p{L}\p{N}_])/gu;
+  const person = (s) => X().norm(s).replace(PERSON, '@');
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length) return 'schema';
     if ((out.call === null) === (out.answer === null)) return 'one';
@@ -824,10 +827,12 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       // "Nothing is due" while a result lists work not handed in (the owner's Sunday, 2026-11-01).
       if (NOTHING_DUE.test(fold(text)) && inp.steps.some((st) => open(st.result))) return 'missed';
       if (!listHolds(text, inp)) return 'list';
-      const held = inp.steps.flatMap((st) => facts(st.result));
+      // What reads brought back: the answer states one of them, in its own person ("Finish my essay" is "finish your
+      // essay"). A confirmation of Rime's own action (a reminder, a saved note) stands on its receipt instead.
+      const held = inp.steps.filter((st) => spec(st.call.name)?.kind === 'read').flatMap((st) => facts(st.result));
       const sources = held.map((v) => X().source(v, { min: 2 })), singles = new Set(held.map((v) => X().norm(v)));
-      const visible = X().source(text, { min: 1 });
-      if (held.length && !quotes.some((q) => visible.has(q) && ([...X().norm(q)].length === 1 ? singles.has(X().norm(q)) : sources.some((s) => s.has(q))))) return 'ground';
+      const visible = X().source(person(text), { min: 1 });
+      if (held.length && !quotes.some((q) => visible.has(person(q)) && ([...X().norm(q)].length === 1 ? singles.has(X().norm(q)) : sources.some((s) => s.has(q))))) return 'ground';
     }
     const sources = data.map((r) => X().source(r, { min: 2 })), singles = new Set(data.map((r) => X().norm(r)));
     if (quotes.some((q) => !q.trim() || ([...X().norm(q)].length === 1 ? !singles.has(X().norm(q)) : !sources.some((x) => x.has(q))))) return 'quote';

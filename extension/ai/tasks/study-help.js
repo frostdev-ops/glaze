@@ -141,6 +141,14 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
     "qui es-tu|qui [êe]tes-vous|comment t'appelles-tu|de quoi (?:avons-nous|on a|nous avons) parl[ée](?: jusqu'ici)?|r[ée]sume (?:notre|cette) conversation|qu'est-ce que (?:je t'ai|j'ai) demand[ée]",
     'wer bist du|wie hei(?:ß|ss)t du|wor[üu]ber haben wir (?:bisher |gerade )?gesprochen|fass(?:e)? (?:unser(?:en)?|diese[ns]?) (?:chat|gespr[äa]ch) zusammen|was habe ich (?:dich )?(?:gefragt|gesagt)',
     'wie ben (?:je|jij)|hoe heet je|waar(?:over)? hebben we (?:het )?(?:over )?(?:gehad|gesproken)|vat (?:ons|dit) gesprek samen|wat heb ik (?:je )?gevraagd',
+    // About the student: their name, who they are, what Rime knows of them; and introducing themselves.
+    "(?:do you |did you )?(?:know|remember) (?:my name|who i am|me)|what(?:'s| is) my name|who am i|what do you (?:know|remember) about me",
+    "(?:my name is|my name's|call me|i go by) [\\p{L}'’-]+(?: [\\p{L}'’-]+)?",
+    "(?:me llamo|mi nombre es|ll[áa]mame) [\\p{L}'’-]+(?: [\\p{L}'’-]+)?|(?:sabes|recuerdas) (?:c[óo]mo me llamo|mi nombre|qui[ée]n soy)|c[óo]mo me llamo|qui[ée]n soy|qu[ée] sabes de m[íi]",
+    "(?:meu nome [ée]|me chamo|pode me chamar de) [\\p{L}'’-]+(?: [\\p{L}'’-]+)?|voc[êe] (?:sabe|lembra) (?:o )?meu nome|qual [ée] o meu nome|quem sou eu|o que voc[êe] sabe sobre mim",
+    "(?:je m'appelle|mon nom est|appelle-moi) [\\p{L}'’-]+(?: [\\p{L}'’-]+)?|tu (?:sais|connais|te souviens de) (?:mon nom|comment je m'appelle)|comment je m'appelle|qui suis-je|que sais-tu de moi",
+    "(?:ich hei(?:ß|ss)e|mein name ist|nenn mich) [\\p{L}'’-]+(?: [\\p{L}'’-]+)?|(?:kennst|wei(?:ß|ss)t) du (?:meinen namen|wie ich hei(?:ß|ss)e|wer ich bin)|wie hei(?:ß|ss)e ich|wer bin ich|was wei(?:ß|ss)t du (?:über|ueber) mich",
+    "(?:ik heet|mijn naam is|noem me) [\\p{L}'’-]+(?: [\\p{L}'’-]+)?|(?:weet|ken) je (?:mijn naam|hoe ik heet|wie ik ben)|hoe heet ik|wie ben ik|wat weet je over mij",
   ].join('|')})[?!.\\s]*$`, 'iu');
   const socialRequest = (inp) => !inp.attempt && sentences(inp.question).flatMap((s) => s.split(/[,;:—–]|\s-\s/u)).every((s) => {
     const q = s.trim().replace(/[’‘]/g, "'").replace(/^[¿¡]\s*/u, '');
@@ -295,17 +303,23 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
     if ((out.kind === 'check-my-step') !== (out.step !== null) || (out.kind === 'check-my-step' && !inp.attempt) || (out.kind === 'question' && !asks(out.reply))) return 'kind';
     if (inp.recall && [out.reply, out.followUp].some((p) => typeof p === 'string' && (R().claims(p).length || R().synced(p)))) return 'ground';
     const texts = textsOf(inp), sources = texts.map((t) => X().source(t));
+    // Quoting the student's own saved note back to them offers no wording.
+    const own = (inp.recall?.records || []).filter((r) => r.kind === 'memory').flatMap((r) => [r.text, r.source?.evidence]).filter((t) => typeof t === 'string');
+    const quotable = [...sources, ...own.map((t) => X().source(t))];
     for (const piece of [out.reply, out.followUp].filter((p) => typeof p === 'string' && p.trim())) {
       const rule = hands(piece, inp);
       if (rule) return rule;
       const words_ = prose(piece);
       // A quotation of three words or more that no source holds is wording too.
-      for (const q of WD.quotedRanges(words_, true)) if (q.text.trim().split(/\s+/).length >= 3 && !sources.some((x) => x.has(q.text))) return 'quote';
+      for (const q of WD.quotedRanges(words_, true)) {
+        const said = q.text.trim().replace(/[\s.!?…,;:]+$/u, '');
+        if (said.split(/\s+/).length >= 3 && !quotable.some((x) => x.has(said))) return 'quote';
+      }
       // Essays, reading and the rest: every statement speaks to the student or about their work. A concept may explain
       // with another text, but never with a name or three words in a row from theirs.
       if (['essay', 'reading', 'other'].includes(inp.subject)) {
         for (const s of sentences(words_)) {
-          if (asks(s) || WD.about(s) || IMPERATIVE.test(s) || social(s) && socialRequest(inp)) continue;
+          if (asks(s) || WD.about(s) || IMPERATIVE.test(s) || socialRequest(inp)) continue;
           if (out.kind !== 'concept' && words(s).length >= 5) return 'speaks';
           const names = words(s).filter((w, i) => /^\p{Lu}\p{Ll}{2,}/u.test(w) && (i > 0 || !OPENERS.test(w)));
           const triples = words(s).map((_, i, a) => a.slice(i, i + 3).join(' ')).filter((t, i, a) => i <= a.length - 3);
