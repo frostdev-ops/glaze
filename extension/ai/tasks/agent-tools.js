@@ -794,9 +794,29 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const data = values([...(inp.fired ? [inp.fired] : []), ...inp.steps.map((s) => s.result)], inp.first === true);
     return IDS.some((key) => typeof call.arguments[key] === 'string' && !heldId(call.arguments[key], inp, data) && currentId(call.name, call.arguments, key, inp.current));
   };
-  // First and second person as one, in Glaze's six languages: a title the student wrote ("my essay") read back to them.
-  const PERSON = /(?<![\p{L}\p{N}_])(?:my|your|mine|yours|myself|yourself|mi|mis|tu|tus|meu|minha|meus|minhas|teu|tua|teus|tuas|seu|sua|seus|suas|mon|ma|mes|ton|ta|tes|votre|vos|mein|meine|meinen|meinem|meiner|meines|dein|deine|deinen|deinem|deiner|deines|mijn|jouw|uw)(?![\p{L}\p{N}_])/gu;
-  const person = (s) => X().norm(s).replace(PERSON, '@');
+  // Match the student's possessive to Rime's, within the same language and grammatical form. Keep the other
+  // words literal: a possessive alone is not an item, and no character in the answer acts as a wildcard.
+  const PERSON = {
+    en: [['my', 'your'], ['mine', 'yours'], ['myself', 'yourself']],
+    es: [['mi', 'tu'], ['mis', 'tus']],
+    'pt-BR': [['meu', 'teu', 'seu'], ['minha', 'tua', 'sua'], ['meus', 'teus', 'seus'], ['minhas', 'tuas', 'suas']],
+    fr: [['mon', 'ton'], ['ma', 'ta'], ['mes', 'tes'], ['votre'], ['vos']],
+    de: [['mein', 'dein'], ['meine', 'deine'], ['meinen', 'deinen'], ['meinem', 'deinem'], ['meiner', 'deiner'], ['meines', 'deines']],
+    nl: [['mijn', 'jouw', 'uw']],
+  };
+  const visibleFact = (text, quote, locale) => {
+    const q = X().norm(quote), t = X().norm(text);
+    if (t.includes(q)) return true;
+    const groups = PERSON[locale] || [], lookup = new Map(groups.flatMap((g) => g.map((w) => [w, g])));
+    const parts = q.split(/([\p{L}\p{N}_]+)/u);
+    if (!parts.some((part) => /[\p{L}\p{N}]/u.test(part) && !lookup.has(part))) return false;
+    const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = parts.map((part) => lookup.has(part)
+      ? `(?<![\\p{L}\\p{N}_])(?:${lookup.get(part).map(escape).join('|')})(?![\\p{L}\\p{N}_])` : escape(part)).join('');
+    return new RegExp(pattern, 'u').test(t);
+  };
+  // A receipt for a write or confirmation proves the action, not an unrelated school status.
+  const SCHOOL_STATUS = /(?:\b(?:is|are|was|were|will be) (?:currently |now |still )?(?:due|overdue|missing|submitted|graded)|\b(?:grade|score) (?:is|was|:)|\b(?:you have|you've got) (?:an? |the )?(?:[\p{L}-]+ ){0,3}(?:assignment|homework|quiz|exam|test|lab report)|\b(?:vence|vencen|pendiente|entregad[oa]|nota es|está para entregar|pendente|nota é|à rendre|en retard|note est|fällig|abgegeben|note ist|in te leveren|cijfer is)\b)/iu;
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length) return 'schema';
     if ((out.call === null) === (out.answer === null)) return 'one';
@@ -831,8 +851,8 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       // essay"). A confirmation of Rime's own action (a reminder, a saved note) stands on its receipt instead.
       const held = inp.steps.filter((st) => spec(st.call.name)?.kind === 'read').flatMap((st) => facts(st.result));
       const sources = held.map((v) => X().source(v, { min: 2 })), singles = new Set(held.map((v) => X().norm(v)));
-      const visible = X().source(person(text), { min: 1 });
-      if (held.length && !quotes.some((q) => visible.has(person(q)) && ([...X().norm(q)].length === 1 ? singles.has(X().norm(q)) : sources.some((s) => s.has(q))))) return 'ground';
+      if (!held.length && inp.steps.some((st) => spec(st.call.name)?.kind !== 'read' && rich(st.result)) && SCHOOL_STATUS.test(fold(text))) return 'ground';
+      if (held.length && !quotes.some((q) => visibleFact(text, q, inp.locale) && ([...X().norm(q)].length === 1 ? singles.has(X().norm(q)) : sources.some((s) => s.has(q))))) return 'ground';
     }
     const sources = data.map((r) => X().source(r, { min: 2 })), singles = new Set(data.map((r) => X().norm(r)));
     if (quotes.some((q) => !q.trim() || ([...X().norm(q)].length === 1 ? !singles.has(X().norm(q)) : !sources.some((x) => x.has(q))))) return 'quote';
