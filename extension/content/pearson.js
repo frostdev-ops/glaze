@@ -45,7 +45,9 @@
       if (!name) continue;
       const svg = document.createElementNS(svgNS,'svg'); svg.classList.add('gz-pearson-symbol');
       svg.setAttribute('viewBox','0 0 32 32'); svg.setAttribute('aria-hidden','true'); svg.setAttribute('focusable','false');
-      svg.innerHTML = glyphs[name]; node.setAttribute('data-gz-pearson-symbol',''); node.append(svg);
+      // Parsed as SVG in an inert document, not through innerHTML (Firefox Add-ons flags that sink).
+      svg.replaceChildren(...new DOMParser().parseFromString(`<svg xmlns="${svgNS}">${glyphs[name]}</svg>`, 'image/svg+xml').documentElement.childNodes);
+      node.setAttribute('data-gz-pearson-symbol',''); node.append(svg);
     }
     for (const [node,value] of symbols) if (!node.isConnected) { restoreSymbol(node,value); symbols.delete(node); }
   };

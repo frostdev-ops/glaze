@@ -23,5 +23,7 @@ for(const name of ['mathlive.mjs','mathlive-static.css','LICENSE.txt']){
  fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace(/[ \t]+$/gm,''));
 }
 JS
+# Firefox Add-ons refuses innerHTML assignments: parse MathLive's markup in an inert document instead.
+node "$root/tools/vendor/mathlive-sinks.js" "$dest/mathlive.mjs"
 chmod -R a+rX "$dest"
 echo 'Vendored MathLive 0.111.4 with its readable runtime, math fonts and license.'

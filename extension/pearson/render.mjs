@@ -21,7 +21,9 @@ export function render(latex) { try {
   if (!bounded(latex) || validateLatex(latex).length) return null;
   const markup = convertLatexToMarkup(latex, { displayMode: true });
   if (markup.length > 200000) return null;
-  const template = document.createElement('template'); template.innerHTML = markup;
+  // Parsed in an inert document, not through innerHTML (Firefox Add-ons flags that sink); an explicit body keeps leading space.
+  const template = document.createElement('template');
+  template.content.replaceChildren(...new DOMParser().parseFromString('<body>' + markup, 'text/html').body.childNodes);
   if (template.content.querySelector('.ML__error')) return null;
   for (const node of template.content.querySelectorAll('*')) {
     if (!tags.has(node.tagName)) return null;

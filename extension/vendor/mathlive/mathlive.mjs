@@ -1,4 +1,10 @@
 /** MathLive 0.111.4 */
+// tools/vendor/mathlive-sinks.js: markup parsed in an inert document instead of an innerHTML assignment.
+function __gzHTML(target, html) {
+  const svg = target.namespaceURI === "http://www.w3.org/2000/svg";
+  const parsed = new globalThis.DOMParser().parseFromString(svg ? '<svg xmlns="http://www.w3.org/2000/svg">' + html + "</svg>" : "<body>" + html, svg ? "image/svg+xml" : "text/html");
+  (target.localName === "template" ? target.content : target).replaceChildren(...(svg ? parsed.documentElement : parsed.body).childNodes);
+}
 var __defProp = Object.defineProperty;
 var __defProps = Object.defineProperties;
 var __getOwnPropDescs = Object.getOwnPropertyDescriptors;
@@ -25402,7 +25408,7 @@ var Scrim = class _Scrim {
       mlkPlate.style.paddingRight = (_c2 = this.savedMlkPaddingRight) != null ? _c2 : "";
     if (deepActiveElement() !== this.savedActiveElement)
       (_e = (_d2 = this.savedActiveElement) == null ? void 0 : _d2.focus) == null ? void 0 : _e.call(_d2);
-    element.innerHTML = "";
+    __gzHTML(element, "");
     this.state = "closed";
   }
   handleEvent(ev) {
@@ -26301,7 +26307,7 @@ function createSuggestionPopover(mf, html) {
     mf.dirty = true;
     mf.focus();
   });
-  panel.innerHTML = globalThis.MathfieldElement.createHTML(html);
+  __gzHTML(panel, globalThis.MathfieldElement.createHTML(html));
   return panel;
 }
 function disposeSuggestionPopover() {
@@ -26614,7 +26620,7 @@ function render(mathfield, renderOptions) {
       )}</span>`;
     }
   }
-  field.innerHTML = globalThis.MathfieldElement.createHTML(content);
+  __gzHTML(field, globalThis.MathfieldElement.createHTML(content));
   renderSelection(mathfield, renderOptions.interactive);
   mathfield.updateToggleLayout();
   mathfield.dirty = false;
@@ -28017,7 +28023,7 @@ function showVariantsPanel(element, onClose) {
   else if (l === 3 || l === 5 || l === 6) w = 3;
   else if (l >= 7 && l < 14) w = 4;
   variantPanel.style.width = `calc(var(--variant-keycap-length) * ${w} + 12px)`;
-  variantPanel.innerHTML = mathfield_element_default.createHTML(markup);
+  __gzHTML(variantPanel, mathfield_element_default.createHTML(markup));
   Scrim.open({
     root: (_e = keyboard == null ? void 0 : keyboard.container) == null ? void 0 : _e.querySelector(".ML__keyboard"),
     child: variantPanel
@@ -28476,7 +28482,7 @@ function makeSyntheticKeycap(element) {
   }
   if (!element.innerHTML) {
     const [markup, _] = renderKeycap(keycap);
-    element.innerHTML = globalThis.MathfieldElement.createHTML(markup);
+    __gzHTML(element, globalThis.MathfieldElement.createHTML(markup));
   }
 }
 function injectStylesheets() {
@@ -28544,9 +28550,9 @@ function makeKeyboardElement(keyboard) {
   result.className = "ML__keyboard";
   const plate = document.createElement("div");
   plate.className = "MLK__plate";
-  plate.innerHTML = globalThis.MathfieldElement.createHTML(
+  __gzHTML(plate, globalThis.MathfieldElement.createHTML(
     SVG_ICONS + keyboard.normalizedLayouts.map((x, i) => makeLayout(keyboard, x, i)).join("")
-  );
+  ));
   const backdrop = document.createElement("div");
   backdrop.className = "MLK__backdrop";
   backdrop.appendChild(plate);
@@ -29447,7 +29453,7 @@ var VirtualKeyboard = class _VirtualKeyboard {
       const keycap = this.getKeycap(keycapElement.id);
       if (keycap) {
         const [markup, cls] = renderKeycap(keycap, { shifted });
-        keycapElement.innerHTML = globalThis.MathfieldElement.createHTML(markup);
+        __gzHTML(keycapElement, globalThis.MathfieldElement.createHTML(markup));
         keycapElement.className = cls;
         if (shifted && typeof keycap.shift === "object" && ((_a3 = keycap.shift) == null ? void 0 : _a3.tooltip))
           keycapElement.dataset.tooltip = keycap.shift.tooltip;
@@ -29759,7 +29765,7 @@ var VirtualKeyboard = class _VirtualKeyboard {
     const toolbars = el.querySelectorAll(".ML__edit-toolbar");
     if (!toolbars) return;
     for (const toolbar of toolbars)
-      toolbar.innerHTML = makeEditToolbar(this, mf);
+      __gzHTML(toolbar, makeEditToolbar(this, mf));
   }
   update(mf) {
     this._style = mf.style;
@@ -33403,9 +33409,9 @@ function showKeystroke(mathfield, keystroke) {
   const bounds = mathfield.element.getBoundingClientRect();
   vb.style.left = `${bounds.left}px`;
   vb.style.top = `${bounds.top - 64}px`;
-  vb.innerHTML = globalThis.MathfieldElement.createHTML(
+  __gzHTML(vb, globalThis.MathfieldElement.createHTML(
     "<span>" + (getKeybindingMarkup(keystroke) || keystroke) + "</span>" + vb.innerHTML
-  );
+  ));
   vb.style.visibility = "visible";
   setTimeout(() => {
     if (vb.childNodes.length > 0)
@@ -33420,7 +33426,7 @@ function toggleKeystrokeCaption(mathfield) {
     panel.style.visibility = "hidden";
   } else {
     const panel = createKeystrokeCaption();
-    panel.innerHTML = "";
+    __gzHTML(panel, "");
   }
   return false;
 }
@@ -35639,7 +35645,7 @@ function showEnvironmentPopover(mf) {
   if (possiblyExistentFlexbox) flexbox = possiblyExistentFlexbox;
   else {
     flexbox = document.createElement("div");
-    panel.innerHTML = "";
+    __gzHTML(panel, "");
     panel.appendChild(flexbox);
   }
   flexbox.className = "MLEP__environment-controls";
@@ -35647,7 +35653,7 @@ function showEnvironmentPopover(mf) {
   flexbox.style.width = "100%";
   flexbox.style.height = "100%";
   flexbox.style.boxSizing = "border-box";
-  flexbox.innerHTML = controllerSvg;
+  __gzHTML(flexbox, controllerSvg);
   let delimiterOptions = [];
   let activeDelimeter = "";
   const environment = mf.model.parentEnvironment.environmentName;
@@ -35675,11 +35681,11 @@ function showEnvironmentPopover(mf) {
   delimiterControls.className = "MLEP__environment-delimiter-controls";
   delimiterControls.style.display = "flex";
   delimiterControls.style.flexDirection = "column";
-  delimiterControls.innerHTML = `
+  __gzHTML(delimiterControls, `
   <div class='MLEP__array-delimiter-options'>
   ${activeDelimeter}
   ${delimiterOptions.join("")}
-  </div>`;
+  </div>`);
   if (activeDelimeter) flexbox.appendChild(delimiterControls);
   const arrayControls = flexbox.querySelectorAll(
     "[data-command]"
@@ -35869,7 +35875,7 @@ function icon(name) {
     }
     if (markup) {
       const template = document.createElement("template");
-      template.innerHTML = markup;
+      __gzHTML(template, markup);
       ICON_CATALOG[name] = template;
       icon2 = template;
     }
@@ -35878,7 +35884,7 @@ function icon(name) {
     if ("content" in icon2)
       return icon2.content.cloneNode(true);
     const element = document.createElement("svg");
-    element.innerHTML = icon2.innerHTML;
+    __gzHTML(element, icon2.innerHTML);
     return element;
   }
   return void 0;
@@ -36040,14 +36046,14 @@ var _MenuItemState = class {
     const span = document.createElement("span");
     span.className = this.parentMenu.hasCheck ? "label indent" : "label";
     if (this.type === "heading") span.classList.add("heading");
-    span.innerHTML = this.label;
+    __gzHTML(span, this.label);
     li.append(span);
     if (this._tooltip) {
       li.setAttribute("data-tooltip", this._tooltip);
     }
     if (isCommand(this._declaration) && this._declaration.keyboardShortcut) {
       const kbd = document.createElement("kbd");
-      kbd.innerHTML = getKeybindingMarkup(this._declaration.keyboardShortcut);
+      __gzHTML(kbd, getKeybindingMarkup(this._declaration.keyboardShortcut));
       li.append(kbd);
     }
     if (this.type === "submenu") li.append(icon("trailing-chevron"));
@@ -39457,9 +39463,9 @@ var _Mathfield = class __Mathfield {
       "<span role=status aria-live=assertive aria-atomic=true></span>"
     );
     markup.push("</span>");
-    this.element.innerHTML = globalThis.MathfieldElement.createHTML(
+    __gzHTML(this.element, globalThis.MathfieldElement.createHTML(
       markup.join("")
-    );
+    ));
     if (!this.element.children) {
       console.error(
         `%cMathLive 0.111.4: Something went wrong and the mathfield could not be created.%c
@@ -41105,7 +41111,7 @@ var _MathfieldElement = class _MathfieldElement extends HTMLElement {
       slot.style.display = "none";
       this.shadowRoot.appendChild(slot);
     } else {
-      this.shadowRoot.innerHTML = "<style>" + getStylesheetContent("core") + getStylesheetContent("mathfield") + getStylesheetContent("mathfield-element") + getStylesheetContent("ui") + getStylesheetContent("menu") + '</style><span></span><slot style="display:none"></slot>';
+      __gzHTML(this.shadowRoot, "<style>" + getStylesheetContent("core") + getStylesheetContent("mathfield") + getStylesheetContent("mathfield-element") + getStylesheetContent("ui") + getStylesheetContent("menu") + '</style><span></span><slot style="display:none"></slot>');
     }
     if (options) this._setOptions(options);
   }
@@ -43217,7 +43223,7 @@ var MathStaticElement = class extends HTMLElement {
     try {
       const content = (_b3 = (_a3 = this.textContent) == null ? void 0 : _a3.trim()) != null ? _b3 : "";
       if (!content) {
-        this._renderContainer.innerHTML = "";
+        __gzHTML(this._renderContainer, "");
         this._errorFallback.style.display = "none";
         this._renderContainer.style.display = "none";
         this._removeMathML();
@@ -43251,7 +43257,7 @@ var MathStaticElement = class extends HTMLElement {
       if (this.maxMatrixCols !== void 0)
         options.maxMatrixCols = this.maxMatrixCols;
       const markup = convertLatexToMarkup(latex, options);
-      this._renderContainer.innerHTML = markup;
+      __gzHTML(this._renderContainer, markup);
       this._renderContainer.style.display = this.getDefaultDisplay();
       this._errorFallback.style.display = "none";
       this._updateAccessibility(latex);
@@ -43309,7 +43315,7 @@ var MathStaticElement = class extends HTMLElement {
         this._mathMLContainer.setAttribute("aria-hidden", "false");
         this._shadowRoot.appendChild(this._mathMLContainer);
       }
-      this._mathMLContainer.innerHTML = "<math xmlns='http://www.w3.org/1998/Math/MathML'>" + mathML + "</math>";
+      __gzHTML(this._mathMLContainer, "<math xmlns='http://www.w3.org/1998/Math/MathML'>" + mathML + "</math>");
     } catch (error) {
       console.warn("Could not generate MathML:", error);
     }
@@ -43466,7 +43472,7 @@ function createMathMLNode(latex, options) {
   span.setAttribute("translate", "no");
   try {
     const html = "<math xmlns='http://www.w3.org/1998/Math/MathML'>" + options.renderToMathML(latex) + "</math>";
-    span.innerHTML = globalThis.MathfieldElement.createHTML(html);
+    __gzHTML(span, globalThis.MathfieldElement.createHTML(html));
   } catch (error) {
     console.error(
       `MathLive 0.111.4:  Could not convert "${latex}"' to MathML with ${error}`
@@ -43486,7 +43492,7 @@ function createMarkupNode(text, options, mathstyle) {
     element.style.display = mathstyle === "displaystyle" ? "flex" : "inline-flex";
     element.setAttribute("aria-hidden", "true");
     element.setAttribute("translate", "no");
-    element.innerHTML = globalThis.MathfieldElement.createHTML(html);
+    __gzHTML(element, globalThis.MathfieldElement.createHTML(html));
     return element;
   } catch (error) {
     console.error("Could not parse'" + text + "' with ", error);
@@ -43510,7 +43516,7 @@ function createAccessibleMarkupPair(latex, mathstyle, options) {
       span.setAttribute("translate", "no");
       const speakable = options.renderToSpeakableText(latex);
       if (globalThis.MathfieldElement.textToSpeechMarkup === "ssml")
-        span.innerHTML = globalThis.MathfieldElement.createHTML(speakable);
+        __gzHTML(span, globalThis.MathfieldElement.createHTML(speakable));
       else span.textContent = speakable;
       span.className = "ML__sr-only";
       fragment.append(span);
