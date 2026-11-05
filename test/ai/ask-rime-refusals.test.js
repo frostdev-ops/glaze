@@ -180,3 +180,8 @@ test('a reminder receipt may say when the reminder itself is due', () => {
   const inp = tools('remind me to start my math homework in 2 minutes', [wake]);
   assert.equal(A.why(answer('Your reminder is due at Thursday, November 5, 12:23 PM.'), inp), '');
 });
+
+test('a confirmation cannot hide an unrelated item after a conjunction', () => {
+  const inp = tools('remind me to start my math homework in 2 minutes', [wake]);
+  assert.equal(A.why(answer('Reminder set and a biology project appears on your list.'), inp), 'ground');
+});
