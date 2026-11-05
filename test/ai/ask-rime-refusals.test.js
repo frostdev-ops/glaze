@@ -169,3 +169,9 @@ test('a reminder cannot mask a coordinated invented school item', () => {
   const inp = tools('remind me to start my math homework in 2 minutes', [wake]);
   for (const text of ['Reminder set, and a biology project awaits you.', 'Reminder set and a biology project awaits you.']) assert.equal(A.why(answer(text), inp), 'ground');
 });
+
+test('a school assertion after an unpunctuated conjunction needs school evidence', () => {
+  const inp = tools('remind me to start my math homework in 2 minutes', [wake]);
+  assert.equal(A.why(answer('Reminder set and a biology project is on your list.'), inp), 'ground');
+  assert.equal(A.why(answer('Reminder set and I’ll remind you to start your math homework.'), inp), '');
+});
