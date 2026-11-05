@@ -159,6 +159,16 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
   };
 
   // ---- the worker's side -----------------------------------------------------------------------------------------------
+  // Discovery and the daily check share one storage.local object. Merge each mark against its latest value, in order.
+  let recording = Promise.resolve();
+  const record = (env, patch) => {
+    const next = recording.then(async () => {
+      const kept = (await env.local.get(KEPT))?.[KEPT] || {};
+      await env.local.set({ [KEPT]: { ...kept, ...patch } });
+    });
+    recording = next.catch(() => {});
+    return next;
+  };
   // Whether a check may have anything to do, from the store's marks alone (store.js ~rime, ~none): a folder of models from
   // before the marks counts, so its first check runs and its list sets them. Loads and reads nothing else.
   const present = async (root = () => navigator.storage.getDirectory()) => {
@@ -218,7 +228,7 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
     const kept = (await env.local.get(KEPT))?.[KEPT] || {}, now = env.now();
     const cat = await env.store.catalog(), st = cat.state, pending = !!st && !st.trial && Object.keys(st.keep || {}).length > 0;
     if (reason === 'start' && Number.isFinite(kept.checked) && now - kept.checked < RECENT && !pending) return { state: 'recent' };
-    const note = (o) => env.local.set({ [KEPT]: { ...kept, checked: now, ...o } }).catch?.(() => {});
+    const note = (o) => record(env, { checked: now, ...o }).catch(() => {});
     let doc;
     if (controller.signal.aborted) return { state: 'stopped' };
     try { doc = await fetchList(env, controller.signal); } catch { doc = null; }
@@ -266,7 +276,7 @@ var GZ_AI_MODEL_UPDATES = globalThis.GZ_AI_MODEL_UPDATES || (() => {
     if ([...cat.entries.values()].some((m) => !m.role)) return { state: 'here' };
     const kept = (await env.local.get(KEPT))?.[KEPT] || {}, now = env.now();
     if (Number.isFinite(kept.listed) && now >= kept.listed && now - kept.listed < DAY) return { state: 'recent' };
-    await env.local.set({ [KEPT]: { ...kept, listed: now } });
+    await record(env, { listed: now });
     let doc;
     try { doc = await fetchList(env, new AbortController().signal); } catch { doc = null; }
     if (!doc) return { state: 'offline' };

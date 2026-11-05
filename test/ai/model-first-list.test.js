@@ -34,6 +34,7 @@ const R11 = FIXTURE.map((m, i) => entry(FILES[i], { id: m.id, name: m.name, quan
   tools: 3, memory: 1, scale: 1, minGlaze: '4.0.3', version: 'r11' }));
 const listOf = (serial, models = R11) => ({ v: 1, serial, issued: '2026-11-20T09:00:00Z', models });
 const DAY = 864e5, NOW = Date.parse('2026-11-20T12:00:00Z');
+const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
 
 const setup = (opts = {}) => {
   const disk = fakeFs();
@@ -104,6 +105,52 @@ test('two opens at once share one fetch', async () => {
   assert.equal(a.state, 'listed');
   assert.deepEqual(b, a);
   assert.equal(t.calls.length, 1);
+});
+
+test('a daily check finishing after first discovery preserves the discovery rate limit', async () => {
+  const t = setup(), opening = deferred(), open = deferred(), fetching = deferred(), finishFetch = deferred();
+  const initial = await t.store.catalog(), catalog = t.store.catalog;
+  let reads = 0, fetches = 0;
+  t.env.store = { ...t.store, catalog: async () => {
+    if (++reads === 1) { opening.resolve(); await open.promise; return initial; }
+    return catalog();
+  } };
+  t.env.fetch = async () => {
+    if (++fetches === 1) { fetching.resolve(); await finishFetch.promise; return new Response('', { status: 503 }); }
+    return new Response('{}');
+  };
+  const first = U.first(t.env);
+  await opening.promise;
+  // Another context makes a model available and downloads it after first() read its empty catalog.
+  await t.store.edit((st) => U.accept(st, listOf(1), { glaze: t.env.glaze }));
+  await t.store.download(R11[0].id);
+  const daily = U.check(t.env);
+  await fetching.promise;
+  open.resolve();
+  await first;
+  assert.equal(t.kept[U.KEPT].listed, NOW);
+  finishFetch.resolve();
+  assert.equal((await daily).state, 'offline');
+  assert.deepEqual(t.kept[U.KEPT], { listed: NOW, checked: NOW, result: 'offline' });
+});
+
+test('first discovery writing after a daily check preserves the daily result and timestamp', async () => {
+  const t = setup({ doc: {} }), reading = deferred(), finishRead = deferred();
+  const get = t.env.local.get;
+  let reads = 0;
+  t.env.local.get = async (key) => {
+    const snapshot = structuredClone(await get(key));
+    if (++reads === 1) { reading.resolve(); await finishRead.promise; }
+    return snapshot;
+  };
+  const first = U.first(t.env);
+  await reading.promise;
+  await t.store.edit((st) => U.accept(st, listOf(1), { glaze: t.env.glaze }));
+  await t.store.download(R11[0].id);
+  assert.equal((await U.check(t.env)).state, 'refused');
+  finishRead.resolve();
+  await first;
+  assert.deepEqual(t.kept[U.KEPT], { checked: NOW, result: 'shape', listed: NOW });
 });
 
 test('Data Saver or Safari: no fetch at all', async () => {
