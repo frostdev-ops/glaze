@@ -60,7 +60,8 @@ test('the host keeps native launch controls without access and restores them whe
   frame.src = 'https://school.blackboard.com/webapps/blackboard/execute/ultraFramePassThrough?redirectTo=' + encodeURIComponent('https://school.blackboard.com/webapps/blackboard/execute/blti/launchLink?course_id=_1_1&content_id=_2_1&from_ultra=true');
   frame.parentElement = slot; frame.closest = () => ({ querySelector: () => header });
   frame.contentWindow = { postMessage: m => messages.push(m) };
-  const c = vm.createContext({ URL, crypto: { randomUUID: () => '00000000-0000-4000-8000-000000000000' },
+  let serial = 0;
+  const c = vm.createContext({ URL, crypto: { randomUUID: () => `00000000-0000-4000-8000-${String(++serial).padStart(12, '0')}` },
     GZ_PEARSON_EMBED_LIB: L, GZ_CTX: { site: 'ultra', on: () => true, settings: () => ({ enabled: true, enhance: { pearsonEmbed: true } }), darkTheme: () => false, t: x => x },
     location: new URL('https://school.blackboard.com/ultra/courses/_1_1/lti/launchFrame'),
     document: { getElementById: () => frame, querySelector: () => header, createElement: node, documentElement: node(), head: node() },
@@ -70,7 +71,7 @@ test('the host keeps native launch controls without access and restores them whe
     requestAnimationFrame: () => 1, cancelAnimationFrame() {}, addEventListener: listen,
   });
   vm.runInContext(read('courses/page/pearson-embed.js'), c);
-  const active = () => fire('message', { source: frame.contentWindow, origin: L.socket, data: { gzPearsonEmbed: 'active', channel: '00000000-0000-4000-8000-000000000000' } });
+  const active = () => fire('message', { source: frame.contentWindow, origin: L.socket, data: { gzPearsonEmbed: 'active', channel: messages.at(-1)?.channel } });
   c.GZ_PEARSON_EMBED.sync(); await tick(); active();
   assert.equal(slot.attrs.has('data-gz-pearson-slot'), false, 'a synced preference cannot act without access on this device');
   assert.ok(messages.every(m => m.enabled !== true), 'no enabled context reaches a launcher that cannot run');
@@ -78,10 +79,16 @@ test('the host keeps native launch controls without access and restores them whe
   for (const f of changes) f({ pearsonAccess: { newValue: true } }, 'local');
   await tick(); c.GZ_PEARSON_EMBED.sync(); active();
   assert.equal(slot.attrs.has('data-gz-pearson-slot'), true);
+  const channel = messages.at(-1).channel;
   pearsonAccess = false;
   for (const f of changes) f({ pearsonAccess: { newValue: false } }, 'local');
   await tick(); active();
   assert.equal(slot.attrs.has('data-gz-pearson-slot'), false);
   assert.equal(exit.attrs.has('data-gz-pearson-native-exit'), false, 'native Exit returns');
   assert.equal(messages.at(-1).enabled, false, 'prepared launches lose parent consent before cleanup');
+  pearsonAccess = true;
+  for (const f of changes) f({ pearsonAccess: { newValue: true } }, 'local');
+  await tick();
+  assert.equal(messages.at(-1).channel, channel, 'the live opener accepts only its established channel');
+  active(); assert.equal(slot.attrs.has('data-gz-pearson-slot'), true);
 });
