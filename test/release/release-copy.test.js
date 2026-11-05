@@ -75,6 +75,13 @@ test('4.0.3 access instructions account for browsers that already hold the hosts
   for (const key of ['Pearson problem viewer', 'Pearson inside Blackboard', 'Modern Pearson equations', 'when needed']) assert.ok(changelog.includes(key), key);
 });
 
+test('Rime privacy separates the opening list request from the model download click', () => {
+  const policy = read('../PRIVACY.md').split('- **Rime** (Settings')[1].split('- **Agent access**')[0];
+  assert.match(policy, /model files only after you click Download/, 'the click restriction applies to model files, not the first list request');
+  assert.match(policy, /opening Settings → AI asks `huggingface.co`, at most once a day/);
+  assert.match(policy, /never in Safari or with Data Saver on/);
+});
+
 // Typing effects (3.3.6) draw at the caret: the listing says they never read what is typed and stay out of password fields.
 const terms = {
   '': ['never read what you type', 'password', 'Look › Pointer'],
