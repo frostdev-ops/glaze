@@ -12,6 +12,9 @@ const env = require('../../tools/dev/check-env.js');
 const lock = require('../../tools/dev/check-env.js').lockPath();
 const shots = process.argv[2] ? path.resolve(process.argv[2]) : '';
 const routed = fs.readFileSync(path.join(__dirname, '../../test/fixtures/openrouter-models.json'), 'utf8');
+// Rime's entries as a signed list offers them (Glaze bundles none): R8's files under the permanent ids at tiers 1 to 4.
+const LISTED = require('../../test/fixtures/ai/rime-list-entries.json').models;
+const LIST = 'https://huggingface.co/frostdev-ops/Rime-1.7B-GGUF/resolve/main/glaze-models.json';
 const KEY = 'sk-or-v1-0000synthetic0000000000000000000000000000000000000000000000';
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 // The stand-in servers: OpenRouter's key record and list, OpenAI's and Groq's ids, Anthropic refusing the key, Ollama's ids.
@@ -62,12 +65,12 @@ async function pass(scheme) {
         '--proxy-server=http://127.0.0.1:0', '--proxy-bypass-list=<-loopback>', '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-quic'],
     });
     env.noFirstRun(context);
-    const served = [];
+    const served = [], missed = [];
     await context.route('**/*', (r) => {
       const url = r.request().url();
       if (new URL(url).protocol === 'chrome-extension:') return r.continue();
       const s = SERVERS[url];
-      if (!s) return r.abort();
+      if (!s) { missed.push(url); return r.abort(); }
       served.push([url, r.request().headers()]);
       return r.fulfill({ status: s[0], contentType: 'application/json', body: s[1] });
     });
@@ -258,17 +261,20 @@ async function pass(scheme) {
       await page.locator('#ai-providers .ai-prov', { hasText: 'Chrome on-device AI' }).click();
     });
 
-    // Glaze's own model's card in each state, at desktop width and at 320 px: not downloaded with its size, downloading
-    // with its progress (as the worker reports it), ready (the store's chunk files written sparse into OPFS, as a finished
-    // download leaves them; nothing is fetched), and its size to use in Advanced. Its picture download's row the same way:
-    // needing a download, downloading, ready, and its own Delete, which leaves the text model. Delete then removes them.
+    // Glaze's own model's card in each state, at desktop width and at 320 px: not available yet (Glaze bundles no Rime; the
+    // card's open asks once for the signed list, which this check's network refuses), then with a list's entries in the
+    // store's state (written as an accepted list leaves it) not downloaded with its size, downloading with its progress (as
+    // the worker reports it), ready (the store's chunk files written sparse into OPFS, as a finished download leaves them;
+    // nothing is fetched), and its size to use in Advanced. Its picture download's row the same way: needing a download,
+    // downloading, ready, and its own Delete, which leaves the text model. Delete then removes them.
     await check('glaze', async () => {
       const card = page.locator('#ai-providers .ai-prov', { hasText: 'Rime' });
       const note = page.locator('#ai-drawer .line.own:not(#ai-local-pictures) .note');
       const pics = page.locator('#ai-local-pictures'), picNote = page.locator('#ai-local-pictures .note');
-      // The store's files for models.json's entries `pick` chooses, written sparse as a finished download leaves them.
-      const place = (pick) => page.evaluate(async (pick) => {
-        const all = (await (await fetch('/ai/local/models.json')).json()).models.filter((x) => (pick === 'pictures' ? !!x.role : x.tier === 1));
+      // The store's files for the entries `pick` chooses (the list's tier 1, or models.json's picture download), written
+      // sparse as a finished download leaves them.
+      const place = (pick) => page.evaluate(async ([pick, listed]) => {
+        const all = pick === 'pictures' ? (await (await fetch('/ai/local/models.json')).json()).models.filter((x) => !!x.role) : listed.filter((x) => x.tier === 1);
         const top = await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models', { create: true });
         let n = 0;
         for (const m of all) {
@@ -280,7 +286,14 @@ async function pass(scheme) {
           await dir.getFileHandle('ready', { create: true });
         }
         return n;
-      }, pick);
+      }, [pick, LISTED]);
+      // The store's state as an accepted list leaves it (ai/local/updates.js accept), every context's catalog told.
+      const listed = () => page.evaluate(async (models) => {
+        const top = await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models', { create: true });
+        const w = await (await top.getFileHandle('~updates.json', { create: true })).createWritable();
+        await w.write(JSON.stringify({ v: 1, serial: 1, issued: '2026-11-20T09:00:00Z', models, pins: {}, keep: {}, trial: null, failed: {} })); await w.close();
+        const bus = new BroadcastChannel('glaze-models'); bus.postMessage({ type: 'catalog' }); bus.close();
+      }, LISTED);
       const both = async (name) => {
         await shoot(`glaze-${name}`);
         const was = page.viewportSize();
@@ -302,6 +315,22 @@ async function pass(scheme) {
       await open();
       await page.evaluate(async () => { const { ai } = await chrome.storage.local.get('ai'); await chrome.storage.local.set({ ai: { ...ai, on: true } }); });
       await open();
+      missed.length = 0;
+      await card.click();
+      await note.filter({ hasText: /^Not available yet$/ }).waitFor();
+      assert.equal(await page.locator('#ai-drawer button').count(), 0, 'no Download, no Delete');
+      assert.equal(await pics.count(), 0, 'picture reading comes with Rime');
+      for (let i = 0; i < 50 && !missed.includes(LIST); i++) await pause(100);
+      assert.deepEqual(missed, [LIST], 'the card\'s open asks for the signed list, and nothing else');
+      await both('pending');
+      await card.click();
+      await card.click();
+      await note.filter({ hasText: /^Not available yet$/ }).waitFor();
+      await pause(500);
+      assert.deepEqual(missed, [LIST], 'not again the same day');
+
+      await listed();
+      await open();
       await card.click();
       await note.filter({ hasText: /^Needs a download · 1\.1 GB$/ }).waitFor();
       await picNote.filter({ hasText: /^Needs a download · 1\.5 GB$/ }).waitFor();
@@ -320,7 +349,7 @@ async function pass(scheme) {
       assert.ok(await place('text') > 1);
       await open();
       await card.click();
-      await note.filter({ hasText: /^Ready · 1\.1 GB$/ }).waitFor();
+      await note.filter({ hasText: /^Ready · r8-test-20261102 · 1\.1 GB$/ }).waitFor();
       assert.ok(await card.locator('.st.ok').isVisible());
       assert.ok(await page.locator('#ai-drawer .line.own:not(#ai-local-pictures)').getByRole('button', { name: 'Delete', exact: true }).isVisible());
       await picNote.filter({ hasText: /^Needs a download · 1\.5 GB$/ }).waitFor();
@@ -329,7 +358,7 @@ async function pass(scheme) {
       // The picture download: its progress (the worker's events carry part 'pictures'), then ready, then its own Delete.
       await (context.serviceWorkers()[0] || worker).evaluate(() => chrome.runtime.sendMessage({ type: 'glaze:ai-config', event: 'progress', provider: 'local', part: 'pictures', loaded: 0.3 }).catch(() => {}));
       await picNote.filter({ hasText: /^30% · 1\.5 GB$/ }).waitFor();
-      await note.filter({ hasText: /^Ready · 1\.1 GB$/ }).waitFor();
+      await note.filter({ hasText: /^Ready · r8-test-20261102 · 1\.1 GB$/ }).waitFor();
       assert.equal(await page.locator('#ai-drawer progress').count(), 1);
       assert.equal(await page.locator('#ai-drawer progress').evaluate((b) => [b.value, b.getAttribute('aria-label')].join(' ')), '0.3 Picture reading');
       assert.equal(await card.locator('.pct').count(), 0, 'the model itself is not downloading');
@@ -345,19 +374,21 @@ async function pass(scheme) {
       await both('pictures-ready');
       await pics.getByRole('button', { name: 'Delete', exact: true }).click();
       await picNote.filter({ hasText: /^Needs a download · 1\.5 GB$/ }).waitFor();
-      await note.filter({ hasText: /^Ready · 1\.1 GB$/ }).waitFor();
+      await note.filter({ hasText: /^Ready · r8-test-20261102 · 1\.1 GB$/ }).waitFor();
       assert.deepEqual(await page.evaluate(async () => { const top = await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models'); const out = []; for await (const [k, h] of top.entries()) if (h.kind === 'directory') out.push(k); return out.sort(); }), ['rime-1.7b-q4_k_m']);
 
       await page.locator('label', { hasText: 'Advanced' }).click();
       const tier = page.locator('#ai-local-tier');
       await tier.waitFor();
-      assert.deepEqual(await tier.locator('option').allTextContents(), ['Auto', '1.1 GB', '1.4 GB', '1.8 GB']);
+      assert.deepEqual(await tier.locator('option').allTextContents(), ['Auto', ...LISTED.map((m) => `${m.name} · ${(Math.round(m.size / 1e8) / 10).toFixed(1)} GB`)]);
+      assert.equal(await page.locator('#ai-local-auto').count(), 1, 'Update automatically, with a model here');
       assert.equal(await tier.getAttribute('aria-label'), 'Model size');
       await both('tier');
       await page.locator('label', { hasText: 'Simple' }).click();
 
       await page.getByRole('button', { name: 'Delete', exact: true }).click();
       await note.filter({ hasText: /^Needs a download/ }).waitFor();
+      assert.deepEqual(missed, [LIST], 'with Rime offered, the card asks for no list');
       await picNote.filter({ hasText: /^Needs a download · 1\.5 GB$/ }).waitFor();
       assert.equal(await page.evaluate(async () => { try { await (await (await navigator.storage.getDirectory()).getDirectoryHandle('glaze-models')).getDirectoryHandle('rime-1.7b-q4_k_m'); return 'kept'; } catch (e) { return e.name; } }), 'NotFoundError');
       await card.click();

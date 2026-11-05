@@ -208,6 +208,48 @@ test('prepare downloads in the host with progress, once for callers that ask tog
   assert.deepEqual(w.st.log.downloads, ['glaze-q4']);
 });
 
+test('an older empty prepare preflight joins a download started after the first list arrived', async () => {
+  let finishRead, finishDownload, reads = 0;
+  const s = setup({ hold: () => new Promise((resolve) => { finishDownload = resolve; }) });
+  const list = s.st.list;
+  s.st.list = async () => (++reads === 1 ? new Promise((resolve) => { finishRead = resolve; }) : list());
+  const older = LOCAL.prepare(LOCAL.config({}));
+  await settle();
+  const newer = LOCAL.prepare(LOCAL.config({}));
+  await settle();
+  assert.equal(typeof finishDownload, 'function');
+  finishRead([]);
+  await settle();
+  finishDownload();
+  assert.deepEqual(await Promise.all([older, newer]), [{ state: 'ready' }, { state: 'ready' }]);
+  assert.deepEqual(s.st.log.downloads, ['lfm3-q4']);
+});
+
+test('Delete retires a prepare that is still reading its catalog before starting the host', async () => {
+  let finishRead, reads = 0;
+  const s = setup(), list = s.st.list;
+  s.st.list = async () => (++reads === 1 ? new Promise((resolve) => { finishRead = resolve; }) : list());
+  const preparing = LOCAL.prepare(LOCAL.config({}));
+  await settle();
+  await LOCAL.remove(LOCAL.config({}));
+  finishRead(await list());
+  assert.deepEqual(await preparing, { state: 'download' });
+  assert.deepEqual(s.st.log.downloads, [], 'a preflight started before Delete cannot restart the download');
+  assert.equal(s.workers.length, 0, 'the retired preflight starts no host');
+  assert.deepEqual(await LOCAL.prepare(LOCAL.config({})), { state: 'ready' }, 'a new Download click still works');
+});
+
+test('a failed catalog read during Download reports a failure, and a later read can retry', async () => {
+  const s = setup(), list = s.st.list;
+  s.st.list = async () => { throw new Error('OPFS is temporarily unavailable'); };
+  const cfg = LOCAL.config({});
+  assert.deepEqual(await LOCAL.status(cfg), { state: 'unavailable', reason: 'failed' });
+  assert.deepEqual(await LOCAL.prepare(cfg), { state: 'unavailable', reason: 'failed' }, 'a read failure is not an unpublished Rime');
+  assert.equal(s.workers.length, 0);
+  s.st.list = list;
+  assert.deepEqual(await LOCAL.prepare(cfg), { state: 'ready' });
+});
+
 test('no ladder, a catalog of Glaze-tuned models only (Rime, no `stock`): the smallest tier downloads', async () => {
   const kept = MODELS.splice(0, MODELS.length,
     { id: 'rime-q8', name: 'Rime Q8', size: 1800000000, quant: 'Q8_0', tier: 4, license: 'lfm1.0' },
@@ -222,14 +264,14 @@ test('no ladder, a catalog of Glaze-tuned models only (Rime, no `stock`): the sm
 });
 
 test('a saved tier no longer offered by the catalog follows Auto through Download and the broker', async () => {
-  const models = require('../../extension/ai/local/models.json').models;
-  const s = setup({ ladder: { pick: () => ({ id: 'rime-1.7b-r8-q8_0' }) } });
+  const models = [...require('../../extension/ai/local/models.json').models, ...require('../fixtures/ai/rime-list-entries.json').models];
+  const s = setup({ ladder: { pick: () => ({ id: 'rime-1.7b-q8_0' }) } });
   s.st.list = async () => models.map((m) => ({ ...m, state: s.st.here[m.id] || 'missing' }));
   const e = env({ task: async (id) => id === TEXT.id ? TEXT : null }, { local: { provider: 'local', tier: 9, generation: 'removed-tier' } });
   assert.equal((await B.config({ op: 'test', provider: 'local' }, e)).state, 'download');
   assert.deepEqual(s.st.log.downloads, [], 'status never downloads');
   assert.deepEqual(await B.config({ op: 'prepare', provider: 'local' }, e), { ok: true, state: 'ready' });
-  assert.deepEqual(s.st.log.downloads, ['rime-1.7b-r8-q8_0'], 'the missing saved tier lets the ladder choose');
+  assert.deepEqual(s.st.log.downloads, ['rime-1.7b-q8_0'], 'the missing saved tier lets the ladder choose');
   assert.deepEqual(await B.config({ op: 'test', provider: 'local' }, e).then((r) => [r.state, r.tier]), ['ready', 4]);
   const p = port(e);
   try {
@@ -243,22 +285,22 @@ test('a saved tier no longer offered by the catalog follows Auto through Downloa
 });
 
 test('a missing saved tier reuses a ready Rime model; an offered tier still selects exactly that model', async () => {
-  const models = [...require('../../extension/ai/local/models.json').models];
-  const s = setup({ here: { 'rime-1.7b-r8-q6_k': 'ready' } });
+  const models = [...require('../../extension/ai/local/models.json').models, ...require('../fixtures/ai/rime-list-entries.json').models];
+  const s = setup({ here: { 'rime-1.7b-q6_k': 'ready' } });
   s.st.list = async () => models.map((m) => ({ ...m, state: s.st.here[m.id] || 'missing' }));
   const old = LOCAL.config({ tier: 9 });
   assert.deepEqual(await LOCAL.status(old).then((r) => [r.state, r.tier]), ['ready', 3]);
-  assert.equal((await LOCAL.catalog(old)).models[0].weights, 'rime-1.7b-r8-q6_k');
+  assert.equal((await LOCAL.catalog(old)).models[0].weights, 'rime-1.7b-q6_k');
   await P.run('local', request(TEXT, { text: 'Hello' }), old);
-  assert.deepEqual(s.st.log.opened, ['rime-1.7b-r8-q6_k']);
+  assert.deepEqual(s.st.log.opened, ['rime-1.7b-q6_k']);
   assert.deepEqual(await LOCAL.prepare(old), { state: 'ready' });
-  assert.deepEqual(s.st.log.downloads, ['rime-1.7b-r8-q6_k']);
-  // The shipped Q5_K_M is an offered tier: it takes precedence over the ready Q6_K fallback.
+  assert.deepEqual(s.st.log.downloads, ['rime-1.7b-q6_k']);
+  // The list's Q5_K_M is an offered tier: it takes precedence over the ready Q6_K fallback.
   const q5 = LOCAL.config({ tier: 2 });
   assert.deepEqual(await LOCAL.status(q5).then((r) => [r.state, r.tier]), ['download', 2]);
   await LOCAL.prepare(q5);
-  assert.equal(s.st.log.downloads.at(-1), 'rime-1.7b-r8-q5_k_m');
-  assert.equal((await LOCAL.catalog(q5)).models[0].weights, 'rime-1.7b-r8-q5_k_m');
+  assert.equal(s.st.log.downloads.at(-1), 'rime-1.7b-q5_k_m');
+  assert.equal((await LOCAL.catalog(q5)).models[0].weights, 'rime-1.7b-q5_k_m');
   assert.deepEqual(await LOCAL.status(LOCAL.config({ tier: 4 })).then((r) => [r.state, r.tier]), ['download', 4]);
 });
 
@@ -327,9 +369,9 @@ test('replaced stock files remain deletable before Rime is downloaded, with or w
     if (host) await s.link.call('release');
     const e = env();
     const st = await B.config({ op: 'test', provider: 'local' }, e);
-    assert.equal(st.state, 'download');
+    assert.deepEqual([st.state, st.reason], ['unavailable', 'pending'], 'Glaze bundles no Rime');
     assert.equal(st.stale, true, 'Settings must know there are old files to delete');
-    assert.deepEqual(await B.config({ op: 'delete', provider: 'local' }, e).then((r) => [r.state, r.stale]), ['download', undefined]);
+    assert.deepEqual(await B.config({ op: 'delete', provider: 'local' }, e).then((r) => [r.state, r.stale]), ['unavailable', undefined]);
     assert.ok(s.st.log.removed.includes('lfm3-1.7b-q5_k_m'));
     assert.deepEqual(s.st.log.downloads, [], 'freeing old storage never downloads another model');
   }

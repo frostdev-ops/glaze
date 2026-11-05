@@ -37,7 +37,9 @@ assignment's instructions and rubric. Nothing goes to AI from a test.
 
 [Rime](../PRIVACY.md#network-requests), Glaze's own model (Frostdev's, built on LFM3-1.7B; Chrome and
 Firefox), downloads from `huggingface.co` and its CDN only when you click Download in Settings → AI, and nothing about
-you goes with it. It then runs on this device, so what you give it stays there. While it is downloaded, Glaze checks
+you goes with it. It then runs on this device, so what you give it stays there. Glaze comes without Rime: until a Rime
+model is offered, opening Rime's card in Settings → AI asks `huggingface.co` for the signed list of Rime models, at most
+once a day and never with Data Saver on; nothing about you is sent. While it is downloaded, Glaze checks
 `huggingface.co` for a signed list of Rime models about once a day and downloads updates from there and its CDN; nothing
 about you is sent. **Update automatically** in the card's Advanced section turns that off.
 

@@ -3182,6 +3182,7 @@
   "Use AI": "Utiliser l’IA",
   "Endpoint": "Point de terminaison",
   "Not available in this browser": "Indisponible dans ce navigateur",
+  "Not available yet": "Pas encore disponible",
   "Model": "Modèle",
   "Key": "Clé",
   "Features": "Fonctions",

@@ -3182,6 +3182,7 @@
   "Use AI": "KI verwenden",
   "Endpoint": "Endpunkt",
   "Not available in this browser": "In diesem Browser nicht verfügbar",
+  "Not available yet": "Noch nicht verfügbar",
   "Model": "Modell",
   "Key": "Schlüssel",
   "Features": "Funktionen",

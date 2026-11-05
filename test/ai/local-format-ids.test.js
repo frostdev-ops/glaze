@@ -137,8 +137,9 @@ test('the real tasks\' requests reach the local provider with their own task and
 });
 
 test('models.json: the text models are Rime, read in Glaze\'s format (no `stock`); the picture model stays stock', async () => {
-  const text = SHIPPED.models.filter((m) => !m.role);
-  assert.deepEqual(text.map((m) => m.id), ['rime-1.7b-r8-q4_k_m', 'rime-1.7b-r8-q5_k_m', 'rime-1.7b-r8-q6_k', 'rime-1.7b-r8-q8_0', 'rime-1.7b-r9-q4_k_m', 'rime-1.7b-r9-q5_k_m', 'rime-1.7b-r9-q6_k', 'rime-1.7b-r9-q8_0']);
+  assert.deepEqual(SHIPPED.models.filter((m) => !m.role), [], 'Glaze bundles no Rime; the signed list brings it');
+  const text = require('../fixtures/ai/rime-list-entries.json').models;
+  assert.deepEqual(text.map((m) => m.id), ['rime-1.7b-q4_k_m', 'rime-1.7b-q5_k_m', 'rime-1.7b-q6_k', 'rime-1.7b-q8_0']);
   for (const m of text) assert.equal('stock' in m, false, m.id);
   assert.equal(SHIPPED.models.find((m) => m.role === 'pictures').stock, true);
   // A stock text entry as tools/vendor/model-manifest.js writes it with --stock, listed by the real store beside Rime:
