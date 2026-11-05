@@ -52,3 +52,40 @@ test('study help still refuses wording for the student\'s paper', () => {
   const inp = H.task.input({ question: `Is my thesis good? ${thesis}`, subject: 'essay' });
   assert.equal(H.why({ kind: 'hint', step: null, reply: 'Your thesis is stronger once it says "screens delay melatonin release" instead.', followUp: null }, inp), 'quote');
 });
+
+test('person matching cannot ground an invented item with a pronoun, a placeholder, or another locale', () => {
+  const todo = { call: { name: 'todo_list', arguments: {} }, result: { items: [{ title: 'Finish my essay draft', course: 'ENG 101', due: AT, submitted: false }] } };
+  const inp = tools('what do I still have to do?', [todo], ['todo_list']);
+  assert.equal(A.why(answer('Your lab report is due.', ['my']), inp), 'ground');
+  assert.equal(A.why(answer('Finish @ essay draft.', ['Finish my essay draft']), inp), 'ground');
+  const other = { call: { name: 'todo_list', arguments: {} }, result: { items: [{ title: 'Intro to Tu Delft', submitted: false }] } };
+  assert.equal(A.why(answer('Intro to My Delft', ['Intro to Tu Delft']), tools('What is due?', [other], ['todo_list'])), 'ground');
+});
+
+test('a reminder receipt does not support a new school due-date claim', () => {
+  const inp = tools('remind me to start my math homework in 2 minutes', [wake]);
+  assert.equal(A.why(answer('Done. Your chemistry lab report is due tomorrow.'), inp), 'ground');
+  assert.equal(A.why(answer('Your chemistry lab report is due tomorrow.'), inp), 'ground');
+});
+
+test('saved memory does not make new wording for a paper quotable', () => {
+  const quote = 'screens delay melatonin release';
+  for (const subject of ['essay', 'other']) {
+    const inp = help({ subject, question: 'Is my thesis good?', recall: memory(quote, quote) });
+    assert.equal(H.why({ kind: 'hint', step: null, reply: `Your thesis is stronger once it says "${quote}" instead.`, followUp: null }, inp), 'quote', subject);
+  }
+});
+
+test('introductions in assignment material remain coursework in all six locales', () => {
+  for (const [locale, question, reply] of [
+    ['en', 'My name is Daisy', 'The green light symbolizes Gatsby’s hope of winning Daisy back.'],
+    ['es', 'Me llamo Daisy', 'La luz verde simboliza la esperanza de Gatsby de recuperar a Daisy.'],
+    ['pt-BR', 'Me chamo Daisy', 'A luz verde simboliza a esperança de Gatsby de reconquistar Daisy.'],
+    ['fr', 'Je m’appelle Daisy', 'La lumière verte symbolise l’espoir de Gatsby de reconquérir Daisy.'],
+    ['de', 'Ich heiße Daisy', 'Das grüne Licht steht für Gatsbys Hoffnung, Daisy zurückzugewinnen.'],
+    ['nl', 'Ik heet Daisy', 'Het groene licht staat voor de hoop van Gatsby om Daisy terug te winnen.'],
+  ]) {
+    const inp = help({ question, locale, subject: 'reading', material: `${question}. Gatsby Daisy` });
+    assert.equal(H.why({ kind: 'hint', step: null, reply, followUp: null }, inp), 'speaks', locale);
+  }
+});
