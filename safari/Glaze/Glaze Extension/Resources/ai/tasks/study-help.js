@@ -153,10 +153,17 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
   // An identity question may itself be a reading exercise. Explicit school material disambiguates the bare form;
   // a name-specific question can still be a personal request while coursework is open.
   const ambiguousIdentity = /^(?:who am i|qui[ée]n soy|quem sou eu|qui suis-je|wer bin ich|wie ben ik)[?!.\s]*$/iu;
-  const socialRequest = (inp) => !inp.attempt && ![inp.material, inp.context?.prompt, inp.context?.assignment?.instructions, inp.context?.assignment?.description, ...(inp.context?.assignment?.files || []).map((f) => f.text), ...recalled(inp)].filter(Boolean).some((t) => ambiguousIdentity.test(inp.question) || X().source(t, { min: 3 }).has(inp.question)) && sentences(inp.question).flatMap((s) => s.split(/[,;:—–]|\s-\s/u)).every((s) => {
-    const q = s.trim().replace(/[’‘]/g, "'").replace(/^[¿¡]\s*/u, '');
-    return social(q.replace(/^(?:please\s+)?say\s+/iu, '')) || /^(?:rime|glaze)[?!.\s]*$/iu.test(q) || SOCIAL_QUESTION.test(q);
-  });
+  const socialRequest = (inp) => {
+    if (inp.attempt) return false;
+    const parts = sentences(inp.question).flatMap((s) => s.split(/[,;:—–]|\s-\s/u))
+      .map((s) => s.trim().replace(/[’‘]/g, "'").replace(/^[¿¡]\s*/u, ''));
+    const material = [inp.material, inp.context?.prompt, inp.context?.assignment?.instructions, inp.context?.assignment?.description,
+      ...(inp.context?.assignment?.files || []).map((f) => f.text), ...recalled(inp)].filter(Boolean);
+    const workHistory = ['essay', 'reading'].includes(inp.subject) && inp.history?.length;
+    if ((material.length || workHistory) && parts.some((q) => ambiguousIdentity.test(q))) return false;
+    if (material.some((t) => X().source(t, { min: 3 }).has(inp.question))) return false;
+    return parts.every((q) => social(q.replace(/^(?:please\s+)?say\s+/iu, '')) || /^(?:rime|glaze)[?!.\s]*$/iu.test(q) || SOCIAL_QUESTION.test(q));
+  };
 
   // Numbers as values: 1,000 and 1.5 and the 1,5 of the other locales alike, a minus of any kind, ½ none.
   const NUM = /[-−]?(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+(?:[.,]\d+)?)/g;
