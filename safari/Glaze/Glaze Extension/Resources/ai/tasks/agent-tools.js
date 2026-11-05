@@ -829,6 +829,9 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   const visibleFact = (text, quote, locale) => {
     const q = spelled(quote), t = spelled(text);
     if (t.includes(q) || restated(t, q, locale)) return true;
+    // A course or item named by its code, the part before its dash or colon ("AVI 412" for "AVI 412 – Sécurité aérienne").
+    const head = q.split(/\s+[–—-]\s+|:\s+/u)[0];
+    if (head !== q && /\d/.test(head) && [...head].length >= 3 && new RegExp(`(?<![\\p{L}\\p{N}])${head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'u').test(t)) return true;
     const groups = PERSON[locale] || [], lookup = new Map(groups.flatMap((g) => g.map((w) => [w, g])));
     const parts = q.split(/([\p{L}\p{N}_]+)/u);
     if (!parts.some((part) => /[\p{L}\p{N}]/u.test(part) && !lookup.has(part))) return false;
@@ -855,7 +858,7 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     const out = [];
     // The page by its names and titles only: its ids prove nothing, and its material may be partial, so due dates and
     // grades in it still need a read.
-    const walk = (v, key) => { if (Array.isArray(v)) v.forEach((x) => walk(x, key)); else if (S.isObj(v)) { for (const [k, x] of Object.entries(v)) if (k !== 'material') walk(x, k); } else if (typeof v === 'string' && ['name', 'title', 'code'].includes(key)) out.push(v); };
+    const walk = (v, key) => { if (Array.isArray(v)) v.forEach((x) => walk(x, key)); else if (S.isObj(v)) { for (const [k, x] of Object.entries(v)) if (k !== 'material') walk(x, k); } else if ((typeof v === 'string' || typeof v === 'number') && ['name', 'title', 'code', 'kind', 'revision'].includes(key)) out.push(String(v)); };
     walk(inp.current || null);
     for (const h of inp.history || []) out.push(h.question, h.answer);
     if (inp.summary) out.push(inp.summary);
@@ -913,7 +916,8 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       if (!listHolds(text, inp)) return 'list';
       // What reads brought back: the answer states one of them, in its own person ("Finish my essay" is "finish your
       // essay"). A confirmation of Rime's own action (a reminder, a saved note) stands on its receipt instead.
-      const held = inp.steps.filter((st) => spec(st.call.name)?.kind === 'read').flatMap((st) => facts(st.result));
+      // Discovery (which accounts) holds no fact an answer must repeat.
+      const held = inp.steps.filter((st) => spec(st.call.name)?.kind === 'read' && st.call.name !== 'accounts_list').flatMap((st) => facts(st.result));
       const inHeld = holder(held);
       if (!held.length && inp.steps.some((st) => spec(st.call.name)?.kind !== 'read' && rich(st.result)) && (SCHOOL_STATUS.test(fold(text)) || SCHOOL_ITEM.test(fold(text)) && SCHOOL_ASSERTION.test(fold(text)) || ungroundedSchool(text, inp))) return 'ground';
       if (held.length && !quotes.some((q) => visibleFact(text, q, inp.locale) && inHeld(q))) return 'ground';
