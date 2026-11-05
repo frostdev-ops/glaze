@@ -837,7 +837,11 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
     if (head !== q && /\d/.test(head) && [...head].length >= 3) {
       const code = new RegExp(`(?<![\\p{L}\\p{N}])${head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'u').exec(t);
       // A code on its own names the course. A different title attached to it is a different claim.
-      if (code && !/^\s*[–—-]\s+\p{L}/u.test(t.slice(code.index + code[0].length))) return true;
+      if (code) {
+        const tail = t.slice(code.index + code[0].length);
+        const otherTitle = /^\s*(?:[–—-]|:)\s+(?!(?:no|none|nothing|aucun\p{L}*|pas|geen|niet|ning[uú]n\p{L}*|nada|nenhum\p{L}*|keine?)(?![\p{L}]))\p{L}/u.test(tail);
+        if (!otherTitle) return true;
+      }
     }
     const groups = PERSON[locale] || [], lookup = new Map(groups.flatMap((g) => g.map((w) => [w, g])));
     const parts = q.split(/([\p{L}\p{N}_]+)/u);
