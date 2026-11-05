@@ -309,7 +309,10 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
     // Quoting the student's own saved note back to them offers no wording.
     const own = (inp.recall?.records || []).filter((r) => r.kind === 'memory').flatMap((r) => [r.text, r.source?.evidence]).filter((t) => typeof t === 'string');
     const paper = /(?<![\p{L}\p{N}])(?:essay|paper|thesis|draft|paragraph|ensayo|tesis|redacci[óo]n|redação|reda[cç][ãa]o|tese|disserta[cç][ãa]o|th[èe]se|r[ée]daction|dissertation|aufsatz|these|entwurf|werkstuk|scriptie|stelling)(?![\p{L}\p{N}])/iu;
-    const paperWork = !socialRequest(inp) && (['essay', 'reading'].includes(inp.subject) || [inp.question, ...(inp.history || []).map((h) => h.question), inp.context?.prompt || ''].some((t) => paper.test(t))); 
+    const memoryQuestion = /(?<![\p{L}\p{N}])(?:save[ds]?|remember|memory|recall|guard[éea]s?|recuerd[ao]s?|mem[oó]ria|salv[eo]u?|lembr[ao]|souviens|m[ée]moire|enregistr[ée]|gespeichert|erinner|geheugen|opgeslagen|onthoud)(?![\p{L}\p{N}])/iu.test(inp.question)
+      && /(?<![\p{L}\p{N}])(?:preferences?|notes?|facts?|preferencias?|recuerdos?|prefer[êe]ncias?|anota[cç][ãa]o|pr[ée]f[ée]rences?|notiz|vorlieben?|voorkeur(?:en)?)(?![\p{L}\p{N}])/iu.test(inp.question)
+      && !paper.test(inp.question);
+    const paperWork = !socialRequest(inp) && !memoryQuestion && (['essay', 'reading'].includes(inp.subject) || [inp.question, ...(inp.history || []).map((h) => h.question), inp.context?.prompt || ''].some((t) => paper.test(t)));
     const quotable = [...sources, ...(!paperWork ? own.map((t) => X().source(t)) : [])];
     for (const piece of [out.reply, out.followUp].filter((p) => typeof p === 'string' && p.trim())) {
       const rule = hands(piece, inp);
