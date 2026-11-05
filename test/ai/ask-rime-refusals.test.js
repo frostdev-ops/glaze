@@ -188,3 +188,8 @@ test('a confirmation cannot hide an unrelated item after a conjunction', () => {
   const both = tools('remind me to start my math homework and finish my biology project in 2 minutes', [two]);
   assert.equal(A.why(answer('I’ll remind you to start your math homework and finish your biology project.'), both), '');
 });
+
+test('confirmation receipts cannot introduce invented presentations or worksheets', () => {
+  const inp = tools('remind me to start my math homework in 2 minutes', [wake]);
+  for (const text of ['Reminder set. Your biology presentation is tomorrow.', 'Reminder set. A chemistry worksheet awaits you.']) assert.equal(A.why(answer(text), inp), 'ground', text);
+});
