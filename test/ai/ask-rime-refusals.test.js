@@ -175,3 +175,8 @@ test('a school assertion after an unpunctuated conjunction needs school evidence
   assert.equal(A.why(answer('Reminder set and a biology project is on your list.'), inp), 'ground');
   assert.equal(A.why(answer('Reminder set and I’ll remind you to start your math homework.'), inp), '');
 });
+
+test('a reminder receipt may say when the reminder itself is due', () => {
+  const inp = tools('remind me to start my math homework in 2 minutes', [wake]);
+  assert.equal(A.why(answer('Your reminder is due at Thursday, November 5, 12:23 PM.'), inp), '');
+});
