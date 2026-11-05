@@ -92,3 +92,44 @@ test('the host keeps native launch controls without access and restores them whe
   assert.equal(messages.at(-1).channel, channel, 'the live opener accepts only its established channel');
   active(); assert.equal(slot.attrs.has('data-gz-pearson-slot'), true);
 });
+
+test('turning Pearson inside Blackboard off keeps a live session in step with the Look; only later launches go native', async () => {
+  const events = new Map(), messages = [], watches = [];
+  const listen = (k,f) => events.set(k, [...events.get(k) || [], f]);
+  const fire = (k,e) => { for (const f of events.get(k) || []) f(e); };
+  const node = () => {
+    const attrs = new Map(), styles = new Map();
+    return { attrs, children: [], isConnected: true,
+      style: { getPropertyValue: k => styles.get(k) || '', getPropertyPriority: () => '', setProperty: (k,v) => styles.set(k,v), removeProperty: k => styles.delete(k) },
+      setAttribute: (k,v) => attrs.set(k,v), removeAttribute: k => attrs.delete(k), getAttribute: k => attrs.get(k) ?? null,
+      addEventListener() {}, removeEventListener() {}, getBoundingClientRect: () => ({ top: 0, bottom: 20 }),
+      append(...nodes) { this.children.push(...nodes); for (const n of nodes) n.parentElement = this; },
+      remove() { this.isConnected = false; },
+      get firstElementChild() { return this.children[0]; }, get lastElementChild() { return this.children.at(-1); },
+    };
+  };
+  const settings = { enabled: true, enhance: { pearsonEmbed: true } };
+  const slot = node(), header = node(), exit = node(), frame = node(), controls = node();
+  controls.append(exit); header.querySelector = () => exit;
+  frame.src = 'https://school.blackboard.com/webapps/blackboard/execute/ultraFramePassThrough?redirectTo=' + encodeURIComponent('https://school.blackboard.com/webapps/blackboard/execute/blti/launchLink?course_id=_1_1&content_id=_2_1&from_ultra=true');
+  frame.parentElement = slot; frame.closest = () => ({ querySelector: () => header });
+  frame.contentWindow = { postMessage: m => messages.push(m) };
+  const c = vm.createContext({ URL, crypto: { randomUUID: () => '00000000-0000-4000-8000-000000000001' },
+    GZ_PEARSON_EMBED_LIB: L, GZ_CTX: { site: 'ultra', on: () => true, settings: () => settings, darkTheme: () => false, t: x => x },
+    location: new URL('https://school.blackboard.com/ultra/courses/_1_1/lti/launchFrame'),
+    document: { getElementById: () => frame, querySelector: () => header, createElement: node, documentElement: node(), head: node() },
+    chrome: { runtime: { getURL: x => x }, storage: { local: { get: async () => ({ pearsonAccess: true }) }, onChanged: { addListener() {} } } },
+    MutationObserver: class { constructor() { this.on = false; watches.push(this); } observe() { this.on = true; } disconnect() { this.on = false; } },
+    ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
+    getComputedStyle: () => ({ getPropertyValue: () => '' }), visualViewport: { height: 800, addEventListener() {} },
+    requestAnimationFrame: () => 1, cancelAnimationFrame() {}, addEventListener: listen,
+  });
+  vm.runInContext(read('courses/page/pearson-embed.js'), c);
+  await tick(); c.GZ_PEARSON_EMBED.sync();
+  fire('message', { source: frame.contentWindow, origin: L.socket, data: { gzPearsonEmbed: 'active', channel: messages.at(-1)?.channel } });
+  assert.equal(slot.attrs.has('data-gz-pearson-slot'), true, 'embedded with access and the switch on');
+  settings.enhance = { pearsonEmbed: false };
+  c.GZ_PEARSON_EMBED.sync();
+  assert.equal(slot.attrs.has('data-gz-pearson-slot'), true, 'switched off: the live session stays where it is');
+  assert.ok(watches.at(-1).on, 'and keeps following the Look, so a palette change still reaches it');
+});
