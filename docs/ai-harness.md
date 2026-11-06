@@ -144,13 +144,16 @@ Ask Rime runs both (below); the worker loads them with the harness (`aiFiles`). 
 125047, 125048); `glaze-plans/lfm-tune/FORMAT-new-tasks.md` gives their training layouts.
 
 - `study.help`: help with a question about coursework that never gives the answer. Input `{ question, attempt?, subject
-  (math, science, code, essay, reading, other), locale? (en, pt-BR, es, fr, de, nl), material?, context?, history? }` (context as
+  (math, science, code, essay, reading, other), locale? (en, pt-BR, es, fr, de, nl), material?, records?, context?, history? }` (context as
   `writer-context.js` cleans it; history, Ask Rime's conversation so far, reaches a cloud model only). Output `{ kind: hint | question | concept | check-my-step, step: correct | mistake |
   unclear | null, reply, followUp }`. `check` refuses a reply that states the answer (each locale's "the answer is…", the
   correct option, including a bare number or option letter), gives a result one step of arithmetic on the problem's numbers makes or a new equation in its
   variables, writes code with the student's own names, offers wording (`wording.js`, Feedback's rules but "for example,"),
   quotes three words no source holds, or (essay, reading, other) makes a statement that neither speaks to the student nor
-  is about their work (a greeting, who Rime is and "we haven't talked yet" speak to them, in six languages); `why(output, input)` names the rule, and `hands(text, input)` gives only the answer-giving ones
+  is about their work (a greeting, who Rime is and "we haven't talked yet" speak to them, in six languages; outside essays
+  and reading, the question just asked and the records read are no work to copy from); `records` is what Ask Rime's reader
+  read (one plain line an item, open work first, weekday dates, today), held to the answer-giving rules but never shared
+  work; `why(output, input)` names the rule, and `hands(text, input)` gives only the answer-giving ones
   (answer, solves, code, wording) for a text that isn't a tutor's reply. Symbolic rearrangements count as steps too; a number merely
   appearing in the attempt does not excuse a new result. Quotations may come from any context block shown to the model,
   including the discussion prompt.
@@ -176,7 +179,7 @@ The prompts use the current question, `earlier` turns from this chat and, for `a
 student's intent, requested items, filters, date windows and latest corrections. These chat blocks are distinct from
 scoped saved `recall`; neither supplies full logs of other chats. Ordinary chat follow-ups in `study.help` can be answered
 directly from supplied history, without inventing a tutoring exercise. Its coursework limits still apply, and it cannot
-call tools or claim to have checked school records without supplied material or results.
+call tools or claim to have checked school records without supplied records, material or results.
 
 `agent.tools` checks each result's success/error, matching identity, freshness and coverage before treating the student's
 request as complete. It reuses valid episode evidence and reads further when requested parts remain unverified. Failed
@@ -268,7 +271,7 @@ explain or do assessed work retain the study-help path; planning words and quota
 and due dates, grades, assignments, Writer documents: word lists in English and the student's locale) that asks for no help
 with work and comes with no attempt; else study.help, its subject by symbols and words (code, math, science, essay,
 reading, other); at tools level 3 also Rime's own topics (below). agent.tools gets the tools its topics need, at most six (the 4,096-token window of Glaze's own model
-holds no more, and training offered three to six). `episode()` runs agent.tools, runs each call, appends the step and
+holds no more, and training offered three to six); from a 16K window at tools level 3, every tool but memory's (owner, 2026-11-06). `episode()` runs agent.tools, runs each call, appends the step and
 runs again; a seventh call ends it as `steps`. Model runs go to the broker over a channel in the worker, as the feature
 `ask` and this sender's: admission, rates and the call record are the broker's. Tool calls go through `agents/calls.js`
 with Agents' tools (`mcpCore`; the native link stays off): Ask's switch is the grant of Agents' groups, a result reaches
@@ -345,7 +348,10 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   failed result holds none, so the answer says only that. Help with work that names the student's records (a course code,
   a lab report, an essay, an assignment, or a records topic) first runs agent.tools' help turn (`help`: study.help's
   subject as a data block before the question; route's `read` tools), whose answer is never shown, then study.help with
-  what was read as its `material`. Help naming nothing, and general questions, go to study.help alone. The reads go
+  what was read as its `records` (a saved Writer document stays `material`). Help naming nothing, and general questions,
+  go to study.help alone. From a 16K window every study question gets that reader, offered every record read and nothing
+  else. A reader keeps what it read: reading ends when it answers, asks again for a list it already has (same target,
+  filters aside), runs out of calls, or gives an answer its check refuses after a read. The reads go
   through `agents/tab.js` ops (`announcement`, `search`, `modules`, `topics`) in an open tab of the account's school,
   as Agents' reads do, or Glaze's caches; with no tab open a read says so. Moodle accounts aren't read by the agent layer.
 - **The student's week, dates and the conversation at level 3** (the owner's Sunday, 2026-11-01): the `now` block adds the
@@ -382,9 +388,8 @@ In Ask Rime (`ai/ask.js`, `ai/page/ask.js`):
   available, including schema, instructions and output reserves. Every supplied character remains in a part; inputs
   needing too many parts are refused before inference. Local run accounting grows with the window without changing
   deadlines, call ceilings, cancellation or output budgets. No filler is added to ordinary requests.
-  From a 16K window up, a chat offers the union of the tools routed so far (the newest question's always, earlier ones most
-  recent first within about 2,000 tokens of `<tools>` lines), so the system turn stays cached across turns; below 16K each
-  question gets its own.
+  From a 16K window up, a records turn offers every tool but memory's, so the system turn stays cached across turns, and a
+  study reader every record read; below 16K each question gets its own.
 - **Routing at level 3** (`TOPICS3`, six languages): announcements, content, syllabus and discussions (their reads), compute (`run_js`; a computing verb in the student's own grade math
   is no help request, but graded work still goes to study.help), navigate (`places_list`, `place_open`, `page_highlight`),
   remind (`wake_create`, `wakes_list`, `wake_cancel`) and watch (`monitor_create`, `wakes_list`, `todo_list`,

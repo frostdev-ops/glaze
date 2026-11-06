@@ -295,8 +295,8 @@ test('memory receipts stay out of school material passed to study help', async (
     assert.equal(run.input.summary, undefined, 'the automatic save prelude carries no compaction summary');
   }
   const help = h.state.runs.find((r) => r.task === 'study.help');
-  assert.match(help.input.material, /Compare two invented samples/);
-  assert.doesNotMatch(help.input.material, /short bullet points|persistence|receipt|m-[0-9a-f]{32}/);
+  assert.match(help.input.records, /Compare two invented samples/);
+  assert.doesNotMatch(help.input.records, /short bullet points|persistence|receipt|m-[0-9a-f]{32}/);
   const reader = h.state.runs.find((r) => r.input.help);
   assert.deepEqual(reader.input.history, history); assert.equal(reader.input.summary, summary);
   assert.equal(reader.input.first, true); assert.equal(reader.input.current.assignment.id, '41');

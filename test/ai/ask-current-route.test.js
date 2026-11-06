@@ -456,3 +456,32 @@ test('a quoted document title remains usable as the target of a direct read requ
   assert.equal(h.state.reads.filter((r) => r.name === 'documents_list').length, 1);
   assert.deepEqual(h.state.errors, []);
 });
+
+test('study mode: the reader reads records only, and study help gets what it read as records with today', async (t) => {
+  const h = await harness({ current: null, plans: [call('accounts_list'), call('assignments_list', { account: ACCOUNT }), said()] });
+  t.after(h.close);
+  assert.equal((await h.ask('Help me study for my quiz')).type, 'end');
+  const reader = h.state.runs.find((r) => r.task === 'agent.tools'), tutor = h.state.runs.find((r) => r.task === 'study.help');
+  assert.ok(reader.raw.tools.every((n) => A.SPECS.find((s) => s.name === n).kind === 'read'), reader.raw.tools.join());
+  assert.ok(!reader.raw.tools.some((n) => ['places_list', 'place_open', 'page_highlight', 'run_js'].includes(n)), reader.raw.tools.join());
+  const [today, ...reads] = tutor.raw.records.split('\n\n');
+  assert.match(today, /^Today: \w+day, \w+ \d+$/);
+  assert.deepEqual(reads.map((r) => r.split('\n')[0]), ['assignments_list:'], 'accounts_list is discovery, not a record');
+  assert.match(reads[0], /^- Fresh course instructions\.$/m);
+  assert.doesNotMatch(tutor.raw.records, /https?:|"/, 'no addresses or JSON');
+  assert.equal(tutor.raw.material, undefined, 'records are not work');
+});
+
+test('study mode: records list open work first and call a quiz a quiz, whatever its type', async (t) => {
+  const items = [
+    { id: '_1', type: 'assignment', courseId: '_25_1', course: 'SPAN 1110', title: 'Syllabus Acknowledgment', due: NOW + 1e6, submitted: true },
+    { id: '_2', type: 'assignment', courseId: '_25_1', course: 'MATH 1160', title: 'Quiz1Module1', due: NOW + 2e6, submitted: false },
+  ];
+  const h = await harness({ current: null, plans: [call('accounts_list'), call('assignments_list', { account: ACCOUNT }), said()],
+    read: (name, args, ctx) => (name === 'assignments_list' ? { account: ctx.account, items } : { account: ctx.account, items: [] }) });
+  t.after(h.close);
+  assert.equal((await h.ask('Help me study for my quiz')).type, 'end');
+  const lines = h.state.runs.find((r) => r.task === 'study.help').raw.records.split('\n').filter((l) => l.startsWith('- '));
+  assert.match(lines[0], /^- Quiz1Module1 · MATH 1160 · quiz · due .+ · not submitted$/);
+  assert.match(lines[1], /^- Syllabus Acknowledgment · SPAN 1110 · assignment · due .+ · done$/);
+});

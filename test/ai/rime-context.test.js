@@ -323,8 +323,11 @@ test('a question on a new port carries the chat\'s summary: the next request has
   assert.deepEqual(h.got.filter((m) => m.id >= 2 && m.type === 'error').map((m) => [m.id, m.error]), [[2, 'request'], [3, 'request']]);
 });
 
-test('from 16K up the tools offered are the chat\'s union, so later turns share the system turn; below 16K each question gets its own; the union stays under its budget, oldest dropped first', async () => {
-  const toolsOf = (h, n) => h.seen.runs.filter((r) => r.task === 'agent.tools')[n].input.tools;
+const EVERY = A.NAMES.filter((n) => !n.startsWith('memory_')).sort();
+const READS = [...new Set([...K.READS.flatMap((k) => K.TOOLS[k] || K.TOOLS3[k] || []), 'accounts_list'])].filter((n) => A.SPECS.find((t) => t.name === n).kind === 'read').sort();
+
+test('from 16K up every records turn offers every tool but memory\'s, so turns share the system turn; below 16K each question gets its own', async () => {
+  const toolsOf = (h, n) => [...h.seen.runs.filter((r) => r.task === 'agent.tools')[n].input.tools].sort();
   const chat = async (window, questions) => {
     const h = harness({ count: () => ({ used: 900, window, reserve: 768, exact: true }), script: { 'agent.tools': questions.map(() => said('Done.', [])) } });
     const history = [];
@@ -337,20 +340,9 @@ test('from 16K up the tools offered are the chat\'s union, so later turns share 
   };
   const Q = ["What's due this week?", 'Any new announcements in BIO 1100?', 'Any new announcements in BIO 1100?'];
   const big = await chat(16384, Q);
-  const first = K.route(Q[0], { locale: 'en', level: 3 }).tools, second = K.route(Q[1], { locale: 'en', level: 3 }).tools;
-  assert.ok([...first, ...second].every((t) => toolsOf(big, 1).includes(t)), 'turn 2 offers turn 1\'s tools too');
-  assert.deepEqual(toolsOf(big, 2), toolsOf(big, 1), 'turn 3 asks nothing new: the same tools, so the same system turn');
+  for (const n of [0, 1, 2]) assert.deepEqual(toolsOf(big, n), EVERY, `turn ${n + 1}`);
   const small = await chat(4096, Q);
-  assert.deepEqual([...toolsOf(small, 1)].sort(), [...second].sort(), 'below 16K, the question\'s own');
-  // Many topics: the union stays within its budget and keeps the newest question's tools.
-  const many = ["What's due this week?", 'Any new announcements in BIO 1100?', 'What does the BIO 1100 syllabus say about late work?', 'What discussions are open in BIO 1100?', 'What is my grade in BIO 1100?', 'Remind me tomorrow at 9 pm to study', 'Take me to my BIO 1100 assignments'];
-  const h = await chat(16384, many);
-  const last = toolsOf(h, many.length - 1), mine = K.route(many.at(-1), { locale: 'en', level: 3 }).tools;
-  assert.ok(mine.every((t) => last.includes(t)));
-  assert.ok(K.UNION.budget >= K.unionCost(last), `${K.unionCost(last)} tokens`);
-  const all = [...new Set(many.flatMap((q) => K.route(q, { locale: 'en', level: 3 }).tools))];
-  assert.ok(K.unionCost(all) > K.UNION.budget, 'this chat needs trimming');
-  assert.ok(!last.includes('announcements_list') || last.includes('syllabus_read'), 'an older topic goes before a newer one');
+  assert.deepEqual(toolsOf(small, 1), [...K.route(Q[1], { locale: 'en', level: 3 }).tools].sort(), 'below 16K, the question\'s own');
 });
 
 test('the tool union follows the current provider window when it changes during a chat', async () => {
@@ -365,7 +357,7 @@ test('the tool union follows the current provider window when it changes during 
     h.say({ id: 2, op: 'ask', question: questions[1], history: [turn(questions[0], 'Done.')] });
     await settle();
     const routed = questions.map((q) => K.route(q, { locale: 'en', level: 3 }).tools);
-    const expected = window >= K.UNION.from ? [...new Set(routed.flat())] : routed[1];
+    const expected = window >= K.UNION.from ? EVERY : routed[1];
     assert.deepEqual([...h.seen.runs.filter((m) => m.task === 'agent.tools').at(-1).input.tools].sort(), expected.sort(), `window ${windows.join(' -> ')}`);
   }
 });
@@ -387,7 +379,7 @@ test('compaction includes the offered tool union in its context budget', async (
   assert.deepEqual(h.seen.counts.find((m) => m.input.history?.length === 3).input.tools, offered);
 });
 
-test('study-help readers share and extend the chat tool union, and New chat clears it', async () => {
+test('study-help readers are offered record reads only, keep the retained chat, and New chat clears the union', async () => {
   const questions = ["What's due this week?", 'Help me understand the BIO 1100 syllabus', 'Any new announcements in BIO 1100?', 'What is my grade in BIO 1100?'];
   const routes = questions.map((q) => K.route(q, { locale: 'en', level: 3 }));
   for (const window of [16384, 8192]) {
@@ -400,16 +392,16 @@ test('study-help readers share and extend the chat tool union, and New chat clea
       history.push(turn(question, 'Done.'));
     }
     const runs = h.seen.runs.filter((m) => m.task === 'agent.tools');
-    const expected = window >= K.UNION.from ? [...new Set([...routes[0].tools, ...routes[1].read])] : routes[1].read;
+    const expected = window >= K.UNION.from ? READS : routes[1].read;
     assert.deepEqual([...runs[1].input.tools].sort(), [...expected].sort(), `reader, window ${window}`);
     assert.deepEqual(runs[1].input.history, [history[0]], 'the actual reader receives the retained conversation');
     assert.equal(runs[1].input.summary, 'Earlier plan: exclude practice work.');
     const admission = h.seen.counts.filter((m) => m.input.help).at(-1).input;
     assert.deepEqual(admission.history, [history[0]], 'reader admission counts the same conversation');
     assert.equal(admission.summary, runs[1].input.summary);
-    const later = window >= K.UNION.from ? [...new Set([...expected, ...routes[2].tools])] : routes[2].tools;
+    const later = window >= K.UNION.from ? EVERY : routes[2].tools;
     assert.deepEqual([...runs[2].input.tools].sort(), [...later].sort(), `after the reader, window ${window}`);
-    assert.deepEqual([...runs[3].input.tools].sort(), [...routes[3].tools].sort(), 'New chat forgets every earlier tool');
+    assert.deepEqual([...runs[3].input.tools].sort(), window >= K.UNION.from ? EVERY : [...routes[3].tools].sort(), 'New chat forgets every earlier tool');
   }
 });
 
@@ -435,8 +427,9 @@ test('study follow-ups and their readers discover the current window before trim
     const run = h.seen.runs.find((r) => r.task === 'study.help');
     assert.ok(run, JSON.stringify(h.got));
     assert.deepEqual(run.input.history, window === 4096 ? history.slice(-6).map((h) => ({ question: h.question.slice(0, 2000), answer: h.answer.slice(0, 2000) })) : history);
-    assert.equal(h.seen.runs.some((r) => r.task === 'agent.tools'), reader, 'only a reader needs a tool request');
-    if (reader) {
+    const reads = reader || window >= K.UNION.from;
+    assert.equal(h.seen.runs.some((r) => r.task === 'agent.tools'), reads, 'from 16K every study question reads first; below, only help naming records');
+    if (reads) {
       const expected = window === 4096 ? history.slice(-6).map((h) => ({ question: h.question.slice(0, 2000), answer: h.answer.slice(0, 2000) })) : history;
       assert.deepEqual(h.seen.runs.find((r) => r.task === 'agent.tools').input.history, expected);
       const readerCounts = h.seen.counts.filter((m) => m.input.help);
@@ -459,9 +452,11 @@ test('a recreated port restores the bounded tool union, even after its topic was
   assert.ok(input.tools.includes('todo_list'));
   assert.ok(input.tools.includes('announcements_list'));
   assert.ok(next.got.findIndex((m) => m.type === 'tools') < next.got.findIndex((m) => m.type === 'end'));
-  next.say({ id: 3, op: 'ask', question: 'What is my grade in BIO 1100?', tools: carried.tools });
+  // Every tool from 16K: New chat's own forgetting shows below it, where a question keeps its topics' tools.
+  const small = harness({ count: () => ({ used: 900, window: 8192, reserve: 768 }), script: { 'agent.tools': [said('Done.')] } });
+  small.say({ id: 3, op: 'ask', question: 'What is my grade in BIO 1100?', tools: carried.tools });
   await settle();
-  assert.ok(!next.seen.runs.filter((m) => m.task === 'agent.tools').at(-1).input.tools.includes('todo_list'), 'New chat ignores carried tools');
+  assert.ok(!small.seen.runs.filter((m) => m.task === 'agent.tools').at(-1).input.tools.includes('todo_list'), 'New chat ignores carried tools');
 });
 
 test('carried tools reject unknown, repeated, oversized and non-list values before changing the chat', async () => {

@@ -391,7 +391,7 @@ test('port: help with a named piece of work reads it with the tools, then study.
   await settle();
   assert.deepEqual(runs.map((r) => r.task), ['agent.tools', 'agent.tools', 'study.help']);
   assert.deepEqual([runs[0].input.help, runs[0].input.first], ['other', true]);
-  assert.match(runs[2].input.material, /Lab report 3/);
+  assert.match(runs[2].input.records, /Lab report 3/);
   assert.deepEqual(got.filter((m) => m.type === 'end').map((m) => [m.task, m.output?.reply]), [['study.help', 'Start with the hypothesis the instructions ask for.']]);
 });
 
