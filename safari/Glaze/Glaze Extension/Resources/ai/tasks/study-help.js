@@ -342,9 +342,9 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
       // Essays, reading and the rest: every statement speaks to the student or about their work. A concept may explain
       // with another text, but never with a name or three words in a row from theirs.
       if (['essay', 'reading'].includes(inp.subject) || inp.subject === 'other' && sharedWork(inp)) {
-        // Outside essays and reading, the question just asked and the records Glaze read are no work to copy from:
-        // repeating "quiz or test" or a due date's day and month is no wording.
-        const workTexts = ['essay', 'reading'].includes(inp.subject) ? texts : textsOf({ ...inp, question: '', records: '' });
+        // Outside essays, reading and a paper's chat, the question just asked and the records Glaze read are no work to
+        // copy from: repeating "quiz or test" or a due date's day and month is no wording.
+        const workTexts = ['essay', 'reading'].includes(inp.subject) || paperWork ? texts : textsOf({ ...inp, question: '', records: '' });
         const workSources = workTexts === texts ? sources : workTexts.map((t) => X().source(t));
         for (const s of sentences(words_)) {
           if (asks(s) || WD.about(s) || IMPERATIVE.test(s) || socialRequest(inp)) continue;

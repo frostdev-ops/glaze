@@ -518,6 +518,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   // A list the reader already has, asked for again for the same target with other filters (todo_list, then todo_list for
   // seven days). A retry after a failed read is not one.
   const FILTERS = ['days', 'from', 'to'];
+  const READER_FIXES = ['tool', 'arguments', 'id', 'schema', 'one'];
   // An account named for the one the earlier read already used is the same target (2026-11-06: schedule_list, then
   // schedule_list with the student's only account).
   const target = (args) => JSON.stringify(Object.entries(isObj(args) ? args : {}).filter(([k]) => !FILTERS.includes(k) && k !== 'account').sort(([a], [b]) => (a < b ? -1 : 1)));
@@ -548,7 +549,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       }
       catch (e) {
         if (signal?.aborted) throw e;
-        if (reader && steps.length && ['check', 'refusal', 'invalid-response'].includes(R().code(e))) return { steps };
+        if (reader && steps.length && ['check', 'refusal', 'invalid-response'].includes(R().code(e))) {
+          // A refused call (an invented id, a tool not offered) may still become the read that matters: one corrective turn.
+          if (R().code(e) === 'check' && !fixed && READER_FIXES.includes(e.why)) { fixed = true; fix = e.why; continue; }
+          return { steps };
+        }
         // A refused first call gets its corrective turn too; Glaze's own list needs results.
         const failed = R().code(e) === 'check' && (first || e.why === 'repeat') && (steps.length || first && AT().FIXES.includes(e.why));
         if (failed && e.why === 'repeat') repeated = true;
@@ -659,7 +664,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
     // One read as study help's records: a line an item (title · course · type · due · what else it says · its state),
     // soonest first, and an item read's own fields. Ids, addresses and flags that say nothing stay out: a small model
     // finds the quiz in a list, not in escaped JSON (2026-11-06: Quiz1Module1 was first and still missed).
-    const NOISE = new Set(['account', 'id', 'courseId', 'url', 'origin', 'covers', 'at', 'ok', 'next', 'more', 'moreUnsubmitted', 'marked']);
+    const NOISE = new Set(['account', 'id', 'courseId', 'assignment', 'document', 'key', 'place', 'url', 'origin', 'covers', 'at', 'ok', 'next', 'more', 'moreUnsubmitted', 'marked']);
+    const ID = /^_\d+_\d+$/;
     const FLAGS = ['done', 'submitted', 'graded', 'late', 'missing', 'complete'];
     const stateOf = (v) => (v.graded ? 'graded' : v.missing ? 'missing' : v.late ? 'late' : v.submitted || v.done || v.complete ? 'done'
       : typeof v.submitted === 'boolean' ? 'not submitted' : '');
@@ -679,11 +685,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       if (list) {
         const span = isObj(v.covers) && v.covers.from && v.covers.to ? ` (${v.covers.from} to ${v.covers.to})` : '';
         const lines = v[list].filter(isObj).map((it) => `- ${[it.title ?? it.name, it.course ?? it.code, ASSESSMENT.exec(String(it.title ?? ''))?.[1].toLowerCase() || it.type, it.due ? `due ${it.due}` : it.at,
-          ...Object.entries(it).filter(([k, x]) => !NOISE.has(k) && !FLAGS.includes(k) && !['title', 'name', 'course', 'code', 'type', 'due', 'color'].includes(k) && scalar(x) && x !== '').map(([k, x]) => `${k} ${x}`),
+          ...Object.entries(it).filter(([k, x]) => !NOISE.has(k) && !FLAGS.includes(k) && !['title', 'name', 'course', 'code', 'type', 'due', 'color'].includes(k) && scalar(x) && x !== '' && !ID.test(String(x))).map(([k, x]) => `${k} ${x}`),
           stateOf(it)].filter((x) => x !== undefined && x !== null && x !== '').join(' · ')}`);
         return [`${name}${span}:`, ...(lines.length ? lines : ['- nothing']), ...(v.more ? [`- and ${v.more} more`] : [])].join('\n');
       }
-      const lines = Object.entries(v).filter(([k, x]) => !NOISE.has(k) && x !== '' && x !== null).map(([k, x]) => `${k}: ${scalar(x) ? x : JSON.stringify(x)}`);
+      const lines = Object.entries(v).filter(([k, x]) => !NOISE.has(k) && x !== '' && x !== null && !ID.test(String(x))).map(([k, x]) => `${k}: ${scalar(x) ? x : JSON.stringify(x)}`);
       return lines.length ? [`${name}:`, ...lines].join('\n') : '';
     };
     const studyMaterial = (context, steps, documents, question, zone, locale = 'en', now = Date.now()) => {
