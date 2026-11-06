@@ -1,6 +1,6 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="extension/assets/logo-dark.svg">
     <img src="extension/assets/logo.svg" alt="Glaze" width="360">
   </picture>
 </p>
