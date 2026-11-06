@@ -485,3 +485,13 @@ test('study mode: records list open work first and call a quiz a quiz, whatever 
   assert.match(lines[0], /^- Quiz1Module1 · MATH 1160 · quiz · due .+ · not submitted$/);
   assert.match(lines[1], /^- Syllabus Acknowledgment · SPAN 1110 · assignment · due .+ · done$/);
 });
+
+test('study mode: assignment identifiers are not included in projected records', async (t) => {
+  const h = await harness({ current: null, plans: [call('accounts_list'), call('assignments_list', { account: ACCOUNT }), said()],
+    read: (name, args, ctx) => ({ account: ctx.account, items: [{ assignment: '_987_1', courseId: '_25_1', title: 'Quiz 3', course: 'MATH 1160', type: 'assignment' }] }) });
+  t.after(h.close);
+  assert.equal((await h.ask('Help me study for my quiz')).type, 'end');
+  const records = h.state.runs.find((r) => r.task === 'study.help').raw.records;
+  assert.match(records, /Quiz 3/);
+  assert.doesNotMatch(records, /_987_1|_25_1|https?:/);
+});

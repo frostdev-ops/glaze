@@ -90,3 +90,17 @@ test('study help: a follow-up may repeat the question and report what the record
   const reply = 'The schedule covers Thursday, October 29, 12:00 AM through Sunday, November 15, 12:00 AM, and it has no quiz or test items. The earlier chat asked which course or topic to focus on, but it didn’t name one. Which course or topic should we study first?';
   assert.equal(SH.why({ kind: 'concept', step: null, reply, followUp: null }, inp), '');
 });
+
+test('reader: a refused call after a read gets one corrective turn, then reading ends with what it read', async () => {
+  const fixed = reader([asks('todo_list'), refused('id'), asks('assignments_list'), said('done')]);
+  const out = await fixed.go();
+  assert.equal(out.steps.length, 2);
+  assert.equal(fixed.runs[2].fix, 'id');
+  const twice = reader([asks('todo_list'), refused('id'), refused('id')]);
+  assert.equal((await twice.go()).steps.length, 1);
+});
+
+test('study help: in a chat about a paper, a follow-up\'s own words stay guarded', () => {
+  const inp = input({ question: 'What does the green light mean?', history: [{ question: 'Help me with my essay on The Great Gatsby', answer: 'What is your thesis so far?' }] });
+  assert.equal(SH.why({ kind: 'concept', step: null, reply: 'The green light means hope and longing for the future.', followUp: null }, inp), 'speaks');
+});
