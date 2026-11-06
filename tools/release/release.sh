@@ -4,7 +4,7 @@
 # refuses a working tree with uncommitted or untracked files.
 #   sh tools/release/release.sh          tests, then the Chrome zip
 #   MAC=1 sh tools/release/release.sh    also the notarized Mac app and DMG (NOTARY_PROFILE or ASC_KEY_*)
-# Firefox is built from dev/firefox; store uploads, GitHub and the appcast follow RELEASING.md.
+# Firefox is built from dev/firefox; store uploads, GitHub and the appcast go through store-release.mjs.
 # Complete automated publication: node tools/release/store-release.mjs release
 set -eu
 

@@ -1,4 +1,4 @@
-// Firefox Add-ons' linter warns on every innerHTML assignment, and a release needs zero warnings (RELEASING.md). Rewrites
+// Firefox Add-ons' linter warns on every innerHTML assignment, and a release needs zero warnings. Rewrites
 // each `<target>.innerHTML = <markup>;` in the vendored MathLive runtime to `__gzHTML(<target>, <markup>);`, which parses
 // the markup in an inert DOMParser document (an explicit body keeps leading whitespace; SVG targets parse as SVG) and
 // moves its nodes in, a template's into its content. Run by tools/vendor/vendor-mathlive.sh; refuses a file with a sink left.

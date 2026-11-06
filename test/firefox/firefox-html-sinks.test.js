@@ -1,5 +1,5 @@
 // Firefox Add-ons' linter warns on every innerHTML or outerHTML assignment, insertAdjacentHTML and document.write, and a
-// release needs zero warnings (RELEASING.md). Writer and ProseMirror parse HTML with DOMParser or build elements instead;
+// release needs zero warnings. Writer and ProseMirror parse HTML with DOMParser or build elements instead;
 // older features' sinks are rewritten on dev/firefox.
 const test = require('node:test');
 const assert = require('node:assert/strict');

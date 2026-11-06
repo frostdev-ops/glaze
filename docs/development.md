@@ -1,6 +1,6 @@
 # Development
 
-How Glaze is put together, and how to build, test, package and publish it. See also [Contributing](../CONTRIBUTING.md), [Releasing](../RELEASING.md) and [Firefox for Android testing](firefox-android.md).
+How Glaze is put together, and how to build, test, package and publish it. See also [Contributing](../CONTRIBUTING.md) and [Firefox for Android testing](firefox-android.md).
 
 ## How it works
 
@@ -101,8 +101,8 @@ Both browser checks accept an optional evidence directory and use the shared bro
 ```
 
 Writes `dist/glaze-v<version>.zip`, ready for the Chrome Web Store. Requires `node` and `zip`.
-From a clean `dev/firefox` checkout, `sh tools/build/package-firefox.sh` writes it too, plus `dist/glaze-v<version>-firefox.zip` for Firefox Add-ons. The Firefox compatibility branch must include the intended main release, as [Releasing](../RELEASING.md) describes. Other checkouts require an explicit `--development` argument; that produces a visibly named development build for local checks, not a store upload. Each Firefox ZIP records its source commit and development status in `glaze-build.json`.
-For a release, `sh tools/release/release.sh` builds everything into `release/<version>/`, from a fresh checkout of the committed `HEAD` (it refuses a dirty working tree); see [RELEASING.md](../RELEASING.md).
+From a clean `dev/firefox` checkout, `sh tools/build/package-firefox.sh` writes it too, plus `dist/glaze-v<version>-firefox.zip` for Firefox Add-ons. The Firefox compatibility branch must include the intended main release. Other checkouts require an explicit `--development` argument; that produces a visibly named development build for local checks, not a store upload. Each Firefox ZIP records its source commit and development status in `glaze-build.json`.
+For a release, `sh tools/release/release.sh` builds everything into `release/<version>/`, from a fresh checkout of the committed `HEAD` (it refuses a dirty working tree).
 
 ```sh
 node --test
@@ -155,24 +155,6 @@ retry, a foreground manual recovery after a hidden tab stalls, and preservation 
 frames. It accepts the same `NODE_PATH` setup and an optional evidence directory, and also uses
 only routed synthetic sites in a temporary browser profile.
 
-### Publishing to the Chrome Web Store
-
-For one command that submits Chrome, Firefox, Mac and iPhone/iPad releases, pushes the release tag,
-publishes the universal notarized DMG on GitHub, and deploys frostdev.io with the signed update feed, use
-`node tools/release/store-release.mjs release`. Credential setup, build-only mode and resumable submission
-are documented in [Releasing Glaze](../RELEASING.md#release-command-and-credentials).
-
-```sh
-sh tools/release/publish-chrome.sh
-```
-
-Packages the extension from a fresh checkout of the committed `HEAD` (it refuses a working tree with uncommitted or untracked files), uploads it with the Chrome Web Store API, and submits it for review. Pass a
-zip path to upload a specific build; set `CWS_NO_PUBLISH=1` to upload without submitting. It signs in
-as the `cws-publisher` service account through `gcloud` impersonation, so no key file is kept: your
-Google account needs the Service Account Token Creator role on it, and the service account must be
-added under **Account** in the Developer Dashboard. The listing text, screenshots and privacy answers
-aren't in the API; edit those in the dashboard. The publisher and item IDs default to Glaze's; override them with `CWS_PUBLISHER_ID` and `CWS_EXTENSION_ID` (the publisher ID is in the dashboard's address, after `/devconsole/`).
-
 ## Google Calendar sync
 
 Google Calendar sync is on in Chrome builds since 4.0.1 (the build-time switch `ON` in `planner/gcal.js`). The Chrome package keeps the manifest's `oauth2` client (`calendar.app.created` scope) and the optional `identity` permission; with Drive enabled, the same client also carries `drive.file`, `openid` and `email`. Firefox leaves out `oauth2` but holds `identity` from install for Drive's web sign-in; Safari leaves both out. With the Calendar switch off, Settings hides its section, the worker refuses Calendar operations and `package.sh` removes Calendar's scope, keeping the client and permission while Drive needs them. `test/planner/gcal.test.js` runs Calendar against a local mock of Google's API (`checks/mocks/gcal-mock.js`); `test/planner/gcal-package.test.js` checks the packaged manifest and development copy.
@@ -198,7 +180,7 @@ Safari has no identity API, so Drive and Calendar sync sign in through the Glaze
 ## Safari
 
 Safari loads Glaze from this Mac app. The Xcode project is in `safari/`; to build the app yourself
-you need Xcode and the public key from [Mac update release setup](#mac-update-release-setup):
+you need Xcode (the script sets Glaze's update public key; `SAFARI_UPDATE_PUBLIC_KEY` overrides it):
 
 ```sh
 sh tools/build/build-safari.sh
@@ -240,46 +222,10 @@ or signing an app. Release scripts continue to stage and validate a fresh tempor
 `tools/build/package-safari.sh` regenerates the Xcode project from scratch and replaces its native edits.
 Use it only when you mean to regenerate the project. It doesn't know about the iPhone and iPad targets below.
 
-### Mac update release setup
-
-The Developer ID build stages Sparkle 2.10.0 in a temporary Mac project through
-`tools/build/stage-safari-dmg.py`; the checked-in App Store project stays free of Sparkle.
-Glaze's signing key was made once with the [Sparkle distribution's key generator](https://sparkle-project.org/documentation/#eddsa-ed25519-signatures)
-(`bin/generate_keys`), which keeps the private key in the login Keychain (account `ed25519`) of the Mac
-that made it. Back it up with `generate_keys -x <file>` and keep that file somewhere safe: without it,
-no update can be signed for apps already installed. `tools/build/build-safari.sh` passes the public key
-(`0lbeC9MO1QDsjSGjs6iyxSBwXKMpEiKVoB+5wZwQEqY=`, or `SAFARI_UPDATE_PUBLIC_KEY` if set) into
-`SUPublicEDKey` in the staged Mac app's `Glaze/Info.plist`. Staging on its own without a key leaves
-updates disabled; a release build rejects the `REPLACE_WITH_SPARKLE_EDDSA_PUBLIC_KEY` placeholder.
-
-After building and notarizing a release, generate its signed update entry locally (replace
-`<version>` with the manifest version):
-
-```sh
-sh tools/release/safari-appcast.sh "release/<version>/github/glaze-<version>-safari-macos.dmg" /path/to/Sparkle/bin
-```
-
-The helper verifies the notarized DMG and app, checks that the Keychain signing key matches the
-app's public key, and writes `release/appcast.xml`, preserving older entries. It does not publish
-anything. Upload the DMG to its GitHub release before publishing that feed at
-`https://frostdev.io/projects/glaze/appcast.xml` (the frostdev.io path is `/projects/glaze/appcast.xml`).
-Use the same Sparkle Keychain account for key generation and appcast signing; if you choose a
-custom account, set `SAFARI_UPDATE_KEY_ACCOUNT` to it when running the helper.
-
-The containing app's **Updates** controls use Sparkle's persisted `automaticallyChecksForUpdates`
-and `automaticallyDownloadsUpdates` settings. Explicit **Check for Updates…** uses Sparkle's user
-initiated check, including its progress and installation approval UI. Quiet native checks honor the
-automatic-check setting. Update controls are compiled into the Developer ID app only; the shared
-guide shows the App Store link in store builds. The guide's message bridge accepts only its bundled
-main-frame page, and status checks stop when the app is inactive or the guide goes away.
-
 ### iPhone and iPad
 
 The iOS app is two more targets in the same Xcode project (`Glaze iOS` and `Glaze iOS Extension`), sharing
-the extension's resources and native handler with the Mac targets. `tools/build/appstore-ios.sh` archives it
-with App Store signing into `release/<version>/build/Glaze-iOS.xcarchive` and `release/<version>/app-store/glaze-<version>-ios.ipa`. It uses
-the App Store profiles already on the Mac; set `ASC_KEY_PATH`, `ASC_KEY_ID` and `ASC_ISSUER_ID` to let Xcode
-create them. It never uploads unless `APPSTORE_UPLOAD=1` is set. To try it in the Simulator, run the
+the extension's resources and native handler with the Mac targets. To try it in the Simulator, run the
 `Glaze iOS` scheme in Xcode.
 
 ## Bundled libraries

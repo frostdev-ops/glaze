@@ -41,7 +41,7 @@ const usage = `Usage: node tools/release/store-release.mjs [release|doctor|plan|
   --notes FILE        Plain-text GitHub release notes (default current CHANGELOG.md entry).
   --help               Show this help.
 
-Every store publishes as soon as its review approves the submission. See RELEASING.md for credentials and recovery.`;
+Every store publishes as soon as its review approves the submission.`;
 const expand = value => value.startsWith('~/') ? path.join(os.homedir(), value.slice(2)) : value;
 const digest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8'));

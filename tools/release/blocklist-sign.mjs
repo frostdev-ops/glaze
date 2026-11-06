@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The owner's tool for the mod blocklist (mods/blocklist.js). Run it on the owner's own computer, offline: the private key
-// never goes on a server, in the repo or in a backup the key's owner doesn't control (RELEASING.md).
+// never goes on a server, in the repo or in a backup the key's owner doesn't control.
 //   node tools/release/blocklist-sign.mjs keygen <keyfile>
 //       Makes the Ed25519 key pair. The private key goes in <keyfile> (mode 600, outside the repo, never overwritten);
 //       the public key is printed, to paste over PENDING_OWNER_KEY in mods/blocklist.js.
@@ -67,7 +67,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     } else if (cmd === 'sign' && a && b && args.length <= 4) {
       const out = c || b.replace(/(\.json)?$/, '.signed.json');
       const { list } = sign(a, b, out, { force: process.argv.includes('--force-unpinned') });
-      console.log(`Signed seq ${list.seq}: ${list.mods.length} mods, ${list.bundles.length} bundles, ${list.authors.length} authors; issued ${list.issued}, expires ${list.expires}.\nWrote ${out} and set seq ${list.seq} in ${b}. Publish it: gallery.mjs --blocklist ${out} (RELEASING.md).`);
+      console.log(`Signed seq ${list.seq}: ${list.mods.length} mods, ${list.bundles.length} bundles, ${list.authors.length} authors; issued ${list.issued}, expires ${list.expires}.\nWrote ${out} and set seq ${list.seq} in ${b}. Publish it: gallery.mjs --blocklist ${out}.`);
     } else {
       console.error('usage: blocklist-sign.mjs keygen <keyfile> | sign <keyfile> <list.json> [<signed.json>] [--force-unpinned]');
       process.exitCode = 2;

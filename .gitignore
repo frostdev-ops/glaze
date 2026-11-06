@@ -10,3 +10,6 @@ extension/assets/ads/
 
 # Local work-package board (rimewire): tracker, specs and journal stay on this machine
 /.rimewire/
+
+# The maintainer's release runbook stays local (owner, 2026-11-06).
+/RELEASING.md

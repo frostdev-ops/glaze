@@ -107,7 +107,7 @@ const firefoxFixture = (branch, check) => {
 test('GZ-06: Firefox packaging rejects main before invoking the package builder', () => {
   firefoxFixture('main', ({ result, called }) => {
     assert.ifError(result.error);
-    assert.equal(called, false, 'main is not the permanent Firefox compatibility source required by RELEASING.md');
+    assert.equal(called, false, 'main is not the permanent Firefox compatibility source');
     assert.notEqual(result.status, 0, 'wrong-source packaging must stop before making an upload ZIP');
   });
 });

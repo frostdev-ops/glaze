@@ -8,7 +8,7 @@
 // "all clear" (current() says which), so withholding or outliving the list can't lift a block. Turning the setting off
 // stops the asking only; it doesn't lift blocks already made.
 //
-// The list is signed offline (scripts/blocklist-sign.mjs, RELEASING.md) and served as { list, sig }. The signature is
+// The list is signed offline (tools/release/blocklist-sign.mjs) and served as { list, sig }. The signature is
 // Ed25519 over utf8('glaze-blocklist-1|' + canon(list)). Checking needs WebCrypto's Ed25519, as sharing does (Chrome 137,
 // Safari 17, Firefox 129); elsewhere nothing verifies, so no list applies.
 //
@@ -18,7 +18,7 @@ var GZ_BLOCKLIST = globalThis.GZ_BLOCKLIST || (() => {
   const S = globalThis.crypto.subtle;
   const te = new TextEncoder();
   // The owner's public key: Ed25519, the raw 32 bytes in base64url. Its private key is kept offline by the owner
-  // (`node scripts/blocklist-sign.mjs keygen`, RELEASING.md); a list signed by anything else is refused.
+  // (`node tools/release/blocklist-sign.mjs keygen`); a list signed by anything else is refused.
   const OWNER_KEY = 'KdWyoeAi5qK10c7op_zwFp2D6kBhrBtbXnE1TakrLa4';
   const ENDPOINT = 'https://frostdev.io/glaze/mods/api/blocklist';
   // storage.local: the last good list { list, sig, seq, checkedAt }, and when a check was last tried (a failed try holds

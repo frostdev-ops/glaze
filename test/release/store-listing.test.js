@@ -1,4 +1,4 @@
-// The store listings are release copy (RELEASING.md copies store/listing.md into the Chrome Web Store package), so they
+// The store listings are release copy (store/listing.md goes into the Chrome Web Store package), so they
 // must describe the version being shipped and may not make claims the privacy policy contradicts (audit BLD-2, BLD-4, BLD-6).
 const test = require('node:test');
 const assert = require('node:assert/strict');
