@@ -951,3 +951,33 @@ test('the first screen turns Glaze\'s navigation on or off, and changes nothing 
   const denied = { ok: false, error: 'sender' };
   for (const patch of [{ place: 'rail' }, { on: false, place: 'rail' }, { on: 'no' }, {}]) assert.deepEqual(await w.send({ type: 'glaze:navbar', patch }, welcome), denied, JSON.stringify(patch));
 });
+
+test('first screen changes only the chosen switch, on the latest stored group', async () => {
+  const welcome = { id: 'glaze', url: 'chrome-extension://x/settings/welcome.html', frameId: 0, tab: { id: 12 } };
+  const w = worker({}, { enhance: { writer: false, future: 'kept' }, motion: { enter: false }, extras: { rotate: '6h' } });
+  const send = (key, value, sender = welcome) => w.send({ type: 'glaze:setup', key, value }, sender);
+  assert.deepEqual(await Promise.all([send('enhance.sidebar', false), send('enhance.widgets', false)]), [{ ok: true }, { ok: true }]);
+  assert.deepEqual(w.sync.enhance, { writer: false, future: 'kept', sidebar: false, widgets: false });
+  assert.equal('notes' in w.sync.enhance, false, 'fresh defaults must remain implicit');
+  assert.equal('pet' in w.sync.enhance, false, 'late synced choices must remain possible');
+  assert.deepEqual(await send('motion.level', 'off'), { ok: true });
+  assert.deepEqual(w.sync.motion, { enter: false, level: 'off' });
+  assert.deepEqual(await send('extras.pointerAnim', false), { ok: true });
+  assert.deepEqual(w.sync.extras, { rotate: '6h', pointerAnim: false });
+  for (const [key, value] of [['enhance.pearson', true], ['enhance.notes', 'yes'], ['motion.level', 'bad'], ['extras.rotate', 'off'], ['__proto__.x', true]])
+    assert.deepEqual(await send(key, value), { ok: false, error: 'sender' }, key);
+  assert.deepEqual(await send('enhance.notes', false, { ...welcome, frameId: 2 }), { ok: false, error: 'sender' });
+});
+
+test('first screen broker needs its own top-level tab and cannot choose arbitrary theme values', async () => {
+  const G = require('../../extension/content/defaults.js');
+  const welcome = { id: 'glaze', url: 'chrome-extension://x/settings/welcome.html', frameId: 0, tab: { id: 12 } };
+  const w = worker({}, { look: { tooltips: false }, bg: { image: 'https://example.com/kept.png' } });
+  const msg = { type: 'glaze:look', parts: null, patch: { colors: { '--gz-accent': '#123456' }, bg: { image: 'https://example.com/evil.png' } } };
+  assert.deepEqual(await w.send(msg, { ...welcome, tab: undefined }), { ok: false, error: 'sender' });
+  assert.deepEqual(await w.send(msg, { ...welcome, frameId: 2 }), { ok: false, error: 'sender' });
+  assert.deepEqual(await w.send(msg, welcome), { ok: true });
+  assert.equal(w.sync.colors['--gz-accent'], G.GZ_DEFAULTS.colors['--gz-accent']);
+  assert.equal(w.sync.bg.image, 'https://example.com/kept.png');
+  assert.equal(w.sync.look.tooltips, false);
+});
