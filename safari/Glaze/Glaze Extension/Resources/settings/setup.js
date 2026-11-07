@@ -338,7 +338,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
       dd.dataset.k = k;
       dd.style.setProperty('--i', String(i));
       if (raw) dd.setAttribute('translate', 'no');
-      return [make('dt', { textContent: k }), dd];
+      return [make('dt', { className: 'sr-only', textContent: k }), dd];
     }));
     openSchool.hidden = !school;
     if (school) openSchool.querySelector('.label').textContent = school.host;

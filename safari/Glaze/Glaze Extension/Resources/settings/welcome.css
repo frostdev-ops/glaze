@@ -536,7 +536,6 @@ html[data-gz-motion="expressive"] #done:not([hidden]) .seal { animation: seal-po
 @keyframes draw-tick { from { stroke-dashoffset: 70; } }
 @keyframes seal-pop { 0% { transform: scale(0.9); } 50% { transform: scale(1.08); } }
 .summary { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; }
-.summary dt { display: none; }
 .summary dd { display: grid; gap: 0.1rem; min-width: 8.5rem; padding: 0.7rem 1.1rem; border-radius: 16px; text-align: center; font-weight: 600; background: var(--glass); border: 1px solid var(--edge); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
 .summary dd::before { content: attr(data-k); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gz-ink-faint); }
 html:not([data-gz-motion="off"]) #done:not([hidden]) .summary dd { animation: rise 0.6s var(--ease) both; animation-delay: calc(0.35s + var(--i, 0) * 80ms); }
@@ -549,6 +548,7 @@ html:not([data-gz-motion="off"]) #done:not([hidden]) .summary dd { animation: ri
   background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--gz-surface-2) 55%, transparent) 70%);
 }
 html[data-step="start"] .foot, html[data-step="done"] .foot { visibility: hidden; }
+.toast:not([hidden]) { visibility: visible; }
 .toast { flex: 1; text-align: center; font-size: 0.9rem; font-weight: 500; color: var(--gz-err); }
 #back[hidden] + .toast { margin-left: auto; }
 html:not([data-gz-motion="off"]) .toast:not([hidden]) { animation: rise 0.35s var(--ease) both; }
