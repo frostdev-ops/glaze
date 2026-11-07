@@ -235,7 +235,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     const step = { ArrowRight: 1, ArrowDown: cols, ArrowLeft: -1, ArrowUp: -cols, Home: -i, End: cards.length - 1 - i }[e.key];
     if (step === undefined) return;
     e.preventDefault();
-    const j = Math.max(0, Math.min(cards.length - 1, i + (getComputedStyle(box).direction === 'rtl' && /Left|Right/.test(e.key) ? -step : step)));
+    const j = Math.max(0, Math.min(cards.length - 1, i + (box.matches(':dir(rtl)') && /Left|Right/.test(e.key) ? -step : step)));
     cards[j].focus();
     pick(j);
   });

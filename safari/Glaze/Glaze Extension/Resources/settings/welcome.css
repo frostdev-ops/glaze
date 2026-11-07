@@ -599,3 +599,10 @@ html:not([data-gz-motion="off"]) .sig { animation: rise 0.7s var(--ease) both 0.
 }
 
 html[data-gz-motion="off"], html[data-gz-motion="off"] *, html[data-gz-motion="off"] ::before, html[data-gz-motion="off"] ::after { animation: none !important; transition: none !important; }
+/* Except what a student who chose Off still needs: a level's preview while pointed at, and the Allow spinner. */
+html[data-gz-motion="off"] .lv-subtle:is(:hover, :focus-visible) .demo i { animation: d-subtle 3.2s var(--ease) infinite both !important; }
+html[data-gz-motion="off"] .lv-expressive:is(:hover, :focus-visible) .demo i { animation: d-express 3.2s var(--spring) infinite both !important; }
+html[data-gz-motion="off"] .lv-expressive:is(:hover, :focus-visible) .demo em { animation: d-burst 3.2s ease-out infinite both !important; }
+html[data-gz-motion="off"] .level .demo i:nth-child(2) { animation-delay: 0.12s !important; }
+html[data-gz-motion="off"] .level .demo i:nth-child(3) { animation-delay: 0.24s !important; }
+html[data-gz-motion="off"] .primary .spin { animation: spin 0.8s linear infinite !important; }
