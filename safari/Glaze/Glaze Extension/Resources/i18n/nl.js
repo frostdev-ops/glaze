@@ -3956,5 +3956,19 @@
   "Finish the expression or use Pearson input.": "Maak de uitdrukking af of gebruik de Pearson-invoer.",
   "Pearson cannot import this expression.": "Pearson kan deze uitdrukking niet importeren.",
   "The Pearson answer changed. Reopen the equation editor.": "Het Pearson-antwoord is gewijzigd. Open de vergelijkingseditor opnieuw.",
-  "Pearson could not use this expression.": "Pearson kon deze uitdrukking niet gebruiken."
+  "Pearson could not use this expression.": "Pearson kon deze uitdrukking niet gebruiken.",
+  "Glaze’s own rail or top bar in place of the site’s menus.": "De eigen zijbalk of bovenbalk van Glaze in plaats van de menu’s van de site.",
+  "The page’s sidebar, with your widgets docked under it.": "De zijbalk van de pagina, met je widgets eronder vastgezet.",
+  "Everything due, grouped by day, with tasks of your own.": "Alles wat moet, per dag gegroepeerd, met je eigen taken.",
+  "Notes with folders and checklists, kept on this device.": "Notities met mappen en checklists, bewaard op dit apparaat.",
+  "A calmer editor in Blackboard’s discussion, message and assignment boxes.": "Een rustigere editor in de discussie-, bericht- en opdrachtvakken van Blackboard.",
+  "{keys} jumps to a course, a page or a setting.": "{keys} springt naar een cursus, een pagina of een instelling.",
+  "See what’s new, how you did, and what you need.": "Zie wat nieuw is, hoe je het deed en wat je nodig hebt.",
+  "Pages open at once, with your courses loaded ahead.": "Pagina’s openen meteen, met je cursussen vooraf geladen.",
+  "A buddy that grows with the work you hand in.": "Een maatje dat groeit met het werk dat je inlevert.",
+  "A note on the site’s pages before work is due.": "Een melding op de pagina’s van de site voordat werk moet worden ingeleverd.",
+  "School": "School",
+  "Setup": "Instellen",
+  "You’re all set": "Alles is klaar",
+  "{n} on": "{n} aan"
 };

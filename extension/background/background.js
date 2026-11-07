@@ -27,6 +27,10 @@ const brokerArea = (area) => ({
 });
 // Who asks: Glaze's own editor page, or a content script in a tab on a Canvas site Glaze runs on.
 const fromEditor = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && s.url.split(/[?#]/)[0] === chrome.runtime.getURL('options.html');
+// Glaze's first screen (settings/welcome.html), in its own tab: it puts on a built-in Look or Glaze's own theme, and turns the
+// navigation on or off (look and navbar, below).
+const fromWelcome = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && s.url.split(/[?#]/)[0] === chrome.runtime.getURL('settings/welcome.html')
+  && (s.origin === undefined || ownOrigin(s.origin)) && (!s.tab || s.frameId === 0);
 // The extension's origin, as a sender's origin gives it: Safari lowercases its UUID there (and in location.origin), while
 // getURL keeps it uppercase. Chrome's and Firefox's ids are lowercase already.
 const OWN_ORIGIN = chrome.runtime.getURL('').replace(/\/$/, '').toLowerCase();
@@ -186,10 +190,11 @@ const BROKER = {
       if (!m.patch || typeof m.patch !== 'object' || Array.isArray(m.patch) || Object.keys(m.patch).some((k) => !Object.hasOwn(GZ_DEFAULTS, k) && !Object.hasOwn(GZ_SPEC, k) && k !== 'card')) return false;
       if (m.partKeys !== undefined && (!fromEditor(s) || !Array.isArray(m.partKeys) || !m.partKeys.length || new Set(m.partKeys).size !== m.partKeys.length || m.partKeys.some((k) => !['bg', 'anim', 'fx', 'cursor', 'pointer', 'type', 'nav', 'rules'].includes(k)))) return false;
       if (fromEditor(s) || (s.id === chrome.runtime.id && s.url?.split(/[?#]/)[0] === chrome.runtime.getURL('popup.html'))) return true;
+      const theme = (keys) => m.parts === null && (m.look === undefined || GZ_LOOKS.some((L) => L.name === m.look)) && Object.keys(m.patch).every((k) => keys.includes(k));
+      if (fromWelcome(s)) return theme(['version', 'colors', 'preset', 'auto', 'look', 'bg']);
       // A page (the command palette's Look): only one of a site Glaze runs on. It names a built-in Look for that Look's own
       // parts, or none.
-      return m.parts === null && (m.look === undefined || GZ_LOOKS.some((L) => L.name === m.look)) && Object.keys(m.patch).every((k) => ['version', 'colors', 'preset', 'auto', 'look', 'bg', 'card'].includes(k))
-        && !!await lmsPage(s);
+      return theme(['version', 'colors', 'preset', 'auto', 'look', 'bg', 'card']) && !!await lmsPage(s);
     },
     run: async (m, area) => {
       let parts = m.look !== undefined ? GZ_LOOK_PARTS(GZ_LOOKS.find((L) => L.name === m.look)) : m.parts == null ? null : GZ_XPARTS.bundle(m.parts);
@@ -305,6 +310,7 @@ const BROKER = {
     allow: async (m, s) => {
       if (!m.patch || typeof m.patch !== 'object' || Array.isArray(m.patch) || !Object.keys(m.patch).length) return false;
       if (fromEditor(s)) { const n = GZ_SANITIZE({ navbar: m.patch }).navbar; return Object.keys(m.patch).every((k) => Object.hasOwn(n, k) && n[k] === m.patch[k]); }
+      if (fromWelcome(s)) return Object.keys(m.patch).length === 1 && typeof m.patch.on === 'boolean';
       return Object.keys(m.patch).length === 1 && ['open', 'icons'].includes(m.patch.rail) && s.frameId === 0 && (!!await fromUltra(s) || !!await fromCanvas(s) || !!await fromMoodle(s));
     },
     run: async (m, { sync }) => {

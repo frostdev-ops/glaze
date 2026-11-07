@@ -3956,5 +3956,19 @@
   "Finish the expression or use Pearson input.": "Vervollständige den Ausdruck oder verwende die Pearson-Eingabe.",
   "Pearson cannot import this expression.": "Pearson kann diesen Ausdruck nicht importieren.",
   "The Pearson answer changed. Reopen the equation editor.": "Die Pearson-Antwort wurde geändert. Öffne den Gleichungseditor erneut.",
-  "Pearson could not use this expression.": "Pearson konnte diesen Ausdruck nicht übernehmen."
+  "Pearson could not use this expression.": "Pearson konnte diesen Ausdruck nicht übernehmen.",
+  "Glaze’s own rail or top bar in place of the site’s menus.": "Die eigene Leiste oder Kopfleiste von Glaze anstelle der Menüs der Website.",
+  "The page’s sidebar, with your widgets docked under it.": "Die Seitenleiste der Seite, mit deinen Widgets darunter angedockt.",
+  "Everything due, grouped by day, with tasks of your own.": "Alles Fällige, nach Tagen gruppiert, mit eigenen Aufgaben.",
+  "Notes with folders and checklists, kept on this device.": "Notizen mit Ordnern und Checklisten, auf diesem Gerät gespeichert.",
+  "A calmer editor in Blackboard’s discussion, message and assignment boxes.": "Ein ruhigerer Editor in den Diskussions-, Nachrichten- und Aufgabenfeldern von Blackboard.",
+  "{keys} jumps to a course, a page or a setting.": "{keys} springt zu einem Kurs, einer Seite oder einer Einstellung.",
+  "See what’s new, how you did, and what you need.": "Sieh, was neu ist, wie du abgeschnitten hast und was du noch brauchst.",
+  "Pages open at once, with your courses loaded ahead.": "Seiten öffnen sofort, deine Kurse sind vorab geladen.",
+  "A buddy that grows with the work you hand in.": "Ein Lernbuddy, der mit jeder abgegebenen Arbeit wächst.",
+  "A note on the site’s pages before work is due.": "Ein Hinweis auf den Seiten der Website, bevor etwas fällig ist.",
+  "School": "Schule",
+  "Setup": "Einrichtung",
+  "You’re all set": "Alles bereit",
+  "{n} on": "{n} an"
 };

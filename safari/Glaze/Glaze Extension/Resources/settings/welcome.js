@@ -1,10 +1,10 @@
-// Glaze's first screen (settings/welcome.html), opened once when Glaze is installed on a browser that asks for each site
-// (background/background.js): a school on its own address needs its host granted before Glaze can reach it. The student types or
-// pastes it (core/site.js); Allow asks the browser for exactly that host, then checks that it is Blackboard, Canvas or
-// Moodle before Glaze takes it: anything else has its grant handed straight back, with course sites nearby to pick instead.
-// Open goes there. All sites asks for every https site at once, after which Glaze asks on each school's pages itself
-// (settings/page/consent.js). It wears the Frostdev Look: its terrain (looks/scene.js), palette, pointers and motion
-// (looks/page/motionx.js), all from the Look's own definitions. It talks only to the school sites the student names.
+// The school step of Glaze's first screen (settings/welcome.html; settings/setup.js runs the rest of the wizard and wears the
+// Look), opened once when Glaze is installed on a browser that asks for each site (background/background.js): a school on its
+// own address needs its host granted before Glaze can reach it. The student types or pastes it (core/site.js); Allow asks the
+// browser for exactly that host, then checks that it is Blackboard, Canvas or Moodle before Glaze takes it: anything else has
+// its grant handed straight back, with course sites nearby to pick instead. Open goes there. All sites asks for every https
+// site at once, after which Glaze asks on each school's pages itself (settings/page/consent.js). The school allowed, or none,
+// goes to the wizard as 'glaze:school' on the document. It talks only to the school sites the student names.
 // Classic script; module.exports for node (the button's state).
 var GZ_WELCOME = globalThis.GZ_WELCOME || (() => {
   // The button: nothing to do yet ('none', shown as a dimmed Allow), Glaze can already reach the site ('open'), or it must
@@ -16,7 +16,6 @@ var GZ_WELCOME = globalThis.GZ_WELCOME || (() => {
 if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   const { act } = GZ_WELCOME;
   const { address } = GZ_SITE;
-  const html = document.documentElement;
   const $ = (s) => document.querySelector(s);
   const form = $('#site'), bar = $('.bar'), input = $('#address'), go = $('#go'), label = go.querySelector('.label');
   const note = $('#note'), error = $('#error'), picks = $('#picks'), kindTag = $('#kind'), all = $('#all'), another = $('#another'), said = $('#said');
@@ -24,36 +23,9 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   const arrow = go.querySelector('.arrow');
   GZ_I18N.page();
   const still = matchMedia('(prefers-reduced-motion: reduce)');
+  const school = (detail) => document.dispatchEvent(new CustomEvent('glaze:school', { detail }));
 
-  // The Frostdev Look, as defaults.js defines it: its palette on <html> (looks/page/motionx.js reads the colours there), its
-  // terrain behind everything, and its pointer's, typing's and success's motion.
-  const { colors: palette, bg } = GZ_LOOKS.find((l) => l.name === 'Frostdev');
-  for (const [k, v] of Object.entries(palette)) html.style.setProperty(k, v);
-  const motion = () => html.setAttribute('data-gz-motion', still.matches ? 'off' : 'subtle');
-  motion();
-  const canvas = $('#terrain');
-  let scene = null;
-  const paint = () => {
-    const L = GZ_SCENE_LOOK(bg.intensity);
-    scene?.update({ kind: 'scene', name: bg.scene, palette, ground: palette['--gz-surface-2'], colors: bg.colors, dim: L.dim, amount: L.amount, speed: still.matches ? 0 : L.pace });
-  };
-  import(chrome.runtime.getURL('looks/scene.js')).then((m) => {
-    scene = m.start(canvas, () => true, () => { scene = null; canvas.classList.remove('live'); });
-    paint();
-    requestAnimationFrame(() => scene && canvas.classList.add('live'));
-  }, () => {});
-  still.addEventListener('change', () => { motion(); paint(); globalThis.GZ_MOTIONX?.sync(); });
-  globalThis.GZ_CTX ||= Object.freeze({
-    need: (file, ready) => (ready() ? Promise.resolve() : Promise.reject(new Error(file))),
-    on: () => true,
-    parts: () => GZ_LOOK_PARTS({ name: 'Frostdev' })?.x || null,
-    settings: () => ({ extras: { pointerAnim: true } }),
-  });
-  const fx = document.createElement('script');
-  fx.src = chrome.runtime.getURL('looks/page/motionx.js');
-  fx.onload = () => globalThis.GZ_MOTIONX?.sync();
-  document.body.append(fx);
-  // The Look's "complete" effect (contour rings and its snowflake) from the middle of el.
+  // The worn Look's "complete" effect from the middle of el.
   const bloom = (el) => {
     const r = el.getBoundingClientRect();
     document.dispatchEvent(new CustomEvent('glaze:moment', { detail: { name: 'complete', x: r.left + r.width / 2, y: r.top + r.height / 2 } }));
@@ -117,6 +89,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     kindTag.hidden = false;
     another.hidden = false;
     said.textContent = t('Allowed {host}', { host: s.host });
+    school({ host: s.host, url: done.url });
     hold(false);
     render();
     go.focus();
@@ -124,6 +97,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   };
   const again = () => {
     done = null;
+    school(null);
     kindTag.hidden = true;
     input.readOnly = false;
     input.value = '';
@@ -194,7 +168,6 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   chrome.permissions.onAdded?.addListener(refresh);
   chrome.permissions.onRemoved?.addListener(refresh);
   refresh();
-  input.focus();
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WELCOME;

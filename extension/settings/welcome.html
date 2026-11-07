@@ -1,48 +1,122 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-step="start">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="dark light">
 <title translate="no">Glaze</title>
 <link rel="icon" href="../icons/icon32.png">
 <link rel="stylesheet" href="welcome.css">
 </head>
 <body>
-<!-- Glaze's first screen after an install (Chrome, Edge, Firefox): frostdev.io's splash, the Frostdev Look's terrain, and
-     the one grant a school on its own address needs (settings/welcome.js). -->
+<!-- Glaze's first screen after an install (Chrome, Edge, Firefox): a setup wizard (settings/setup.js) for the theme, motion
+     and features, then the one grant a school on its own address needs (settings/welcome.js). -->
 <div class="ground" aria-hidden="true"></div>
 <canvas id="terrain" aria-hidden="true"></canvas>
-<main>
-  <h1 class="brand rise" translate="no">
-    <svg class="drop" viewBox="24 14 80 106" aria-hidden="true">
-      <defs><linearGradient id="drop" x1="0.1" y1="0" x2="0.9" y2="1"><stop offset="0" stop-color="#a6efff"/><stop offset="0.55" stop-color="#27cdf1"/><stop offset="1" stop-color="#1590c4"/></linearGradient></defs>
-      <path d="M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z" fill="url(#drop)"/>
-      <path d="M64 18 C64 18 28 59 28 80 a36 36 0 0 0 36 36 Z" fill="#03131e" opacity="0.22"/>
-      <ellipse cx="79" cy="76" rx="10" ry="15" transform="rotate(20 79 76)" fill="#ffffff" opacity="0.55"/>
-    </svg>
-    <span>Glaze</span>
-  </h1>
-  <form id="site" class="rise" novalidate autocomplete="off">
-    <label for="address" class="cap">School address</label>
-    <div class="bar">
-      <span class="lead" aria-hidden="true">
-        <svg class="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.7 3.9 5.7 3.9 9s-1.3 6.3-3.9 9c-2.6-2.7-3.9-5.7-3.9-9S9.4 5.7 12 3z"/></svg>
-        <svg class="check" viewBox="0 0 24 24"><path d="M5 12.5l4.4 4.4L19 7.3"/></svg>
-      </span>
-      <input id="address" type="text" inputmode="url" enterkeyhint="go" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" placeholder="canvas.school.edu" aria-describedby="error">
-      <span id="kind" class="kind" translate="no" hidden></span>
-      <button id="go" type="submit" class="primary"><span class="label">Allow</span><svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg><span class="spin" aria-hidden="true"></span></button>
+<header class="top">
+  <span class="mini" translate="no" aria-hidden="true"><svg viewBox="24 14 80 106"><path d="M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z"/></svg>Glaze</span>
+  <nav class="rail" aria-label="Setup">
+    <ol>
+      <li><button type="button" data-go="theme"><span class="num" aria-hidden="true">1</span><span>Theme</span></button></li>
+      <li><button type="button" data-go="motion"><span class="num" aria-hidden="true">2</span><span>Motion</span></button></li>
+      <li><button type="button" data-go="features"><span class="num" aria-hidden="true">3</span><span>Features</span></button></li>
+      <li><button type="button" data-go="school"><span class="num" aria-hidden="true">4</span><span>School</span></button></li>
+    </ol>
+    <span class="fill" aria-hidden="true"></span>
+  </nav>
+</header>
+<main id="wizard">
+  <section id="start" class="step" aria-labelledby="start-title">
+    <h1 class="brand" id="start-title" tabindex="-1" translate="no">
+      <svg class="drop" viewBox="24 14 80 106" aria-hidden="true">
+        <defs>
+          <linearGradient id="drop" x1="0.1" y1="0" x2="0.9" y2="1"><stop offset="0" style="stop-color: var(--gz-accent-hi)"/><stop offset="0.55" style="stop-color: var(--gz-accent)"/><stop offset="1" style="stop-color: color-mix(in srgb, var(--gz-accent) 72%, #000)"/></linearGradient>
+        </defs>
+        <path d="M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z" fill="url(#drop)"/>
+        <path d="M64 18 C64 18 28 59 28 80 a36 36 0 0 0 36 36 Z" fill="#03131e" opacity="0.22"/>
+        <ellipse cx="79" cy="76" rx="10" ry="15" transform="rotate(20 79 76)" fill="#ffffff" opacity="0.55"/>
+      </svg>
+      <span>Glaze</span>
+    </h1>
+    <button id="begin" type="button" class="primary big"><span class="label">Start</span><svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></button>
+  </section>
+
+  <section id="theme" class="step" aria-labelledby="theme-title" hidden>
+    <h2 id="theme-title" tabindex="-1">Theme</h2>
+    <div id="looks" class="looks" role="radiogroup" aria-labelledby="theme-title"></div>
+  </section>
+
+  <section id="motion" class="step" aria-labelledby="motion-title" hidden>
+    <h2 id="motion-title" tabindex="-1">Motion</h2>
+    <div id="levels" class="levels" role="radiogroup" aria-labelledby="motion-title"></div>
+    <div class="switches" id="motion-switches"></div>
+  </section>
+
+  <section id="features" class="step" aria-labelledby="feature-title" hidden>
+    <div class="chips" id="chips" role="tablist" aria-label="Features"></div>
+    <div class="slide" id="slide" role="tabpanel" aria-labelledby="feature-title">
+      <div class="art" id="art" aria-hidden="true">
+        <div class="v v-navigation" data-art="navigation" hidden><div class="win"><i class="bar"><b></b><b></b><b></b></i><i class="nrail"><b></b><b></b><b></b><b></b><b></b></i><i class="page"><b></b><b></b><b></b><b></b></i></div></div>
+        <div class="v v-sidebar" data-art="sidebar" hidden><div class="win"><i class="bar"><b></b><b></b><b></b></i><i class="page"><b></b><b></b><b></b><b></b></i><i class="dock"><b class="clock"></b><b class="timer"><s></s></b><b class="tile"></b></i></div></div>
+        <div class="v v-todo" data-art="todo" hidden><div class="win"><i class="bar"><b></b><b></b><b></b></i><i class="day"></i><i class="row"><b class="box"></b><b class="ln"></b></i><i class="row"><b class="box"></b><b class="ln"></b></i><i class="day"></i><i class="row"><b class="box"></b><b class="ln"></b></i></div></div>
+        <div class="v v-notes" data-art="notes" hidden><div class="win"><i class="bar"><b></b><b></b><b></b></i><i class="folders"><b></b><b></b><b></b></i><i class="sheet"><b></b><b></b><b></b><s></s></i></div></div>
+        <div class="v v-writer" data-art="writer" hidden><div class="win"><i class="bar"><b></b><b></b><b></b></i><i class="tools"><b></b><b></b><b></b><b></b><b></b></i><i class="paper"><b></b><b></b><b></b><b></b><s></s></i></div></div>
+        <div class="v v-search" data-art="search" hidden><div class="win"><i class="bar"><b></b><b></b><b></b></i><i class="page"><b></b><b></b><b></b><b></b></i><i class="palette"><b class="q"><s></s></b><b class="hit"></b><b class="hit"></b><b class="hit"></b></i></div></div>
+        <div class="v v-grades" data-art="grades" hidden><div class="win"><i class="bar"><b></b><b></b><b></b></i><i class="grade"><b class="ln"></b><b class="fill"></b><b class="new"></b></i><i class="grade"><b class="ln"></b><b class="fill"></b></i><i class="grade"><b class="ln"></b><b class="fill"></b><b class="new"></b></i></div></div>
+        <div class="v v-speed" data-art="speed" hidden><div class="win"><i class="bar"><b></b><b></b><b></b></i><i class="load"></i><i class="flip"><i class="pg"><b></b><b></b><b></b></i><i class="pg"><b></b><b></b><b></b></i></i><svg class="bolt" viewBox="0 0 24 24"><path d="M13.5 2 5 13.5h6L9.5 22 19 9.5h-6.2z"/></svg></div></div>
+        <div class="v v-buddy" data-art="buddy" hidden><div class="win"><i class="bar"><b></b><b></b><b></b></i><i class="habitat"></i><img class="pet" src="../assets/art/stickers/critters/study-buddy-happy.webp" alt=""><i class="hearts"><b></b><b></b><b></b></i><i class="xp"><b></b></i></div></div>
+        <div class="v v-reminders" data-art="reminders" hidden><div class="win"><i class="bar"><b></b><b></b><b></b></i><i class="page"><b></b><b></b><b></b><b></b></i><i class="note"><svg class="bell" viewBox="0 0 24 24"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"/></svg><b></b><b></b></i></div></div>
+      </div>
+      <div class="about">
+        <p class="count" id="count" translate="no"></p>
+        <h2 id="feature-title" tabindex="-1"></h2>
+        <p class="says" id="says"></p>
+        <div class="switches" id="feature-switches"></div>
+      </div>
     </div>
-    <div id="note" class="note" role="alert" hidden><p id="error"></p><div id="picks" class="picks"></div></div>
-  </form>
-  <div class="more rise">
-    <button id="all" type="button" class="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.7 3.9 5.7 3.9 9s-1.3 6.3-3.9 9c-2.6-2.7-3.9-5.7-3.9-9S9.4 5.7 12 3z"/></svg><svg class="check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.4 4.4L19 7.3"/></svg><span>All sites</span></button>
-    <button id="another" type="button" class="ghost" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Another school</span></button>
-  </div>
+  </section>
+
+  <section id="school" class="step" aria-labelledby="school-title" hidden>
+    <h2 id="school-title" tabindex="-1">School</h2>
+    <form id="site" novalidate autocomplete="off">
+      <label for="address" class="sr-only">School address</label>
+      <div class="bar">
+        <span class="lead" aria-hidden="true">
+          <svg class="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.7 3.9 5.7 3.9 9s-1.3 6.3-3.9 9c-2.6-2.7-3.9-5.7-3.9-9S9.4 5.7 12 3z"/></svg>
+          <svg class="check" viewBox="0 0 24 24"><path d="M5 12.5l4.4 4.4L19 7.3"/></svg>
+        </span>
+        <input id="address" type="text" inputmode="url" enterkeyhint="go" autocapitalize="off" autocorrect="off" spellcheck="false" translate="no" placeholder="canvas.school.edu" aria-describedby="error">
+        <span id="kind" class="kind" translate="no" hidden></span>
+        <button id="go" type="submit" class="primary"><span class="label">Allow</span><svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg><span class="spin" aria-hidden="true"></span></button>
+      </div>
+      <div id="note" class="note" role="alert" hidden><p id="error"></p><div id="picks" class="picks"></div></div>
+    </form>
+    <div class="more">
+      <button id="all" type="button" class="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.7 3.9 5.7 3.9 9s-1.3 6.3-3.9 9c-2.6-2.7-3.9-5.7-3.9-9S9.4 5.7 12 3z"/></svg><svg class="check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.4 4.4L19 7.3"/></svg><span>All sites</span></button>
+      <button id="another" type="button" class="ghost" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Another school</span></button>
+    </div>
+  </section>
+
+  <section id="done" class="step" aria-labelledby="done-title" hidden>
+    <div class="seal" aria-hidden="true">
+      <svg viewBox="0 0 120 120"><circle class="ring" cx="60" cy="60" r="52"/><path class="tick" d="M38 62l15 15 30-33"/></svg>
+    </div>
+    <h2 id="done-title" tabindex="-1">You’re all set</h2>
+    <dl class="summary" id="summary"></dl>
+    <div class="finish">
+      <button id="open-school" type="button" class="primary big" hidden><span class="label" translate="no"></span><svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></button>
+      <button id="open-settings" type="button" class="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg><span>Settings</span></button>
+    </div>
+  </section>
   <p id="said" class="sr-only" aria-live="polite"></p>
+  <p id="told" class="sr-only" aria-live="polite"></p>
 </main>
-<a class="sig rise" href="https://frostdev.io/" target="_blank" rel="noopener" translate="no">
+<footer class="foot">
+  <button id="back" type="button" class="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H6M11 6.5 5.5 12l5.5 5.5"/></svg><span>Back</span></button>
+  <p id="toast" class="toast" role="status" hidden></p>
+  <button id="next" type="button" class="primary"><span class="label">Next</span><svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></button>
+</footer>
+<a class="sig" href="https://frostdev.io/" target="_blank" rel="noopener" translate="no">
   <svg viewBox="0 0 64 64" aria-hidden="true">
     <path class="plate" d="M32 3.5 56.7 17.75v28.5L32 60.5 7.3 46.25v-28.5z"/>
     <g class="arms">
@@ -70,5 +144,6 @@
 <script src="../looks/lookx.js"></script>
 <script src="../core/site.js"></script>
 <script src="welcome.js"></script>
+<script src="setup.js"></script>
 </body>
 </html>
