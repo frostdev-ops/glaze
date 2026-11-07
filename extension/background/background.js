@@ -30,7 +30,7 @@ const fromEditor = (s) => s.id === chrome.runtime.id && typeof s.url === 'string
 // Glaze's first screen (settings/welcome.html), in its own tab: it puts on a built-in Look or Glaze's own theme, and turns the
 // navigation on or off (look and navbar, below).
 const fromWelcome = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && s.url.split(/[?#]/)[0] === chrome.runtime.getURL('settings/welcome.html')
-  && (s.origin === undefined || ownOrigin(s.origin)) && (!s.tab || s.frameId === 0);
+  && (s.origin === undefined || ownOrigin(s.origin)) && Number.isInteger(s.tab?.id) && s.frameId === 0;
 // The extension's origin, as a sender's origin gives it: Safari lowercases its UUID there (and in location.origin), while
 // getURL keeps it uppercase. Chrome's and Firefox's ids are lowercase already.
 const OWN_ORIGIN = chrome.runtime.getURL('').replace(/\/$/, '').toLowerCase();
@@ -196,9 +196,15 @@ const BROKER = {
       // parts, or none.
       return theme(['version', 'colors', 'preset', 'auto', 'look', 'bg', 'card']) && !!await lmsPage(s);
     },
-    run: async (m, area) => {
+    run: async (m, area, sender) => {
       let parts = m.look !== undefined ? GZ_LOOK_PARTS(GZ_LOOKS.find((L) => L.name === m.look)) : m.parts == null ? null : GZ_XPARTS.bundle(m.parts);
-      const patch = { ...m.patch };
+      let patch = { ...m.patch };
+      if (fromWelcome(sender)) {
+        const s = GZ_SANITIZE(await area.sync.get(null));
+        const L = m.look === undefined ? { colors: GZ_DEFAULTS.colors, palette: GZ_DEFAULTS.preset, look: {}, bg: {} } : GZ_LOOKS.find((l) => l.name === m.look);
+        const { auto, ...rest } = GZ_LOOK_APPLY(s, L);
+        patch = { version: 2, ...rest, ...(m.look !== undefined && { auto }) };
+      }
       if (m.parts != null && (!parts || !GZ_XPARTS.same(parts, m.parts))) return { ok: false, error: 'bad' };
       // Builder edits merge in this queue, so another editor's background or motion parts survive.
       if (m.partKeys) {
@@ -316,6 +322,22 @@ const BROKER = {
     run: async (m, { sync }) => {
       const navbar = GZ_SANITIZE({ navbar: { ...(await sync.get('navbar')).navbar, ...m.patch } }).navbar;
       return { ok: await sync.set({ navbar }) };
+    },
+  },
+  // The first screen changes one switch at a time against the latest stored group.
+  setup: {
+    allow: async (m, s) => {
+      if (!fromWelcome(s)) return false;
+      const switches = ['enhance.sidebar', 'enhance.widgets', 'enhance.todo', 'enhance.dashboard', 'enhance.notes', 'enhance.writer',
+        'enhance.palette', 'enhance.search', 'enhance.keys', 'enhance.newgrades', 'enhance.scores', 'enhance.calc', 'enhance.instant',
+        'enhance.prefetch', 'enhance.feedback', 'enhance.pet', 'enhance.streak', 'enhance.remind', 'motion.followSystem', 'extras.pointerAnim'];
+      return switches.includes(m.key) ? typeof m.value === 'boolean' : m.key === 'motion.level' && ['off', 'subtle', 'expressive'].includes(m.value);
+    },
+    run: async (m, { sync }) => {
+      const [group, key] = m.key.split('.');
+      const raw = (await sync.get(group))[group];
+      const current = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+      return { ok: await sync.set({ [group]: { ...current, [key]: m.value } }) };
     },
   },
   // Better To Do's own data (planner/todo.js change). A Canvas or Ultra page edits its own site's accounts' lists; only the

@@ -922,7 +922,7 @@ test('the shared editor save forwards builder part keys through the queued write
 
 test('the first screen wears a built-in Look or Glaze\'s own theme, and nothing else', async () => {
   const X = require('../../extension/looks/lookparts.js'), G = require('../../extension/content/defaults.js');
-  const welcome = { id: 'glaze', url: 'chrome-extension://x/settings/welcome.html', frameId: 0, tab: {} };
+  const welcome = { id: 'glaze', url: 'chrome-extension://x/settings/welcome.html', frameId: 0, tab: { id: 12 } };
   const s = G.GZ_SANITIZE({});
   const L = G.GZ_LOOKS.find((l) => l.name === 'Synthwave');
   const w = worker();
@@ -943,7 +943,7 @@ test('the first screen wears a built-in Look or Glaze\'s own theme, and nothing 
 });
 
 test('the first screen turns Glaze\'s navigation on or off, and changes nothing else of the bar', async () => {
-  const welcome = { id: 'glaze', url: 'chrome-extension://x/settings/welcome.html#features', frameId: 0, tab: {} };
+  const welcome = { id: 'glaze', url: 'chrome-extension://x/settings/welcome.html#features', frameId: 0, tab: { id: 12 } };
   const w = worker({}, { navbar: { place: 'top' } });
   assert.deepEqual(await w.send({ type: 'glaze:navbar', patch: { on: false } }, welcome), { ok: true });
   assert.equal(w.sync.navbar.on, false);

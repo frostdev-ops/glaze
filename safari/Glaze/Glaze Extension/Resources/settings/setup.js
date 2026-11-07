@@ -75,8 +75,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   const save = (key, on) => {
     Object.assign(s, S.change(s, key, on));
     if (key === 'navbar.on') return send({ type: 'glaze:navbar', patch: { on } });
-    const [group] = key.split('.');
-    return chrome.storage.sync.set({ version: 2, [group]: s[group] }).catch(failed);
+    return send({ type: 'glaze:setup', key, value: on });
   };
   // A Look goes in once the student settles on one: arrow keys walk the cards, and sync takes 120 writes a minute.
   let themeTimer = 0, pending = null;
