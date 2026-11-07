@@ -249,3 +249,19 @@ test('wizard keeps a chosen motion through late reads and applies later synced m
   assert.equal(levels[1].attrs['aria-checked'], 'true');
   assert.equal(w.get('html').attrs['data-gz-motion'], 'subtle', 'the page follows synced motion too');
 });
+
+test('wizard preserves a pending theme and ignores storage reads answered out of order', async () => {
+  const w = wizardScreen(), cards = w.get('#looks').children;
+  const library = cards.find((card) => card.dataset.look === 'Library');
+  library.handlers.click();
+  w.reads[0]({});
+  await tick();
+  assert.equal(library.attrs['aria-checked'], 'true', 'a read during the debounce keeps the chosen Look');
+  w.events.changed({ motion: {} }, 'sync');
+  w.events.changed({ motion: {} }, 'sync');
+  w.reads[2]({ motion: { level: 'off' } });
+  await tick();
+  w.reads[1]({ motion: { level: 'expressive' } });
+  await tick();
+  assert.equal(w.get('html').attrs['data-gz-motion'], 'off', 'an older read cannot overwrite the latest');
+});
