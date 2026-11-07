@@ -204,3 +204,48 @@ test('a failed first-run probe still hands back an optional host', async () => {
   await tick();
   assert.deepEqual(s.removed, ['https://www.school.edu/*']);
 });
+
+// Run the wizard itself with controllable storage reads and broker replies.
+const wizardScreen = () => {
+  const vm = require('node:vm'), fs = require('node:fs'), path = require('node:path');
+  class Element {
+    constructor(tag = '') { this.tag = tag; this.dataset = {}; this.style = { setProperty() {} }; this.classList = { add() {}, remove() {} }; this.attrs = {}; this.children = []; this.handlers = {}; this.hidden = true; this.textContent = ''; this.isConnected = true; this.offsetTop = 0; }
+    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children = children; }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    getAttribute(k) { return this.attrs[k]; }
+    removeAttribute(k) { delete this.attrs[k]; }
+    addEventListener(k, fn) { this.handlers[k] = fn; }
+    focus() { document.activeElement = this; }
+    closest() { return this; }
+    contains(e) { return this.children.includes(e); }
+    querySelector(q) { if (!this.sub) this.sub = {}; return this.sub[q] ||= new Element(q); }
+    getBoundingClientRect() { return { left: 0, top: 0, width: 1, height: 1 }; }
+  }
+  const elements = new Map(), get = (key) => { if (!elements.has(key)) elements.set(key, new Element(key)); return elements.get(key); };
+  const document = { documentElement: get('html'), body: get('body'), activeElement: null, querySelector: get, getElementById: (id) => get(`#${id}`), querySelectorAll: () => [], createElement: (tag) => new Element(tag), createElementNS: (_, tag) => new Element(tag), addEventListener() {}, dispatchEvent() {} };
+  document.activeElement = document.body;
+  const reads = [], replies = [], events = {};
+  const looks = G.GZ_LOOKS.map((l) => l.name === 'Frostdev' ? { ...l, bg: { kind: 'solid' } } : l);
+  const context = vm.createContext({ document, ...G, GZ_LOOKS: looks, GZ_I18N: { t: (s) => s, ui() {} }, GZ_LOOK_PARTS: () => null, GZ_LX: { CURSORS: {} }, GZ_COLOR: { brightness: () => 0, parse: () => ({}) }, CSS: { supports: () => false }, matchMedia: () => ({ matches: false, addEventListener() {} }), location: { hash: '#/motion', assign() {} }, navigator: { platform: 'Mac' }, getComputedStyle: () => ({ direction: 'ltr' }), addEventListener: (name, fn) => { events[name] = fn; }, scrollTo() {}, requestAnimationFrame() {}, setTimeout() { return 1; }, clearTimeout() {}, CustomEvent: class {}, chrome: { runtime: { id: 'glaze', getURL: (p) => p, sendMessage: () => new Promise((resolve) => replies.push(resolve)) }, storage: { sync: { get: () => new Promise((resolve) => reads.push(resolve)) }, local: { get: async () => ({ freshDefaults: { fresh: true } }) }, onChanged: { addListener: (fn) => { events.changed = fn; } } } } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/settings/setup.js'), 'utf8'), context);
+  return { get, reads, replies, events };
+};
+
+test('wizard keeps a chosen motion through late reads and applies later synced motion', async () => {
+  const w = wizardScreen(), levels = w.get('#levels').children;
+  levels[0].handlers.click();
+  w.reads[0]({ motion: { level: 'expressive' } });
+  await tick();
+  assert.equal(levels[0].attrs['aria-checked'], 'true', 'an old read cannot undo the pending choice');
+  assert.equal(w.get('html').attrs['data-gz-motion'], 'off');
+  w.replies[0]({ ok: true });
+  await tick();
+  w.reads.at(-1)({ motion: { level: 'off' } });
+  await tick();
+  w.events.changed({ motion: {} }, 'sync');
+  w.reads.at(-1)({ motion: { level: 'subtle' } });
+  await tick();
+  assert.equal(levels[1].attrs['aria-checked'], 'true');
+  assert.equal(w.get('html').attrs['data-gz-motion'], 'subtle', 'the page follows synced motion too');
+});
