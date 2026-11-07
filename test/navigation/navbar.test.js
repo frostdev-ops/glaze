@@ -288,9 +288,9 @@ test('the editor may change navbar fields; Ultra and Moodle top frames may only 
     [{ patch: { rail: 'open', on: false } }, { ultra: true, frameId: 0 }], [{ patch: { rail: 'auto' } }, { ultra: true, frameId: 0 }], [{ patch: ['open'] }, { editor: true }], [{}, { editor: true }],
     [{ patch: {} }, { editor: true }], [{ patch: { badges: 'false' } }, { editor: true }], [{ patch: { unknown: true } }, { editor: true }]]) assert.equal(await h.allow(m, s), false, JSON.stringify([m, s]));
   assert.equal(await h.allow({ patch: { rail: 'auto', badges: false } }, { editor: true }), true);
-  // Glaze's first screen turns the bar on or off, and nothing else.
-  assert.equal(await h.allow({ patch: { on: false } }, { welcome: true }), true);
-  for (const patch of [{ rail: 'open' }, { on: false, rail: 'open' }, { on: 'false' }]) assert.equal(await h.allow({ patch }, { welcome: true }), false, JSON.stringify(patch));
+  // Glaze's first screen turns the bar on or off and sets its place, rail and style, one at a time, and nothing else.
+  for (const patch of [{ on: false }, { place: 'top' }, { rail: 'open' }, { style: 'embed' }]) assert.equal(await h.allow({ patch }, { welcome: true }), true, JSON.stringify(patch));
+  for (const patch of [{ on: false, rail: 'open' }, { on: 'false' }, { rail: 'peek' }, { course: 'hide' }, { badges: false }]) assert.equal(await h.allow({ patch }, { welcome: true }), false, JSON.stringify(patch));
   const sync = { get: async () => structuredClone(store), set: async (p) => { Object.assign(store, p); return true; } };
   assert.equal((await h.run({ patch: { rail: 'icons' } }, { sync })).ok, true);
   assert.deepEqual(store.navbar, { ...DEF, rail: 'icons', brand: 'school' });

@@ -63,7 +63,7 @@ test('the first screen sets the bar on or off, its place, its rail and its style
 
 test('the first screen picks Glaze\'s own items in the bar, merged into the latest stored items', async () => {
   const kept = { items: { calendar: { label: 'Dates', hidden: true } }, groups: [{ label: 'Main', items: ['course', 'calendar'] }], tabs: ['course'], glaze: ['settings'],
-    links: [{ id: 'abcdefghijkl', n: 'Library', u: 'https://library.school.edu/' }], widgets: [{ id: 'clock', at: 'top' }] };
+    links: [{ id: 'abcdefghijkl', n: 'Library', u: 'https://library.school.edu/', i: 'link', tab: false }], widgets: [{ id: 'clock', at: 'top' }] };
   const w = worker({ freshDefaults: { fresh: false, pending: false } }, { navbarItems: structuredClone(kept) });
   const items = (glaze, sender = welcome) => w.send({ type: 'glaze:navbarItems', glaze }, sender);
   assert.deepEqual(await items(['notes', 'settings', 'todo']), { ok: true });
