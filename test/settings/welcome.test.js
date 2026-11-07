@@ -211,7 +211,7 @@ const wizardScreen = () => {
   class Element {
     constructor(tag = '') { this.tag = tag; this.dataset = {}; this.style = { setProperty() {} }; this.classList = { add() {}, remove() {} }; this.attrs = {}; this.children = []; this.handlers = {}; this.hidden = true; this.textContent = ''; this.isConnected = true; this.offsetTop = 0; }
     append(...children) { this.children.push(...children); }
-    replaceChildren(...children) { this.children = children; }
+    replaceChildren(...children) { if (this.children.includes(document.activeElement)) document.activeElement = document.body; this.children = children; }
     setAttribute(k, v) { this.attrs[k] = String(v); }
     getAttribute(k) { return this.attrs[k]; }
     removeAttribute(k) { delete this.attrs[k]; }
@@ -229,7 +229,7 @@ const wizardScreen = () => {
   const looks = G.GZ_LOOKS.map((l) => l.name === 'Frostdev' ? { ...l, bg: { kind: 'solid' } } : l);
   const context = vm.createContext({ document, ...G, GZ_LOOKS: looks, GZ_I18N: { t: (s) => s, ui() {} }, GZ_LOOK_PARTS: () => null, GZ_LX: { CURSORS: {} }, GZ_COLOR: { brightness: () => 0, parse: () => ({}) }, CSS: { supports: () => false }, matchMedia: () => ({ matches: false, addEventListener() {} }), location: { hash: '#/motion', assign() {} }, navigator: { platform: 'Mac' }, getComputedStyle: () => ({ direction: 'ltr' }), addEventListener: (name, fn) => { events[name] = fn; }, scrollTo() {}, requestAnimationFrame() {}, setTimeout() { return 1; }, clearTimeout() {}, CustomEvent: class {}, chrome: { runtime: { id: 'glaze', getURL: (p) => p, sendMessage: () => new Promise((resolve) => replies.push(resolve)) }, storage: { sync: { get: () => new Promise((resolve) => reads.push(resolve)) }, local: { get: async () => ({ freshDefaults: { fresh: true } }) }, onChanged: { addListener: (fn) => { events.changed = fn; } } } } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/settings/setup.js'), 'utf8'), context);
-  return { get, reads, replies, events };
+  return { get, reads, replies, events, document, location: context.location };
 };
 
 test('wizard keeps a chosen motion through late reads and applies later synced motion', async () => {
@@ -270,4 +270,15 @@ test('motion off stops the motion previews and transitions as well as feature ar
   const fs = require('node:fs'), path = require('node:path');
   const css = fs.readFileSync(path.join(__dirname, '../../extension/settings/welcome.css'), 'utf8');
   assert.match(css, /html\[data-gz-motion="off"\]\s+\*[^{}]*\{[^}]*animation:\s*none\s*!important[^}]*transition:\s*none\s*!important/s);
+});
+
+
+test('browser history keeps focus when it replaces a feature slide', async () => {
+  const w = wizardScreen();
+  w.location.hash = '#/features/sidebar';
+  w.events.hashchange();
+  w.get('#feature-switches').children[0].focus();
+  w.location.hash = '#/features/notes';
+  w.events.hashchange();
+  assert.equal(w.document.activeElement, w.get('#feature-title'));
 });
