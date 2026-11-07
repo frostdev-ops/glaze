@@ -7,12 +7,19 @@
   // Referrer changes to the previous homework page after in-frame navigation; the parent stays the same.
   const from = origin === L.mylab ? L.socket : /^\/assignment\//i.test(location.pathname) ? L.mylab : L.tdx;
   const html = document.documentElement;
-  const childAttrs = new Map(), id = crypto.randomUUID();
+  const childAttrs = new Map();
+  let id = crypto.randomUUID(), helloTimer = null, helloDelay = 250;
   // Child frames whose current document said hello. Before that a frame can still hold its MyLab launch redirect, where
   // Chrome refuses and logs a post to tdx.
   const said = new WeakMap();
   let channel = null, enabled = false, stopped = false, nav = null, mode = null, question = null, lastQuestion = null, theme = {}, lookKey = '', sheet = null;
   const emit = m => parent.postMessage(m, from);
+  // Only the document id is sent without a target origin; retry until the parent listener returns context.
+  const hello = () => {
+    if (standalone || stopped) return;
+    parent.postMessage({ gzPearsonFrame: 'hello', id }, '*');
+    clearTimeout(helloTimer); helloTimer = setTimeout(hello, helloDelay); helloDelay = Math.min(helloDelay * 2, 10000);
+  };
   const place = request => {
     if (!enabled || !channel || stopped) return;
     if (origin === L.mylab) {
@@ -33,7 +40,7 @@
       const to = L.frameOrigin(f.src); if (!to) continue;
       if (!childAttrs.has(f)) childAttrs.set(f,f.getAttribute('data-gz-pearson-child'));
       f.setAttribute('data-gz-pearson-child','');
-      if (channel && !standalone && said.has(f)) f.contentWindow?.postMessage({ gzPearsonFrame: 'context', channel, theme }, to);
+      if (channel && !standalone && said.get(f)?.origin === to) f.contentWindow?.postMessage({ gzPearsonFrame: 'context', channel, theme }, to);
     }
   };
   const mark = () => {
@@ -68,10 +75,12 @@
   addEventListener('message', e => {
     const m = e.data;
     if ((m?.gzPearsonFrame === 'hello' || m?.gzPearsonFrame === 'bye') && L.channel(m.id) && [L.mylab,L.tdx].includes(e.origin)) {
-      const f = frameOf(e);
-      if (f && m.gzPearsonFrame === 'hello') said.set(f, m.id); else if (f && said.get(f) === m.id) said.delete(f);
+      const f = m.gzPearsonFrame === 'hello' ? frameOf(e) : [...document.getElementsByTagName('iframe')].find(f => f.contentWindow === e.source);
+      if (f && m.gzPearsonFrame === 'hello') said.set(f, { id: m.id, origin: e.origin });
+      else if (f && said.get(f)?.id === m.id && said.get(f)?.origin === e.origin) said.delete(f);
     }
     if (!standalone && e.source === parent && e.origin === from && m?.gzPearsonFrame === 'context' && L.channel(m.channel)) {
+      clearTimeout(helloTimer); helloTimer = null;
       const next = L.theme(m.theme), key = JSON.stringify(next);
       if (channel === m.channel && lookKey === key) return;
       const changed = channel !== m.channel;
@@ -84,7 +93,7 @@
       } else {
         let sent = false;
         for (const f of document.getElementsByTagName('iframe')) {
-          const to = L.frameOrigin(f.src); if (to) { sent = true; if (said.has(f)) f.contentWindow?.postMessage(m,to); }
+          const to = L.frameOrigin(f.src); if (to) { sent = true; if (said.get(f)?.origin === to) f.contentWindow?.postMessage(m,to); }
         }
         if (!sent) place(m.request);
       }
@@ -115,8 +124,13 @@
     if (a === 'local' && c.pearsonAccess && c.pearsonAccess.newValue !== true) { enabled = false; mark(); children(); }
     if (a === 'sync' && (c.enabled || c.enhance) || a === 'local' && c.pearsonAccess) read();
   });
-  addEventListener('pagehide', e => { if (!e.persisted) { if (!standalone) parent.postMessage({ gzPearsonFrame: 'bye', id }, '*'); stopped = true; watch.disconnect(); navWatch.disconnect(); modeWatch.disconnect(); } mark(); children(); });
-  addEventListener('pageshow', e => { if (e.persisted) { read(); children(); place(); } });
-  if (!standalone) parent.postMessage({ gzPearsonFrame: 'hello', id }, '*');
+  addEventListener('pagehide', e => {
+    clearTimeout(helloTimer); helloTimer = null;
+    if (!standalone) parent.postMessage({ gzPearsonFrame: 'bye', id }, '*');
+    if (!e.persisted) { stopped = true; watch.disconnect(); navWatch.disconnect(); modeWatch.disconnect(); }
+    mark(); children();
+  });
+  addEventListener('pageshow', e => { if (e.persisted) { id = crypto.randomUUID(); helloDelay = 250; hello(); read(); children(); place(); } });
+  hello();
   read(); mount();
 })();

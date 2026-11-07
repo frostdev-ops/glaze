@@ -2,7 +2,8 @@
 (() => {
   const L = GZ_PEARSON_EMBED_LIB;
   if (location.origin !== L.socket || location.pathname !== '/uiservice/opener' || top === window || globalThis.__gzPearsonLaunchDoc) return;
-  const doc = globalThis.__gzPearsonLaunchDoc = crypto.randomUUID(), id = crypto.randomUUID();
+  const doc = globalThis.__gzPearsonLaunchDoc = crypto.randomUUID();
+  let id = crypto.randomUUID(), helloTimer = null, helloDelay = 250;
   // Pearson redirects can leave an interop referrer. The worker identifies the approved Ultra host.
   let host = null;
   // live: this device holds Pearson's hosts, Glaze and a Pearson switch are on, so a session here stays themed. enabled: also
@@ -14,7 +15,11 @@
   // Only the homework document that said hello: before it the frame is blank, which Chrome counts as this opener's origin.
   const toChild = m => { const f = ownFrame(); if (f && child?.frame === f) f.contentWindow?.postMessage(m, L.mylab); };
   const childContext = () => { if (!ended && ready && live && context) toChild({ gzPearsonFrame: 'context', channel: context.channel, theme: context.theme }); };
-  const hello = () => parent.postMessage({ gzPearsonEmbed: 'hello', id }, host);
+  const hello = () => {
+    if (ended || !ready || !host) return;
+    parent.postMessage({ gzPearsonEmbed: 'hello', id }, host);
+    clearTimeout(helloTimer); helloTimer = setTimeout(hello, helloDelay); helloDelay = Math.min(helloDelay * 2, 10000);
+  };
   const start = async () => {
     if (ended) return;
     if (ready) { if (context) { tell(); childContext(); } return; }
@@ -57,6 +62,7 @@
     if (ended || !ready) return;
     if (host && e.source === parent && e.origin === host && m?.gzPearsonEmbed === 'context' && L.channel(m.channel)) {
       if (active && context?.channel !== m.channel) return;
+      clearTimeout(helloTimer); helloTimer = null;
       const theme = L.theme(m.theme), lookKey = JSON.stringify(theme);
       if (context?.channel === m.channel && context.enabled === (m.enabled === true) && context.lookKey === lookKey) return;
       context = { channel: m.channel, enabled: m.enabled === true, theme, lookKey };
@@ -80,11 +86,12 @@
   });
   addEventListener('pagehide', () => {
     // A cached document must renew both worker authorization and parent consent before resuming its hook.
+    clearTimeout(helloTimer); helloTimer = null;
     if (ready && host) parent.postMessage({ gzPearsonEmbed: 'bye', id }, host);
     ended = true; generation++; ready = false; loading = false; live = false; enabled = false; host = null;
     if (context) { context.enabled = false; tell(); }
   });
-  addEventListener('pageshow', e => { if (e.persisted) { ended = false; read(); } });
+  addEventListener('pageshow', e => { if (e.persisted) { id = crypto.randomUUID(); helloDelay = 250; ended = false; read(); } });
   // The first hello can land before Blackboard's side listens; it posted to this frame on load before the hello existed.
   addEventListener('load', () => { if (!ended && ready && !context) hello(); });
   read();
