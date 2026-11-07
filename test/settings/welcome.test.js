@@ -265,3 +265,9 @@ test('wizard preserves a pending theme and ignores storage reads answered out of
   await tick();
   assert.equal(w.get('html').attrs['data-gz-motion'], 'off', 'an older read cannot overwrite the latest');
 });
+
+test('motion off stops the motion previews and transitions as well as feature art', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const css = fs.readFileSync(path.join(__dirname, '../../extension/settings/welcome.css'), 'utf8');
+  assert.match(css, /html\[data-gz-motion="off"\]\s+\*[^{}]*\{[^}]*animation:\s*none\s*!important[^}]*transition:\s*none\s*!important/s);
+});
