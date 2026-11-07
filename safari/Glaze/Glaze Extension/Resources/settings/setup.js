@@ -70,27 +70,39 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { toastEl.hidden = true; }, 4000);
   };
-  const failed = () => { toast(t('Not saved. Try again in a moment.')); load().then(refresh); };
+  const failed = () => toast(t('Not saved. Try again in a moment.'));
   const send = (m) => chrome.runtime.sendMessage(m).then((r) => { if (!r?.ok) failed(); }, failed);
+  const edits = new Map();
   const save = (key, on) => {
     Object.assign(s, S.change(s, key, on));
-    if (key === 'navbar.on') return send({ type: 'glaze:navbar', patch: { on } });
-    return send({ type: 'glaze:setup', key, value: on });
+    const edit = { value: on };
+    edits.set(key, edit);
+    const m = key === 'navbar.on' ? { type: 'glaze:navbar', patch: { on } } : { type: 'glaze:setup', key, value: on };
+    return send(m).then(() => { if (edits.get(key) === edit) edits.delete(key); return load().then(refresh); });
   };
   // A Look goes in once the student settles on one: arrow keys walk the cards, and sync takes 120 writes a minute.
-  let themeTimer = 0, pending = null;
+  let themeTimer = 0, pending = null, themeChoice = null;
   const flush = () => {
     clearTimeout(themeTimer);
     if (!pending) return;
     const L = pending;
     pending = null;
-    send({ type: 'glaze:look', ...(L !== S.OWN && { look: L.name }), parts: null, patch: { version: 2, ...S.theme(s, L) } });
+    const choice = themeChoice;
+    send({ type: 'glaze:look', ...(L !== S.OWN && { look: L.name }), parts: null, patch: { version: 2, ...S.theme(s, L) } }).then(() => {
+      if (themeChoice === choice) themeChoice = null;
+      return load().then(refresh);
+    });
   };
-  const saveTheme = (L) => { clearTimeout(themeTimer); pending = L; themeTimer = setTimeout(flush, 350); };
+  const saveTheme = (L) => { clearTimeout(themeTimer); pending = L; themeChoice = { look: L }; themeTimer = setTimeout(flush, 350); };
   addEventListener('pagehide', flush);
+  let readId = 0;
   const load = async () => {
+    const id = ++readId;
     const [raw, local] = await Promise.all([chrome.storage.sync.get(null).catch(() => ({})), chrome.storage.local.get('freshDefaults').catch(() => ({}))]);
+    if (id !== readId) return;
     s = GZ_SANITIZE(raw, local.freshDefaults ? local.freshDefaults.fresh === true : true);
+    for (const [key, edit] of edits) Object.assign(s, S.change(s, key, edit.value));
+    if (themeChoice) Object.assign(s, S.theme(s, themeChoice.look));
   };
 
   // ---- the page wears the Look ----
@@ -344,6 +356,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   };
   const refresh = () => {
     dress();
+    motion();
     renderLooks();
     renderLevels();
     renderSwitches();
