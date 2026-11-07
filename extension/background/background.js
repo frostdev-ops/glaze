@@ -29,7 +29,7 @@ const brokerArea = (area) => ({
 const fromEditor = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && s.url.split(/[?#]/)[0] === chrome.runtime.getURL('options.html');
 // Glaze's first screen (settings/welcome.html), in its own tab: it puts on a built-in Look or Glaze's own theme, and turns the
 // navigation on or off (look and navbar, below).
-const fromWelcome = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && s.url.split(/[?#]/)[0] === chrome.runtime.getURL('settings/welcome.html')
+const fromWelcome = (s) => s?.id === chrome.runtime.id && typeof s.url === 'string' && s.url.split(/[?#]/)[0] === chrome.runtime.getURL('settings/welcome.html')
   && (s.origin === undefined || ownOrigin(s.origin)) && Number.isInteger(s.tab?.id) && s.frameId === 0;
 // The extension's origin, as a sender's origin gives it: Safari lowercases its UUID there (and in location.origin), while
 // getURL keeps it uppercase. Chrome's and Firefox's ids are lowercase already.
