@@ -90,11 +90,13 @@ test('each step is an address, and Next and Back walk the feature slides', () =>
   assert.equal(S.hashOf({ step: 'features', slide: last }), `#/features/${S.FEATURES[last].id}`);
   assert.deepEqual(S.at('#school'), { step: 'school', slide: 0 }, 'a hash without its slash still finds its step');
   assert.deepEqual(S.move({ step: 'start', slide: 0 }, -1), { step: 'start', slide: 0 });
-  assert.deepEqual(S.move({ step: 'motion', slide: 0 }, 1), { step: 'features', slide: 0 });
+  assert.deepEqual(S.move({ step: 'motion', slide: 0 }, 1), { step: 'nav', slide: 0 });
+  assert.deepEqual(S.move({ step: 'nav', slide: 0 }, 1), { step: 'features', slide: 0 });
   assert.deepEqual(S.move({ step: 'features', slide: 0 }, 1), { step: 'features', slide: 1 });
-  assert.deepEqual(S.move({ step: 'features', slide: last }, 1), { step: 'school', slide: 0 });
-  assert.deepEqual(S.move({ step: 'school', slide: 0 }, -1), { step: 'features', slide: last });
-  assert.deepEqual(S.move({ step: 'features', slide: 0 }, -1), { step: 'motion', slide: 0 });
+  assert.deepEqual(S.move({ step: 'features', slide: last }, 1), { step: 'ai', slide: 0 });
+  assert.deepEqual(S.move({ step: 'ai', slide: 0 }, -1), { step: 'features', slide: last });
+  assert.deepEqual(S.move({ step: 'ai', slide: 0 }, 1), { step: 'school', slide: 0 });
+  assert.deepEqual(S.move({ step: 'features', slide: 0 }, -1), { step: 'nav', slide: 0 });
   assert.deepEqual(S.move({ step: 'done', slide: 0 }, 1), { step: 'done', slide: 0 });
 });
 

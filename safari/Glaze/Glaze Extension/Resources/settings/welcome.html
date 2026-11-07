@@ -7,10 +7,13 @@
 <title translate="no">Glaze</title>
 <link rel="icon" href="../icons/icon32.png">
 <link rel="stylesheet" href="welcome.css">
+<link rel="stylesheet" href="setup-nav.css">
+<link rel="stylesheet" href="setup-ai.css">
 </head>
 <body>
-<!-- Glaze's first screen after an install (Chrome, Edge, Firefox): a setup wizard (settings/setup.js) for the theme, motion
-     and features, then the one grant a school on its own address needs (settings/welcome.js). -->
+<!-- Glaze's first screen after an install (Chrome, Edge, Firefox): a setup wizard (settings/setup.js) for the theme, motion,
+     navigation (setup-nav.js), features and AI (setup-ai.js), then the one grant a school on its own address needs
+     (settings/welcome.js). -->
 <div class="ground" aria-hidden="true"></div>
 <canvas id="terrain" aria-hidden="true"></canvas>
 <header class="top">
@@ -19,8 +22,10 @@
     <ol>
       <li><button type="button" data-go="theme"><span class="num" aria-hidden="true">1</span><span>Theme</span></button></li>
       <li><button type="button" data-go="motion"><span class="num" aria-hidden="true">2</span><span>Motion</span></button></li>
-      <li><button type="button" data-go="features"><span class="num" aria-hidden="true">3</span><span>Features</span></button></li>
-      <li><button type="button" data-go="school"><span class="num" aria-hidden="true">4</span><span>School</span></button></li>
+      <li><button type="button" data-go="nav"><span class="num" aria-hidden="true">3</span><span>Navigation</span></button></li>
+      <li><button type="button" data-go="features"><span class="num" aria-hidden="true">4</span><span>Features</span></button></li>
+      <li><button type="button" data-go="ai"><span class="num" aria-hidden="true">5</span><span translate="no">AI</span></button></li>
+      <li><button type="button" data-go="school"><span class="num" aria-hidden="true">6</span><span>School</span></button></li>
     </ol>
     <span class="fill" aria-hidden="true"></span>
   </nav>
@@ -52,11 +57,15 @@
     <div class="switches" id="motion-switches"></div>
   </section>
 
+  <section id="nav" class="step" aria-labelledby="nav-title" hidden>
+    <h2 id="nav-title" tabindex="-1">Navigation</h2>
+    <div id="nav-body"></div>
+  </section>
+
   <section id="features" class="step" aria-labelledby="feature-title" hidden>
     <div class="chips" id="chips" role="tablist" aria-label="Features"></div>
     <div class="slide" id="slide" role="tabpanel" aria-labelledby="feature-title">
       <div class="art" id="art" aria-hidden="true">
-        <div class="v v-navigation" data-art="navigation" hidden><div class="win"><i class="bar"><b></b><b></b><b></b></i><i class="nrail"><b></b><b></b><b></b><b></b><b></b></i><i class="page"><b></b><b></b><b></b><b></b></i></div></div>
         <div class="v v-sidebar" data-art="sidebar" hidden><div class="win"><i class="bar"><b></b><b></b><b></b></i><i class="page"><b></b><b></b><b></b><b></b></i><i class="dock"><b class="clock"></b><b class="timer"><s></s></b><b class="tile"></b></i></div></div>
         <div class="v v-todo" data-art="todo" hidden><div class="win"><i class="bar"><b></b><b></b><b></b></i><i class="day"></i><i class="row"><b class="box"></b><b class="ln"></b></i><i class="row"><b class="box"></b><b class="ln"></b></i><i class="day"></i><i class="row"><b class="box"></b><b class="ln"></b></i></div></div>
         <div class="v v-notes" data-art="notes" hidden><div class="win"><i class="bar"><b></b><b></b><b></b></i><i class="folders"><b></b><b></b><b></b></i><i class="sheet"><b></b><b></b><b></b><s></s></i></div></div>
@@ -74,6 +83,11 @@
         <div class="switches" id="feature-switches"></div>
       </div>
     </div>
+  </section>
+
+  <section id="ai" class="step" aria-labelledby="ai-title" hidden>
+    <h2 id="ai-title" tabindex="-1" translate="no">AI</h2>
+    <div id="ai-body"></div>
   </section>
 
   <section id="school" class="step" aria-labelledby="school-title" hidden>
@@ -144,6 +158,8 @@
 <script src="../looks/lookx.js"></script>
 <script src="../core/site.js"></script>
 <script src="welcome.js"></script>
+<script src="setup-nav.js"></script>
+<script src="setup-ai.js"></script>
 <script src="setup.js"></script>
 </body>
 </html>

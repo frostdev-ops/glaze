@@ -3957,7 +3957,6 @@
   "Pearson cannot import this expression.": "Pearson kan deze uitdrukking niet importeren.",
   "The Pearson answer changed. Reopen the equation editor.": "Het Pearson-antwoord is gewijzigd. Open de vergelijkingseditor opnieuw.",
   "Pearson could not use this expression.": "Pearson kon deze uitdrukking niet gebruiken.",
-  "Glaze’s own rail or top bar in place of the site’s menus.": "De eigen zijbalk of bovenbalk van Glaze in plaats van de menu’s van de site.",
   "The page’s sidebar, with your widgets docked under it.": "De zijbalk van de pagina, met je widgets eronder vastgezet.",
   "Everything due, grouped by day, with tasks of your own.": "Alles wat moet, per dag gegroepeerd, met je eigen taken.",
   "Notes with folders and checklists, kept on this device.": "Notities met mappen en checklists, bewaard op dit apparaat.",

@@ -1,17 +1,18 @@
-// Glaze's first screen as a setup wizard (settings/welcome.html): the student picks a theme, how much motion, and which
-// features to keep, then names their school (settings/welcome.js). Each step is the address's hash (#/theme,
+// Glaze's first screen as a setup wizard (settings/welcome.html): the student picks a theme, how much motion, their
+// navigation (settings/setup-nav.js), which features to keep and their AI (settings/setup-ai.js), then names their school
+// (settings/welcome.js). Each step is the address's hash (#/theme,
 // #/features/notes: no element's id, which Chrome would scroll to and take focus from), so the browser's back and forward
 // walk them too. Every choice is saved the moment it is made, as Settings saves it: a Look
 // through the worker ('glaze:look': a built-in Look with its own parts, or Glaze's own theme with none), the navigation's
-// switch through 'glaze:navbar', motion, the pointer's animation and the features straight to storage.sync. The page wears
+// switch through 'glaze:navbar', motion, the pointer's animation and the features through 'glaze:setup'. A step of its own
+// file (GZ_SETUP_PARTS, loaded before this) is mounted with the page's helpers and gives back its render and summary. The page wears
 // what is picked: the Look's palette, its scene (looks/scene.js) or ground, its pointers and effects (looks/page/motionx.js),
 // and the motion level; the opening splash wears the Frostdev Look. Classic script; module.exports for node.
 var GZ_SETUP = globalThis.GZ_SETUP || (() => {
   const D = typeof GZ_DEFAULTS !== 'undefined' ? { GZ_DEFAULTS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON } : require('../content/defaults.js');
-  const STEPS = ['start', 'theme', 'motion', 'features', 'school', 'done'];
+  const STEPS = ['start', 'theme', 'motion', 'nav', 'features', 'ai', 'school', 'done'];
   // One slide each: its words, its picture (welcome.html [data-art]), and its switches as [setting, label, needs].
   const FEATURES = [
-    { id: 'navigation', title: 'Navigation', says: 'Glaze’s own rail or top bar in place of the site’s menus.', keys: [['navbar.on', 'Use Glaze navigation']] },
     { id: 'sidebar', title: 'Sidebar', says: 'The page’s sidebar, with your widgets docked under it.', keys: [['enhance.sidebar', 'Use the sidebar'], ['enhance.widgets', 'Widgets']] },
     { id: 'todo', title: 'To Do', says: 'Everything due, grouped by day, with tasks of your own.', keys: [['enhance.todo', 'Better To Do'], ['enhance.dashboard', 'Glaze Dashboard']] },
     { id: 'notes', title: 'Notes', says: 'Notes with folders and checklists, kept on this device.', keys: [['enhance.notes', 'Notes']] },
@@ -73,11 +74,12 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   const failed = () => toast(t('Not saved. Try again in a moment.'));
   const send = (m) => chrome.runtime.sendMessage(m).then((r) => { if (!r?.ok) failed(); }, failed);
   const edits = new Map();
-  const save = (key, on) => {
+  // One setting (group.key) shown changed at once and kept so through reloads until its message is answered; m: the
+  // message that saves it (a switch's 'glaze:setup' unless given).
+  const save = (key, on, m = { type: 'glaze:setup', key, value: on }) => {
     Object.assign(s, S.change(s, key, on));
     const edit = { value: on };
     edits.set(key, edit);
-    const m = key === 'navbar.on' ? { type: 'glaze:navbar', patch: { on } } : { type: 'glaze:setup', key, value: on };
     return send(m).then(() => { if (edits.get(key) === edit) edits.delete(key); return load().then(refresh); });
   };
   // A Look goes in once the student settles on one: arrow keys walk the cards, and sync takes 120 writes a minute.
@@ -95,12 +97,14 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   };
   const saveTheme = (L) => { clearTimeout(themeTimer); pending = L; themeChoice = { look: L }; themeTimer = setTimeout(flush, 350); };
   addEventListener('pagehide', flush);
-  let readId = 0;
+  let readId = 0, raw = {}, fresh = true;
   const load = async () => {
     const id = ++readId;
-    const [raw, local] = await Promise.all([chrome.storage.sync.get(null).catch(() => ({})), chrome.storage.local.get('freshDefaults').catch(() => ({}))]);
+    const [all, local] = await Promise.all([chrome.storage.sync.get(null).catch(() => ({})), chrome.storage.local.get('freshDefaults').catch(() => ({}))]);
     if (id !== readId) return;
-    s = GZ_SANITIZE(raw, local.freshDefaults ? local.freshDefaults.fresh === true : true);
+    raw = all;
+    fresh = local.freshDefaults ? local.freshDefaults.fresh === true : true;
+    s = GZ_SANITIZE(raw, fresh);
     for (const [key, edit] of edits) Object.assign(s, S.change(s, key, edit.value));
     if (themeChoice) Object.assign(s, S.theme(s, themeChoice.look));
   };
@@ -332,7 +336,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   const renderDone = () => {
     const theme = S.worn(s);
     const rows = [[t('Theme'), theme ? theme.name : t('Custom theme'), true], [t('Motion'), t(S.LEVELS.find(([k]) => k === s.motion.level)[1])],
-      [t('Features'), t('{n} on', { n: S.count(s) })], ...(school ? [[t('School'), school.host, true]] : [])];
+      [t('Features'), t('{n} on', { n: S.count(s) })], ...mounted.flatMap((p) => p.summary?.() || []), ...(school ? [[t('School'), school.host, true]] : [])];
     $('#summary').replaceChildren(...rows.flatMap(([k, v, raw], i) => {
       const dd = make('dd', { textContent: v });
       dd.dataset.k = k;
@@ -361,6 +365,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     renderLevels();
     renderSwitches();
     renderChips();
+    for (const p of mounted) p.render?.();
     if (place.step === 'done') renderDone();
   };
   const show = (to, from) => {
@@ -382,10 +387,11 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
       if (k === now) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
     });
     // The rail fills to the step shown, feature by feature through Features.
-    const fill = to.step === 'done' ? 1 : (now - 1 + (to.step === 'features' ? to.slide / S.FEATURES.length : 0)) / 3;
+    const fill = to.step === 'done' ? 1 : (now - 1 + (to.step === 'features' ? to.slide / S.FEATURES.length : 0)) / (S.STEPS.length - 3);
     html.style.setProperty('--progress', String(Math.max(0, Math.min(1, fill))));
     if (to.step === 'features') renderSlide();
     if (to.step === 'done') { renderDone(); if (shown() !== 'off') setTimeout(() => bloom($('.seal')), 450); }
+    for (const p of mounted) if (p.step === to.step) p.show?.(from);
     renderFoot();
     dress();
     const heading = document.getElementById(to.step === 'features' ? 'feature-title' : `${to.step}-title`);
@@ -405,6 +411,15 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   back.addEventListener('click', () => go(S.move(place, -1)));
   $('#begin').addEventListener('click', () => go({ step: 'theme', slide: 0 }));
   rail.forEach((b) => b.addEventListener('click', () => go({ step: b.dataset.go, slide: 0 })));
+
+  // ---- the steps of their own files ----
+  // Each part: { step, mount(api) → { render?(), show?(from), summary?() → [[label, value, raw?]] } }. render runs after
+  // every read of storage and choice; show when its step comes up; summary adds the done step's rows.
+  const api = Object.freeze({
+    t, make, tick, arrows, toast, failed, send, save, bloom, motion, said, $,
+    settings: () => s, raw: () => raw, fresh: () => fresh, reload: () => load().then(refresh), shown, place: () => place,
+  });
+  const mounted = (globalThis.GZ_SETUP_PARTS || []).map((p) => ({ step: p.step, ...p.mount(api) }));
 
   // ---- start ----
   reduced.addEventListener('change', motion);

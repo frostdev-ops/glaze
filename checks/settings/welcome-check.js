@@ -147,17 +147,18 @@ const stub = (required) => {
       await page.click('#next');
       await settle();
       st = await step(page);
-      check(st.hash === '#/features/navigation' && await page.evaluate(() => document.querySelectorAll('#chips .chip').length) === 10, 'wizard: features start at navigation, ten slides');
-      check(JSON.stringify(await checked(page, '#feature-switches .switch')) === '["navbar.on"]', 'wizard: navigation is on');
-      await shot(page, `${w}-w6-features-navigation`);
-      await flip(page, 'navbar.on');
-      check(await until(async () => (await synced(page, 'navbar')).navbar?.on === false), 'wizard: navigation turned off through the worker');
-      await flip(page, 'navbar.on');
-      check(await until(async () => (await synced(page, 'navbar')).navbar?.on === true), 'wizard: and on again');
+      check(st.hash === '#/nav' && st.shown.join() === 'nav', 'wizard: Next goes to navigation');
+      await shot(page, `${w}-w6-nav`);
+      await page.click('#next');
+      await settle();
+      st = await step(page);
+      check(st.hash === '#/features/sidebar' && await page.evaluate(() => document.querySelectorAll('#chips .chip').length) === 9, 'wizard: features start at the sidebar, nine slides');
       const ids = ['sidebar', 'todo', 'notes', 'writer', 'search', 'grades', 'speed', 'buddy', 'reminders'];
       for (const id of ids) {
-        await page.click('#next');
-        await settle();
+        if (id !== 'sidebar') {
+          await page.click('#next');
+          await settle();
+        }
         check((await step(page)).hash === `#/features/${id}`, `wizard: Next walks to ${id}`);
         await shot(page, `${w}-w7-features-${id}`);
         if (id === 'notes') {
@@ -178,9 +179,17 @@ const stub = (required) => {
           check(await until(async () => (await synced(page, 'enhance')).enhance?.remind === true), 'wizard: reminders turned on is saved');
         }
       }
-      await page.click('#chips .chip:nth-child(4)');
+      await page.click('#next');
       await settle();
-      check((await step(page)).hash === '#/features/notes' && await page.evaluate(() => document.querySelector('#chips .chip:nth-child(4)').dataset.on === 'false'), 'wizard: a dot jumps to its slide and shows it off');
+      st = await step(page);
+      check(st.hash === '#/ai' && st.shown.join() === 'ai', 'wizard: after the last feature, AI');
+      await shot(page, `${w}-w8-ai`);
+      await page.click('#back');
+      await settle();
+      check((await step(page)).hash === '#/features/reminders', 'wizard: Back from AI returns to the last feature');
+      await page.click('#chips .chip:nth-child(3)');
+      await settle();
+      check((await step(page)).hash === '#/features/notes' && await page.evaluate(() => document.querySelector('#chips .chip:nth-child(3)').dataset.on === 'false'), 'wizard: a dot jumps to its slide and shows it off');
       await page.click('#back');
       await settle();
       check((await step(page)).hash === '#/features/todo', 'wizard: Back walks the slides back');
@@ -198,7 +207,7 @@ const stub = (required) => {
       if (w === 'narrow') {
         const tour = await open(viewport, 'no-preference', '');
         await shot(tour, `${w}-w1-start`);
-        for (const [hash, name] of [['#/theme', 'w2-theme'], ['#/motion', 'w5-motion'], ['#/features/navigation', 'w6-features-navigation'], ['#/features/buddy', 'w7-features-buddy']]) {
+        for (const [hash, name] of [['#/theme', 'w2-theme'], ['#/motion', 'w5-motion'], ['#/nav', 'w6-nav'], ['#/features/sidebar', 'w7-features-sidebar'], ['#/features/buddy', 'w7-features-buddy'], ['#/ai', 'w8-ai']]) {
           await tour.evaluate((h) => { location.hash = h; }, hash);
           await settle();
           await shot(tour, `${w}-${name}`);

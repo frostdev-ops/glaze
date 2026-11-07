@@ -3957,7 +3957,6 @@
   "Pearson cannot import this expression.": "O Pearson não pode importar esta expressão.",
   "The Pearson answer changed. Reopen the equation editor.": "A resposta do Pearson mudou. Abra o editor de equações novamente.",
   "Pearson could not use this expression.": "O Pearson não conseguiu usar esta expressão.",
-  "Glaze’s own rail or top bar in place of the site’s menus.": "A barra lateral ou superior do Glaze no lugar dos menus do site.",
   "The page’s sidebar, with your widgets docked under it.": "A barra lateral da página, com seus widgets encaixados abaixo.",
   "Everything due, grouped by day, with tasks of your own.": "Tudo o que vence, agrupado por dia, com suas próprias tarefas.",
   "Notes with folders and checklists, kept on this device.": "Notas com pastas e listas de verificação, guardadas neste dispositivo.",

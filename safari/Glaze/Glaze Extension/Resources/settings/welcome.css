@@ -318,18 +318,6 @@ html[data-gz-motion="expressive"] .slide[data-in="back"] { animation: in-back-x 
 .v * { animation-duration: 5s; animation-iteration-count: infinite; animation-fill-mode: both; animation-timing-function: var(--ease); }
 html[data-gz-motion="off"] .v * { animation: none !important; }
 
-/* Navigation: Glaze's rail slides in, its highlight walking the items. */
-.v-navigation .page { left: 26%; }
-.v-navigation .nrail { left: 0; top: 1.6rem; bottom: 0; width: 17%; display: grid; align-content: start; justify-items: center; gap: 0.9rem; padding-top: 1.1rem; background: color-mix(in srgb, var(--gz-surface) 92%, transparent); border-right: 1px solid var(--edge); animation-name: slide-left; }
-.v-navigation .nrail b { position: static; width: 38%; aspect-ratio: 1; border-radius: 30%; background: var(--gz-line-strong); z-index: 1; }
-.v-navigation .nrail b:first-child { background: var(--gz-accent); border-radius: 50%; width: 46%; }
-.v-navigation .nrail b:not(:first-child) { animation-name: lit; }
-.v-navigation .nrail b:nth-child(3) { animation-delay: 1.2s; }
-.v-navigation .nrail b:nth-child(4) { animation-delay: 2.4s; }
-.v-navigation .nrail b:nth-child(5) { animation-delay: 3.6s; }
-@keyframes slide-left { 0% { transform: translateX(-100%); } 12%, 100% { transform: none; } }
-@keyframes lit { 0%, 24%, 100% { background: var(--gz-line-strong); box-shadow: none; } 6%, 18% { background: var(--gz-accent-hi); box-shadow: 0 0 0 5px color-mix(in srgb, var(--gz-accent) 30%, transparent); } }
-
 /* Sidebar: the dock comes in from the side, a clock and a timer in it. */
 .v-sidebar .page { right: 40%; }
 .v-sidebar .dock { right: 5%; top: calc(1.6rem + 7%); bottom: 7%; width: 30%; display: grid; grid-template-rows: 1.2fr 1fr 0.8fr; gap: 0.6rem; animation-name: slide-right; }
