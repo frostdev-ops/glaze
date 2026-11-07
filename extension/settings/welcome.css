@@ -597,3 +597,5 @@ html:not([data-gz-motion="off"]) .sig { animation: rise 0.7s var(--ease) both 0.
   .bar, .ghost, .primary, .look, .level, .switch { border: 1px solid CanvasText; }
   .look[aria-checked="true"], .level[aria-checked="true"], .switch[aria-checked="true"] { outline: 3px solid Highlight; }
 }
+
+html[data-gz-motion="off"], html[data-gz-motion="off"] *, html[data-gz-motion="off"] ::before, html[data-gz-motion="off"] ::after { animation: none !important; transition: none !important; }
