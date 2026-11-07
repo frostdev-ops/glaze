@@ -275,7 +275,7 @@ test('the editor may change navbar fields; Ultra and Moodle top frames may only 
   const source = read('background/background.js');
   const DEF = G.GZ_SANITIZE({}).navbar;
   const store = { navbar: { on: true, rail: 'auto', brand: 'school' } };
-  const ctx = vm.createContext({ GZ_SANITIZE: G.GZ_SANITIZE, fromEditor: (s) => s.editor === true, fromUltra: async (s) => s.ultra === true, fromMoodle: async (s) => s.moodle === true, fromCanvas: async (s) => s.canvas === true });
+  const ctx = vm.createContext({ GZ_SANITIZE: G.GZ_SANITIZE, fromEditor: (s) => s.editor === true, fromWelcome: (s) => s.welcome === true, fromUltra: async (s) => s.ultra === true, fromMoodle: async (s) => s.moodle === true, fromCanvas: async (s) => s.canvas === true });
   const h = vm.runInContext(`({${source.match(/\n {2}navbar: \{([\s\S]*?)\n {2}\},/)[1]}})`, ctx);
   assert.equal(await h.allow({ patch: { rail: 'open' } }, { ultra: true, frameId: 0 }), true);
   assert.equal(await h.allow({ patch: { rail: 'icons' } }, { editor: true }), true);
@@ -288,6 +288,9 @@ test('the editor may change navbar fields; Ultra and Moodle top frames may only 
     [{ patch: { rail: 'open', on: false } }, { ultra: true, frameId: 0 }], [{ patch: { rail: 'auto' } }, { ultra: true, frameId: 0 }], [{ patch: ['open'] }, { editor: true }], [{}, { editor: true }],
     [{ patch: {} }, { editor: true }], [{ patch: { badges: 'false' } }, { editor: true }], [{ patch: { unknown: true } }, { editor: true }]]) assert.equal(await h.allow(m, s), false, JSON.stringify([m, s]));
   assert.equal(await h.allow({ patch: { rail: 'auto', badges: false } }, { editor: true }), true);
+  // Glaze's first screen turns the bar on or off, and nothing else.
+  assert.equal(await h.allow({ patch: { on: false } }, { welcome: true }), true);
+  for (const patch of [{ rail: 'open' }, { on: false, rail: 'open' }, { on: 'false' }]) assert.equal(await h.allow({ patch }, { welcome: true }), false, JSON.stringify(patch));
   const sync = { get: async () => structuredClone(store), set: async (p) => { Object.assign(store, p); return true; } };
   assert.equal((await h.run({ patch: { rail: 'icons' } }, { sync })).ok, true);
   assert.deepEqual(store.navbar, { ...DEF, rail: 'icons', brand: 'school' });
@@ -348,7 +351,7 @@ test('a navbar control saves only its edit, preserving a pin from another tab', 
 
 test('a navbar edit batched with Look parts merges in the worker queue too', async () => {
   const stored = { navbar: { ...G.GZ_SANITIZE().navbar, rail: 'icons' } };
-  const ctx = vm.createContext({ GZ_SANITIZE: G.GZ_SANITIZE, GZ_XPARTS: { write: async (_area, _parts, patch) => { Object.assign(stored, patch); return true; } } });
+  const ctx = vm.createContext({ GZ_SANITIZE: G.GZ_SANITIZE, fromWelcome: () => false, GZ_XPARTS: { write: async (_area, _parts, patch) => { Object.assign(stored, patch); return true; } } });
   const source = read('background/background.js');
   const h = vm.runInContext(`({${source.match(/\n {2}look: \{([\s\S]*?)\n {2}\},/)[1]}})`, ctx);
   assert.equal((await h.run({ patch: { navbar: { badges: false } } }, { sync: { get: async () => structuredClone(stored) } })).ok, true);

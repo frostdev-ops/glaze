@@ -298,3 +298,10 @@ test('save errors remain visible on the last step', () => {
   const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/settings/welcome.css'), 'utf8');
   assert.match(css, /\.toast:not\(\[hidden\]\)\s*\{[^}]*visibility:\s*visible/);
 });
+
+test('the worker takes from the first screen exactly the switches the wizard shows', () => {
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/background/background.js'), 'utf8');
+  const listed = JSON.parse(src.match(/\n {2}setup: \{[\s\S]*?const switches = (\[[^\]]*\])/)[1].replace(/'/g, '"'));
+  const shown = [...S.FEATURES.flatMap((f) => f.keys.map(([k]) => k)).filter((k) => k !== 'navbar.on'), 'motion.followSystem', 'extras.pointerAnim'];
+  assert.deepEqual([...listed].sort(), [...shown].sort());
+});
