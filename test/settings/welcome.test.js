@@ -304,6 +304,9 @@ test('save errors remain visible on the last step', () => {
 test('the worker takes from the first screen exactly the switches the wizard shows', () => {
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/background/background.js'), 'utf8');
   const listed = JSON.parse(src.match(/\n {2}setup: \{[\s\S]*?const switches = (\[[^\]]*\])/)[1].replace(/'/g, '"'));
-  const shown = [...S.FEATURES.flatMap((f) => f.keys.map(([k]) => k)).filter((k) => k !== 'navbar.on'), 'motion.followSystem', 'extras.pointerAnim'];
+  const shown = [...S.FEATURES.flatMap((f) => f.keys.map(([k]) => k)), 'motion.followSystem', 'extras.pointerAnim'];
   assert.deepEqual([...listed].sort(), [...shown].sort());
+  const choices = JSON.parse(src.match(/\n {2}setup: \{[\s\S]*?const choices = (\{[^}]*\})/)[1].replace(/'/g, '"'));
+  const picked = Object.fromEntries([['motion.level', S.LEVELS.map(([v]) => v)], ...S.FEATURES.filter((f) => f.pick).map((f) => [f.pick[0], f.pick[2].map(([v]) => v)])]);
+  assert.deepEqual(choices, picked);
 });

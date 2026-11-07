@@ -964,7 +964,11 @@ test('first screen changes only the chosen switch, on the latest stored group', 
   assert.deepEqual(w.sync.motion, { enter: false, level: 'off' });
   assert.deepEqual(await send('extras.pointerAnim', false), { ok: true });
   assert.deepEqual(w.sync.extras, { rotate: '6h', pointerAnim: false });
-  for (const [key, value] of [['enhance.pearson', true], ['enhance.notes', 'yes'], ['motion.level', 'bad'], ['extras.rotate', 'off'], ['__proto__.x', true]])
+  assert.deepEqual(await send('writer.format', 'apa7'), { ok: true });
+  assert.deepEqual(w.sync.writer, { format: 'apa7' });
+  assert.deepEqual(await send('enhance.remindExam', true), { ok: true });
+  assert.equal(w.sync.enhance.remindExam, true);
+  for (const [key, value] of [['enhance.pearson', true], ['enhance.notes', 'yes'], ['motion.level', 'bad'], ['extras.rotate', 'off'], ['__proto__.x', true], ['writer.format', 'harvard'], ['writer.zoom', 100]])
     assert.deepEqual(await send(key, value), { ok: false, error: 'sender' }, key);
   assert.deepEqual(await send('enhance.notes', false, { ...welcome, frameId: 2 }), { ok: false, error: 'sender' });
 });
