@@ -26,7 +26,7 @@ const player = `<!doctype html><html><head><style>body{margin:0;background:white
   fs.mkdirSync(out,{recursive:true});
   await require('../../tools/dev/wait-for-browser.js')();
   ctx=await chromium.launchPersistentContext(path.join(tmp,'profile'),{...require('../../tools/dev/check-env.js').chromeLaunch(),headless:true,viewport:{width:1280,height:850},args:[`--disable-extensions-except=${ext}`,`--load-extension=${ext}`,'--disable-background-networking','--host-resolver-rules=MAP * ~NOTFOUND']});
-  env.noFirstRun(ctx); ctx.on('page',p=>p.on('pageerror',e=>errors.push(String(e))));
+  env.noFirstRun(ctx); ctx.on('page',p=>{p.on('pageerror',e=>errors.push(String(e)));p.on('console',m=>{if(/Failed to execute 'postMessage'/.test(m.text()))errors.push(m.text());});});
   await ctx.addInitScript(()=>{window.pearsonBackdropCreates=0;new MutationObserver(records=>{for(const r of records)for(const n of r.addedNodes)if(n.nodeType===1&&n.matches('iframe#gz-pearson-backdrop'))window.pearsonBackdropCreates++;}).observe(document,{childList:true,subtree:true});});
   await ctx.route('**/*',r=>{
    const u=new URL(r.request().url()); if(u.protocol==='chrome-extension:')return r.continue();
@@ -132,7 +132,7 @@ const player = `<!doctype html><html><head><style>body{margin:0;background:white
   const freshWait=ctx.waitForEvent('page');await page.getByRole('button',{name:'Open in tab',exact:true}).click();const fresh=await freshWait;await fresh.waitForURL(mylab+'/Student/OverviewHomework.aspx?homeworkId=101');
   check(true,'Open in tab during authentication performs a fresh top-level native LTI launch');await fresh.close();
   check(await page.frames().find(f=>f.url().startsWith(socket+'/synthetic/launch')).getByRole('heading',{name:'Native authentication'}).isVisible(),'the tab escape leaves the original authentication frame available');
-  check(errors.length===0,'the integration produces no page errors: '+errors.join(' | '));
+  check(errors.length===0,'the integration produces no page errors or refused frame posts: '+errors.join(' | '));
   console.log(`${checks.length}/${checks.length} Pearson embedding checks passed`);
  } finally {await ctx?.close();fs.rmSync(tmp,{recursive:true,force:true});fs.writeFileSync(path.join(out,'results.json'),JSON.stringify({checks,errors},null,2)+'\n');}
 })().catch(e=>{console.error(e);process.exitCode=1;});

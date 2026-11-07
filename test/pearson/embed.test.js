@@ -17,7 +17,7 @@ const homeworkFrames = ({standalone=false,frames=[],mode=null,href=L.mylab+'/Stu
   const document={documentElement:html,getElementsByTagName:()=>frames,querySelector:selector=>selector==='#playerViewer,#assignmentViewer'?mode:null,
     createElement:()=>({isConnected:false,remove(){this.isConnected=false;}}),head:{append(node){node.isConnected=true;}}};
   let enabled=true,pearsonAccess=true,enhance={pearsonViewer:true};
-  const context=vm.createContext({document,parent,URL,GZ_PEARSON_EMBED_LIB:L,location:new URL(href),
+  const context=vm.createContext({document,parent,URL,crypto,GZ_PEARSON_EMBED_LIB:L,location:new URL(href),
     MutationObserver:class{constructor(fn){observers.push(fn);}observe(){}disconnect(){}},addEventListener:listen,
     chrome:{storage:{sync:{get:async()=>({enabled,enhance})},local:{get:async()=>({pearsonAccess})},onChanged:{addListener:fn=>listen('storage',e=>fn(e.changes,e.area))}}}});
   context.window=context;context.top=standalone?context:{};
@@ -29,6 +29,7 @@ const homeworkFrames = ({standalone=false,frames=[],mode=null,href=L.mylab+'/Stu
     switches:async value=>{enhance=value;fire('storage',{changes:{enhance:{newValue:value}},area:'sync'});await new Promise(setImmediate);},settle:()=>new Promise(setImmediate),event:fire,
     mutate:()=>observers.forEach(fn=>fn([]))};
 };
+const tdxDoc='22222222-2222-4222-8222-222222222222',mylabDoc='33333333-3333-4333-8333-333333333333';
 const nativeFrame = (src,original=null) => {
   const attrs=new Map(original===null?[]:[['data-gz-pearson-child',original]]),sent=[];
   return {src,sent,isConnected:true,contentWindow:{postMessage:(message,origin)=>sent.push({message,origin})},
@@ -69,6 +70,7 @@ test('native child canvas markers follow homework mode and restore when a frame 
 test('redirected question frames exchange appearance and navigation only with their expected window and origin',async()=>{
   const question=nativeFrame(L.mylab+'/Service/PlayerLaunch.ashx?synthetic_launch=one'),other=nativeFrame(L.mylab+'/Service/KeepSession.aspx');
   const h=homeworkFrames({frames:[question,other]});await h.settle();
+  h.message({gzPearsonFrame:'hello',id:tdxDoc},{source:question.contentWindow,origin:L.tdx});
   const context={gzPearsonFrame:'context',channel:'00000000-0000-4000-8000-000000000000',theme:{'--gz-ink':'#abcdef','--private':'secret'}};
   h.message(context,{source:{}});h.message(context,{origin:L.mylab});assert.equal(question.sent.length,0);
   h.message(context);assert.equal(question.sent.at(-1).origin,L.tdx);
@@ -199,6 +201,7 @@ test('a live opener follows the Look with only embedding off and blocks forwardi
   const h=bridge({read:()=>++reads===1?Promise.resolve({enabled:true,enhance:{pearsonEmbed:true,pearsonViewer:true}}):reads===2?Promise.resolve(insideOff):refresh.promise});
   await h.settle();h.message(hostContext);h.flush();
   const frame=h.frames.find(f=>f.isConnected);
+  h.message({gzPearsonFrame:'hello',id:mylabDoc},{source:frame.contentWindow,origin:L.mylab});
   h.settings(insideOff);await h.settle();
   h.message({...hostContext,enabled:false,theme:{'--gz-ink':'#abcdef'}});
   assert.equal(frame.sent.at(-1).message.theme['--gz-ink'],'#abcdef','the existing frame still receives the Look');
@@ -209,7 +212,7 @@ test('a live opener follows the Look with only embedding off and blocks forwardi
   const down=frame.sent.length,up=h.sent.length;
   h.message({...hostContext,enabled:false,theme:{'--gz-ink':'#123456'}});
   h.message({gzPearsonEmbed:'locate',channel:request.doc,request:request.doc});
-  h.message({gzPearsonFrame:'hello'},{source:frame.contentWindow,origin:L.mylab});
+  h.message({gzPearsonFrame:'hello',id:mylabDoc},{source:frame.contentWindow,origin:L.mylab});
   h.message({gzPearsonFrame:'place',channel:request.doc,url:L.mylab+'/Student/PlayerHomework.aspx?homeworkId=101'},{source:frame.contentWindow,origin:L.mylab});
   assert.equal(frame.sent.length,down,'no context or locate is forwarded while the disabled storage refresh is pending');
   assert.equal(h.sent.length,up,'no child navigation is forwarded after the last switch goes off');
@@ -240,7 +243,7 @@ test('a cached opener suspends prepared launch consent until fresh authorization
   await h.settle();assert.equal(h.requests.length,2,'restoration revalidates the current tab and consent');
   h.message(hostContext);denied.resolve({ok:false});await h.settle();h.flush();
   assert.equal(h.calls.length,0,'a rejected restoration keeps the native opener');
-  assert.equal(h.sent.length,1,'failed reauthorization cannot post to an unverified host');
+  assert.deepEqual(h.sent.map(s=>[s.message.gzPearsonEmbed,s.origin]),[['hello',new URL(host).origin],['bye',new URL(host).origin]],'failed reauthorization cannot post to an unverified host');
 });
 test('an authorization reply from before pagehide cannot authorize a restored opener',async()=>{
   const old=deferred(),fresh=deferred();let attempts=0;const h=bridge({authorize:()=>++attempts===1?old.promise:fresh.promise});
@@ -276,4 +279,57 @@ test('reauthorizing an active cached opener preserves its native session without
   const h=bridge();await h.settle();h.message(hostContext);h.flush();const mounted=h.frames.find(f=>f.isConnected);
   h.event('pagehide',{persisted:true});h.event('pageshow',{persisted:true});await h.settle();h.message(hostContext);h.flush();
   assert.equal(h.calls.length,1);assert.equal(h.frames.find(f=>f.isConnected),mounted);
+});
+// A frame's document can still be a redirect at another origin, where Chrome refuses and logs a post to the expected one.
+test('homework posts to a question frame only after its current document says hello, and stops at that document\'s bye',async()=>{
+  const context={gzPearsonFrame:'context',channel:'00000000-0000-4000-8000-000000000000',theme:{}},locate={gzPearsonFrame:'locate',channel:context.channel,request:'11111111-1111-4111-8111-111111111111'};
+  const question=nativeFrame(L.mylab+'/Service/PlayerLaunch.ashx?synthetic_launch=one'),h=homeworkFrames({frames:[question]});await h.settle();
+  h.message(context);h.event('load',{target:{localName:'iframe'}});h.message(locate);
+  assert.equal(question.sent.length,0,'the frame may still show its MyLab launch document');
+  assert.ok(!h.sent.some(s=>s.message.request===locate.request),'a question frame that has not answered keeps the pop-out waiting on it');
+  h.message({gzPearsonFrame:'hello'},{source:question.contentWindow,origin:L.tdx});
+  h.message({gzPearsonFrame:'hello',id:tdxDoc},{source:question.contentWindow,origin:L.mylab});
+  assert.equal(question.sent.length,0,'a hello needs its document name and the expected origin');
+  h.message({gzPearsonFrame:'hello',id:tdxDoc},{source:question.contentWindow,origin:L.tdx});
+  assert.deepEqual(question.sent.map(s=>[s.message.gzPearsonFrame,s.origin]),[['context',L.tdx]]);
+  h.message({gzPearsonFrame:'bye',id:mylabDoc},{source:question.contentWindow,origin:L.tdx});
+  h.message(locate);assert.equal(question.sent.at(-1).message.gzPearsonFrame,'locate','a bye from an earlier document does not end the current one');
+  h.message({gzPearsonFrame:'bye',id:tdxDoc},{source:question.contentWindow,origin:L.tdx});
+  const count=question.sent.length;h.event('load',{target:{localName:'iframe'}});h.message(locate);h.message({...context,theme:{'--gz-ink':'#abcdef'}});
+  assert.equal(question.sent.length,count,'nothing is posted while the frame is between documents');
+  const early=nativeFrame(L.mylab+'/Service/PlayerLaunch.ashx?synthetic_launch=two'),first=homeworkFrames({frames:[early]});
+  first.message({gzPearsonFrame:'hello',id:tdxDoc},{source:early.contentWindow,origin:L.tdx});await first.settle();first.message(context);
+  assert.equal(early.sent.at(-1)?.message.gzPearsonFrame,'context','a hello before the homework page has its own context still counts');
+});
+test('a homework document names itself in its hello and says bye with that name when it unloads for good',async()=>{
+  const h=homeworkFrames();await h.settle();
+  const hello=h.sent.find(s=>s.message.gzPearsonFrame==='hello');assert.ok(L.channel(hello?.message.id));
+  h.event('pagehide',{persisted:true});assert.ok(!h.sent.some(s=>s.message.gzPearsonFrame==='bye'),'a cached page comes back with its frames');
+  h.event('pagehide',{persisted:false});
+  assert.deepEqual(JSON.parse(JSON.stringify(h.sent.at(-1))),{message:{gzPearsonFrame:'bye',id:hello.message.id},origin:'*'});
+  const top=homeworkFrames({standalone:true});await top.settle();top.event('pagehide',{persisted:false});assert.equal(top.sent.length,0);
+});
+test('the opener posts to its homework frame only after that document says hello, and stops at its bye',async()=>{
+  const h=bridge();await h.settle();
+  const hello=h.sent.find(s=>s.message.gzPearsonEmbed==='hello');assert.ok(L.channel(hello?.message.id),'the opener names itself to Blackboard');
+  h.message(hostContext);h.flush();
+  const frame=h.frames.find(f=>f.isConnected),locate={gzPearsonEmbed:'locate',channel:request.doc,request:request.doc};
+  h.message({...hostContext,theme:{'--gz-ink':'#abcdef'}});h.message(locate);
+  assert.equal(frame.sent.length,0,'the new frame still holds its blank document');
+  h.message({gzPearsonFrame:'hello',id:mylabDoc},{source:frame.contentWindow,origin:L.tdx});assert.equal(frame.sent.length,0);
+  h.message({gzPearsonFrame:'hello',id:mylabDoc},{source:frame.contentWindow,origin:L.mylab});
+  assert.deepEqual(frame.sent.map(s=>[s.message.gzPearsonFrame,s.origin]),[['context',L.mylab]]);
+  h.message(locate);assert.equal(frame.sent.at(-1).message.gzPearsonFrame,'locate');
+  h.message({gzPearsonFrame:'bye',id:tdxDoc},{source:frame.contentWindow,origin:L.mylab});
+  h.message({...hostContext,theme:{'--gz-ink':'#123456'}});assert.equal(frame.sent.at(-1).message.theme['--gz-ink'],'#123456','a stale bye is ignored');
+  h.message({gzPearsonFrame:'bye',id:mylabDoc},{source:frame.contentWindow,origin:L.mylab});
+  const count=frame.sent.length;h.message(locate);h.message({...hostContext,theme:{'--gz-ink':'#654321'}});
+  assert.equal(frame.sent.length,count,'nothing is posted after the homework document leaves');
+});
+test('the opener repeats its hello at load until Blackboard answers, and says bye to it on pagehide',async()=>{
+  const h=bridge();await h.settle();
+  h.event('load',{});assert.deepEqual(h.sent.map(s=>s.message.gzPearsonEmbed),['hello','hello'],'a hello sent before the Blackboard side listened is repeated');
+  h.message(hostContext);h.event('load',{});assert.equal(h.sent.length,2);
+  h.event('pagehide',{persisted:false});
+  assert.deepEqual(JSON.parse(JSON.stringify(h.sent.at(-1))),{message:{gzPearsonEmbed:'bye',id:h.sent[0].message.id},origin:new URL(host).origin});
 });
