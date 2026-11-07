@@ -13,7 +13,7 @@ const CHECKS = [
   { name: 'sites', script: 'checks/settings/sites-check.js', args: (dir) => [dir] },
   { name: 'pointer', script: 'checks/looks/pointer-check.js', args: (dir) => [dir] },
   { name: 'register-update', script: 'checks/platform/register-update-check.js', limit: 60 * 1000, args: (dir) => [dir] },
-  { name: 'local-engine', script: 'checks/ai/local-engine-check.js', limit: 2 * 60 * 1000, args: (dir) => ['small', '--out', dir] },
+  { name: 'local-engine', script: 'checks/ai/local-engine-check.js', limit: 4 * 60 * 1000, args: (dir) => ['small', '--out', dir] },
   { name: 'local-vision', script: 'checks/ai/local-vision-gpu-check.js', limit: 2 * 60 * 1000, args: (dir) => ['small', '--out', dir] },
   // Its headed step needs Xvfb, which the gate's Chromium install (--with-deps) brings.
   { name: 'agent-link', script: 'checks/agents/agent-link-check.js', limit: 5 * 60 * 1000, args: (dir) => [dir] },

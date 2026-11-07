@@ -179,6 +179,12 @@ test('settings has room for the narrow route sweep while the gate leaves time fo
   assert.ok(BUDGET >= settings.limit && BUDGET <= 11 * 60 * 1000, 'the runner must finish before the fifteen-minute job limit');
 });
 
+test('the local engine has room for its kernel sweep, measured at 143 s on the runner', () => {
+  const { CHECKS, BUDGET } = require('../../tools/dev/ci-browser-checks.js');
+  const engine = CHECKS.find((c) => c.name === 'local-engine');
+  assert.ok(engine.limit >= 3 * 60 * 1000 && engine.limit <= BUDGET);
+});
+
 test('the browser gate includes a portable backup within its existing total budget', () => {
   const { CHECKS, BUDGET } = require('../../tools/dev/ci-browser-checks.js');
   assert.ok(CHECKS.some((c) => c.script === 'checks/settings/backup-check.js'));
