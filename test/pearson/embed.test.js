@@ -10,7 +10,7 @@ test('native MyLab launch frames retain their expected tdx destination after red
   for(const value of ['https://mylab.pearson.com.evil.test/Service/PlayerLaunch.ashx','https://mylab.pearson.com/Service/KeepSession.aspx','https://mylab.pearson.com/Service/OtherLaunch.ashx','https://name:secret@mylab.pearson.com/Service/PlayerLaunch.ashx','https://mylab.pearson.com:8443/Service/PlayerLaunch.ashx'])assert.equal(L.frameOrigin(value),null,value);
 });
 const homeworkFrames = ({standalone=false,frames=[],mode=null,href=L.mylab+'/Student/PlayerHomework.aspx?homeworkId=101'}={}) => {
-  const events=new Map(),attrs=new Map(),sent=[],observers=[];
+  const events=new Map(),attrs=new Map(),sent=[],observers=[],timers=new Map(); let serial=0;
   const listen=(key,fn)=>events.set(key,[...(events.get(key)||[]),fn]);
   const parent={postMessage:(message,origin)=>sent.push({message,origin})};
   const html={toggleAttribute:(key,on)=>on?attrs.set(key,''):attrs.delete(key)};
@@ -19,6 +19,7 @@ const homeworkFrames = ({standalone=false,frames=[],mode=null,href=L.mylab+'/Stu
   let enabled=true,pearsonAccess=true,enhance={pearsonViewer:true};
   const context=vm.createContext({document,parent,URL,crypto,GZ_PEARSON_EMBED_LIB:L,location:new URL(href),
     MutationObserver:class{constructor(fn){observers.push(fn);}observe(){}disconnect(){}},addEventListener:listen,
+    setTimeout:fn=>{timers.set(++serial,fn);return serial;},clearTimeout:id=>timers.delete(id),
     chrome:{storage:{sync:{get:async()=>({enabled,enhance})},local:{get:async()=>({pearsonAccess})},onChanged:{addListener:fn=>listen('storage',e=>fn(e.changes,e.area))}}}});
   context.window=context;context.top=standalone?context:{};
   vm.runInContext(fs.readFileSync(path.resolve(__dirname,'../../extension/pearson/embedded.js'),'utf8'),context);
@@ -27,7 +28,7 @@ const homeworkFrames = ({standalone=false,frames=[],mode=null,href=L.mylab+'/Stu
     enabled:async value=>{enabled=value;fire('storage',{changes:{enabled:{newValue:value}},area:'sync'});await new Promise(setImmediate);},
     access:async value=>{pearsonAccess=value;fire('storage',{changes:{pearsonAccess:{newValue:value}},area:'local'});await new Promise(setImmediate);},
     switches:async value=>{enhance=value;fire('storage',{changes:{enhance:{newValue:value}},area:'sync'});await new Promise(setImmediate);},settle:()=>new Promise(setImmediate),event:fire,
-    mutate:()=>observers.forEach(fn=>fn([]))};
+    mutate:()=>observers.forEach(fn=>fn([])),flush:()=>{for(const [id,fn] of [...timers]){timers.delete(id);fn();}},timers};
 };
 const tdxDoc='22222222-2222-4222-8222-222222222222',mylabDoc='33333333-3333-4333-8333-333333333333';
 const nativeFrame = (src,original=null) => {
@@ -301,12 +302,15 @@ test('homework posts to a question frame only after its current document says he
   first.message({gzPearsonFrame:'hello',id:tdxDoc},{source:early.contentWindow,origin:L.tdx});await first.settle();first.message(context);
   assert.equal(early.sent.at(-1)?.message.gzPearsonFrame,'context','a hello before the homework page has its own context still counts');
 });
-test('a homework document names itself in its hello and says bye with that name when it unloads for good',async()=>{
+test('a homework document names itself in its hello and says bye with that name when it unloads',async()=>{
   const h=homeworkFrames();await h.settle();
   const hello=h.sent.find(s=>s.message.gzPearsonFrame==='hello');assert.ok(L.channel(hello?.message.id));
-  h.event('pagehide',{persisted:true});assert.ok(!h.sent.some(s=>s.message.gzPearsonFrame==='bye'),'a cached page comes back with its frames');
-  h.event('pagehide',{persisted:false});
+  h.event('pagehide',{persisted:true});
   assert.deepEqual(JSON.parse(JSON.stringify(h.sent.at(-1))),{message:{gzPearsonFrame:'bye',id:hello.message.id},origin:'*'});
+  h.event('pageshow',{persisted:true});
+  const restored=h.sent.at(-1).message;assert.equal(restored.gzPearsonFrame,'hello');assert.ok(L.channel(restored.id));assert.notEqual(restored.id,hello.message.id,'a late cached-page bye cannot retire the restored document');
+  h.event('pagehide',{persisted:false});
+  assert.deepEqual(JSON.parse(JSON.stringify(h.sent.at(-1))),{message:{gzPearsonFrame:'bye',id:restored.id},origin:'*'});
   const top=homeworkFrames({standalone:true});await top.settle();top.event('pagehide',{persisted:false});assert.equal(top.sent.length,0);
 });
 test('the opener posts to its homework frame only after that document says hello, and stops at its bye',async()=>{
@@ -332,4 +336,38 @@ test('the opener repeats its hello at load until Blackboard answers, and says by
   h.message(hostContext);h.event('load',{});assert.equal(h.sent.length,2);
   h.event('pagehide',{persisted:false});
   assert.deepEqual(JSON.parse(JSON.stringify(h.sent.at(-1))),{message:{gzPearsonEmbed:'bye',id:h.sent[0].message.id},origin:new URL(host).origin});
+});
+
+
+test('unanswered child hellos retry until the parent supplies context',async()=>{
+  const h=homeworkFrames();await h.settle();
+  assert.equal(h.sent.filter(s=>s.message.gzPearsonFrame==='hello').length,1);
+  h.flush();assert.equal(h.sent.filter(s=>s.message.gzPearsonFrame==='hello').length,2,'a late parent can hear the child');
+  h.message({gzPearsonFrame:'context',channel:request.doc,theme:{}});
+  const count=h.sent.length;h.flush();assert.equal(h.sent.length,count,'context ends retries');
+});
+test('unanswered opener hellos retry until Blackboard supplies context',async()=>{
+  const h=bridge();await h.settle();
+  assert.equal(h.sent.filter(s=>s.message.gzPearsonEmbed==='hello').length,1);
+  h.flush();assert.equal(h.sent.filter(s=>s.message.gzPearsonEmbed==='hello').length,2,'a late route listener can hear the opener');
+  h.message(hostContext);const count=h.sent.filter(s=>s.message.gzPearsonEmbed==='hello').length;h.flush();assert.equal(h.sent.filter(s=>s.message.gzPearsonEmbed==='hello').length,count,'context ends retries');
+});
+test('a child hello cannot authorize posts to a different frame destination',async()=>{
+  const f=nativeFrame(L.tdx+'/Player/Player.aspx'),h=homeworkFrames({frames:[f]});await h.settle();
+  h.message({gzPearsonFrame:'hello',id:tdxDoc},{source:f.contentWindow,origin:L.tdx});
+  h.message({gzPearsonFrame:'context',channel:request.doc,theme:{}});
+  f.src=L.mylab+'/Student/PlayerHomework.aspx?homeworkId=101';
+  h.message({gzPearsonFrame:'context',channel:request.doc,theme:{'--gz-ink':'#abcdef'}});
+  assert.equal(f.sent.length,1,'the previous origin did not authorize the new destination');
+});
+
+test('a departing child retires its hello even after the iframe src changes',async()=>{
+  const f=nativeFrame(L.tdx+'/Player/Player.aspx'),h=homeworkFrames({frames:[f]});await h.settle();
+  h.message({gzPearsonFrame:'hello',id:tdxDoc},{source:f.contentWindow,origin:L.tdx});
+  h.message({gzPearsonFrame:'context',channel:request.doc,theme:{}});
+  f.src=L.mylab+'/Student/PlayerHomework.aspx?homeworkId=101';
+  h.message({gzPearsonFrame:'bye',id:tdxDoc},{source:f.contentWindow,origin:L.tdx});
+  f.src=L.tdx+'/Player/Player.aspx';
+  h.message({gzPearsonFrame:'context',channel:request.doc,theme:{'--gz-ink':'#abcdef'}});
+  assert.equal(f.sent.length,1,'the departed document did not authorize a later navigation');
 });
