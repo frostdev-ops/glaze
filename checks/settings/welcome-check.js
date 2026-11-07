@@ -1,5 +1,6 @@
 // Glaze's first screen (settings/welcome.html) through each of its states, in headless Chrome with the real unpacked
-// extension. The browser's permission prompt can't be answered headless, so chrome.permissions is the check's: it decides
+// extension: the setup wizard's steps (theme, motion, the feature slides, done), each choice read back from storage as the
+// worker saved it, and the school step's. The browser's permission prompt can't be answered headless, so chrome.permissions is the check's: it decides
 // what is held and answers each request when the check says. The schools are the check's too: bb.school.edu answers as
 // Blackboard does, www.school.edu is a school's main website linking to it, and nothing else exists. Screenshots of every
 // state, wide and narrow, go to the evidence directory.
@@ -61,15 +62,15 @@ const stub = (required) => {
       return route.abort();
     });
     const url = `chrome-extension://${id}/settings/welcome.html`;
-    const open = async (viewport, motion = 'no-preference') => {
+    const open = async (viewport, motion = 'no-preference', hash = '#/school') => {
       const page = await ctx.newPage();
       page.on('pageerror', (e) => errors.push(String(e)));
       // The check knocks on school sites that don't exist; the browser logs each miss. A file of Glaze's own that fails still counts.
       page.on('console', (m) => { if (m.type() === 'error' && !(m.text().startsWith('Failed to load resource') && !m.location().url.startsWith('chrome-extension:'))) errors.push(m.text()); });
       await page.setViewportSize(viewport);
       await page.emulateMedia({ reducedMotion: motion });
-      await page.goto(url);
-      await page.waitForFunction(() => document.querySelector('#terrain.live'), null, { timeout: 15000 }).catch(() => {});
+      await page.goto(url + hash);
+      if (hash === '') await page.waitForFunction(() => document.querySelector('#terrain.live'), null, { timeout: 15000 }).catch(() => {});
       await pause(1200);
       return page;
     };
@@ -82,12 +83,133 @@ const stub = (required) => {
     const shot = (page, name) => page.screenshot({ path: path.join(out, `${name}.png`) });
     const type = async (page, text) => { await page.fill('#address', ''); await page.type('#address', text, { delay: 25 }); await pause(250); };
 
+    // The wizard: what is shown, and what storage holds.
+    const synced = (page, keys) => page.evaluate((k) => chrome.storage.sync.get(k), keys);
+    const until = async (fn, ms = 8000) => { const end = Date.now() + ms; for (;;) { const v = await fn(); if (v || Date.now() > end) return v; await pause(100); } };
+    const step = (page) => page.evaluate(() => ({ step: document.documentElement.dataset.step, hash: location.hash, shown: [...document.querySelectorAll('.step')].filter((e) => !e.hidden).map((e) => e.id) }));
+    const accent = (page) => page.evaluate(() => document.documentElement.style.getPropertyValue('--gz-accent').trim());
+    const checked = (page, sel) => page.evaluate((q) => [...document.querySelectorAll(q)].filter((e) => e.getAttribute('aria-checked') === 'true').map((e) => e.dataset.look || e.dataset.level || e.dataset.key), sel);
+    const flip = (page, key) => page.click(`.switch[data-key="${key}"]`);
+    const settle = () => pause(900);
+
+    {
+      const w = 'wide', page = await open({ width: 1440, height: 900 }, 'no-preference', '');
+      let st = await step(page);
+      check(st.step === 'start' && st.shown.join() === 'start', 'wizard: it opens on its splash');
+      check(await accent(page) === '#27cdf1' && await page.evaluate(() => document.querySelector('#terrain').classList.contains('live')), 'wizard: the splash wears the Frostdev Look, its terrain drawn');
+      check(await page.evaluate(() => document.activeElement?.id === 'begin'), 'wizard: Start has focus');
+      await shot(page, `${w}-w1-start`);
+
+      await page.click('#begin');
+      await settle();
+      st = await step(page);
+      check(st.hash === '#/theme' && st.shown.join() === 'theme', 'wizard: Start goes to the theme');
+      check(await page.evaluate(() => document.querySelectorAll('#looks .look').length) === 12, 'wizard: Glaze\'s own theme and the eleven Looks');
+      check(JSON.stringify(await checked(page, '#looks .look')) === '["Frost"]' && await accent(page) === '#17c8f4', 'wizard: a fresh install wears Glaze\'s own theme, and the page wears it too');
+      await shot(page, `${w}-w2-theme`);
+      await page.click('.look[data-look="Synthwave"]');
+      check(await until(async () => (await synced(page, 'colors')).colors?.['--gz-accent'] === '#f472b6'), 'wizard: a Look picked is saved');
+      check(await until(async () => typeof (await synced(page, 'lookX')).lookX === 'string' && (await synced(page, 'lookX')).lookX !== ''), 'wizard: with its own parts');
+      await settle();
+      check(await accent(page) === '#f472b6' && await page.evaluate(() => document.querySelector('#terrain').classList.contains('live')), 'wizard: the page wears the Look picked, its scene drawn');
+      await shot(page, `${w}-w3-theme-synthwave`);
+      await page.click('.look[data-look="Library"]');
+      await settle();
+      check(await page.evaluate(() => document.documentElement.dataset.tone === 'light' && !document.querySelector('#terrain').classList.contains('live')), 'wizard: a light Look turns the page light, with no scene');
+      await shot(page, `${w}-w4-theme-light`);
+      await page.click('.look[data-look="Frostdev"]');
+      check(await until(async () => (await synced(page, 'colors')).colors?.['--gz-accent'] === '#27cdf1'), 'wizard: the last Look picked is the one kept');
+      await settle();
+      // Arrow keys walk the cards and choose, as radios do.
+      await page.keyboard.press('ArrowRight');
+      await settle();
+      check(JSON.stringify(await checked(page, '#looks .look')) === '["Aurora Night"]' && await page.evaluate(() => document.activeElement?.dataset.look === 'Aurora Night'), 'wizard: an arrow key moves to the next Look and wears it');
+      await page.keyboard.press('ArrowLeft');
+      check(await until(async () => (await synced(page, 'colors')).colors?.['--gz-accent'] === '#27cdf1'), 'wizard: and back');
+      await settle();
+
+      await page.click('#next');
+      await settle();
+      st = await step(page);
+      check(st.hash === '#/motion' && JSON.stringify(await checked(page, '#levels .level')) === '["expressive"]', 'wizard: Next goes to motion, Expressive chosen');
+      await shot(page, `${w}-w5-motion`);
+      await page.click('.level[data-level="subtle"]');
+      check(await until(async () => (await synced(page, 'motion')).motion?.level === 'subtle') && await page.evaluate(() => document.documentElement.dataset.gzMotion === 'subtle'), 'wizard: a motion level is saved and worn');
+      await page.click('.level[data-level="off"]');
+      check(await until(async () => (await synced(page, 'motion')).motion?.level === 'off') && await page.evaluate(() => document.documentElement.dataset.gzMotion === 'off'), 'wizard: Off holds the page still');
+      await page.click('.level[data-level="expressive"]');
+      check(await until(async () => (await synced(page, 'motion')).motion?.level === 'expressive'), 'wizard: and Expressive again');
+      await flip(page, 'extras.pointerAnim');
+      check(await until(async () => (await synced(page, 'extras')).extras?.pointerAnim === false), 'wizard: the pointer animation switch is saved');
+      await flip(page, 'extras.pointerAnim');
+      check(await until(async () => (await synced(page, 'extras')).extras?.pointerAnim === true), 'wizard: and back on');
+
+      await page.click('#next');
+      await settle();
+      st = await step(page);
+      check(st.hash === '#/features/navigation' && await page.evaluate(() => document.querySelectorAll('#chips .chip').length) === 10, 'wizard: features start at navigation, ten slides');
+      check(JSON.stringify(await checked(page, '#feature-switches .switch')) === '["navbar.on"]', 'wizard: navigation is on');
+      await shot(page, `${w}-w6-features-navigation`);
+      await flip(page, 'navbar.on');
+      check(await until(async () => (await synced(page, 'navbar')).navbar?.on === false), 'wizard: navigation turned off through the worker');
+      await flip(page, 'navbar.on');
+      check(await until(async () => (await synced(page, 'navbar')).navbar?.on === true), 'wizard: and on again');
+      const ids = ['sidebar', 'todo', 'notes', 'writer', 'search', 'grades', 'speed', 'buddy', 'reminders'];
+      for (const id of ids) {
+        await page.click('#next');
+        await settle();
+        check((await step(page)).hash === `#/features/${id}`, `wizard: Next walks to ${id}`);
+        await shot(page, `${w}-w7-features-${id}`);
+        if (id === 'notes') {
+          check(JSON.stringify(await checked(page, '#feature-switches .switch')) === '["enhance.notes"]', 'wizard: a fresh install\'s notes are on');
+          await flip(page, 'enhance.notes');
+          check(await until(async () => (await synced(page, 'enhance')).enhance?.notes === false), 'wizard: notes turned off is saved');
+        }
+        if (id === 'search') {
+          await flip(page, 'enhance.palette');
+          check(await until(async () => (await synced(page, 'enhance')).enhance?.palette === false)
+            && await page.evaluate(() => document.querySelector('.switch[data-key="enhance.search"]').getAttribute('aria-disabled') === 'true'), 'wizard: search waits on the command palette');
+          await flip(page, 'enhance.palette');
+          check(await until(async () => (await synced(page, 'enhance')).enhance?.palette === true), 'wizard: palette on again');
+        }
+        if (id === 'reminders') {
+          check(JSON.stringify(await checked(page, '#feature-switches .switch')) === '[]', 'wizard: reminders stay off until chosen');
+          await flip(page, 'enhance.remind');
+          check(await until(async () => (await synced(page, 'enhance')).enhance?.remind === true), 'wizard: reminders turned on is saved');
+        }
+      }
+      await page.click('#chips .chip:nth-child(4)');
+      await settle();
+      check((await step(page)).hash === '#/features/notes' && await page.evaluate(() => document.querySelector('#chips .chip:nth-child(4)').dataset.on === 'false'), 'wizard: a dot jumps to its slide and shows it off');
+      await page.click('#back');
+      await settle();
+      check((await step(page)).hash === '#/features/todo', 'wizard: Back walks the slides back');
+      await page.goBack();
+      await settle();
+      check((await step(page)).hash === '#/features/notes', 'wizard: the browser\'s back does too');
+      await page.click('.rail [data-go="school"]');
+      await settle();
+      st = await step(page);
+      check(st.hash === '#/school' && await page.evaluate(() => document.activeElement?.id === 'address'), 'wizard: the rail jumps to the school, its field focused');
+      await page.close();
+    }
+
     for (const [w, viewport] of [['wide', { width: 1440, height: 900 }], ['narrow', { width: 390, height: 844 }]]) {
+      if (w === 'narrow') {
+        const tour = await open(viewport, 'no-preference', '');
+        await shot(tour, `${w}-w1-start`);
+        for (const [hash, name] of [['#/theme', 'w2-theme'], ['#/motion', 'w5-motion'], ['#/features/navigation', 'w6-features-navigation'], ['#/features/buddy', 'w7-features-buddy']]) {
+          await tour.evaluate((h) => { location.hash = h; }, hash);
+          await settle();
+          await shot(tour, `${w}-${name}`);
+        }
+        check(await tour.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${w}: nothing runs off the side`);
+        await tour.close();
+      }
       const page = await open(viewport);
       let s = await state(page);
-      check(s.focus === 'address' && s.act === 'none' && s.disabled === 'true' && s.label === 'Allow', `${w}: the field has focus and Allow waits for an address`);
-      check(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--gz-accent').trim() === '#27cdf1'), `${w}: it wears the Frostdev palette`);
-      check(await page.evaluate(() => document.querySelector('#terrain').classList.contains('live')), `${w}: the terrain draws`);
+      check(s.focus === 'address' && s.act === 'none' && s.disabled === 'true' && s.label === 'Allow', `${w}: the field has focus and Allow waits for an address${s.focus === 'address' ? '' : ` (focus: ${s.focus || 'none'})`}`);
+      check(await accent(page) === '#27cdf1', `${w}: it wears the theme the student picked`);
       await shot(page, `${w}-1-idle`);
 
       await page.fill('#address', '');
@@ -136,6 +258,19 @@ const stub = (required) => {
       await shot(page, `${w}-6-granted`);
       await pause(900);
       await shot(page, `${w}-6b-granted-settled`);
+      // Finish: what was chosen, and the school to open.
+      check(await page.evaluate(() => document.querySelector('#next .label').textContent) === 'Finish', `${w}: the school's step finishes the wizard`);
+      await page.click('#next');
+      await settle();
+      check((await step(page)).hash === '#/done', `${w}: Finish shows the end`);
+      const summary = await page.evaluate(() => [...document.querySelectorAll('#summary dd')].map((d) => d.textContent));
+      check(summary.includes('Frostdev') && summary.includes('Expressive') && summary.includes('bb.school.edu'), `${w}: the end lists the Look, the motion and the school (${summary.join(', ')})`);
+      check(await page.evaluate(() => !document.querySelector('#open-school').hidden && document.querySelector('#open-school .label').textContent === 'bb.school.edu'), `${w}: and offers to open the school`);
+      await pause(800);
+      await shot(page, `${w}-w8-done`);
+      await page.goBack();
+      await settle();
+      check((await step(page)).hash === '#/school' && (await state(page)).bar === 'done', `${w}: back at the school, still allowed`);
 
       await page.click('#another');
       await pause(300);
@@ -183,7 +318,7 @@ const stub = (required) => {
     }
 
     const calm = await open({ width: 1440, height: 900 }, 'reduce');
-    check(await calm.evaluate(() => document.documentElement.getAttribute('data-gz-motion') === 'off'), 'reduced motion: the Look\'s motion is off');
+    check(await calm.evaluate(() => document.documentElement.getAttribute('data-gz-motion') === 'off'), 'reduced motion: the page\'s motion is off');
     const ph = await calm.evaluate(() => document.querySelector('#address').placeholder);
     await pause(3200);
     check(ph === await calm.evaluate(() => document.querySelector('#address').placeholder), 'reduced motion: the examples hold still');

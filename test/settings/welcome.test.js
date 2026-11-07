@@ -11,11 +11,12 @@ test('the button says what it will do', () => {
   assert.equal(W.act(s, true), 'open');
 });
 
-test('the page wears the Frostdev Look from its definition, and asks only from a click', () => {
+test('the page wears each Look from its definition, and asks only from a click', () => {
   const fs = require('node:fs'), path = require('node:path');
-  const js = fs.readFileSync(path.join(__dirname, '../../extension/settings/welcome.js'), 'utf8');
-  assert.match(js, /GZ_LOOKS\.find\(\(l\) => l\.name === 'Frostdev'\)/);
-  assert.match(js, /GZ_LOOK_PARTS\(\{ name: 'Frostdev' \}\)/);
+  const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension/settings', f), 'utf8');
+  const js = read('welcome.js'), wizard = read('setup.js');
+  assert.match(wizard, /GZ_LOOKS\.find\(\(l\) => l\.name === 'Frostdev'\)/, 'the splash wears Frostdev as defaults.js defines it');
+  assert.match(wizard, /GZ_LOOK_PARTS\(L\)/, 'a Look\'s pointers and effects from its own parts');
   // Every request sits in a click or submit handler, before any await: All sites here, a school through core/site.js allow
   // (shared with Settings → Sites), which asks first thing.
   const requests = [...js.matchAll(/chrome\.permissions\.request\(/g)].length;
@@ -23,9 +24,79 @@ test('the page wears the Frostdev Look from its definition, and asks only from a
   assert.doesNotMatch(js, /await[^;\n]*\n?[^;\n]*chrome\.permissions\.request/);
   assert.match(js, /\ballow\(s, \{ checking: /, 'a school goes through core/site.js allow');
   assert.doesNotMatch(js, /chrome\.permissions\.remove\(/, 'core/site.js hands a grant back, not the page');
-  assert.doesNotMatch(js, /\bfetch\(|XMLHttpRequest|WebSocket/, 'the page itself fetches nothing: only core/site.js, at the sites the student names');
+  for (const src of [js, wizard]) assert.doesNotMatch(src, /\bfetch\(|XMLHttpRequest|WebSocket|GZ_FONTS\.load/, 'the page itself fetches nothing: only core/site.js, at the sites the student names');
+  assert.doesNotMatch(wizard, /chrome\.permissions\./, 'the wizard asks for no site');
 });
 
+// The wizard's own rules (settings/setup.js).
+const G = require('../../extension/content/defaults.js');
+const S = require('../../extension/settings/setup.js');
+
+test('every switch in the wizard is a setting, and a fresh install shows what it will get', () => {
+  const fresh = G.GZ_SANITIZE({}, true);
+  for (const [key, label, needs] of S.FEATURES.flatMap((f) => f.keys)) {
+    const [g, k] = key.split('.');
+    assert.equal(G.GZ_SPEC[g]?.[k]?.[1], 'bool', key);
+    assert.ok(label && typeof S.get(fresh, key) === 'boolean', key);
+    if (needs) assert.ok(S.FEATURES.some((f) => f.keys.some(([x]) => x === needs)), `${key} waits on a switch the wizard shows`);
+  }
+  assert.equal(new Set(S.FEATURES.map((f) => f.id)).size, S.FEATURES.length);
+  assert.equal(S.get(fresh, 'enhance.notes'), true, 'notes start on for a fresh install');
+  assert.equal(S.get(fresh, 'enhance.remind'), false, 'reminders start off');
+  assert.equal(S.count(fresh), S.FEATURES.flatMap((f) => f.keys).filter(([k]) => S.get(fresh, k)).length);
+  const html = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/settings/welcome.html'), 'utf8');
+  for (const f of S.FEATURES) assert.match(html, new RegExp(`data-art="${f.id}"`), `${f.id} has a picture`);
+});
+
+test('a switch writes its whole group with the one value changed', () => {
+  const s = G.GZ_SANITIZE({}, true);
+  const patch = S.change(s, 'enhance.notes', false);
+  assert.deepEqual(Object.keys(patch), ['enhance']);
+  assert.deepEqual(patch.enhance, { ...s.enhance, notes: false });
+  assert.equal(s.enhance.notes, true, 'the settings themselves are untouched');
+});
+
+test('a Look is put on as Settings puts it on, and Glaze\'s own theme leaves light and dark alone', () => {
+  const s = G.GZ_SANITIZE({ auto: { on: true }, look: { tooltips: false }, bg: { image: 'https://pics.example/a.jpg' } });
+  const L = G.GZ_LOOKS.find((l) => l.name === 'Library');
+  assert.deepEqual(S.theme(s, L), G.GZ_LOOK_APPLY(s, L));
+  const own = S.theme(s, S.OWN);
+  assert.equal('auto' in own, false);
+  assert.deepEqual(own.colors, G.GZ_DEFAULTS.colors);
+  assert.equal(own.preset, G.GZ_DEFAULTS.preset);
+  assert.equal(own.look.tooltips, false, 'the student\'s tooltips kept');
+  assert.equal(own.bg.image, 'https://pics.example/a.jpg', 'and their picture');
+  assert.equal(S.worn(G.GZ_SANITIZE({})), S.OWN, 'a fresh install wears Glaze\'s own theme');
+  assert.equal(S.worn({ ...G.GZ_SANITIZE({}), ...G.GZ_LOOK_APPLY(G.GZ_SANITIZE({}), L) }), L);
+  assert.equal(S.worn(G.GZ_SANITIZE({ colors: { '--gz-accent': '#123456' } })), null, 'a palette of their own is no Look');
+  assert.equal(S.LOOKS.length, G.GZ_LOOKS.length + 1);
+});
+
+test('the page shows the motion chosen, off where the system asks and the student follows it', () => {
+  const s = G.GZ_SANITIZE({});
+  assert.equal(S.level(s, false), 'expressive');
+  assert.equal(S.level(s, true), 'off');
+  assert.equal(S.level({ ...s, motion: { ...s.motion, followSystem: false } }, true), 'expressive');
+  assert.equal(S.level({ ...s, motion: { ...s.motion, level: 'subtle' } }, false), 'subtle');
+});
+
+test('each step is an address, and Next and Back walk the feature slides', () => {
+  const last = S.FEATURES.length - 1;
+  assert.deepEqual(S.at(''), { step: 'start', slide: 0 });
+  assert.deepEqual(S.at('#nope'), { step: 'start', slide: 0 });
+  assert.deepEqual(S.at('#/features/notes'), { step: 'features', slide: S.FEATURES.findIndex((f) => f.id === 'notes') });
+  assert.deepEqual(S.at('#/features/nope'), { step: 'features', slide: 0 });
+  for (const step of S.STEPS) assert.deepEqual(S.at(S.hashOf({ step, slide: 0 })), { step, slide: 0 });
+  assert.equal(S.hashOf({ step: 'features', slide: last }), `#/features/${S.FEATURES[last].id}`);
+  assert.deepEqual(S.at('#school'), { step: 'school', slide: 0 }, 'a hash without its slash still finds its step');
+  assert.deepEqual(S.move({ step: 'start', slide: 0 }, -1), { step: 'start', slide: 0 });
+  assert.deepEqual(S.move({ step: 'motion', slide: 0 }, 1), { step: 'features', slide: 0 });
+  assert.deepEqual(S.move({ step: 'features', slide: 0 }, 1), { step: 'features', slide: 1 });
+  assert.deepEqual(S.move({ step: 'features', slide: last }, 1), { step: 'school', slide: 0 });
+  assert.deepEqual(S.move({ step: 'school', slide: 0 }, -1), { step: 'features', slide: last });
+  assert.deepEqual(S.move({ step: 'features', slide: 0 }, -1), { step: 'motion', slide: 0 });
+  assert.deepEqual(S.move({ step: 'done', slide: 0 }, 1), { step: 'done', slide: 0 });
+});
 
 // Run the shipped page while the worker's second check is pending: a quick Open must never race registration.
 const screen = ({ granted = true, found = { kind: 'ultra', url: 'https://bb.school.edu/' }, patterns = [] } = {}) => {

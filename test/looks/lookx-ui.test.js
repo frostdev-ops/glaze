@@ -919,3 +919,35 @@ test('the shared editor save forwards builder part keys through the queued write
   assert.equal(result, '');
   assert.deepEqual(await X.unpack(w.sync.lookX), { x: { cursor: { kind: 'trail' }, nav: { place: 'top' } } });
 });
+
+test('the first screen wears a built-in Look or Glaze\'s own theme, and nothing else', async () => {
+  const X = require('../../extension/looks/lookparts.js'), G = require('../../extension/content/defaults.js');
+  const welcome = { id: 'glaze', url: 'chrome-extension://x/settings/welcome.html', frameId: 0, tab: {} };
+  const s = G.GZ_SANITIZE({});
+  const L = G.GZ_LOOKS.find((l) => l.name === 'Synthwave');
+  const w = worker();
+  assert.deepEqual(await w.send({ type: 'glaze:look', look: L.name, parts: null, patch: { version: 2, ...G.GZ_LOOK_APPLY(s, L) } }, welcome), { ok: true });
+  assert.equal(w.sync.colors['--gz-accent'], L.colors['--gz-accent']);
+  assert.equal((await X.unpack(w.sync.lookX)).x.pointer, 'neon', 'the Look\'s own parts, from the worker\'s table');
+  // Glaze's own theme: the defaults, and no parts.
+  const own = { colors: { ...G.GZ_DEFAULTS.colors }, preset: G.GZ_DEFAULTS.preset, look: { ...G.GZ_DEFAULTS.look }, bg: { ...G.GZ_DEFAULTS.bg } };
+  assert.deepEqual(await w.send({ type: 'glaze:look', parts: null, patch: { version: 2, ...own } }, welcome), { ok: true });
+  assert.equal(w.sync.lookX, '');
+  const denied = { ok: false, error: 'sender' };
+  assert.deepEqual(await w.send({ type: 'glaze:look', parts: { x: { cursor: { kind: 'glow' } } }, patch: {} }, welcome), denied, 'no parts of its own');
+  assert.deepEqual(await w.send({ type: 'glaze:look', look: 'Nope', parts: null, patch: {} }, welcome), denied, 'only a built-in Look');
+  assert.deepEqual(await w.send({ type: 'glaze:look', parts: null, patch: { version: 2, enhance: s.enhance } }, welcome), denied, 'only the theme\'s keys');
+  assert.deepEqual(await w.send({ type: 'glaze:look', parts: null, patch: { version: 2, card: {} } }, welcome), denied);
+  assert.deepEqual(await w.send({ type: 'glaze:look', look: L.name, parts: null, patch: {} }, { ...welcome, frameId: 3 }), denied, 'not from a frame');
+  assert.deepEqual(await w.send({ type: 'glaze:look', look: L.name, parts: null, patch: {} }, { ...welcome, url: 'chrome-extension://x/settings/welcome.html.evil' }), denied);
+});
+
+test('the first screen turns Glaze\'s navigation on or off, and changes nothing else of the bar', async () => {
+  const welcome = { id: 'glaze', url: 'chrome-extension://x/settings/welcome.html#features', frameId: 0, tab: {} };
+  const w = worker({}, { navbar: { place: 'top' } });
+  assert.deepEqual(await w.send({ type: 'glaze:navbar', patch: { on: false } }, welcome), { ok: true });
+  assert.equal(w.sync.navbar.on, false);
+  assert.equal(w.sync.navbar.place, 'top', 'the rest of the bar is kept');
+  const denied = { ok: false, error: 'sender' };
+  for (const patch of [{ place: 'rail' }, { on: false, place: 'rail' }, { on: 'no' }, {}]) assert.deepEqual(await w.send({ type: 'glaze:navbar', patch }, welcome), denied, JSON.stringify(patch));
+});
