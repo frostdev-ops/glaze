@@ -282,3 +282,19 @@ test('browser history keeps focus when it replaces a feature slide', async () =>
   w.events.hashchange();
   assert.equal(w.document.activeElement, w.get('#feature-title'));
 });
+
+test('summary keeps its labels accessible', () => {
+  const w = wizardScreen();
+  w.location.hash = '#/done';
+  w.events.hashchange();
+  const terms = w.get('#summary').children.filter((e) => e.tag === 'dt');
+  assert.ok(terms.length > 0);
+  assert.ok(terms.every((e) => e.className === 'sr-only'), 'summary terms remain available to assistive technology');
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/settings/welcome.css'), 'utf8');
+  assert.doesNotMatch(css, /\.summary\s+dt\s*\{[^}]*display:\s*none/);
+});
+
+test('save errors remain visible on the last step', () => {
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../extension/settings/welcome.css'), 'utf8');
+  assert.match(css, /\.toast:not\(\[hidden\]\)\s*\{[^}]*visibility:\s*visible/);
+});
