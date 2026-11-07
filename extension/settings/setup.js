@@ -367,7 +367,8 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     const was = from && S.STEPS.indexOf(from.step), now = S.STEPS.indexOf(to.step);
     const forward = !from || now > was || (now === was && to.slide >= from.slide);
     html.dataset.step = to.step;
-    const lost = document.activeElement && document.activeElement !== document.body && !document.activeElement.closest(`#${to.step}, .foot, .rail`);
+    const lost = document.activeElement && document.activeElement !== document.body && (!document.activeElement.closest(`#${to.step}, .foot, .rail`)
+      || (to.step === 'features' && from?.step === 'features' && from.slide !== to.slide && list.contains(document.activeElement)));
     const enter = (el) => { el.dataset.in = forward ? 'fwd' : 'back'; el.addEventListener('animationend', () => delete el.dataset.in, { once: true }); };
     for (const id of S.STEPS) {
       const sec = document.getElementById(id);
