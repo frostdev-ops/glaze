@@ -46,19 +46,21 @@ for (const [lang, expected] of Object.entries(access)) test(`listing ${lang || '
   assert.ok(!/(?:ten tabs|zehn Tabs|diez pestañas|dix onglets|tien tabbladen|dez abas)/.test(listing(lang)), 'no settings editor in ten tabs');
 });
 
-// 4.0.4: Ask Rime's fixes, under its name in each language, unlabelled so every store carries them.
-const release404 = {
-  '': 'NEW IN 4.0.4', de: 'NEU IN 4.0.4', es: 'NOVEDADES DE 4.0.4', fr: 'NOUVEAUTÉS DE LA VERSION 4.0.4', nl: 'NIEUW IN 4.0.4', 'pt-BR': 'NOVO NA 4.0.4',
+// 4.0.5: the setup guide, labelled for Chrome and Firefox (Safari doesn't open it), then two Ask Rime fixes under its name and
+// Pearson inside Blackboard under its switch's name, unlabelled so every store carries them.
+const release405 = {
+  '': 'NEW IN 4.0.5', de: 'NEU IN 4.0.5', es: 'NOVEDADES DE 4.0.5', fr: 'NOUVEAUTÉS DE LA VERSION 4.0.5', nl: 'NIEUW IN 4.0.5', 'pt-BR': 'NOVO NA 4.0.5',
 };
-for (const [lang, heading] of Object.entries(release404)) test(`4.0.4 release notes ${lang || 'en'} name Ask Rime and go to every store`, () => {
+for (const [lang, heading] of Object.entries(release405)) test(`4.0.5 release notes ${lang || 'en'} label the setup guide for Chrome and Firefox and send the fixes to every store`, () => {
   const text = listing(lang), block = part(text, 'Release notes');
   const context = {};
   if (lang) vm.runInNewContext(read(`i18n/${lang}.js`), context);
   const ui = (key) => lang ? context.GZ_LANGS[lang][key] : key;
   assert.ok(block.startsWith(heading), heading);
   const bullets = block.split('\n').filter((l) => l.startsWith('•'));
-  assert.equal(bullets.length, 2);
-  for (const l of bullets) assert.ok(l.includes(ui('Ask Rime')) && !/^•\s*(?:Chrome|Firefox|Safari)\s*:/.test(l), l);
+  const label = (l) => /^•\s*(Chrome|Firefox|Safari)\s*:/.exec(l)?.[1];
+  assert.deepEqual(bullets.map((l) => label(l) || (l.includes(ui('Ask Rime')) ? 'Ask Rime' : l.includes(ui('Pearson inside Blackboard')) ? 'Pearson' : l)), ['Chrome', 'Firefox', 'Ask Rime', 'Ask Rime', 'Pearson']);
+  assert.equal(bullets[0].replace('Chrome', ''), bullets[1].replace('Firefox', ''), 'one setup-guide line per browser that opens it');
   assert.ok(!/\b(?:CI|audit|eval|R\d+)\b/i.test(block), 'no internal process or model rounds in store copy');
 });
 
@@ -88,12 +90,12 @@ for (const [lang, expected] of Object.entries(terms)) test(`listing ${lang || 'e
   for (const term of expected) assert.ok(text.includes(term), term);
 });
 
-test('4.0.4 versions agree and the exact pure notes transform fits Apple', () => {
-  assert.equal(JSON.parse(read('manifest.json')).version, '4.0.4');
-  assert.equal(JSON.parse(read('../safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.4');
-  // The helper and its Claude Desktop bundle, glaze-mcp-4.0.4.mcpb on the GitHub release, carry Glaze's version.
-  assert.equal(JSON.parse(read('../mcp/package.json')).version, '4.0.4');
-  assert.equal(JSON.parse(read('../mcp/mcpb/manifest.json')).version, '4.0.4');
+test('4.0.5 versions agree and the exact pure notes transform fits Apple', () => {
+  assert.equal(JSON.parse(read('manifest.json')).version, '4.0.5');
+  assert.equal(JSON.parse(read('../safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.5');
+  // The helper and its Claude Desktop bundle, glaze-mcp-4.0.5.mcpb on the GitHub release, carry Glaze's version.
+  assert.equal(JSON.parse(read('../mcp/package.json')).version, '4.0.5');
+  assert.equal(JSON.parse(read('../mcp/mcpb/manifest.json')).version, '4.0.5');
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
   const script = read('../tools/release/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));
@@ -105,7 +107,7 @@ test('4.0.4 versions agree and the exact pure notes transform fits Apple', () =>
   });
   const result = notes(path.join(root, '..'));
   assert.ok(result.length <= 4000, `${result.length} characters`);
-  assert.match(result, /^Fixed\n/);
+  assert.match(result, /^Added\n/);
   assert.ok(result.length <= 3000, `AMO: ${result.length} characters`);
   assert.ok(!result.includes('## [3.4.5]'));
 });

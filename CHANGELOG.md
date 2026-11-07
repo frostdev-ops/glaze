@@ -6,6 +6,18 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [4.0.5] — 2026-11-07
+
+### Added
+
+- Chrome, Edge and Firefox: a new install opens a setup guide. Choose a theme (Frost or one of the eleven Looks) and motion, turn each feature on or off beside a short animated picture of it, then add your school. Every choice saves as you make it.
+
+### Fixed
+
+- Ask Rime's study help answers from your school's records: ask about your next test and it names the test, its course and its due date.
+- Ask Rime reads each list once and keeps what it read, instead of reading the same list again or losing it in a long chat.
+- Pearson inside Blackboard no longer fills your browser's error list for Glaze while a Pearson page is still loading.
+
 ## [4.0.4] — 2026-11-05
 
 ### Fixed

@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.4 (Dutch)
+# Chrome Web Store listing — Glaze 4.0.5 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -73,7 +73,10 @@ Canvas is een handelsmerk van Instructure, Inc. Blackboard is een handelsmerk va
 
 ## Release notes
 
-NIEUW IN 4.0.4
+NIEUW IN 4.0.5
 
-• Vraag het Rime stopt niet meer met een fout bij een goed antwoord: je naam, een herinnering die het net heeft gezet, iets in je eigen woorden, een tijd zoals jij die schrijft, een cursus bij zijn code, of een gewoon ‘er kwam niets terug’ van je school.
-• Als een antwoord een regel van Vraag het Rime breekt, krijgt Rime nog een poging in plaats van een fout.
+• Chrome: een nieuwe installatie opent een installatiegids: kies een thema en beweging, zet functies een voor een aan of uit en voeg dan je school toe.
+• Firefox: een nieuwe installatie opent een installatiegids: kies een thema en beweging, zet functies een voor een aan of uit en voeg dan je school toe.
+• De studiehulp van Vraag het Rime antwoordt uit de gegevens van je school: vraag naar je volgende toets en het noemt de toets, de cursus en de inleverdatum.
+• Vraag het Rime leest elke lijst één keer en onthoudt wat het las, ook in een lang gesprek.
+• Pearson binnen Blackboard vult de foutenlijst van Glaze in je browser niet meer.

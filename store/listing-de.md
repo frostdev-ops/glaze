@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.4 (German)
+# Chrome Web Store listing — Glaze 4.0.5 (German)
 
 ## Short summary (132 character maximum)
 
@@ -73,7 +73,10 @@ Canvas ist eine Marke von Instructure, Inc. Blackboard ist eine Marke von Anthol
 
 ## Release notes
 
-NEU IN 4.0.4
+NEU IN 4.0.5
 
-• Rime fragen bricht bei einer richtigen Antwort nicht mehr mit einem Fehler ab: dein Name, eine gerade gestellte Erinnerung, etwas in deinen eigenen Worten, eine Uhrzeit in deiner Schreibweise, ein Kurs mit seinem Kürzel oder ein schlichtes „nichts gefunden“ von deiner Schule.
-• Verstößt eine Antwort gegen eine Regel von Rime fragen, bekommt Rime einen weiteren Versuch statt eines Fehlers.
+• Chrome: Nach einer neuen Installation öffnet sich eine Einrichtung: Wähle Design und Bewegung, schalte Funktionen einzeln ein oder aus und füge dann deine Schule hinzu.
+• Firefox: Nach einer neuen Installation öffnet sich eine Einrichtung: Wähle Design und Bewegung, schalte Funktionen einzeln ein oder aus und füge dann deine Schule hinzu.
+• Die Lernhilfe von Rime fragen antwortet aus den Daten deiner Schule: Fragst du nach deinem nächsten Test, nennt sie den Test, seinen Kurs und das Abgabedatum.
+• Rime fragen liest jede Liste nur einmal und behält, was es gelesen hat, auch in einem langen Chat.
+• Pearson in Blackboard füllt die Fehlerliste deines Browsers für Glaze nicht mehr.

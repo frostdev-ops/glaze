@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.4 (French)
+# Chrome Web Store listing — Glaze 4.0.5 (French)
 
 ## Short summary (132 character maximum)
 
@@ -73,7 +73,10 @@ Canvas est une marque d’Instructure, Inc. Blackboard est une marque d’Anthol
 
 ## Release notes
 
-NOUVEAUTÉS DE LA VERSION 4.0.4
+NOUVEAUTÉS DE LA VERSION 4.0.5
 
-• Demander à Rime ne s’arrête plus sur une erreur quand sa réponse est juste : votre nom, un rappel qu’il vient de créer, un fait dit avec vos mots, une heure écrite à votre façon, un cours désigné par son code, ou un simple « rien reçu » de votre établissement.
-• Quand une réponse enfreint une règle de Demander à Rime, Rime a un nouvel essai au lieu d’une erreur.
+• Chrome : une nouvelle installation ouvre un guide de configuration : choisissez un thème et les animations, activez ou désactivez les fonctions une à une, puis ajoutez votre établissement.
+• Firefox : une nouvelle installation ouvre un guide de configuration : choisissez un thème et les animations, activez ou désactivez les fonctions une à une, puis ajoutez votre établissement.
+• L’aide aux révisions de Demander à Rime répond à partir des données de votre établissement : demandez votre prochain test, il vous donne le test, son cours et sa date limite.
+• Demander à Rime lit chaque liste une seule fois et garde ce qu’il a lu, même dans une longue conversation.
+• Pearson dans Blackboard ne remplit plus la liste d’erreurs de Glaze dans votre navigateur.

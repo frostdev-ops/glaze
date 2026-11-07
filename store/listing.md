@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.4
+# Chrome Web Store listing — Glaze 4.0.5
 
 ## Name
 
@@ -81,10 +81,13 @@ Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Antholog
 
 ## Release notes
 
-NEW IN 4.0.4
+NEW IN 4.0.5
 
-• Ask Rime no longer stops with an error on a right answer: your name, a reminder it just set, a fact in your own words, a time written your way, a course named by its code, or a plain “nothing came back” from your school.
-• When an answer breaks one of Ask Rime's rules, Rime gets one more try instead of an error.
+• Chrome: a new install opens a setup guide: choose a theme and motion, turn features on or off one by one, then add your school.
+• Firefox: a new install opens a setup guide: choose a theme and motion, turn features on or off one by one, then add your school.
+• Ask Rime's study help answers from your school's records: ask about your next test and it names the test, its course and its due date.
+• Ask Rime reads each list once and keeps what it read, even in a long chat.
+• Pearson inside Blackboard no longer fills your browser's error list for Glaze.
 
 ## Single-purpose statement
 
