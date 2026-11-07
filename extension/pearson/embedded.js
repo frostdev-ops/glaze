@@ -7,7 +7,10 @@
   // Referrer changes to the previous homework page after in-frame navigation; the parent stays the same.
   const from = origin === L.mylab ? L.socket : /^\/assignment\//i.test(location.pathname) ? L.mylab : L.tdx;
   const html = document.documentElement;
-  const childAttrs = new Map();
+  const childAttrs = new Map(), id = crypto.randomUUID();
+  // Child frames whose current document said hello. Before that a frame can still hold its MyLab launch redirect, where
+  // Chrome refuses and logs a post to tdx.
+  const said = new WeakMap();
   let channel = null, enabled = false, stopped = false, nav = null, mode = null, question = null, lastQuestion = null, theme = {}, lookKey = '', sheet = null;
   const emit = m => parent.postMessage(m, from);
   const place = request => {
@@ -30,7 +33,7 @@
       const to = L.frameOrigin(f.src); if (!to) continue;
       if (!childAttrs.has(f)) childAttrs.set(f,f.getAttribute('data-gz-pearson-child'));
       f.setAttribute('data-gz-pearson-child','');
-      if (channel && !standalone) f.contentWindow?.postMessage({ gzPearsonFrame: 'context', channel, theme }, to);
+      if (channel && !standalone && said.has(f)) f.contentWindow?.postMessage({ gzPearsonFrame: 'context', channel, theme }, to);
     }
   };
   const mark = () => {
@@ -61,8 +64,13 @@
   const watch = new MutationObserver(records => { if (records.some(r => [...r.addedNodes,...r.removedNodes].some(n => n.nodeType === 1 && (n.matches(watched) || n.querySelector(watched))))) mount(); });
   watch.observe(html, { childList: true, subtree: true });
   addEventListener('load', e => { if (e.target?.localName === 'iframe') children(); }, true);
+  const frameOf = e => [...document.getElementsByTagName('iframe')].find(f => f.contentWindow === e.source && L.frameOrigin(f.src) === e.origin);
   addEventListener('message', e => {
     const m = e.data;
+    if ((m?.gzPearsonFrame === 'hello' || m?.gzPearsonFrame === 'bye') && L.channel(m.id) && [L.mylab,L.tdx].includes(e.origin)) {
+      const f = frameOf(e);
+      if (f && m.gzPearsonFrame === 'hello') said.set(f, m.id); else if (f && said.get(f) === m.id) said.delete(f);
+    }
     if (!standalone && e.source === parent && e.origin === from && m?.gzPearsonFrame === 'context' && L.channel(m.channel)) {
       const next = L.theme(m.theme), key = JSON.stringify(next);
       if (channel === m.channel && lookKey === key) return;
@@ -76,13 +84,12 @@
       } else {
         let sent = false;
         for (const f of document.getElementsByTagName('iframe')) {
-          const to = L.frameOrigin(f.src); if (to) { sent = true; f.contentWindow?.postMessage(m,to); }
+          const to = L.frameOrigin(f.src); if (to) { sent = true; if (said.has(f)) f.contentWindow?.postMessage(m,to); }
         }
         if (!sent) place(m.request);
       }
     } else if (enabled && channel && [L.mylab,L.tdx].includes(e.origin)) {
-      const f = [...document.getElementsByTagName('iframe')].find(f => f.contentWindow === e.source && L.frameOrigin(f.src) === e.origin);
-      if (!f) return;
+      if (!frameOf(e)) return;
       if (m?.gzPearsonFrame === 'hello') children();
       if (m?.channel === channel && m.gzPearsonFrame === 'question' && Number.isInteger(m.question) && m.question > 0 && m.question <= 10000) {
         if (origin === L.mylab) { question = m.question; place(); } else emit({ gzPearsonFrame: 'question', channel, question: m.question });
@@ -108,8 +115,8 @@
     if (a === 'local' && c.pearsonAccess && c.pearsonAccess.newValue !== true) { enabled = false; mark(); children(); }
     if (a === 'sync' && (c.enabled || c.enhance) || a === 'local' && c.pearsonAccess) read();
   });
-  addEventListener('pagehide', e => { if (!e.persisted) { stopped = true; watch.disconnect(); navWatch.disconnect(); modeWatch.disconnect(); } mark(); children(); });
+  addEventListener('pagehide', e => { if (!e.persisted) { if (!standalone) parent.postMessage({ gzPearsonFrame: 'bye', id }, '*'); stopped = true; watch.disconnect(); navWatch.disconnect(); modeWatch.disconnect(); } mark(); children(); });
   addEventListener('pageshow', e => { if (e.persisted) { read(); children(); place(); } });
-  if (!standalone) parent.postMessage({ gzPearsonFrame: 'hello' }, '*');
+  if (!standalone) parent.postMessage({ gzPearsonFrame: 'hello', id }, '*');
   read(); mount();
 })();

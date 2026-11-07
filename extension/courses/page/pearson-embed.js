@@ -3,6 +3,9 @@ var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
   const X = globalThis.GZ_CTX, L = globalThis.GZ_PEARSON_EMBED_LIB;
   if (!X || !L || X.site !== 'ultra') return null;
   let view = null, sheet = null, queued = 0, pearsonAccess = false, accessRevision = 0;
+  // Opener documents that said hello, by frame window, heard with or without a view: switching Pearson inside Blackboard on
+  // can make an already loaded opener say it before the view exists.
+  const said = new WeakMap(), ready = v => said.has(v.frame.contentWindow);
   const vars = slot => ['--gz-pearson-gap','--gz-pearson-height','--gz-pearson-scheme'].map(k => [k,slot.style.getPropertyValue(k),slot.style.getPropertyPriority(k)]);
   const restore = v => { v.slot.removeAttribute('data-gz-pearson-slot'); for (const [k,value,priority] of v.vars) { if (value) v.slot.style.setProperty(k,value,priority); else v.slot.style.removeProperty(k); } };
   const nativeExit = header => header?.querySelector('button[data-analytics-id="course.content.header.exit"]') || header?.querySelector('button:not(.gz-pearson-host-controls *)');
@@ -10,8 +13,9 @@ var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
   // Pearson inside Blackboard off keeps a live session as it is; only later launches go native.
   const live = () => pearsonAccess && X.on() && X.settings().enabled !== false && ['pearsonViewer', 'pearsonEmbed', 'pearsonMath'].some(k => X.settings().enhance[k] === true);
   const on = () => live() && X.settings().enhance.pearsonEmbed === true;
+  // Posts wait for the opener's hello: until then the frame can hold a Blackboard redirect, where Chrome refuses and logs them.
   const context = (force = false) => {
-    if (!view) return;
+    if (!view || !ready(view)) return;
     const enabled = on(), key = `${enabled}:${view.lookKey}`; if (!force && view.sent === key) return;
     view.sent = key; view.frame.contentWindow?.postMessage({ gzPearsonEmbed: 'context', channel: view.channel, enabled, theme: view.theme }, L.socket);
   };
@@ -46,7 +50,7 @@ var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
         if (!view || view !== v || open.disabled) return;
         open.disabled = true;
         try {
-          const fresh = !v.url ? null : await new Promise(done => {
+          const fresh = !v.url || !ready(v) ? null : await new Promise(done => {
             const request = crypto.randomUUID(), timer = setTimeout(() => { v.pending = null; done(null); }, 1500);
             v.pending = {request, timer, done}; v.frame.contentWindow.postMessage({gzPearsonEmbed:'locate',channel:v.channel,request},L.socket);
           });
@@ -75,7 +79,7 @@ var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
     }
     sheet?.remove(); sheet = null;
   };
-  const off = () => { pause(); view?.frame.removeEventListener('load', context); view = null; };
+  const off = () => { pause(); view = null; };
   const sync = () => {
     if (!L.lti(location.href)) return off();
     const frame = document.getElementById('lti-launch-iframe'), header = frame?.closest('.routed-page')?.querySelector('content-page-header > header') || document.querySelector('content-page-header > header');
@@ -100,15 +104,19 @@ var GZ_PEARSON_EMBED = globalThis.GZ_PEARSON_EMBED || (() => {
       const slot = frame.parentElement, resize = new ResizeObserver(schedule), lookWatch = new MutationObserver(look);
       view = { frame, header, exit, slot, resize, lookWatch, theme: {}, lookKey: '', channel: crypto.randomUUID(), sent: null, active: false, url: '', controls: null,
         vars: vars(slot) };
-      resize.observe(slot); resize.observe(header); frame.addEventListener('load', context);
+      resize.observe(slot); resize.observe(header);
       lookWatch.observe(document.documentElement, {attributes:true}); look();
     }
     context(); if (view.active) activate();
   };
   addEventListener('message', e => {
     const v = view, m = e.data;
+    if (e.origin === L.socket && e.source && L.channel(m?.id)) {
+      if (m.gzPearsonEmbed === 'hello') said.set(e.source, m.id); else if (m.gzPearsonEmbed === 'bye' && said.get(e.source) === m.id) said.delete(e.source);
+    }
     if (!v || e.source !== v.frame.contentWindow || e.origin !== L.socket) return;
     if (m?.gzPearsonEmbed === 'hello') { context(true); return; }
+    if (m?.gzPearsonEmbed === 'bye') return;
     if (m?.channel !== v.channel) return;
     if (m.gzPearsonEmbed === 'active') activate();
     if (m.gzPearsonEmbed === 'place') {
