@@ -58,7 +58,7 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
     const seen = (row) => page.evaluate((row) => {
       const c = document.querySelector(`#${row} .stream-panel-activity-card`), cs = getComputedStyle(c);
       const icon = getComputedStyle(c.querySelector('.element-image')), svg = getComputedStyle(c.querySelector('.element-image svg'));
-      return { icon: svg.color, tile: icon.backgroundColor, divider: getComputedStyle(c.querySelector('.element-details')).borderLeftColor, outline: cs.borderTopColor };
+      return { icon: svg.color, tile: icon.backgroundColor, divider: getComputedStyle(c.querySelector('.element-details')).borderLeftColor, outline: cs.borderRightColor };
     }, row);
     // content-ultra.js paints a course's own color on its slot elements once the course list is read.
     await page.waitForFunction(() => document.querySelector('#shared .element-details')?.style.getPropertyValue('--gz-course-raw'));
@@ -67,18 +67,19 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
     const plain = await page.evaluate(() => { const p = document.createElement('div'); p.className = 'element-card'; p.style.border = '1px solid'; document.querySelector('#site-wrap').append(p); const c = getComputedStyle(p).borderTopColor; p.remove(); return c; });
     const own = await expected(3), shared = await expected(3, '--gz-pick: initial; --gz-course-raw: #c473d4'), other = await expected(10);
     check(new Set([own.color, shared.color, other.color, accent]).size === 4, `the three courses and the accent are four colors (${own.color}, ${shared.color}, ${other.color}, ${accent})`);
+    const none = await seen('none');
     for (const [row, want] of [['own', own], ['shared', shared], ['other', other]]) {
       const got = await seen(row);
       check(got.icon === want.color, `${row}: the icon is its course's color (${got.icon}, want ${want.color})`);
       check(got.tile === want.tile, `${row}: the icon tile is its course's tint (${got.tile}, want ${want.tile})`);
       check(got.divider === want.color, `${row}: the divider is its course's color (${got.divider})`);
-      check(got.outline !== plain, `${row}: the outline leans to its course's color (${got.outline}, plain ${plain})`);
+      check(got.outline !== none.outline, `${row}: the outline leans to its course's color (${got.outline}, no course ${none.outline})`);
     }
     check(await page.evaluate(() => document.querySelector('#shared .stream-panel-activity-card').style.getPropertyValue('--gz-course-raw') === '#c473d4'), 'a course sharing a slot carries its own color on its card');
     // A card of no course looks as every card did before: the accent's icon and tile, the plain divider and outline.
-    const none = await seen('none'), soft = await page.evaluate(() => { const p = document.createElement('i'); p.style.setProperty('color', 'var(--gz-accent-soft)', 'important'); document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; });
+    const soft = await page.evaluate(() => { const p = document.createElement('i'); p.style.setProperty('color', 'var(--gz-accent-soft)', 'important'); document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; });
     check(none.icon === accent && none.tile === soft, `a card of no course keeps the accent's icon and tile (${none.icon}, ${none.tile})`);
-    check(none.divider === plain && none.outline.replace(/\s/g, '') !== '' && !(await page.evaluate(() => document.querySelector('#none .stream-panel-activity-card').hasAttribute('data-gz-course-slot'))), `a card of no course keeps the plain divider and has no slot (${none.divider}, ${none.outline})`);
+    check(none.divider === plain && !(await page.evaluate(() => document.querySelector('#none .stream-panel-activity-card').hasAttribute('data-gz-course-slot'))), `a card of no course keeps the plain divider and has no slot (${none.divider})`);
     if (out) { fs.mkdirSync(out, { recursive: true }); await page.locator('#activity-stream').screenshot({ path: path.join(out, 'stream-colors-dark.png') }); }
     // Not harmonised: Ultra's own slot colors.
     await worker.evaluate(async (s) => chrome.storage.sync.set({ courses: { ...s.courses, harmonize: false } }), settings);
@@ -86,6 +87,11 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
     check((await seen('own')).icon === 'rgb(255, 225, 43)', 'unharmonised, the icon is Ultra\'s own slot color');
     check((await seen('shared')).icon === 'rgb(196, 115, 212)', 'unharmonised, a course sharing a slot keeps its own raw color');
     if (out) await page.locator('#activity-stream').screenshot({ path: path.join(out, 'stream-colors-raw.png') });
+    // A light look, harmonised: evidence only.
+    const paper = G.GZ_PRESETS.find(([n]) => n === 'Paper')[1];
+    await worker.evaluate(async ([s, colors]) => chrome.storage.sync.set({ preset: 'Paper', colors, courses: { ...s.courses, harmonize: true } }), [settings, paper]);
+    await page.waitForFunction(() => !document.documentElement.hasAttribute('data-gz-raw-courses') && getComputedStyle(document.body).backgroundColor !== 'rgb(6, 13, 24)');
+    if (out) await page.locator('#activity-stream').screenshot({ path: path.join(out, 'stream-colors-light.png') });
     await worker.evaluate(async () => chrome.storage.sync.set({ enabled: false }));
     await page.waitForFunction(() => !document.querySelector('[data-gz-course-slot]'));
     check(true, 'turning Glaze off takes the slot off the cards');
