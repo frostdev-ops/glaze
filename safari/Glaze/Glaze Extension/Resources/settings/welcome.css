@@ -95,7 +95,8 @@ main::before {
 /* ---- the top: Glaze's mark and the rail of steps ---- */
 .top { display: flex; align-items: center; justify-content: center; position: relative; padding: 1.1rem 1.25rem 0.25rem; min-height: 4.25rem; transition: opacity 0.4s var(--ease), transform 0.4s var(--ease); }
 html[data-step="start"] .top { opacity: 0; transform: translateY(-8px); pointer-events: none; visibility: hidden; }
-.mini { position: absolute; left: 1.25rem; top: 50%; translate: 0 -40%; display: inline-flex; align-items: center; gap: 0.45rem; font-weight: 700; font-size: 1.1rem; letter-spacing: -0.03em; user-select: none; }
+.mini { position: absolute; left: 1rem; top: 50%; translate: 0 -40%; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.35rem 0.8rem 0.35rem 0.65rem; border-radius: 999px; font-weight: 700; font-size: 1.1rem; letter-spacing: -0.03em; user-select: none;
+  background: var(--glass); border: 1px solid var(--edge); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
 .mini svg { width: 0.95rem; height: auto; fill: var(--gz-accent); }
 .rail { position: relative; }
 .rail ol { list-style: none; display: flex; gap: clamp(0.5rem, 3vw, 2.75rem); position: relative; z-index: 1; }
