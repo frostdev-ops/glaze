@@ -55,8 +55,10 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
       p.remove();
       return r;
     }, [slot, vars]);
-    const seen = (row) => page.evaluate((row) => {
+    // Read once the look's transitions (border and background colors, the entry) have run.
+    const seen = (row) => page.evaluate(async (row) => {
       const c = document.querySelector(`#${row} .stream-panel-activity-card`), cs = getComputedStyle(c);
+      await Promise.all(c.getAnimations({ subtree: true }).filter((a) => a.effect?.getComputedTiming().endTime !== Infinity).map((a) => a.finished.catch(() => {})));
       const icon = getComputedStyle(c.querySelector('.element-image')), svg = getComputedStyle(c.querySelector('.element-image svg'));
       return { icon: svg.color, tile: icon.backgroundColor, divider: getComputedStyle(c.querySelector('.element-details')).borderLeftColor, outline: cs.borderRightColor };
     }, row);
@@ -91,6 +93,7 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
     const paper = G.GZ_PRESETS.find(([n]) => n === 'Paper')[1];
     await worker.evaluate(async ([s, colors]) => chrome.storage.sync.set({ preset: 'Paper', colors, courses: { ...s.courses, harmonize: true } }), [settings, paper]);
     await page.waitForFunction(() => !document.documentElement.hasAttribute('data-gz-raw-courses') && getComputedStyle(document.body).backgroundColor !== 'rgb(6, 13, 24)');
+    await page.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().endTime !== Infinity).map((a) => a.finished.catch(() => {}))));
     if (out) await page.locator('#activity-stream').screenshot({ path: path.join(out, 'stream-colors-light.png') });
     await worker.evaluate(async () => chrome.storage.sync.set({ enabled: false }));
     await page.waitForFunction(() => !document.querySelector('[data-gz-course-slot]'));
