@@ -45,6 +45,15 @@ test('the first screen may not add an endpoint, move a provider\'s address, remo
   assert.equal((await ask(w, { op: 'get' }, editor)).connections.openai.key, 'sk-p••••6789', 'the kept key is untouched');
 });
 
+test('keeping an existing Rime connection preserves its tuning', async () => {
+  const w = make();
+  assert.equal((await ask(w, { op: 'set', id: 'local', cfg: { provider: 'local', tier: 2, context: 8192 } }, editor)).ok, true);
+  const before = (await ask(w, { op: 'get' }, editor)).connections.local;
+  assert.equal(before.tier, 2);
+  assert.equal((await ask(w, { op: 'set', id: 'local', cfg: { provider: 'local' } })).ok, true);
+  assert.deepEqual((await ask(w, { op: 'get' }, editor)).connections.local, before);
+});
+
 test('only the first screen\'s own top frame: not a frame of it, another page, another extension or another origin', async () => {
   const w = make();
   for (const sender of [welcome({ frameId: 2 }), welcome({ tab: undefined }), welcome({ id: 'other' }), welcome({ origin: 'https://evil.example' }),
