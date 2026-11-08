@@ -237,15 +237,16 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
 
   // ---- radio groups: arrow keys move and choose, as native radios do ----
   const arrows = (box, cards, pick) => box.addEventListener('keydown', (e) => {
-    const i = cards.indexOf(document.activeElement);
+    const available = cards.filter((c) => !c.hidden && c.getAttribute('aria-disabled') !== 'true');
+    const i = available.indexOf(document.activeElement);
     if (i < 0) return;
-    const cols = Math.max(1, cards.filter((c) => c.offsetTop === cards[0].offsetTop).length);
-    const step = { ArrowRight: 1, ArrowDown: cols, ArrowLeft: -1, ArrowUp: -cols, Home: -i, End: cards.length - 1 - i }[e.key];
+    const cols = Math.max(1, available.filter((c) => c.offsetTop === available[0].offsetTop).length);
+    const step = { ArrowRight: 1, ArrowDown: cols, ArrowLeft: -1, ArrowUp: -cols, Home: -i, End: available.length - 1 - i }[e.key];
     if (step === undefined) return;
     e.preventDefault();
-    const j = Math.max(0, Math.min(cards.length - 1, i + (box.matches(':dir(rtl)') && /Left|Right/.test(e.key) ? -step : step)));
-    cards[j].focus();
-    pick(j);
+    const j = Math.max(0, Math.min(available.length - 1, i + (box.matches(':dir(rtl)') && /Left|Right/.test(e.key) ? -step : step)));
+    available[j].focus();
+    pick(cards.indexOf(available[j]));
   });
   arrows(looksBox, lookCards, (j) => pickLook(S.LOOKS[j], lookCards[j]));
 
