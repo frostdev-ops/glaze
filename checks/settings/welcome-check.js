@@ -173,10 +173,33 @@ const stub = (required) => {
           await flip(page, 'enhance.palette');
           check(await until(async () => (await synced(page, 'enhance')).enhance?.palette === true), 'wizard: palette on again');
         }
+        if (id === 'writer') {
+          const fmt = () => page.evaluate(() => [...document.querySelectorAll('.choice .opt')].filter((b) => b.getAttribute('aria-checked') === 'true').map((b) => b.dataset.value));
+          check(JSON.stringify(await fmt()) === '["mla9"]', 'wizard: a new paper\'s format starts at MLA 9');
+          await page.click('.choice .opt[data-value="apa7"]');
+          check(await until(async () => (await synced(page, 'writer')).writer?.format === 'apa7') && JSON.stringify(await fmt()) === '["apa7"]', 'wizard: APA 7 picked is saved');
+          await page.keyboard.press('ArrowRight');
+          check(await until(async () => (await synced(page, 'writer')).writer?.format === 'chicago17'), 'wizard: an arrow key moves the format along');
+          await flip(page, 'enhance.writer');
+          check(await until(async () => (await synced(page, 'enhance')).enhance?.writer === false)
+            && await page.evaluate(() => document.querySelector('.choice').getAttribute('aria-disabled') === 'true'), 'wizard: the format waits on Writer');
+          await page.click('.choice .opt[data-value="mla9"]', { force: true });
+          await settle();
+          check((await synced(page, 'writer')).writer?.format === 'chicago17', 'wizard: and does nothing while Writer is off');
+          await flip(page, 'enhance.writer');
+          check(await until(async () => (await synced(page, 'enhance')).enhance?.writer === true), 'wizard: Writer on again');
+          const ui = await page.evaluate(() => ({ on: document.querySelector('.switch[data-key="enhance.writer"]').getAttribute('aria-checked'), format: document.querySelector('.choice').getAttribute('aria-disabled') }));
+          check(ui.on === 'true' && ui.format === 'false', `wizard: the page shows Writer on and its format free (${JSON.stringify(ui)})`);
+          await settle();
+          await shot(page, `${w}-w7-features-writer-format`);
+        }
         if (id === 'reminders') {
+          check(JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('#feature-switches .switch')].map((b) => b.dataset.key))) === '["enhance.remind","enhance.remindExam","enhance.remindPlan","enhance.remindClass"]', 'wizard: due-date, exam, plan and class reminders');
           check(JSON.stringify(await checked(page, '#feature-switches .switch')) === '[]', 'wizard: reminders stay off until chosen');
           await flip(page, 'enhance.remind');
           check(await until(async () => (await synced(page, 'enhance')).enhance?.remind === true), 'wizard: reminders turned on is saved');
+          await flip(page, 'enhance.remindExam');
+          check(await until(async () => (await synced(page, 'enhance')).enhance?.remindExam === true), 'wizard: exam reminders turned on is saved');
         }
       }
       await page.click('#next');
@@ -207,10 +230,16 @@ const stub = (required) => {
       if (w === 'narrow') {
         const tour = await open(viewport, 'no-preference', '');
         await shot(tour, `${w}-w1-start`);
-        for (const [hash, name] of [['#/theme', 'w2-theme'], ['#/motion', 'w5-motion'], ['#/nav', 'w6-nav'], ['#/features/sidebar', 'w7-features-sidebar'], ['#/features/buddy', 'w7-features-buddy'], ['#/ai', 'w8-ai']]) {
+        await tour.click('#skip');
+        await settle();
+        check((await step(tour)).hash === '#/school', `${w}: Skip setup goes straight to the school`);
+        for (const [hash, name] of [['#/theme', 'w2-theme'], ['#/motion', 'w5-motion'], ['#/nav', 'w6-nav'], ['#/features/sidebar', 'w7-features-sidebar'], ['#/features/writer', 'w7-features-writer'], ['#/features/buddy', 'w7-features-buddy'], ['#/features/reminders', 'w7-features-reminders'], ['#/ai', 'w8-ai']]) {
           await tour.evaluate((h) => { location.hash = h; }, hash);
           await settle();
           await shot(tour, `${w}-${name}`);
+          const over = await tour.evaluate(() => [...document.querySelectorAll('.top *, .foot *, .step:not([hidden]) *')].filter((e) => e.getClientRects().length && !e.closest('.win, svg'))
+            .filter((e) => { const r = e.getBoundingClientRect(); return r.right > innerWidth + 1 || r.left < -1; }).slice(0, 3).map((e) => e.id || e.className || e.tagName));
+          check(!over.length, `${w}: ${hash} fits the screen${over.length ? ` (${over.join(', ')})` : ''}`);
         }
         check(await tour.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${w}: nothing runs off the side`);
         await tour.close();
@@ -275,6 +304,8 @@ const stub = (required) => {
       const summary = await page.evaluate(() => [...document.querySelectorAll('#summary dd')].map((d) => d.textContent));
       check(summary.includes('Frostdev') && summary.includes('Expressive') && summary.includes('bb.school.edu'), `${w}: the end lists the Look, the motion and the school (${summary.join(', ')})`);
       check(await page.evaluate(() => !document.querySelector('#open-school').hidden && document.querySelector('#open-school .label').textContent === 'bb.school.edu'), `${w}: and offers to open the school`);
+      const pin = await page.evaluate(async () => ({ shown: !document.querySelector('#pin').hidden, on: (await chrome.action.getUserSettings()).isOnToolbar }));
+      check(pin.shown === (pin.on === false), `${w}: Pin Glaze shows while Glaze isn't on the toolbar (${JSON.stringify(pin)})`);
       await pause(800);
       await shot(page, `${w}-w8-done`);
       await page.goBack();

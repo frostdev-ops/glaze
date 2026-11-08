@@ -44,6 +44,7 @@
       <span>Glaze</span>
     </h1>
     <button id="begin" type="button" class="primary big"><span class="label">Start</span><svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></button>
+    <button id="skip" type="button" class="ghost"><span>Skip setup</span></button>
   </section>
 
   <section id="theme" class="step" aria-labelledby="theme-title" hidden>
@@ -117,6 +118,14 @@
     </div>
     <h2 id="done-title" tabindex="-1">You’re all set</h2>
     <dl class="summary" id="summary"></dl>
+    <p id="pin" class="pin" hidden>
+      <span class="tb" aria-hidden="true">
+        <i class="omni"></i>
+        <svg class="puzzle" viewBox="0 0 24 24"><path d="M10 4.5a2 2 0 0 1 4 0V6h3.5a.5.5 0 0 1 .5.5V10h-1.5a2 2 0 0 0 0 4H18v3.5a.5.5 0 0 1-.5.5H14v-1.5a2 2 0 0 0-4 0V18H6.5a.5.5 0 0 1-.5-.5V14h1.5a2 2 0 0 0 0-4H6V6.5a.5.5 0 0 1 .5-.5H10z"/></svg>
+        <svg class="mark" viewBox="24 14 80 106"><path d="M64 18 C64 18 28 59 28 80 a36 36 0 0 0 72 0 C100 59 64 18 64 18 Z"/></svg>
+      </span>
+      <span class="label">Pin Glaze to your toolbar</span>
+    </p>
     <div class="finish">
       <button id="open-school" type="button" class="primary big" hidden><span class="label" translate="no"></span><svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6.5l5.5 5.5-5.5 5.5"/></svg></button>
       <button id="open-settings" type="button" class="ghost"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg><span>Settings</span></button>

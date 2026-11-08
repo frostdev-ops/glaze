@@ -330,8 +330,10 @@ const BROKER = {
       if (!fromWelcome(s)) return false;
       const switches = ['enhance.sidebar', 'enhance.widgets', 'enhance.todo', 'enhance.dashboard', 'enhance.notes', 'enhance.writer',
         'enhance.palette', 'enhance.search', 'enhance.keys', 'enhance.newgrades', 'enhance.scores', 'enhance.calc', 'enhance.instant',
-        'enhance.prefetch', 'enhance.feedback', 'enhance.pet', 'enhance.streak', 'enhance.remind', 'motion.followSystem', 'extras.pointerAnim'];
-      return switches.includes(m.key) ? typeof m.value === 'boolean' : m.key === 'motion.level' && ['off', 'subtle', 'expressive'].includes(m.value);
+        'enhance.prefetch', 'enhance.feedback', 'enhance.pet', 'enhance.streak', 'enhance.remind', 'enhance.remindExam', 'enhance.remindPlan',
+        'enhance.remindClass', 'motion.followSystem', 'extras.pointerAnim'];
+      const choices = { 'motion.level': ['off', 'subtle', 'expressive'], 'writer.format': ['mla9', 'apa7', 'chicago17', 'plain'] };
+      return switches.includes(m.key) ? typeof m.value === 'boolean' : Object.hasOwn(choices, m.key) && choices[m.key].includes(m.value);
     },
     run: async (m, { sync }) => {
       const [group, key] = m.key.split('.');

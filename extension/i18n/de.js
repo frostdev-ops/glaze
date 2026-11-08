@@ -3969,5 +3969,7 @@
   "School": "Schule",
   "Setup": "Einrichtung",
   "You’re all set": "Alles bereit",
-  "{n} on": "{n} an"
+  "{n} on": "{n} an",
+  "Skip setup": "Einrichtung überspringen",
+  "Pin Glaze to your toolbar": "Glaze an die Symbolleiste anheften"
 };

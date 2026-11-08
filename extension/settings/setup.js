@@ -11,17 +11,21 @@
 var GZ_SETUP = globalThis.GZ_SETUP || (() => {
   const D = typeof GZ_DEFAULTS !== 'undefined' ? { GZ_DEFAULTS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON } : require('../content/defaults.js');
   const STEPS = ['start', 'theme', 'motion', 'nav', 'features', 'ai', 'school', 'done'];
-  // One slide each: its words, its picture (welcome.html [data-art]), and its switches as [setting, label, needs].
+  // A new paper's formats (settings/editor-writer.js FORMATS): names, the same in every language but Blank's.
+  const FORMATS = [['mla9', 'MLA 9', true], ['apa7', 'APA 7', true], ['chicago17', 'Chicago 17', true], ['plain', 'Blank']];
+  // One slide each: its words, its picture (welcome.html [data-art]), its switches as [setting, label, needs], and pick: a
+  // choice of one as [setting, label, options ([value, name, raw]), needs].
   const FEATURES = [
     { id: 'sidebar', title: 'Sidebar', says: 'The page’s sidebar, with your widgets docked under it.', keys: [['enhance.sidebar', 'Use the sidebar'], ['enhance.widgets', 'Widgets']] },
     { id: 'todo', title: 'To Do', says: 'Everything due, grouped by day, with tasks of your own.', keys: [['enhance.todo', 'Better To Do'], ['enhance.dashboard', 'Glaze Dashboard']] },
     { id: 'notes', title: 'Notes', says: 'Notes with folders and checklists, kept on this device.', keys: [['enhance.notes', 'Notes']] },
-    { id: 'writer', title: 'Writer', says: 'A calmer editor in Blackboard’s discussion, message and assignment boxes.', keys: [['enhance.writer', 'Glaze Writer']] },
+    { id: 'writer', title: 'Writer', says: 'A calmer editor in Blackboard’s discussion, message and assignment boxes.', keys: [['enhance.writer', 'Glaze Writer']],
+      pick: ['writer.format', 'Format for new papers', FORMATS, 'enhance.writer'] },
     { id: 'search', title: 'Search', says: '{keys} jumps to a course, a page or a setting.', keys: [['enhance.palette', 'Command palette'], ['enhance.search', 'Search in your courses', 'enhance.palette'], ['enhance.keys', 'Keyboard shortcuts']] },
     { id: 'grades', title: 'Grades', says: 'See what’s new, how you did, and what you need.', keys: [['enhance.newgrades', 'New-grade badges'], ['enhance.scores', 'Score bars'], ['enhance.calc', 'What-if calculator']] },
     { id: 'speed', title: 'Speed', says: 'Pages open at once, with your courses loaded ahead.', keys: [['enhance.instant', 'Open pages instantly'], ['enhance.prefetch', 'Load course data ahead of time'], ['enhance.feedback', 'Show pages loading at once']] },
     { id: 'buddy', title: 'Study buddy', says: 'A buddy that grows with the work you hand in.', keys: [['enhance.pet', 'Pet habitat'], ['enhance.streak', 'Streak']] },
-    { id: 'reminders', title: 'Reminders', says: 'A note on the site’s pages before work is due.', keys: [['enhance.remind', 'Due-date reminders']] },
+    { id: 'reminders', title: 'Reminders', says: 'A note on the site’s pages before work is due.', keys: [['enhance.remind', 'Due-date reminders'], ['enhance.remindExam', 'Exam reminders'], ['enhance.remindPlan', 'Plan reminders'], ['enhance.remindClass', 'Class reminders']] },
   ];
   const LEVELS = [['off', 'Off'], ['subtle', 'Subtle'], ['expressive', 'Expressive']];
   const get = (s, key) => key.split('.').reduce((o, k) => o?.[k], s);
@@ -285,6 +289,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
       if (key.startsWith('motion.')) motion();
       if (key === 'extras.pointerAnim') globalThis.GZ_MOTIONX?.sync();
       renderSwitches();
+      renderPicks();
       renderChips();
     });
     switches.push({ b, key, needs });
@@ -298,6 +303,44 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     }
   };
   $('#motion-switches').append(toggle('motion.followSystem', 'Turn motion off when the system asks for reduced motion'), toggle('extras.pointerAnim', 'Pointer animation'));
+
+  // ---- a choice of one inside a slide (a paper's format) ----
+  let picks = [];
+  const oneOf = (key, label, options, needs) => {
+    const id = `pick-${key.replace('.', '-')}`;
+    const opts = options.map(([v, name, raw]) => {
+      const b = make('button', { type: 'button', className: 'opt', textContent: raw ? name : t(name) });
+      b.setAttribute('role', 'radio');
+      if (raw) b.setAttribute('translate', 'no');
+      b.dataset.value = v;
+      b.addEventListener('click', () => pickOne(key, v, needs));
+      return b;
+    });
+    const row = make('div', { className: 'opts' }, ...opts);
+    const box = make('div', { className: 'choice' }, make('span', { className: 'label', id, textContent: t(label) }), row);
+    row.setAttribute('role', 'radiogroup');
+    row.setAttribute('aria-labelledby', id);
+    arrows(row, opts, (j) => pickOne(key, options[j][0], needs));
+    picks = [...picks.filter((p) => p.box.isConnected), { box, opts, key, needs }];
+    return box;
+  };
+  const pickOne = (key, v, needs) => {
+    if ((needs && S.get(s, needs) !== true) || S.get(s, key) === v) return;
+    save(key, v);
+    renderPicks();
+  };
+  const renderPicks = () => {
+    for (const { box, opts, key, needs } of picks) {
+      const off = !!needs && S.get(s, needs) !== true;
+      box.setAttribute('aria-disabled', String(off));
+      const v = S.get(s, key);
+      for (const b of opts) {
+        b.setAttribute('aria-checked', String(b.dataset.value === v));
+        b.tabIndex = b.dataset.value === v ? 0 : -1;
+        b.setAttribute('aria-disabled', String(off));
+      }
+    }
+  };
 
   // ---- features ----
   const chipsBox = $('#chips'), art = $('#art'), list = $('#feature-switches');
@@ -325,9 +368,10 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     art.dataset.show = f.id;
     for (const v of art.children) v.hidden = v.dataset.art !== f.id;
     switches.splice(0, switches.length, ...switches.filter((w) => !list.contains(w.b)));
-    list.replaceChildren(...f.keys.map(([key, label, needs]) => toggle(key, label, needs)));
-    list.dataset.many = String(f.keys.length > 1);
+    list.replaceChildren(...f.keys.map(([key, label, needs]) => toggle(key, label, needs)), ...(f.pick ? [oneOf(...f.pick)] : []));
+    list.dataset.many = String(f.keys.length > 1 || !!f.pick);
     renderSwitches();
+    renderPicks();
     renderChips();
   };
 
@@ -344,9 +388,16 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
       if (raw) dd.setAttribute('translate', 'no');
       return [make('dt', { className: 'sr-only', textContent: k }), dd];
     }));
+    checkPin();
     openSchool.hidden = !school;
     if (school) openSchool.querySelector('.label').textContent = school.host;
   };
+  // Pin Glaze, shown while the browser keeps it in its extensions menu (action.getUserSettings; hidden where there's none).
+  const pin = $('#pin'), action = chrome.action;
+  const pinned = (u) => { pin.hidden = u?.isOnToolbar !== false; };
+  const checkPin = () => Promise.resolve().then(() => action.getUserSettings()).then(pinned, () => pinned(null));
+  action?.onUserSettingsChanged?.addListener(pinned);
+  addEventListener('focus', () => { if (place.step === 'done') checkPin(); });
   openSchool.addEventListener('click', () => { if (school) location.assign(school.url); });
   $('#open-settings').addEventListener('click', () => location.assign(chrome.runtime.getURL('options.html')));
   document.addEventListener('glaze:school', (e) => { school = e.detail; renderFoot(); });
@@ -364,6 +415,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     renderLooks();
     renderLevels();
     renderSwitches();
+    renderPicks();
     renderChips();
     for (const p of mounted) p.render?.();
     if (place.step === 'done') renderDone();
@@ -410,6 +462,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   next.addEventListener('click', () => go(S.move(place, 1)));
   back.addEventListener('click', () => go(S.move(place, -1)));
   $('#begin').addEventListener('click', () => go({ step: 'theme', slide: 0 }));
+  $('#skip').addEventListener('click', () => go({ step: 'school', slide: 0 }));
   rail.forEach((b) => b.addEventListener('click', () => go({ step: b.dataset.go, slide: 0 })));
 
   // ---- the steps of their own files ----

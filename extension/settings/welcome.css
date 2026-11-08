@@ -147,6 +147,8 @@ html:not([data-gz-motion="off"]) #start .brand { animation: rise-brand 0.9s var(
 html:not([data-gz-motion="off"]) #start .brand .drop { animation: drip 1.1s var(--spring) both 0.1s, bob 5s ease-in-out infinite 1.4s; }
 html:not([data-gz-motion="off"]) #begin { animation: rise 0.7s var(--ease) both 0.35s; }
 html[data-gz-motion="expressive"] #begin { animation: rise 0.7s var(--ease) both 0.35s, beckon 2.6s ease-out infinite 1.6s; }
+#skip { margin-top: -1.6rem; }
+html:not([data-gz-motion="off"]) #skip { animation: rise 0.7s var(--ease) both 0.6s; }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); filter: blur(8px); } }
 @keyframes rise-brand { from { opacity: 0; transform: translateY(16px); } }
 @keyframes drip { from { transform: translateY(-40px) scaleY(1.25) scaleX(0.8); opacity: 0; } 60% { transform: translateY(2px) scaleY(0.88) scaleX(1.08); opacity: 1; } }
@@ -277,6 +279,21 @@ html[data-gz-motion="expressive"] .switch .knob::after { transition-timing-funct
 .switch[aria-checked="true"] .knob::after { transform: translateX(1.2rem); background: var(--gz-accent-ink); }
 html[data-tone="light"] .switch[aria-checked="true"] .knob::after { background: #fff; }
 .switch[aria-disabled="true"] { opacity: 0.45; cursor: var(--arrow); }
+/* A choice of one in a slide: its name, then the options as one segmented pill. */
+.choice {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; min-height: 3.4rem; padding: 0.55rem 0.55rem 0.55rem 1.1rem; border-radius: 16px;
+  background: var(--glass); border: 1px solid var(--edge); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  font-weight: 500; transition: opacity 0.2s var(--ease);
+}
+.choice[aria-disabled="true"] { opacity: 0.45; }
+.choice[aria-disabled="true"] .opt { cursor: var(--arrow); }
+.opts { display: inline-flex; flex-wrap: wrap; gap: 0.2rem; padding: 0.2rem; border-radius: 999px; background: color-mix(in srgb, var(--gz-ink-faint) 18%, transparent); box-shadow: inset 0 0 0 1px var(--edge); }
+.opt { padding: 0.4rem 0.8rem; border-radius: 999px; font-size: 0.86rem; font-weight: 600; color: var(--gz-ink-muted); white-space: nowrap; transition: background 0.25s var(--ease), color 0.2s var(--ease), transform 0.3s var(--ease); }
+.opt:hover { color: var(--gz-ink); }
+.opt[aria-checked="true"] { background: var(--gz-accent); color: var(--gz-accent-ink); box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--gz-accent) 70%, transparent); }
+html[data-tone="light"] .opt[aria-checked="true"] { color: #fff; }
+html[data-gz-motion="expressive"] .opt[aria-checked="true"] { animation: opt-pop 0.45s var(--spring); }
+@keyframes opt-pop { 0% { transform: scale(0.88); } 100% { transform: none; } }
 .switch[aria-disabled="true"]:hover { border-color: var(--edge); background: var(--glass); }
 
 /* ---- features: a slide each, its picture beside its words ---- */
@@ -528,6 +545,18 @@ html[data-gz-motion="expressive"] #done:not([hidden]) .seal { animation: seal-po
 .summary dd::before { content: attr(data-k); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gz-ink-faint); }
 html:not([data-gz-motion="off"]) #done:not([hidden]) .summary dd { animation: rise 0.6s var(--ease) both; animation-delay: calc(0.35s + var(--i, 0) * 80ms); }
 .finish { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; margin-top: 0.5rem; }
+/* Pin Glaze: a small toolbar where the drop leaves the extensions menu for a place of its own. */
+.pin { display: inline-flex; align-items: center; gap: 0.85rem; padding: 0.45rem 1.1rem 0.45rem 0.45rem; border-radius: 999px; font-size: 0.92rem; font-weight: 500; color: var(--gz-ink-muted); background: var(--glass); border: 1px solid var(--edge); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.pin .tb { position: relative; display: block; width: 7.2rem; height: 2rem; border-radius: 999px; background: color-mix(in srgb, var(--gz-surface-2) 70%, transparent); box-shadow: inset 0 0 0 1px var(--edge); }
+.pin .omni { position: absolute; left: 0.45rem; top: 50%; width: 3.1rem; height: 0.42rem; margin-top: -0.21rem; border-radius: 999px; background: var(--gz-line-strong); }
+.pin svg { position: absolute; top: 50%; width: 1.15rem; height: 1.15rem; margin-top: -0.575rem; }
+.pin .puzzle { right: 0.5rem; fill: none; stroke: var(--gz-ink-muted); stroke-width: 1.6; stroke-linejoin: round; }
+.pin .mark { right: 2.05rem; fill: var(--gz-accent); }
+html:not([data-gz-motion="off"]) #done:not([hidden]) .pin:not([hidden]) { animation: rise 0.6s var(--ease) both 0.9s; }
+html:not([data-gz-motion="off"]) .pin .puzzle { animation: pin-poke 4.2s var(--ease) infinite 1.4s; }
+html:not([data-gz-motion="off"]) .pin .mark { animation: pin-hop 4.2s var(--ease) infinite 1.4s; }
+@keyframes pin-poke { 0%, 30%, 100% { stroke: var(--gz-ink-muted); transform: none; } 12% { stroke: var(--gz-accent-hi); transform: scale(1.2); } }
+@keyframes pin-hop { 0%, 18% { opacity: 0; transform: translateX(1.55rem) scale(0.4); } 38%, 88% { opacity: 1; transform: none; } 100% { opacity: 0; transform: none; } }
 
 /* ---- the foot: Back, a note when something didn't save, and Next ---- */
 .foot {
@@ -566,10 +595,13 @@ html:not([data-gz-motion="off"]) .sig { animation: rise 0.7s var(--ease) both 0.
   .level { grid-template-columns: 9rem 1fr; text-align: start; align-items: center; }
   .level .demo { aspect-ratio: 16 / 11; }
   .mini { display: none; }
-}
-@media (max-width: 560px) {
   .rail button span:not(.num) { display: none; }
   .rail li[data-state="now"] button span:not(.num) { display: inline; }
+}
+@media (max-width: 560px) {
+  .rail ol { gap: 0.3rem; }
+  .rail button { padding: 0.25rem; gap: 0.4rem; }
+  .rail li[data-state="now"] button { padding-inline-end: 0.55rem; }
   .looks { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
   .look .tick { top: 0.75rem; right: 0.75rem; }
   .kind { order: 1; margin-left: auto; }
@@ -582,6 +614,7 @@ html:not([data-gz-motion="off"]) .sig { animation: rise 0.7s var(--ease) both 0.
   *, ::before, ::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
 @media (forced-colors: active) {
+  .opt[aria-checked="true"] { outline: 2px solid Highlight; }
   .bar, .ghost, .primary, .look, .level, .switch { border: 1px solid CanvasText; }
   .look[aria-checked="true"], .level[aria-checked="true"], .switch[aria-checked="true"] { outline: 3px solid Highlight; }
 }

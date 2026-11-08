@@ -33,7 +33,7 @@ const literalsOf = (js) => [...withoutComments(js).matchAll(/(['"`])((?:\\.|(?!\
 // every t() or tr() call, and the tables shown through t(). Lists inside code (content.js's page names, say)
 // are kept honest by every language having the same keys.
 const fromHtml = (html) => {
-  const h = html.replace(/<(script|style)[\s\S]*?<\/\1>/g, '').replace(/<(\w+)[^>]*translate="no"[^>]*>[\s\S]*?<\/\1>/g, '');
+  const h = html.replace(/<(script|style)[\s\S]*?<\/\1>/g, '').replace(/<(\w+)\b[^>]*translate="no"[^>]*>[\s\S]*?<\/\1>/g, '');
   const out = [...h.matchAll(/>([^<]+)</g)].map((m) => squash(m[1]));
   for (const [tag] of h.matchAll(/<[^>]+>/g)) if (!/translate="no"/.test(tag)) for (const m of tag.matchAll(/\s(?:title|placeholder|aria-label)="([^"]*)"/g)) out.push(squash(m[1]));
   return out.filter((s) => /\p{L}/u.test(s));

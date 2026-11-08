@@ -3969,5 +3969,7 @@
   "School": "Escola",
   "Setup": "Configuração",
   "You’re all set": "Tudo pronto",
-  "{n} on": "{n} ativados"
+  "{n} on": "{n} ativados",
+  "Skip setup": "Pular configuração",
+  "Pin Glaze to your toolbar": "Fixe o Glaze na barra de ferramentas"
 };
