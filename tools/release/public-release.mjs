@@ -204,6 +204,15 @@ function releaseInfo(tag, root, env) {
   if (drafts.length > 1) throw new Error(`Several draft releases use ${tag}; delete the extras on GitHub, then resume.`);
   return drafts[0] || null;
 }
+// GitHub's release list can leave out a draft for a moment after it is created: read it again for up to a minute.
+export async function created(read, wait = ms => new Promise(resolve => setTimeout(resolve, ms)), tries = 12) {
+  for (let i = 0; i < tries; i++) {
+    const release = read();
+    if (release) return release;
+    if (i < tries - 1) await wait(5000);
+  }
+  throw new Error("GitHub doesn't list the draft release yet; resume in a minute.");
+}
 function verifyAsset(asset, expected, tag, root, env) {
   if (asset.digest) return asset.digest === `sha256:${expected}`;
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-asset-'));
@@ -239,7 +248,7 @@ export async function publishPublic(context) {
   let release = releaseInfo(tag, root, env);
   if (!release) {
     gh(['release', 'create', tag, '--repo', repo, '--verify-tag', '--draft', '--title', `Glaze ${manifest.version}`, '--notes-file', notes], root, env);
-    release = releaseInfo(tag, root, env);
+    release = await created(() => releaseInfo(tag, root, env));
   }
   const assets = [...Object.values(state.files), ...storeAssets(manifest)];
   for (const item of assets) {
