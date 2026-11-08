@@ -3971,5 +3971,6 @@
   "You’re all set": "Todo listo",
   "{n} on": "{n} activadas",
   "Skip setup": "Omitir la configuración",
-  "Pin Glaze to your toolbar": "Fija Glaze en la barra de herramientas"
+  "Pin Glaze to your toolbar": "Fija Glaze en la barra de herramientas",
+  "Your key": "Tu clave"
 };

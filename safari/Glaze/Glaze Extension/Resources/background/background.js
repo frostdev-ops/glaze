@@ -2601,7 +2601,7 @@ const loadInto = (m, sender, files, reply) => {
 // (modQuiet). Glaze's writer frame (writer.html) is Glaze's own page inside an LMS tab: it is judged by the frame it sits
 // in and the tab's page, read live, and on an Ultra assignment attempt it may ask for the writer's features only once the
 // tab's own Glaze has said the attempt is an assignment (aiWriter). The connections live in the worker's own store; only
-// Settings' top frame reads and writes them ('glaze:ai-config'), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
+// Settings' top frame reads and writes them ('glaze:ai-config'; the first screen as its Simple mode, welcomeAi), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
 // worker's importScripts calls name (scripts/package-firefox.sh). A task (ai/tasks/<id>.js) goes in this list too.
 const aiFiles = () => importScripts('../writer/writer-sources.js', '../writer/writer-cite.js', '../ai/schema.js', '../ai/request.js', '../ai/stream.js', '../ai/failure.js', '../ai/endpoint.js', '../ai/text.js', '../ai/visual-cache.js', '../ai/models.js', '../ai/providers.js', '../ai/providers/openai.js', '../ai/providers/device.js', '../ai/providers/apple.js', '../ai/local/store.js', '../ai/local/updates.js', '../ai/local/format.js', '../ai/local/link.js', '../ai/local/ladder.js', '../ai/providers/local.js', '../ai/tools.js', '../ai/loop.js', '../ai/task.js', '../ai/memory.js', '../ai/agent/memory.js', '../ai/recall.js', '../ai/tasks/syllabus-read.js', '../ai/tasks/writer-context.js', '../ai/tasks/writer-complete.js', '../ai/tasks/writer-review.js', '../ai/tasks/writer-image.js', '../ai/tasks/writer-feedback.js', '../ai/tasks/writer-outline.js', '../ai/tasks/writer-requirements.js', '../ai/tasks/writer-cite.js', '../ai/tasks/writer-decide.js', '../ai/tasks/wording.js', '../ai/tasks/study-help.js', '../ai/current.js', '../ai/tasks/agent-tools.js', '../ai/tasks/chat-compact.js', '../ai/agent/js.js', '../ai/agent/places.js', '../ai/agent/wakes.js', '../ai/agent/school.js', '../ai/settings.js', '../ai/broker.js', '../ai/ask.js');
 globalThis.addEventListener?.('install', aiFiles);
@@ -3072,9 +3072,22 @@ chrome.runtime.onConnect.addListener((p) => {
   if (p.name !== 'glaze:ai') return;
   ai().connect(p, { ...aiEnv(), who: String(p.sender?.tab?.id ?? 'none'), allowed: (what) => aiSender(p.sender || {}, what), visualScope: () => aiVisualScope(p.sender || {}) });
 });
+// The first screen's AI step (settings/setup-ai.js, in welcome.html's own top frame) does what Settings' Simple mode does:
+// reads the connections, keeps a named provider's key at its own address, keeps Rime or the browser's model, tests and lists
+// them, and downloads Rime's text model or the browser's. No endpoint of its own, no tuning, no removal or deletion.
+const welcomeAi = (m) => {
+  const named = (id) => typeof id === 'string' && Object.hasOwn(GZ_AI_SETTINGS.PRESETS, id), here = (p) => p === 'local' || p === 'device';
+  const only = (o, keys) => !!o && typeof o === 'object' && Object.keys(o).every((k) => keys.includes(k));
+  if (m.op === 'get') return true;
+  if (m.op === 'set') return only(m.cfg, ['provider', 'key']) && (named(m.id) ? m.cfg.provider === 'openai' && typeof m.cfg.key === 'string' && !!m.cfg.key : here(m.id) && m.cfg.provider === m.id && !('key' in m.cfg));
+  if (m.op === 'models') return named(m.id);
+  if (m.op === 'test') return m.part === undefined && (m.id === undefined ? here(m.provider) : named(m.id));
+  if (m.op === 'prepare') return m.id === undefined && m.part === undefined && here(m.provider);
+  return m.op === 'updates' && m.provider === 'local';
+};
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:ai-config') return;
-  if (!fromEditor(s) || s.frameId !== 0 || !extensionOrigin(s)) { reply({ ok: false, error: 'sender' }); return; }
+  if (!(fromEditor(s) && s.frameId === 0 && extensionOrigin(s)) && !(fromWelcome(s) && (ai(), welcomeAi(m)))) { reply({ ok: false, error: 'sender' }); return; }
   // Settings' Rime card: the version in use, an update's progress, and whether Update automatically is on. Opening it also
   // asks for the signed list while no Rime model is offered (ai/local/updates.js first, at most daily), not waited for.
   if (m.op === 'updates') {

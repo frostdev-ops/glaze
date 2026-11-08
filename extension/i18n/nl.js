@@ -3971,5 +3971,6 @@
   "You’re all set": "Alles is klaar",
   "{n} on": "{n} aan",
   "Skip setup": "Instellen overslaan",
-  "Pin Glaze to your toolbar": "Zet Glaze vast in de werkbalk"
+  "Pin Glaze to your toolbar": "Zet Glaze vast in de werkbalk",
+  "Your key": "Eigen sleutel"
 };

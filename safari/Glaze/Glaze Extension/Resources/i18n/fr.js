@@ -3971,5 +3971,6 @@
   "You’re all set": "Tout est prêt",
   "{n} on": "{n} activées",
   "Skip setup": "Passer la configuration",
-  "Pin Glaze to your toolbar": "Épinglez Glaze dans la barre d’outils"
+  "Pin Glaze to your toolbar": "Épinglez Glaze dans la barre d’outils",
+  "Your key": "Votre clé"
 };
