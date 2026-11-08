@@ -103,7 +103,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
         if (/^\/ultra\/courses\/_\d+_\d+\/outline/.test(p)) return 'outline';
         // The Gradebook: a table, so the content keeps more room (sidebar.grades).
         if (/^\/ultra\/courses\/_\d+_\d+\/grades/.test(p) || document.querySelector('.course-content-container > .panel-wrap.grades')) return 'grades';
-        if (/^\/ultra\/courses\/_\d+_\d+\/assessment\//.test(p) || document.getElementById('learningModulePanelContainerId')) return 'assessment';
+        if (/^\/ultra\/(?:courses|organizations)\/_\d+_\d+\/assessment\//.test(p) || document.getElementById('learningModulePanelContainerId')) return 'assessment';
         return 'other';
       },
       // A discussion's details column: in the page's grid beside the thread, not a layer over it.
@@ -737,7 +737,7 @@ var GZ_SIDEBAR_UI = globalThis.GZ_SIDEBAR_UI || (() => {
   // that scrolls them, Save and Submit in a footer below that panel. Its details column, as the attempt's, is the host.
   const nativeTestAttempt = () => {
     if (!ultra || cfg().absorb === false || html().hasAttribute('data-gz-focus')
-      || !/^\/ultra\/courses\/_\d+_\d+\/assessment\/_\d+_\d+\/attempt\/(?:create|_\d+_\d+)\/?$/.test(location.pathname)) return null;
+      || !/^\/ultra\/(?:courses|organizations)\/_\d+_\d+\/assessment\/_\d+_\d+\/attempt\/(?:create|_\d+_\d+)\/?$/.test(location.pathname)) return null;
     const panels = [...document.querySelectorAll('div.assessment-attempt-panel')];
     if (panels.length !== 1) return null;
     const panel = panels[0], shell = panel.parentElement;

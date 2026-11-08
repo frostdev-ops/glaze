@@ -10,9 +10,9 @@ const { page, record, natives, unmoved } = require('../sidebar-ultra-page.js');
 
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
-const testAttempt = (width = 1800) => {
+const testAttempt = (width = 1800, space = 'courses') => {
   const p = page({ at: 'stream', width, stored: record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) });
-  p.c.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/_8_1';
+  p.c.location.pathname = `/ultra/${space}/_101_1/assessment/_7_1/attempt/_8_1`;
   const el = p.el;
   const radio = el('input', 'PrivateSwitchBase-input'); radio.setAttribute('type', 'radio');
   const questions = el('div', 'panel-content-full panel-content-separator', el('div', 'assessment-progress-header', '2 of 2 questions remaining'),
@@ -34,8 +34,8 @@ const testAttempt = (width = 1800) => {
   return { p, details, questions, flex, panel, shell, footer, save, submit, radio };
 };
 
-test("the older test attempt's Details & Information is the sidebar; the questions and Save / Submit stay Ultra's", async () => {
-  const { p, details, questions, radio, footer, save, submit } = testAttempt(), before = natives(p);
+for (const space of ['courses', 'organizations']) test(`${space}: the test's Details & Information is the sidebar; questions and Save / Submit stay Ultra's`, async () => {
+  const { p, details, questions, radio, footer, save, submit } = testAttempt(1800, space), before = natives(p);
   let submissions = 0;
   submit.addEventListener('click', () => submissions++);
   await p.pass();
@@ -58,7 +58,7 @@ test("the older test attempt's Details & Information is the sidebar; the questio
   unmoved(p, before, 'test sidebar off');
 });
 
-test('the older test attempt is recognized only with its whole read-only structure', async () => {
+for (const space of ['courses', 'organizations']) test(`${space}: the test attempt is recognized only with its whole read-only structure`, async () => {
   for (const [what, change] of [
     ['another route', ({ p }) => { p.c.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/overview'; }],
     ['no footer', ({ footer }) => { footer.remove(); }],
@@ -71,7 +71,7 @@ test('the older test attempt is recognized only with its whole read-only structu
     ['two attempts', ({ p }) => { p.$('#main-content-inner').append(p.el('div', 'panel-wrap assessment-attempt-panel', 'Another')); }],
     ['absorption off', ({ p }) => { p.c.sidebarSettings = { absorb: false }; }],
   ]) {
-    const fixture = testAttempt();
+    const fixture = testAttempt(1800, space);
     change(fixture);
     await fixture.p.pass();
     assert.ok(fixture.p.host() !== fixture.details, `${what}: the details stay Ultra's`);
@@ -79,8 +79,8 @@ test('the older test attempt is recognized only with its whole read-only structu
   }
 });
 
-test("the test's Save / Submit footer lifts the drawer's opener, though Ultra places it absolutely", async () => {
-  const { p, footer } = testAttempt(1024);
+for (const space of ['courses', 'organizations']) test(`${space}: the test's Save / Submit footer lifts the drawer's opener, though Ultra places it absolutely`, async () => {
+  const { p, footer } = testAttempt(1024, space);
   const boxOf = p.doc.boxOf;
   p.doc.boxOf = (e) => e.id === 'gz-sb-launch' ? { left: 932, top: 818, width: 80, height: 34 } : boxOf(e);
   footer.box = { left: 0, top: 790, width: 1024, height: 78 };
@@ -106,14 +106,14 @@ test("sidebar.css lays the test's questions and its details column out as the at
 });
 
 
-test('leaving the test restores its details and scroll listener while the old view remains mounted', async () => {
-  const { p, details, panel, radio } = testAttempt();
+for (const space of ['courses', 'organizations']) test(`${space}: leaving the test restores its details and scroll listener while the old view remains mounted`, async () => {
+  const { p, details, panel, radio } = testAttempt(1800, space);
   p.c.getComputedStyle = ((original) => (e) => ({ ...original(e), overflowY: e === panel ? 'auto' : 'visible' }))(p.c.getComputedStyle);
   const before = natives(p);
   await p.pass();
   assert.ok(p.host() === details);
   assert.equal(panel.listeners.filter((e) => e.type === 'scroll').length, 1);
-  p.c.location.pathname = '/ultra/courses/_101_1/announcements';
+  p.c.location.pathname = `/ultra/${space}/_101_1/announcements`;
   await p.pass();
   assert.ok(p.host() !== details);
   assert.equal(details.hasAttribute('data-gz-sidebar-host'), false);
@@ -124,8 +124,8 @@ test('leaving the test restores its details and scroll listener while the old vi
   unmoved(p, before, 'leave test route');
 });
 
-test('Glaze headings cannot keep a changed test details panel eligible', async () => {
-  const { p, details } = testAttempt();
+for (const space of ['courses', 'organizations']) test(`${space}: Glaze headings cannot keep a changed test details panel eligible`, async () => {
+  const { p, details } = testAttempt(1800, space);
   const nativeHeading = details.querySelector('h2');
   await p.pass();
   assert.ok(p.host() === details);

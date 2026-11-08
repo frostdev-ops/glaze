@@ -11,6 +11,7 @@ const site = 'https://bb.school.test', uid = '_42_1';
 const out = path.resolve(process.argv[2] || 'ultra-test-attempt-evidence');
 const lookArg = process.argv.find((a) => a.startsWith('--looks='));
 const LOOKS = lookArg ? lookArg.slice(8).split(',') : ['Frostdev', 'Library'];
+const ONLY_PAGES = process.env.ULTRA_TEST_PAGES?.split(',');
 const SIZES = [[1800, 987], [1280, 800], [1024, 768], [768, 900]];
 const fixture = fs.readFileSync(path.join(__dirname, '../../test/fixtures/ultra-test-attempt.html'), 'utf8');
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
@@ -78,7 +79,7 @@ const HELPERS = `
 
     for (const look of LOOKS) for (const bg of ['scene', 'solid']) {
       await setup(look, bg);
-      for (const [w, h] of SIZES) {
+      for (const [w, h] of ONLY_PAGES ? [] : SIZES) {
         const tag = `${look} ${bg} ${w}x${h}`;
         await page.setViewportSize({ width: w, height: h });
         await go(ATTEMPT);
@@ -220,15 +221,34 @@ const HELPERS = `
         roster: ['/ultra/courses/_101_1/outline/roster', () => { const g = window.__gz; return { clear: !g.meets(g.rect(document.querySelector('.bb-close')), g.rect(document.querySelector('.simple-header h1.panel-title'))) }; }],
         rubric: ['/ultra/courses/_101_1/assessment/_8127_1/overview', () => { const g = window.__gz, h = document.querySelector('.rubric-details-panel > .panel-section-header');
           return { header: g.painted(h) && g.radius(h) > 4, title: !g.painted(h.querySelector('h2')) }; }],
-        grades: ['/ultra/courses/_101_1/grades', () => { const g = window.__gz, t = document.querySelector('bb-ui-student-tabs .MuiTabs-root'); return { tabs: g.painted(t) && g.radius(t) > 10 }; }],
+        grades: ['/ultra/courses/_101_1/grades', () => {
+          const g = window.__gz, t = document.querySelector('bb-ui-student-tabs .MuiTabs-root'), tab = t.querySelector('[role="tab"]');
+          const outer = t.getBoundingClientRect(), inner = tab.getBoundingClientRect();
+          return { tabs: g.painted(t) && g.radius(t) > 10, centered: Math.abs((inner.top - outer.top) - (outer.bottom - inner.bottom)) <= 1,
+            singleSurface: !g.painted(tab), reachable: g.hit(tab) };
+        }],
         announcements: ['/ultra/courses/_101_1/announcements', () => { const g = window.__gz, e = document.querySelector('.no-result-message'); return { empty: g.painted(e) && g.radius(e) > 4 }; }],
         discussion: ['/ultra/courses/_101_1/discussion/_8128_1', () => { const g = window.__gz, e = document.querySelector('.is-empty-wrapper'); return { empty: g.painted(e) && g.radius(e) > 4 }; }],
       };
-      for (const [name, [p, fn]] of Object.entries(pages)) {
+      for (const [name, [p, fn]] of Object.entries(pages).filter(([name]) => !ONLY_PAGES || ONLY_PAGES.includes(name))) {
         await go(p);
         const r = await ev(fn);
         check(Object.values(r).every(Boolean), `${tag} ${name}`, r);
         await shot(`${slug(tag)}-${name}`);
+        if (name === 'grades') {
+          await page.locator('bb-ui-student-tabs .MuiTabs-root').screenshot({ path: path.join(out, `${slug(tag)}-grades-pill.png`) });
+          await ev(() => {
+            const tab = document.querySelector('#student-tab-grades'), other = tab.cloneNode(true);
+            other.id = 'student-tab-progress'; other.classList.remove('Mui-selected'); other.textContent = 'Progress'; other.setAttribute('aria-selected', 'false');
+            tab.after(other);
+          });
+          const grouped = await ev(() => { const g = window.__gz, tab = document.querySelector('#student-tab-grades'), other = document.querySelector('#student-tab-progress');
+            document.documentElement.dir = 'rtl';
+            const result = { selected: g.painted(tab), unselected: !g.painted(other), reachable: g.hit(tab) && g.hit(other) };
+            document.documentElement.removeAttribute('dir'); return result;
+          });
+          check(Object.values(grouped).every(Boolean), `${tag} grades: multiple tabs retain selection and RTL hit targets`, grouped);
+        }
       }
     }
     check(!errors.length, 'no page errors', errors.slice(0, 3));

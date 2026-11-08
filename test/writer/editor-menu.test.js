@@ -70,16 +70,26 @@ test('one listener however often the page syncs, and none once the page or Glaze
   assert.equal(listeners.length, 0, 'Glaze off: nothing listens');
 });
 
-test('the menu feature loads on Ultra pages with an editor, and the worker may load it', () => {
+test('the menu feature loads on Ultra course and organization editor pages, and the worker may load it', () => {
   const need = [];
   const c = { location: { pathname: '' }, GZ_CTX: { site: 'ultra', need: (f) => { need.push(f); return new Promise(() => {}); } }, sessionStorage: { getItem: () => null } };
   c.globalThis = c;
   vm.createContext(c);
   const routes = vm.runInContext(read('content/routes.js'), c);
   const asks = (p) => { need.length = 0; c.location.pathname = p; routes.sync(); return need.includes('writer/page/editor-menu.js'); };
-  for (const p of ['/ultra/courses/_101_1/assessment/_7_1/attempt/_8_1', '/ultra/courses/_101_1/assessment/_7_1/attempt/create',
-    '/ultra/courses/_101_1/journal/_9_1', '/ultra/courses/_101_1/discussion/_9_1', '/ultra/courses/_101_1/outline/discussion/_9_1']) assert.ok(asks(p), p);
-  for (const p of ['/ultra/courses/_101_1/outline', '/ultra/stream', '/ultra/courses/_101_1/assessment/_7_1/overview']) assert.ok(!asks(p), p);
+  for (const space of ['courses', 'organizations']) {
+    const base = `/ultra/${space}/_101_1/`;
+    for (const suffix of ['assessment/_7_1/attempt/_8_1', 'assessment/_7_1/attempt/create', 'outline/assessment/_7_1/attempt/_8_1',
+      'journal/_9_1', 'discussion/_9_1', 'outline/discussion/_9_1']) assert.ok(asks(base + suffix), base + suffix);
+    for (const suffix of ['outline', 'assessment/_7_1/overview', 'assessment/_7_1/attempt', 'assessment/_7_1/attempt/_8_1/review',
+      'assessment/_7_1/attempt/invalid', 'journal/invalid']) assert.ok(!asks(base + suffix), base + suffix);
+    for (const site of ['canvas', 'moodle']) {
+      c.GZ_CTX.site = site;
+      assert.ok(!asks(base + 'assessment/_7_1/attempt/_8_1'), `${site}: no Ultra menu helper`);
+    }
+    c.GZ_CTX.site = 'ultra';
+  }
+  assert.ok(!asks('/ultra/stream'));
   const list = JSON.parse(read('background/background.js').match(/const LOADABLE = new Set\((\[[^\]]*\])\)/)[1].replace(/'/g, '"'));
   assert.ok(list.includes('writer/page/editor-menu.js'));
 });

@@ -49,9 +49,10 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
     const hitsInside = (sel, dx = 0.5) => page.evaluate(({ sel, dx }) => { const e = document.querySelector(sel); if (!e) return false; const r = e.getBoundingClientRect(); const x = r.left + r.width * dx, y = r.top + r.height / 2; return e.contains(document.elementFromPoint(x, y)); }, { sel, dx });
     const disjoint = (a, b) => !!a && !!b && (a.r <= b.l || b.r <= a.l || a.b <= b.t || b.b <= a.t);
 
-    for (const [w, h] of [[1800, 987], [1280, 800], [1024, 768]]) {
+    for (const space of ['courses', 'organizations']) for (const [w, h] of [[1800, 987], [1280, 800], [1024, 768]]) {
+      const attempt = ATTEMPT.replace('/courses/', `/${space}/`);
       await page.setViewportSize({ width: w, height: h });
-      await page.goto(site + ATTEMPT);
+      await page.goto(site + attempt);
       await page.waitForSelector('html[data-gz-sidebar]', { timeout: 20000 }).catch(async (e) => {
         console.error('Sidebar startup diagnostics', JSON.stringify({ errors, tabs: ctx.pages().map((p) => p.url()), page: await page.evaluate(() => ({
           visibility: document.visibilityState,
@@ -64,7 +65,7 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
             started: !!window.__gzGlaze, ultra: typeof GZ_SITE_ULTRA, colors: typeof GZ_COLOR, base: !!document.head?.querySelector('base[href*="/ultra/"]'), ctx: !!globalThis.GZ_CTX, on: globalThis.GZ_CTX?.on(), sidebar: !!globalThis.GZ_SIDEBAR_UI,
             state: globalThis.GZ_SIDEBAR_UI?.context(),
           }) }) };
-        }, site + ATTEMPT) }));
+        }, site + attempt) }));
         throw e;
       });
       await pause(800);
@@ -79,6 +80,14 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
         check(details.l >= questions.r && details.r <= w, `${w}: one column right of the questions, inside the window`, { questions, details });
         check(await page.evaluate(() => getComputedStyle(document.querySelector('.assessment-summary h2')).visibility === 'visible'), `${w}: Details & Information shows at the column's top`);
         check(await hitsInside('.panel-footer-fixed .js-send-draft-button', 0.97), `${w}: Submit's right edge is Submit's`, submit);
+        check(await page.locator('.assessment-summary .no-submission-label').isVisible(), `${space} ${w}: grading is visible inside the sidebar`);
+        await page.click('.gz-sb-toggle');
+        await page.waitForFunction(() => document.documentElement.dataset.gzSidebar === 'collapsed');
+        const collapsed = await box('.assessment-summary'), wider = await box('.panel-content-full');
+        check(collapsed.w === 48 && wider.w >= questions.w + 200, `${space} ${w}: collapsing details gives their width back to the questions`, { collapsed, wider });
+        await page.screenshot({ path: path.join(out, `${space}-test-${w}-collapsed.png`) });
+        await page.click('.gz-sb-toggle');
+        await page.waitForFunction(() => document.documentElement.dataset.gzSidebar === 'expanded');
       } else {
         check(mode === 'drawer', `${w}: the sidebar is a drawer`, mode);
         const launch = await box('#gz-sb-launch');
@@ -88,10 +97,11 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
         await page.click('#gz-sb-launch'); await pause(300);
         check(await page.evaluate(() => { const e = document.querySelector('.assessment-summary h2'), r = e.getBoundingClientRect(); return r.width > 0 && e.contains(document.elementFromPoint(r.left + 4, r.top + r.height / 2)); }),
           `${w}: the details are in the opened drawer`);
-        await page.screenshot({ path: path.join(out, `test-${w}-drawer.png`) });
+        check(await page.locator('.assessment-summary .no-submission-label').isVisible(), `${space} ${w}: grading is visible in the opened drawer`);
+        await page.screenshot({ path: path.join(out, `${space}-test-${w}-drawer.png`) });
         await page.keyboard.press('Escape'); await pause(200);
       }
-      await page.screenshot({ path: path.join(out, `test-${w}-top.png`) });
+      await page.screenshot({ path: path.join(out, `${space}-test-${w}-top.png`) });
       // The foot of the test: the colour menu opened under the last editor.
       await page.evaluate(() => { const p = document.querySelector('.assessment-attempt-panel'); p.scrollTop = p.scrollHeight; });
       await pause(300);
@@ -102,8 +112,8 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
       }
       await page.click('button[aria-label="Color picker"]'); await pause(300);
       const red = await box('button[aria-label="Red"]'), foot = await box('.panel-footer-fixed');
-      check(await hitsInside('button[aria-label="Red"]') && red.b <= foot.t, `${w}: the colour menu's last colour is in view above the footer`, { red, foot });
-      await page.screenshot({ path: path.join(out, `test-${w}-color-menu.png`) });
+      check(await hitsInside('button[aria-label="Red"]') && red.b <= foot.t, `${space} ${w}: the colour menu's last colour is in view above the footer`, { red, foot });
+      await page.screenshot({ path: path.join(out, `${space}-test-${w}-color-menu.png`) });
       await page.click('button[aria-label="Color picker"]'); await pause(150);
       await page.evaluate(() => { document.documentElement.dir = 'rtl'; document.querySelector('.assessment-attempt-panel').scrollTop = 0; });
       await pause(300);
