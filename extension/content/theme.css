@@ -1058,14 +1058,21 @@ html[data-gz-navbar][data-gz-footer] .inner-wrap > :where(.routed-page):is(.rout
    so they sit in the palette but stay telling apart. In oklab toward a grey, each keeps its hue
    (in oklch toward the ink itself, the hue swung toward the ink's: yellow went green). A colour
    picked for a course (content.js sets --gz-pick-N on <html>) is used as is; an unset --gz-pick-N
-   leaves --gz-pick invalid, so the fallback applies. data-gz-raw-courses keeps Ultra's originals. */
-.course-color-1 { --gz-course-raw: #c473d4; --gz-pick: var(--gz-pick-1); } .course-color-2 { --gz-course-raw: #2fd9fc; --gz-pick: var(--gz-pick-2); }
-.course-color-3 { --gz-course-raw: #ffe12b; --gz-pick: var(--gz-pick-3); } .course-color-4 { --gz-course-raw: #ff6417; --gz-pick: var(--gz-pick-4); }
-.course-color-5 { --gz-course-raw: #89f3db; --gz-pick: var(--gz-pick-5); } .course-color-6 { --gz-course-raw: #fe5b91; --gz-pick: var(--gz-pick-6); }
-.course-color-7 { --gz-course-raw: #85f472; --gz-pick: var(--gz-pick-7); } .course-color-8 { --gz-course-raw: #22c7cc; --gz-pick: var(--gz-pick-8); }
-.course-color-9 { --gz-course-raw: #ca22ad; --gz-pick: var(--gz-pick-9); } .course-color-10 { --gz-course-raw: #157afb; --gz-pick: var(--gz-pick-10); }
-[class*="course-color-"] { --gz-course: var(--gz-pick, color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0))); }
-html[data-gz-raw-courses] [class*="course-color-"] { --gz-course: var(--gz-pick, var(--gz-course-raw)); }
+   leaves --gz-pick invalid, so the fallback applies. data-gz-raw-courses keeps Ultra's originals.
+   An Activity card marks only its text column; content-ultra.js copies the column's slot and color
+   to the card (data-gz-course-slot), so its icon, a sibling of the column, has them too. */
+.course-color-1, .stream-panel-activity-card[data-gz-course-slot="1"] { --gz-course-raw: #c473d4; --gz-pick: var(--gz-pick-1); }
+.course-color-2, .stream-panel-activity-card[data-gz-course-slot="2"] { --gz-course-raw: #2fd9fc; --gz-pick: var(--gz-pick-2); }
+.course-color-3, .stream-panel-activity-card[data-gz-course-slot="3"] { --gz-course-raw: #ffe12b; --gz-pick: var(--gz-pick-3); }
+.course-color-4, .stream-panel-activity-card[data-gz-course-slot="4"] { --gz-course-raw: #ff6417; --gz-pick: var(--gz-pick-4); }
+.course-color-5, .stream-panel-activity-card[data-gz-course-slot="5"] { --gz-course-raw: #89f3db; --gz-pick: var(--gz-pick-5); }
+.course-color-6, .stream-panel-activity-card[data-gz-course-slot="6"] { --gz-course-raw: #fe5b91; --gz-pick: var(--gz-pick-6); }
+.course-color-7, .stream-panel-activity-card[data-gz-course-slot="7"] { --gz-course-raw: #85f472; --gz-pick: var(--gz-pick-7); }
+.course-color-8, .stream-panel-activity-card[data-gz-course-slot="8"] { --gz-course-raw: #22c7cc; --gz-pick: var(--gz-pick-8); }
+.course-color-9, .stream-panel-activity-card[data-gz-course-slot="9"] { --gz-course-raw: #ca22ad; --gz-pick: var(--gz-pick-9); }
+.course-color-10, .stream-panel-activity-card[data-gz-course-slot="10"] { --gz-course-raw: #157afb; --gz-pick: var(--gz-pick-10); }
+[class*="course-color-"], .stream-panel-activity-card[data-gz-course-slot] { --gz-course: var(--gz-pick, color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0))); }
+html[data-gz-raw-courses] [class*="course-color-"], html[data-gz-raw-courses] .stream-panel-activity-card[data-gz-course-slot] { --gz-course: var(--gz-pick, var(--gz-course-raw)); }
 [class*="course-color-"]::before, .element-card.element-card-deadline[class*="course-color-"]::after,
 .calendar-wrapper .event-dot[class*="course-color-"] { background-color: var(--gz-course) !important; }
 #site-wrap [class*="course-color-"].top-border, .peek .telemetry-panel.panel-wrap[class*="course-color-"] { border-top-color: var(--gz-course) !important; }
@@ -1215,6 +1222,13 @@ html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel [class*="m
 /* ---- stream & grades item icons: a soft accent tile instead of a white outline on navy ---- */
 #site-wrap .element-card .element-image { background: var(--gz-accent-soft) !important; border: 0 !important; border-radius: var(--gz-radius-sm) !important; color: var(--gz-accent) !important; }
 #site-wrap .element-card .element-image svg { color: var(--gz-accent) !important; }
+/* An Activity card's outline, icon tile and divider are its course's color, the tile tinted as the accent's is; a card
+   of no course has no --gz-course and keeps the accent's. */
+#site-wrap .stream-panel-activity-card { --gz-course-soft: color-mix(in oklab, var(--gz-course) 20%, var(--gz-surface-2)); border-color: color-mix(in oklab, var(--gz-course, var(--gz-border-line, var(--gz-line))) 35%, var(--gz-border-line, var(--gz-line))) !important; }
+#site-wrap .stream-panel-activity-card:hover { border-color: color-mix(in oklab, var(--gz-course, var(--gz-border-strong, var(--gz-line-strong))) 70%, var(--gz-border-strong, var(--gz-line-strong))) !important; }
+#site-wrap .stream-panel-activity-card .element-image { background: var(--gz-course-soft, var(--gz-accent-soft)) !important; color: var(--gz-course, var(--gz-accent)) !important; }
+#site-wrap .stream-panel-activity-card .element-image svg { color: var(--gz-course, var(--gz-accent)) !important; }
+#site-wrap .stream-panel-activity-card > .element-details { border-inline-start-color: var(--gz-course, var(--gz-border-line, var(--gz-line))) !important; }
 /* Stream cards used a stretched Angular switch around a top-aligned icon. Give the icon its own
    centered column, with the same inset around it as the text, including cards with longer copy. */
 #site-wrap .activity-stream .stream-panel-activity-card { box-sizing: border-box; align-items: center; gap: 1rem; padding: 0.75rem 1rem !important; }
