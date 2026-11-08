@@ -502,11 +502,15 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     if (isPreview) return;
     const colors = courseColors();
     for (const el of document.querySelectorAll('[class*="course-color-"]')) {
-      const v = GZ_COURSE_VARS(colors[courseOf(el)]);
-      for (const k of ['--gz-pick', '--gz-course-raw']) {
-        if (el.style.getPropertyValue(k) === (v[k] || '')) continue;
-        if (v[k]) el.style.setProperty(k, v[k]);
-        else el.style.removeProperty(k);
+      const v = GZ_COURSE_VARS(colors[courseOf(el)]), card = el.parentElement;
+      // An Activity card's course is on its text column only: the card takes it too, for its icon (theme.css).
+      const at = card?.matches('.stream-panel-activity-card') ? [el, card] : [el];
+      const slot = at[1] && el.className.match(/course-color-(\d+)/)?.[1];
+      if (slot && card.dataset.gzCourseSlot !== slot) card.dataset.gzCourseSlot = slot;
+      for (const e of at) for (const k of ['--gz-pick', '--gz-course-raw']) {
+        if (e.style.getPropertyValue(k) === (v[k] || '')) continue;
+        if (v[k]) e.style.setProperty(k, v[k]);
+        else e.style.removeProperty(k);
       }
     }
   };
