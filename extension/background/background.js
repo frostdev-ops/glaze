@@ -1,4 +1,4 @@
-importScripts('../courses/download.js', '../core/color.js', '../looks/fonts.js', '../looks/surfaces.js', '../content/defaults.js', '../looks/lookset.js', '../looks/history.js', '../courses/cards.js', '../navigation/nav.js', '../navigation/nav-items.js', '../navigation/navlayout.js', '../looks/motionx.js', '../looks/parts.js', '../navigation/nav-store.js', '../planner/todo.js', '../pet/petbrain.js', '../pet/pet.js', '../pet/petsprites.js', '../planner/remind.js', '../core/widgets.js', '../navigation/sidebar.js', '../looks/lookparts.js', '../sharing/share.js', '../looks/lookx.js', '../looks/looks.js', '../planner/gradescope.js', '../core/doctext.js', '../courses/folders.js', '../planner/notes.js', '../planner/calexport.js', '../planner/gcal.js', '../planner/gcal-auth.js', '../core/site.js', '../navigation/coursetabs.js');
+importScripts('../courses/download.js', '../core/color.js', '../looks/fonts.js', '../looks/surfaces.js', '../content/defaults.js', '../looks/lookset.js', '../looks/history.js', '../courses/cards.js', '../navigation/nav.js', '../navigation/nav-items.js', '../navigation/navlayout.js', '../navigation/navbar.js', '../looks/motionx.js', '../looks/parts.js', '../navigation/nav-store.js', '../planner/todo.js', '../pet/petbrain.js', '../pet/pet.js', '../pet/petsprites.js', '../planner/remind.js', '../core/widgets.js', '../navigation/sidebar.js', '../looks/lookparts.js', '../sharing/share.js', '../looks/lookx.js', '../looks/looks.js', '../planner/gradescope.js', '../core/doctext.js', '../courses/folders.js', '../planner/notes.js', '../planner/calexport.js', '../planner/gcal.js', '../planner/gcal-auth.js', '../core/site.js', '../navigation/coursetabs.js');
 
 importScripts('../pearson/notation.js','../pearson/native.js','../background/pearson.js');
 importScripts('../pearson/embed.js', '../background/pearson-embed.js');
@@ -27,8 +27,8 @@ const brokerArea = (area) => ({
 });
 // Who asks: Glaze's own editor page, or a content script in a tab on a Canvas site Glaze runs on.
 const fromEditor = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && s.url.split(/[?#]/)[0] === chrome.runtime.getURL('options.html');
-// Glaze's first screen (settings/welcome.html), in its own tab: it puts on a built-in Look or Glaze's own theme, and turns the
-// navigation on or off (look and navbar, below).
+// Glaze's first screen (settings/welcome.html), in its own tab: it puts on a built-in Look or Glaze's own theme, and sets up
+// Glaze's navigation (look, navbar and navbarItems, below).
 const fromWelcome = (s) => s?.id === chrome.runtime.id && typeof s.url === 'string' && s.url.split(/[?#]/)[0] === chrome.runtime.getURL('settings/welcome.html')
   && (s.origin === undefined || ownOrigin(s.origin)) && Number.isInteger(s.tab?.id) && s.frameId === 0;
 // The extension's origin, as a sender's origin gives it: Safari lowercases its UUID there (and in location.origin), while
@@ -316,12 +316,26 @@ const BROKER = {
     allow: async (m, s) => {
       if (!m.patch || typeof m.patch !== 'object' || Array.isArray(m.patch) || !Object.keys(m.patch).length) return false;
       if (fromEditor(s)) { const n = GZ_SANITIZE({ navbar: m.patch }).navbar; return Object.keys(m.patch).every((k) => Object.hasOwn(n, k) && n[k] === m.patch[k]); }
-      if (fromWelcome(s)) return Object.keys(m.patch).length === 1 && typeof m.patch.on === 'boolean';
+      // The first screen: the bar on or off, its place, its rail or its style, one at a time.
+      if (fromWelcome(s)) {
+        const [k, ...more] = Object.keys(m.patch);
+        return !more.length && ['on', 'place', 'rail', 'style'].includes(k) && GZ_SANITIZE({ navbar: m.patch }).navbar[k] === m.patch[k];
+      }
       return Object.keys(m.patch).length === 1 && ['open', 'icons'].includes(m.patch.rail) && s.frameId === 0 && (!!await fromUltra(s) || !!await fromCanvas(s) || !!await fromMoodle(s));
     },
     run: async (m, { sync }) => {
       const navbar = GZ_SANITIZE({ navbar: { ...(await sync.get('navbar')).navbar, ...m.patch } }).navbar;
       return { ok: await sync.set({ navbar }) };
+    },
+  },
+  // The first screen picks Glaze's own items in the bar (navigation/navbar.js GLAZE): only those, merged into the latest stored
+  // items as Settings reads them.
+  navbarItems: {
+    allow: (m, s) => fromWelcome(s) && Array.isArray(m.glaze) && new Set(m.glaze).size === m.glaze.length && m.glaze.every((g) => GZ_NAVBAR.GLAZE.includes(g)),
+    run: async (m, { sync, local }) => {
+      const [r, { freshDefaults }] = await Promise.all([sync.get(['navbarItems', 'navItems']), local.get('freshDefaults')]);
+      const prefs = GZ_NAVBAR.initial(r.navbarItems, r.navItems, freshDefaults ? freshDefaults.fresh === true : true);
+      return { ok: await sync.set({ navbarItems: GZ_NAVBAR.clean({ ...prefs, glaze: m.glaze }) }) };
     },
   },
   // The first screen changes one switch at a time against the latest stored group.

@@ -3972,5 +3972,7 @@
   "{n} on": "{n} an",
   "Skip setup": "Einrichtung überspringen",
   "Pin Glaze to your toolbar": "Glaze an die Symbolleiste anheften",
-  "Your key": "Eigener Schlüssel"
+  "Your key": "Eigener Schlüssel",
+  "Icons": "Symbole",
+  "Shortcuts": "Verknüpfungen"
 };

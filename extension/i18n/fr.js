@@ -3972,5 +3972,7 @@
   "{n} on": "{n} activées",
   "Skip setup": "Passer la configuration",
   "Pin Glaze to your toolbar": "Épinglez Glaze dans la barre d’outils",
-  "Your key": "Votre clé"
+  "Your key": "Votre clé",
+  "Icons": "Icônes",
+  "Shortcuts": "Raccourcis"
 };

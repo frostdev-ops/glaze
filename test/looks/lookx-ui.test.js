@@ -942,14 +942,16 @@ test('the first screen wears a built-in Look or Glaze\'s own theme, and nothing 
   assert.deepEqual(await w.send({ type: 'glaze:look', look: L.name, parts: null, patch: {} }, { ...welcome, url: 'chrome-extension://x/settings/welcome.html.evil' }), denied);
 });
 
-test('the first screen turns Glaze\'s navigation on or off, and changes nothing else of the bar', async () => {
+test('the first screen sets up Glaze\'s navigation one field at a time, and changes nothing else of the bar', async () => {
   const welcome = { id: 'glaze', url: 'chrome-extension://x/settings/welcome.html#features', frameId: 0, tab: { id: 12 } };
   const w = worker({}, { navbar: { place: 'top' } });
   assert.deepEqual(await w.send({ type: 'glaze:navbar', patch: { on: false } }, welcome), { ok: true });
   assert.equal(w.sync.navbar.on, false);
   assert.equal(w.sync.navbar.place, 'top', 'the rest of the bar is kept');
   const denied = { ok: false, error: 'sender' };
-  for (const patch of [{ place: 'rail' }, { on: false, place: 'rail' }, { on: 'no' }, {}]) assert.deepEqual(await w.send({ type: 'glaze:navbar', patch }, welcome), denied, JSON.stringify(patch));
+  assert.deepEqual(await w.send({ type: 'glaze:navbar', patch: { place: 'rail' } }, welcome), { ok: true });
+  assert.equal(w.sync.navbar.place, 'rail');
+  for (const patch of [{ course: 'hide' }, { on: false, place: 'rail' }, { on: 'no' }, {}]) assert.deepEqual(await w.send({ type: 'glaze:navbar', patch }, welcome), denied, JSON.stringify(patch));
 });
 
 test('first screen changes only the chosen switch, on the latest stored group', async () => {

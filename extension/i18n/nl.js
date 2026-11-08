@@ -3972,5 +3972,7 @@
   "{n} on": "{n} aan",
   "Skip setup": "Instellen overslaan",
   "Pin Glaze to your toolbar": "Zet Glaze vast in de werkbalk",
-  "Your key": "Eigen sleutel"
+  "Your key": "Eigen sleutel",
+  "Icons": "Pictogrammen",
+  "Shortcuts": "Snelkoppelingen"
 };
