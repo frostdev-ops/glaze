@@ -75,8 +75,8 @@ Canvas es una marca comercial de Instructure, Inc. Blackboard es una marca comer
 
 NOVEDADES DE 4.0.5
 
-• Chrome: una instalación nueva abre una guía de configuración: elige tema y movimiento, activa o desactiva las funciones una a una y añade tu centro.
-• Firefox: una instalación nueva abre una guía de configuración: elige tema y movimiento, activa o desactiva las funciones una a una y añade tu centro.
+• Chrome: una instalación nueva abre una guía de configuración: elige tema, movimiento y navegación, activa o desactiva las funciones una a una, elige una IA o déjala desactivada y añade tu centro.
+• Firefox: una instalación nueva abre una guía de configuración: elige tema, movimiento y navegación, activa o desactiva las funciones una a una, elige una IA o déjala desactivada y añade tu centro.
 • La ayuda para estudiar de Pregúntale a Rime responde con los datos de tu centro: pregunta por tu próximo examen y te dice cuál es, de qué curso y cuándo vence.
 • Pregúntale a Rime lee cada lista una sola vez y conserva lo que leyó, incluso en un chat largo.
 • Pearson dentro de Blackboard ya no llena de errores la lista de Glaze en tu navegador.

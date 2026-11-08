@@ -75,8 +75,8 @@ Canvas is een handelsmerk van Instructure, Inc. Blackboard is een handelsmerk va
 
 NIEUW IN 4.0.5
 
-• Chrome: een nieuwe installatie opent een installatiegids: kies een thema en beweging, zet functies een voor een aan of uit en voeg dan je school toe.
-• Firefox: een nieuwe installatie opent een installatiegids: kies een thema en beweging, zet functies een voor een aan of uit en voeg dan je school toe.
+• Chrome: een nieuwe installatie opent een installatiegids: kies een thema, beweging en navigatie, zet functies een voor een aan of uit, kies een AI of laat die uit en voeg dan je school toe.
+• Firefox: een nieuwe installatie opent een installatiegids: kies een thema, beweging en navigatie, zet functies een voor een aan of uit, kies een AI of laat die uit en voeg dan je school toe.
 • De studiehulp van Vraag het Rime antwoordt uit de gegevens van je school: vraag naar je volgende toets en het noemt de toets, de cursus en de inleverdatum.
 • Vraag het Rime leest elke lijst één keer en onthoudt wat het las, ook in een lang gesprek.
 • Pearson binnen Blackboard vult de foutenlijst van Glaze in je browser niet meer.

@@ -75,8 +75,8 @@ Canvas é uma marca da Instructure, Inc. Blackboard é uma marca da Anthology In
 
 NOVO NA 4.0.5
 
-• Chrome: uma instalação nova abre um guia de configuração: escolha tema e movimento, ligue ou desligue os recursos um a um e adicione sua escola.
-• Firefox: uma instalação nova abre um guia de configuração: escolha tema e movimento, ligue ou desligue os recursos um a um e adicione sua escola.
+• Chrome: uma instalação nova abre um guia de configuração: escolha tema, movimento e navegação, ligue ou desligue os recursos um a um, escolha uma IA ou deixe-a desligada e adicione sua escola.
+• Firefox: uma instalação nova abre um guia de configuração: escolha tema, movimento e navegação, ligue ou desligue os recursos um a um, escolha uma IA ou deixe-a desligada e adicione sua escola.
 • A ajuda para estudar do Pergunte ao Rime responde com os dados da sua escola: pergunte pela sua próxima prova e ele diz qual é, de qual curso e quando vence.
 • O Pergunte ao Rime lê cada lista uma vez só e guarda o que leu, mesmo numa conversa longa.
 • O Pearson dentro do Blackboard não enche mais a lista de erros do Glaze no seu navegador.

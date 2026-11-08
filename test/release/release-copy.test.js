@@ -61,6 +61,7 @@ for (const [lang, heading] of Object.entries(release405)) test(`4.0.5 release no
   const label = (l) => /^•\s*(Chrome|Firefox|Safari)\s*:/.exec(l)?.[1];
   assert.deepEqual(bullets.map((l) => label(l) || (l.includes(ui('Ask Rime')) ? 'Ask Rime' : l.includes(ui('Pearson inside Blackboard')) ? 'Pearson' : l)), ['Chrome', 'Firefox', 'Ask Rime', 'Ask Rime', 'Pearson']);
   assert.equal(bullets[0].replace('Chrome', ''), bullets[1].replace('Firefox', ''), 'one setup-guide line per browser that opens it');
+  assert.ok(bullets[0].toLowerCase().includes(ui('Navigation').toLowerCase()) && bullets[0].includes(ui('AI')), 'the setup line names its navigation and AI steps');
   assert.ok(!/\b(?:CI|audit|eval|R\d+)\b/i.test(block), 'no internal process or model rounds in store copy');
 });
 

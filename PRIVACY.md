@@ -964,9 +964,10 @@ you import) are bundled. It makes requests in these cases:
   over https (or to your own computer). Glaze never chooses a provider, runs no server for AI, and never uses AI on quiz
   or test pages. AI answers are only
   suggestions in the review, marked Check this; nothing is kept until you save.
-- **Rime** (Settings → AI, Chrome and Firefox; model files only after you click Download). Until Frostdev publishes a Rime model, its card
+- **Rime** (Settings → AI and the setup guide's AI step, Chrome and Firefox; model files only after you click Download, or pick
+  Rime in the setup guide). Until Frostdev publishes a Rime model, its card
   shows Not available yet, and opening Settings → AI asks `huggingface.co`, at most once a day, for Frostdev's signed
-  list of Rime models (never in Safari or with Data Saver on); Download appears once the list names one. Glaze's own model, Frostdev's Rime, built
+  list of Rime models (never in Safari or with Data Saver on), and so does the setup guide's AI step; Download appears once the list names one. Glaze's own model, Frostdev's Rime, built
   on Liquid AI's LFM3-1.7B. Download fetches its file from `huggingface.co`, which hands the request to Hugging Face's
   CDN (`*.hf.co`); **Picture reading**'s Download fetches its two files the same way. These requests carry no cookies and
   nothing about you, your courses or your work: only the file's address and the part of it being fetched, with the

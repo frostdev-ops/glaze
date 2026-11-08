@@ -75,8 +75,8 @@ Canvas est une marque d’Instructure, Inc. Blackboard est une marque d’Anthol
 
 NOUVEAUTÉS DE LA VERSION 4.0.5
 
-• Chrome : une nouvelle installation ouvre un guide de configuration : choisissez un thème et les animations, activez ou désactivez les fonctions une à une, puis ajoutez votre établissement.
-• Firefox : une nouvelle installation ouvre un guide de configuration : choisissez un thème et les animations, activez ou désactivez les fonctions une à une, puis ajoutez votre établissement.
+• Chrome : une nouvelle installation ouvre un guide de configuration : choisissez un thème, les animations et la navigation, activez ou désactivez les fonctions une à une, choisissez une IA ou laissez-la désactivée, puis ajoutez votre établissement.
+• Firefox : une nouvelle installation ouvre un guide de configuration : choisissez un thème, les animations et la navigation, activez ou désactivez les fonctions une à une, choisissez une IA ou laissez-la désactivée, puis ajoutez votre établissement.
 • L’aide aux révisions de Demander à Rime répond à partir des données de votre établissement : demandez votre prochain test, il vous donne le test, son cours et sa date limite.
 • Demander à Rime lit chaque liste une seule fois et garde ce qu’il a lu, même dans une longue conversation.
 • Pearson dans Blackboard ne remplit plus la liste d’erreurs de Glaze dans votre navigateur.

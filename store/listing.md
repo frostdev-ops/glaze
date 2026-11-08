@@ -83,8 +83,8 @@ Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Antholog
 
 NEW IN 4.0.5
 
-• Chrome: a new install opens a setup guide: choose a theme and motion, turn features on or off one by one, then add your school.
-• Firefox: a new install opens a setup guide: choose a theme and motion, turn features on or off one by one, then add your school.
+• Chrome: a new install opens a setup guide: choose a theme, motion and navigation, turn features on or off one by one, pick an AI or leave it off, then add your school.
+• Firefox: a new install opens a setup guide: choose a theme, motion and navigation, turn features on or off one by one, pick an AI or leave it off, then add your school.
 • Ask Rime's study help answers from your school's records: ask about your next test and it names the test, its course and its due date.
 • Ask Rime reads each list once and keeps what it read, even in a long chat.
 • Pearson inside Blackboard no longer fills your browser's error list for Glaze.

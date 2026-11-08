@@ -10,7 +10,7 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
-- Chrome, Edge and Firefox: a new install opens a setup guide. Choose a theme (Frost or one of the eleven Looks) and motion, turn each feature on or off beside a short animated picture of it, then add your school. Every choice saves as you make it.
+- Chrome, Edge and Firefox: a new install opens a setup guide. Choose a theme (Frost or one of the eleven Looks) and motion, place Glaze's navigation at the side or the top with your shortcuts in it, turn each feature on or off beside a short animated picture of it, pick an AI (Rime on this computer, your browser's own model or your own key) or leave it off, then add your school. Every choice saves as you make it.
 
 ### Fixed
 
