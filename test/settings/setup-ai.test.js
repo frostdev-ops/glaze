@@ -95,14 +95,20 @@ test('a choice writes what Settings would, and turns no feature on', () => {
   assert.deepEqual([...G.FEATURES].sort(), [...S.FEATURES].sort(), 'every feature Settings has, and no other');
 });
 
-test('a provider connected becomes the model as Settings suggests it, over Rime or the browser\'s model', () => {
+test('a provider connected becomes the model as Settings suggests it while the key choice is current', () => {
   const ids = ['gpt-5', 'gpt-5-mini', 'gpt-4.1'];
-  const p = G.keyed(on({ model: { use: 'local', model: '' } }), 'openai', ids);
+  const p = G.keyed(on({}), 'openai', ids);
   assert.equal(p.on, true);
   assert.deepEqual(p.model, { use: 'openai', model: 'gpt-5' });
   assert.deepEqual(p.models.completion, { use: 'openai', model: 'gpt-5-mini' });
   assert.deepEqual(G.keyed(on({ model: { use: 'openai', model: 'gpt-4.1' } }), 'openai', ids), { on: true }, 'one of its own already chosen stays');
   assert.deepEqual(G.keyed(on({}), 'openai', ['nothing-known']), { on: true, model: { use: 'openai', model: '' } }, 'no suggestion: the provider, its model to choose in Settings');
+});
+
+test('a delayed provider catalog cannot replace a newer local or off choice', () => {
+  for (const cur of [S.clean(), on({ model: { use: 'local', model: '' } }), on({ model: { use: 'device', model: '' } })]) {
+    assert.deepEqual(G.keyed(cur, 'openai', ['gpt-5']), {});
+  }
 });
 
 test('the cards\' words and the done step\'s row', () => {
