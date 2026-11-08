@@ -3969,5 +3969,6 @@
   "School": "Escola",
   "Setup": "Configuração",
   "You’re all set": "Tudo pronto",
-  "{n} on": "{n} ativados"
+  "{n} on": "{n} ativados",
+  "Your key": "Sua chave"
 };
