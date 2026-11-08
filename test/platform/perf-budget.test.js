@@ -335,9 +335,10 @@ const RIME_ARRIVE = { ultra: 711, canvas: 595, moodle: 595 };
 // leaves drafts out before asking for due-date exceptions, 60 on Ultra. Measured against f552ddd63.
 const DRAFT_BEHIND = { ultra: 333 + 60, canvas: 333, moodle: 333 };
 // Activity cards in their course's color (a named raise under the owner's 2026-10-19 approval, 2026-11-07): content-ultra.js's
-// paintCourses copies a card's slot and course color from its text column to the card, 400 bytes on Ultra, and content.js
-// clears the card's slot when Glaze goes off, 23 on every site. Measured against d8d35427e.
-const STREAM_COURSE = { ultra: 400 + 23, canvas: 23, moodle: 23 };
+// paintCourses copies a card's slot and course color from its text column to the card, or drops them when Ultra reuses the
+// card for a column with none, 635 bytes on Ultra, and content.js clears the card's slot when Glaze goes off, 23 on every
+// site. Measured against d8d35427e.
+const STREAM_COURSE = { ultra: 635 + 23, canvas: 23, moodle: 23 };
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what background/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;

@@ -501,17 +501,21 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     I.setAttr('data-gz-ctabs', tabsOn() && at);
     if (isPreview) return;
     const colors = courseColors();
-    for (const el of document.querySelectorAll('[class*="course-color-"]')) {
-      const v = GZ_COURSE_VARS(colors[courseOf(el)]), card = el.parentElement;
-      // An Activity card's course is on its text column only: the card takes it too, for its icon (theme.css).
-      const at = card?.matches('.stream-panel-activity-card') ? [el, card] : [el];
-      const slot = at[1] && el.className.match(/course-color-(\d+)/)?.[1];
-      if (slot && card.dataset.gzCourseSlot !== slot) card.dataset.gzCourseSlot = slot;
-      for (const e of at) for (const k of ['--gz-pick', '--gz-course-raw']) {
+    const put = (e, v) => {
+      for (const k of ['--gz-pick', '--gz-course-raw']) {
         if (e.style.getPropertyValue(k) === (v[k] || '')) continue;
         if (v[k]) e.style.setProperty(k, v[k]);
         else e.style.removeProperty(k);
       }
+    };
+    for (const el of document.querySelectorAll('[class*="course-color-"]')) put(el, GZ_COURSE_VARS(colors[courseOf(el)]));
+    // An Activity card's course is on its text column only: the card takes it too, for its icon (theme.css). Ultra reuses
+    // cards, so one whose column has no slot now drops it.
+    for (const card of document.querySelectorAll('.stream-panel-activity-card')) {
+      const col = card.querySelector(':scope > [class*="course-color-"]'), slot = col?.className.match(/course-color-(\d+)/)?.[1];
+      if (!slot) card.removeAttribute('data-gz-course-slot');
+      else if (card.dataset.gzCourseSlot !== slot) card.dataset.gzCourseSlot = slot;
+      put(card, slot ? GZ_COURSE_VARS(colors[courseOf(col)]) : {});
     }
   };
   // The course tinting the page now, as { key, slot, vars }, or null.
