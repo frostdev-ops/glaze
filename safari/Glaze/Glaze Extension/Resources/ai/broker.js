@@ -548,7 +548,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     return typeof m === 'boolean' ? m : env.vault.set(CONNECTIONS, m.connections);
   };
   const NAME = /^[^\p{Cc}\p{Bidi_Control}]{1,40}$/u;
-  const config = (m, env) => (['prepare', 'test', 'delete'].includes(m?.op) && m.id === undefined ? local(m, env) : queued(async () => {
+  const config = (m, env, { keepExisting = false } = {}) => (['prepare', 'test', 'delete'].includes(m?.op) && m.id === undefined ? local(m, env) : queued(async () => {
     // What a write keeps: until the store is in its shape, an older connection as it is, its model too.
     const done = await upgrade(env).catch(() => false), kept = await stored(env), all = A().migrate(undefined, kept).connections, base = done ? all : kept;
     if (m?.op === 'get') {
@@ -571,6 +571,9 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
       const raw = kind === 'preset' ? { ...given, base: A().PRESETS[m.id].base } : given;
       if (provider === 'openai') { try { E().parse(raw.base); } catch (e) { return { ok: false, error: 'setup', note: e.message }; } }
       const p = P().get(provider), before = usable(m.id, all[m.id]);
+      // Setup only ensures an on-device connection exists. Preserve an existing connection's Settings tuning, including
+      // when Settings saved it after the wizard last read its list; this check shares the vault's write queue.
+      if (keepExisting && before?.p === p) return { ok: true };
       const same = before && before.p === p && E().normalize(before.cfg.base) === E().normalize(raw.base);
       let cfg = p.config({ ...raw, ...(!Object.hasOwn(raw, 'key') && same && before.cfg.key && { key: before.cfg.key }) });
       if (!cfg) return { ok: false, error: 'setup', note: 'Check the address, the model and the key.' };

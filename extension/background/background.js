@@ -3109,7 +3109,8 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     GZ_AI_MODEL_UPDATES.first(env).catch(() => {});
     GZ_AI_MODEL_UPDATES.about(env).then((r) => reply({ ok: true, ...r }), () => reply({ ok: false, error: 'failed' })); return true;
   }
-  ai().config(m, aiEnv()).then(reply, () => reply({ ok: false, error: 'failed' }));
+  const keepExisting = fromWelcome(s) && m.op === 'set' && (m.id === 'local' || m.id === 'device');
+  ai().config(m, aiEnv(), { keepExisting }).then(reply, () => reply({ ok: false, error: 'failed' }));
   return true;
 });
 
