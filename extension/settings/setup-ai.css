@@ -1,1 +1,192 @@
-/* The setup wizard's ai step (settings/setup-ai.js). */
+/* The setup wizard's AI step (settings/setup-ai.js): its picture beside the choices, a provider's key under them, then the
+   features. Every colour from the worn Look's --gz-* palette (settings/welcome.css), so it reads in dark and light. */
+#ai-body { width: 100%; }
+.ai-step { width: 100%; display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); gap: clamp(1.5rem, 4vw, 3.5rem); align-items: center; }
+.ai-side { display: grid; gap: 1rem; align-content: start; }
+/* Where the tallest state fits, its height is kept from the start: the heading and the choices stay put as the key and the
+   features come and go. */
+@media (min-width: 821px) and (min-height: 760px) {
+  .ai-step { align-items: start; }
+  .ai-side { min-height: 34.5rem; }
+}
+
+/* ---- the choices: glass rows with a mark, a name, a word, and the theme's tick ---- */
+.ai-choices { display: grid; gap: 0.55rem; }
+.ai-choice {
+  position: relative; display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) auto 1.5rem; align-items: center; gap: 0.85rem;
+  min-height: 3.9rem; padding: 0.55rem 0.9rem 0.55rem 0.65rem; border-radius: 18px; text-align: start;
+  background: var(--glass); border: 1px solid var(--edge); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: 0 14px 34px -22px var(--shade);
+  transition: transform 0.25s var(--ease), border-color 0.25s var(--ease), box-shadow 0.3s var(--ease), background 0.25s var(--ease), opacity 0.2s var(--ease);
+}
+.ai-choice:hover { border-color: var(--gz-line-strong); background: var(--glass-hi); }
+html:not([data-gz-motion="off"]) .ai-choice:hover { transform: translateY(-2px); }
+html[data-gz-motion="expressive"] .ai-choice:hover { transition-timing-function: var(--spring); }
+.ai-choice[aria-checked="true"] { border-color: var(--gz-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-accent) 32%, transparent), 0 18px 40px -22px var(--shade); }
+.ai-choice[aria-disabled="true"] { opacity: 0.5; cursor: var(--arrow); }
+.ai-choice[aria-disabled="true"]:hover { transform: none; border-color: var(--edge); background: var(--glass); }
+.ai-choice .name { font-weight: 600; font-size: 1rem; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ai-choice .st { font-size: 0.88rem; font-weight: 500; color: var(--gz-ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ai-choice[data-loading] .st { color: var(--gz-accent-hi); }
+html[data-tone="light"] .ai-choice[data-loading] .st { color: var(--gz-accent); }
+.ai-choice[data-ready] .st { color: var(--gz-ok); }
+.ai-choice[data-act] .st { color: var(--gz-accent-hi); font-weight: 600; }
+html[data-tone="light"] .ai-choice[data-act] .st { color: var(--gz-accent); }
+html[data-tone="light"] .ai-choice[data-ready] .st { color: color-mix(in srgb, var(--gz-ok) 70%, #000); }
+.ai-choice .tick {
+  width: 1.5rem; height: 1.5rem; padding: 0.25rem; border-radius: 50%;
+  background: var(--gz-accent); color: var(--gz-accent-ink); fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.3); opacity: 0; transform: scale(0.4); transition: opacity 0.2s var(--ease), transform 0.35s var(--spring);
+}
+.ai-choice .tick path { stroke-dasharray: 22; stroke-dashoffset: 22; transition: stroke-dashoffset 0.35s var(--ease) 0.1s; }
+.ai-choice[aria-checked="true"] .tick { opacity: 1; transform: none; }
+.ai-choice[aria-checked="true"] .tick path { stroke-dashoffset: 0; }
+.ai-ic {
+  position: relative; display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: 50%; color: var(--gz-ink-muted);
+  background: color-mix(in srgb, var(--gz-surface-2) 55%, var(--gz-surface)); box-shadow: inset 0 0 0 1px var(--edge);
+  transition: background 0.3s var(--ease), color 0.3s var(--ease), box-shadow 0.3s var(--ease);
+}
+.ai-ic .ic { width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.ai-choice[aria-checked="true"] .ai-ic { color: var(--gz-accent-hi); background: var(--gz-accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gz-accent) 60%, transparent); }
+html[data-tone="light"] .ai-choice[aria-checked="true"] .ai-ic { color: var(--gz-accent); }
+html:not([data-gz-motion="off"]) .ai-choice[aria-checked="true"] .ai-ic .ic { animation: ai-nod 0.5s var(--spring); }
+@keyframes ai-nod { 40% { transform: scale(1.18) rotate(-6deg); } }
+/* A download's ring around the mark, filling as it comes; a slow turn of light along it while it does. */
+.ai-ic .ring { position: absolute; inset: -4px; width: calc(100% + 8px); height: calc(100% + 8px); transform: rotate(-90deg); fill: none; opacity: 0; transition: opacity 0.3s var(--ease); }
+.ai-ic .ring circle { stroke-width: 3; }
+.ai-ic .ring .track { stroke: color-mix(in srgb, var(--gz-line-strong) 55%, transparent); }
+.ai-ic .ring .arc { stroke: var(--gz-accent); stroke-linecap: round; stroke-dasharray: 100; transition: stroke-dashoffset 0.6s var(--ease); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--gz-accent) 70%, transparent)); }
+.ai-choice[data-loading] .ai-ic .ring { opacity: 1; }
+html:not([data-gz-motion="off"]) .ai-choice[data-loading] .ai-ic .ic { animation: ai-breathe 2.4s ease-in-out infinite; }
+@keyframes ai-breathe { 50% { transform: scale(0.86); opacity: 0.7; } }
+html:not([data-gz-motion="off"]) #ai[data-in] .ai-choice { animation: pop 0.5s var(--ease) both; animation-delay: calc(var(--i, 0) * 45ms + 80ms); }
+html[data-gz-motion="expressive"] #ai[data-in] .ai-choice { animation-timing-function: var(--spring); }
+
+/* ---- a provider's key: its chips, then the bar the school step uses, its button inside its end ---- */
+.ai-key { display: grid; gap: 0.7rem; }
+.ai-provs { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.ai-prov {
+  position: relative; display: inline-flex; align-items: center; gap: 0.4rem; height: 2.15rem; padding: 0 0.75rem 0 0.3rem; border-radius: 999px;
+  font-size: 0.85rem; font-weight: 600; color: var(--gz-ink-muted); background: var(--glass); border: 1px solid var(--edge);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease), background 0.2s var(--ease), transform 0.15s var(--ease);
+}
+.ai-prov:hover { color: var(--gz-ink); border-color: var(--gz-line-strong); }
+.ai-prov:active { transform: scale(0.97); }
+.ai-prov[aria-checked="true"] { color: var(--gz-ink); border-color: var(--gz-accent); background: color-mix(in srgb, var(--gz-accent) 14%, var(--glass)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-accent) 22%, transparent); }
+.ai-prov .mk { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; font-size: 0.66rem; font-weight: 700; letter-spacing: -0.02em; color: #fff; background: #3b4252; }
+.ai-prov[data-p="openai"] .mk { background: #10a37f; } .ai-prov[data-p="anthropic"] .mk { background: #c96442; } .ai-prov[data-p="gemini"] .mk { background: #4285f4; }
+.ai-prov[data-p="openrouter"] .mk { background: #6467f2; } .ai-prov[data-p="xai"] .mk { background: #2b2b2b; } .ai-prov[data-p="mistral"] .mk { background: #fa520f; }
+.ai-prov[data-p="groq"] .mk { background: #f55036; } .ai-prov[data-p="deepseek"] .mk { background: #4d6bfe; }
+.ai-prov[data-connected]::after { content: ''; position: absolute; top: 0.1rem; left: 1.4rem; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--gz-ok); box-shadow: 0 0 0 2px var(--gz-surface); }
+.ai-bar { --bar: 3.5rem; border-radius: 18px; }
+.ai-bar input { font-size: 1rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.02em; }
+.ai-bar input::placeholder { font-family: Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0; }
+.ai-bar .lead { width: 2.5rem; height: 2.5rem; }
+.ai-bar .masked { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 1rem ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.04em; color: var(--gz-ink); }
+.ai-bar .get { flex: none; padding: 0 0.65rem; font-size: 0.86rem; font-weight: 600; color: var(--gz-accent-hi); white-space: nowrap; border-radius: 999px; line-height: 2rem; transition: background 0.2s var(--ease); }
+.ai-bar .get::after { content: ' ↗'; }
+.ai-bar .get:hover { background: color-mix(in srgb, var(--gz-accent) 12%, transparent); }
+html[data-tone="light"] .ai-bar .get { color: var(--gz-accent); }
+.ai-bar .primary { height: 2.55rem; min-width: 6.25rem; border-radius: 12px; }
+.ai-bar .ghost { flex: none; height: 2.4rem; }
+.ai-note { font-size: 0.92rem; font-weight: 500; text-align: center; color: var(--gz-err); }
+html[data-tone="light"] .ai-note { color: color-mix(in srgb, var(--gz-err) 85%, #000); }
+html:not([data-gz-motion="off"]) .ai-key:not([hidden]), html:not([data-gz-motion="off"]) .ai-feats:not([hidden]), html:not([data-gz-motion="off"]) .ai-bar:not([hidden]) { animation: rise 0.45s var(--ease) both; }
+
+/* ---- the features: the wizard's switches, two by two ---- */
+.ai-feats { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ai-feats .switch { min-height: 3.1rem; padding-block: 0.45rem; }
+
+/* ---- the picture: a page whose gray text finishes the line (Tab), and Ask Rime answering beside it, its orb wearing the
+   choice. With AI off the page holds still and nothing answers; with motion off each part holds its last frame. ---- */
+.ai-art { position: relative; }
+.v-ai .win { transition: filter 0.5s var(--ease), opacity 0.5s var(--ease); }
+.v-ai .paper {
+  left: 7%; top: calc(1.6rem + 9%); width: 54%; bottom: 9%; display: grid; align-content: start; gap: 0.75rem; padding: 1.1rem 1rem; border-radius: 14px;
+  background: color-mix(in srgb, var(--gz-surface) 94%, transparent); border: 1px solid var(--edge);
+}
+.v-ai .paper > b { position: relative; height: 0.5rem; border-radius: 4px; background: color-mix(in srgb, var(--gz-ink-muted) 32%, transparent); }
+.v-ai .paper > b:nth-child(1) { width: 55%; height: 0.75rem; background: color-mix(in srgb, var(--gz-ink) 70%, transparent); }
+.v-ai .paper > b:nth-child(2) { width: 92%; }
+.v-ai .paper > b:nth-child(3) { width: 78%; }
+.v-ai .paper > b:nth-child(5) { width: 86%; margin-top: 0.35rem; }
+.v-ai .paper > b:nth-child(6) { width: 70%; }
+.v-ai .paper > b:nth-child(7) { width: 40%; }
+.v-ai .paper .line { display: flex; align-items: center; gap: 0.2rem; height: 0.5rem; background: none; overflow: visible; }
+.v-ai .line s { position: relative; height: 0.5rem; border-radius: 4px; }
+.v-ai .line .typed { width: 34%; background: color-mix(in srgb, var(--gz-ink-muted) 32%, transparent); }
+.v-ai .line .gray { width: 46%; background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--gz-accent) 55%, transparent) 0 6px, transparent 6px 9px); animation-name: ai-ghost; }
+.v-ai .line .tab {
+  flex: none; width: 1.7rem; height: 1rem; margin-left: 0.25rem; border-radius: 4px; background: color-mix(in srgb, var(--gz-surface-2) 70%, var(--gz-surface));
+  border: 1px solid var(--gz-line-strong); box-shadow: 0 2px 0 var(--gz-line-strong); animation-name: ai-tab;
+}
+.v-ai .line .tab::after { content: ''; position: absolute; left: 25%; right: 25%; top: 50%; height: 2px; margin-top: -1px; background: var(--gz-ink-muted); border-radius: 1px; }
+.v-ai .chat {
+  right: 6%; top: calc(1.6rem + 9%); width: 30%; bottom: 9%; display: grid; align-content: end; gap: 0.5rem; padding: 3.1rem 0.6rem 0.7rem; border-radius: 14px;
+  background: var(--glass-hi); border: 1px solid var(--gz-line-strong); box-shadow: 0 18px 36px -18px var(--shade);
+}
+.v-ai .chat > b { position: relative; border-radius: 10px; }
+.v-ai .chat .q { justify-self: end; width: 72%; height: 1.4rem; background: color-mix(in srgb, var(--gz-ink-muted) 24%, transparent); animation-name: ai-q; }
+.v-ai .chat .dots { display: flex; gap: 0.2rem; width: 2.4rem; height: 1.1rem; padding: 0 0.45rem; align-items: center; background: color-mix(in srgb, var(--gz-accent) 18%, transparent); animation-name: ai-dots; }
+.v-ai .chat .dots s { position: static; width: 0.3rem; height: 0.3rem; border-radius: 50%; background: var(--gz-accent); animation: ai-blip 0.9s ease-in-out infinite; }
+.v-ai .chat .dots s:nth-child(2) { animation-delay: 0.15s; }
+.v-ai .chat .dots s:nth-child(3) { animation-delay: 0.3s; }
+.v-ai .chat .a { display: grid; gap: 0.32rem; padding: 0.5rem; width: 94%; background: color-mix(in srgb, var(--gz-accent) 18%, transparent); border: 1px solid color-mix(in srgb, var(--gz-accent) 35%, transparent); animation-name: ai-a; }
+.v-ai .chat .a s { position: static; height: 0.36rem; border-radius: 3px; background: color-mix(in srgb, var(--gz-ink) 55%, transparent); }
+.v-ai .chat .a s:nth-child(2) { width: 82%; } .v-ai .chat .a s:nth-child(3) { width: 58%; }
+.v-ai .orb {
+  right: calc(6% + 15% - 1.25rem); top: calc(1.6rem + 9% + 0.6rem); width: 2.5rem; height: 2.5rem; display: grid; place-items: center; border-radius: 50%;
+  color: var(--gz-accent-ink); background: radial-gradient(circle at 35% 30%, var(--gz-accent-hi), var(--gz-accent) 60%, color-mix(in srgb, var(--gz-accent) 70%, #000));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--gz-accent) 20%, transparent), 0 0 22px color-mix(in srgb, var(--gz-accent) 55%, transparent); animation: ai-glow 2.5s ease-in-out infinite;
+}
+.v-ai .orb .ic { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@keyframes ai-ghost { 0%, 22% { opacity: 0; transform: translateX(-6px); } 30%, 52% { opacity: 1; transform: none; } 58%, 92% { opacity: 1; background: color-mix(in srgb, var(--gz-ink-muted) 32%, transparent); } 100% { opacity: 0; } }
+@keyframes ai-tab { 0%, 30% { opacity: 0; transform: translateY(3px); } 36%, 50% { opacity: 1; transform: none; } 54% { transform: translateY(2px); box-shadow: 0 0 0 var(--gz-line-strong); } 58% { transform: none; } 64%, 100% { opacity: 0; } }
+@keyframes ai-q { 0%, 8% { opacity: 0; transform: translateY(8px) scale(0.92); } 16%, 92% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes ai-dots { 0%, 16% { opacity: 0; transform: scale(0.8); } 22%, 38% { opacity: 1; transform: none; } 42%, 100% { opacity: 0; height: 0; margin-top: -0.5rem; } }
+@keyframes ai-a { 0%, 40% { opacity: 0; transform: translateY(10px) scale(0.94); } 50%, 92% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes ai-blip { 50% { transform: translateY(-3px); opacity: 0.5; } }
+@keyframes ai-glow { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--gz-accent) 12%, transparent), 0 0 34px color-mix(in srgb, var(--gz-accent) 70%, transparent); } }
+/* Motion off: the frame where the answer is in and the gray text taken. */
+html[data-gz-motion="off"] .v-ai .chat .dots { display: none; }
+html[data-gz-motion="off"] .v-ai .line .tab { opacity: 0; }
+/* AI off: nothing finishes the line, nothing answers, the orb goes grey. */
+.ai-step[data-on="false"] .v-ai .win { filter: grayscale(0.85); opacity: 0.6; }
+.ai-step[data-on="false"] .v-ai * { animation: none !important; }
+.ai-step[data-on="false"] .v-ai :is(.gray, .tab, .dots, .a) { opacity: 0; }
+.ai-step[data-on="false"] .v-ai .chat .dots { display: none; }
+.ai-step[data-on="false"] .v-ai .orb { color: var(--gz-ink-muted); background: color-mix(in srgb, var(--gz-surface-2) 55%, var(--gz-surface)); box-shadow: inset 0 0 0 1px var(--edge); }
+
+@media (max-width: 820px) {
+  .ai-step { grid-template-columns: 1fr; gap: 1.25rem; }
+  .ai-art { width: min(100%, 24rem); justify-self: center; }
+}
+@media (max-width: 560px) {
+  .ai-art { width: min(100%, 20rem); }
+  .ai-art .win { aspect-ratio: 16 / 10; }
+  .v-ai .chat { padding: 2.4rem 0.45rem 0.5rem; gap: 0.35rem; }
+  .v-ai .chat .q { height: 1rem; }
+  .v-ai .chat .dots { height: 0.9rem; }
+  .v-ai .chat .a { padding: 0.35rem; gap: 0.25rem; }
+  .v-ai .paper { gap: 0.6rem; padding: 0.9rem 0.8rem; }
+  .v-ai .orb { width: 2.1rem; height: 2.1rem; right: calc(6% + 15% - 1.05rem); }
+  /* The word under the name, so a long name keeps its whole self. */
+  .ai-choice { grid-template-columns: 2.6rem minmax(0, 1fr) 1.5rem; column-gap: 0.75rem; row-gap: 0; min-height: 3.5rem; }
+  .ai-choice .ai-ic, .ai-choice .tick { grid-row: 1 / 3; }
+  .ai-choice .name { grid-column: 2; }
+  .ai-choice .st { grid-column: 2; grid-row: 2; font-size: 0.82rem; }
+  .ai-choice .name { align-self: end; }
+  .ai-choice .st { align-self: start; }
+  .ai-choice .st:empty { display: none; }
+  .ai-choice:has(.st:empty) .name { grid-row: 1 / 3; align-self: center; }
+  .ai-choice .tick { grid-column: 3; }
+  .ai-feats { grid-template-columns: 1fr; }
+  .ai-bar { flex-wrap: wrap; height: auto; padding: 0.4rem; row-gap: 0.4rem; }
+  .ai-bar input, .ai-bar .masked { height: 2.8rem; line-height: 2.8rem; }
+  .ai-bar .primary { width: 100%; }
+}
+@media (forced-colors: active) {
+  .ai-choice, .ai-prov { border: 1px solid CanvasText; }
+  .ai-choice[aria-checked="true"], .ai-prov[aria-checked="true"] { outline: 3px solid Highlight; }
+}
