@@ -183,6 +183,19 @@ test('publishing uploads with --clobber only when the draft action says replace'
   assert.doesNotMatch(source, /existing \? \['--clobber'\]/, 'clobbering must go through the draft check');
 });
 
+// ---- public-release: a draft just created is read again until GitHub lists it (4.0.5: the list lagged, and publishing read null) ----
+
+test('a draft GitHub lists only after a moment is waited for, and one it never lists stops with a resumable error', async () => {
+  const { created } = await pub();
+  const waits = [];
+  const wait = async (ms) => { waits.push(ms); };
+  let reads = 0;
+  assert.deepEqual(await created(() => (++reads < 3 ? null : { draft: true, assets: [] }), wait), { draft: true, assets: [] });
+  assert.equal(reads, 3);
+  assert.equal(waits.length, 2);
+  await assert.rejects(created(() => null, wait, 4), /GitHub doesn't list the draft release yet; resume in a minute\./);
+});
+
 // ---- public-release: an existing tag at another commit is never moved ----
 
 const gitIn = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args],
