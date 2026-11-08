@@ -286,7 +286,7 @@ test('the worker starts the first-list check when Settings asks for Rime\'s vers
   const firsts = [], listeners = [];
   const env = { marker: true };
   const ctx = {
-    fromEditor: () => true, extensionOrigin: () => true, ai: () => ({ config: async () => ({ ok: true }) }), aiEnv: () => ({}), modelUpdatesEnv: () => env,
+    fromEditor: () => true, fromWelcome: () => false, extensionOrigin: () => true, ai: () => ({ config: async () => ({ ok: true }) }), aiEnv: () => ({}), modelUpdatesEnv: () => env,
     GZ_AI_MODEL_UPDATES: { first: (e) => { firsts.push(e); return new Promise(() => {}); }, about: async () => ({ auto: true }) },
     chrome: { runtime: { onMessage: { addListener: (f) => listeners.push(f) } } }, Promise,
   };
