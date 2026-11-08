@@ -48,7 +48,7 @@ const stub = () => {
   try {
     await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      ...env.chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 },
+      ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1440, height: 900 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking', '--renderer-process-limit=1'],
     });
     await ctx.addInitScript(stub);
