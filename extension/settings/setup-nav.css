@@ -1,1 +1,236 @@
-/* The setup wizard's nav step (settings/setup-nav.js). */
+/* The setup wizard's Navigation step (settings/setup-nav.js): the choices beside a small page wearing Glaze's bar as chosen.
+   The page is drawn in em, sized by its own width (a container), so it keeps its proportions at any size. Its moving parts are
+   registered numbers the bar's geometry is worked out from: --nv-on (the bar shown), --nv-top (a bar across the top), --nv-rw
+   (the rail's width), --nv-lab (the rail's labels) and --nv-g (a floating bar's gutter), so one state eases into the next. */
+@property --nv-on { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --nv-top { syntax: '<number>'; inherits: true; initial-value: 0; }
+@property --nv-rw { syntax: '<number>'; inherits: true; initial-value: 8.6; }
+@property --nv-lab { syntax: '<number>'; inherits: true; initial-value: 1; }
+@property --nv-g { syntax: '<number>'; inherits: true; initial-value: 0.6; }
+
+#nav-body { width: 100%; }
+.nv { width: 100%; display: grid; grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); align-items: center; gap: clamp(1.5rem, 4vw, 3.25rem); }
+.nv-controls { display: grid; gap: 0.9rem; }
+.nv-choices { display: grid; gap: 0.9rem; transition: opacity 0.3s var(--ease), filter 0.3s var(--ease); }
+.nv-choices[data-off="true"] { opacity: 0.4; filter: saturate(0.4); }
+
+/* Side or top: a card each, its little page showing where the bar goes. */
+.nv-places { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+.nv-place {
+  position: relative; display: grid; gap: 0.55rem; padding: 0.5rem 0.5rem 0.7rem; border-radius: 18px; text-align: center;
+  background: var(--glass); border: 1px solid var(--edge); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  box-shadow: 0 14px 34px -22px var(--shade); transition: transform 0.25s var(--ease), border-color 0.25s var(--ease), box-shadow 0.3s var(--ease), background 0.25s var(--ease);
+}
+.nv-place:hover { border-color: var(--gz-line-strong); background: var(--glass-hi); }
+html:not([data-gz-motion="off"]) .nv-place:hover { transform: translateY(-2px); }
+.nv-place[aria-checked="true"] { border-color: var(--gz-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-accent) 32%, transparent), 0 18px 40px -22px var(--shade); }
+.nv-place .name { font-weight: 600; font-size: 0.95rem; }
+.nv-place .tick {
+  position: absolute; top: 0.85rem; right: 0.85rem; width: 1.4rem; height: 1.4rem; padding: 0.22rem; border-radius: 50%; z-index: 1;
+  background: var(--gz-accent); color: var(--gz-accent-ink); fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.3); opacity: 0; transform: scale(0.4); transition: opacity 0.2s var(--ease), transform 0.35s var(--spring);
+}
+.nv-place .tick path { stroke-dasharray: 22; stroke-dashoffset: 22; transition: stroke-dashoffset 0.35s var(--ease) 0.1s; }
+.nv-place[aria-checked="true"] .tick { opacity: 1; transform: none; }
+.nv-place[aria-checked="true"] .tick path { stroke-dashoffset: 0; }
+.nv-mock {
+  position: relative; display: block; aspect-ratio: 16 / 10; border-radius: 12px; overflow: hidden;
+  background: radial-gradient(90% 80% at 50% 0%, color-mix(in srgb, var(--gz-accent-soft) 70%, transparent), transparent 70%), color-mix(in srgb, var(--gz-surface-2) 70%, var(--gz-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gz-line) 70%, transparent);
+}
+.nv-mock i, .nv-mock b, .nv-mock s { position: absolute; display: block; }
+.nv-mock .nv-mbar { background: var(--gz-surface); border: 1px solid var(--gz-line-strong); border-radius: 7px; box-shadow: 0 6px 14px -8px var(--shade); }
+.nv-mock .nv-mbar b { border-radius: 3px; background: color-mix(in srgb, var(--gz-ink-muted) 55%, transparent); }
+.nv-mock .nv-mbar s { border-radius: 4px; background: color-mix(in srgb, var(--gz-accent) 30%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gz-accent) 55%, transparent); }
+.nv-mock .nv-mpg b { border-radius: 3px; background: color-mix(in srgb, var(--gz-ink-muted) 32%, transparent); }
+.nv-mock .nv-mpg b:first-child { background: color-mix(in srgb, var(--gz-ink) 65%, transparent); }
+.nv-mock-rail .nv-mbar { left: 6%; top: 9%; bottom: 9%; width: 17%; }
+.nv-mock-rail .nv-mbar b { left: 28%; right: 28%; height: 9%; }
+.nv-mock-rail .nv-mbar b:nth-child(1) { top: 9%; background: var(--gz-accent); }
+.nv-mock-rail .nv-mbar b:nth-child(2) { top: 29%; }
+.nv-mock-rail .nv-mbar b:nth-child(3) { top: 45%; }
+.nv-mock-rail .nv-mbar b:nth-child(4) { top: 61%; }
+.nv-mock-rail .nv-mbar s { left: 12%; right: 12%; top: 25%; height: 17%; }
+.nv-mock-rail .nv-mpg { left: 30%; right: 7%; top: 12%; bottom: 12%; }
+.nv-mock-top .nv-mbar { left: 6%; right: 6%; top: 9%; height: 17%; }
+.nv-mock-top .nv-mbar b { top: 34%; height: 32%; width: 8%; }
+.nv-mock-top .nv-mbar b:nth-child(1) { left: 4%; width: 6%; background: var(--gz-accent); }
+.nv-mock-top .nv-mbar b:nth-child(2) { left: 18%; }
+.nv-mock-top .nv-mbar b:nth-child(3) { left: 31%; }
+.nv-mock-top .nv-mbar b:nth-child(4) { left: 44%; }
+.nv-mock-top .nv-mbar s { top: 14%; bottom: 14%; left: 15.5%; width: 13%; }
+.nv-mock-top .nv-mpg { left: 9%; right: 9%; top: 36%; bottom: 10%; }
+.nv-mock .nv-mpg b { left: 0; height: 9%; }
+.nv-mock .nv-mpg b:nth-child(1) { top: 0; width: 46%; height: 11%; }
+.nv-mock .nv-mpg b:nth-child(2) { top: 26%; width: 92%; }
+.nv-mock .nv-mpg b:nth-child(3) { top: 44%; width: 70%; }
+/* Chosen or pointed at, the page's place walks along its bar. */
+.nv-place:is([aria-checked="true"], :hover, :focus-visible) .nv-mock-rail s { animation: nv-walk-down 3.6s var(--ease) infinite both; }
+.nv-place:is([aria-checked="true"], :hover, :focus-visible) .nv-mock-top s { animation: nv-walk-across 3.6s var(--ease) infinite both; }
+html[data-gz-motion="expressive"] .nv-place:is([aria-checked="true"], :hover, :focus-visible) .nv-mock s { animation-timing-function: var(--spring); }
+@keyframes nv-walk-down { 0%, 22% { transform: none; } 33%, 55% { transform: translateY(94%); } 66%, 88% { transform: translateY(188%); } 100% { transform: none; } }
+@keyframes nv-walk-across { 0%, 22% { transform: none; } 33%, 55% { transform: translateX(100%); } 66%, 88% { transform: translateX(200%); } 100% { transform: none; } }
+
+/* The rail's labels and the bar's style: segmented, the chosen one under a sliding accent. The rail's folds away with a top bar. */
+.nv-fold { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.35s var(--ease), opacity 0.25s var(--ease), margin 0.35s var(--ease), visibility 0s; }
+.nv-fold > div { min-height: 0; overflow: clip; overflow-clip-margin: 6px; }
+.nv-fold[data-shut="true"] { grid-template-rows: 0fr; opacity: 0; margin-bottom: -0.9rem; visibility: hidden; transition: grid-template-rows 0.35s var(--ease), opacity 0.2s var(--ease), margin 0.35s var(--ease), visibility 0s 0.35s; }
+.nv-seg {
+  position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); padding: 4px; border-radius: 15px;
+  background: var(--glass); border: 1px solid var(--edge); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+}
+.nv-seg .thumb {
+  position: absolute; top: 4px; bottom: 4px; left: calc(4px + var(--at, 0) * (100% - 8px) / var(--n)); width: calc((100% - 8px) / var(--n)); border-radius: 11px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gz-accent) 78%, #fff), var(--gz-accent) 60%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), 0 4px 14px -6px color-mix(in srgb, var(--gz-accent) 70%, transparent);
+  transition: left 0.38s var(--ease);
+}
+html[data-gz-motion="expressive"] .nv-seg .thumb { transition-timing-function: var(--spring); }
+:root:dir(rtl) .nv-seg .thumb { left: auto; right: calc(4px + var(--at, 0) * (100% - 8px) / var(--n)); transition-property: right; }
+.nv-opt { position: relative; z-index: 1; height: 2.45rem; padding: 0 0.5rem; border-radius: 11px; font-size: 0.92rem; font-weight: 600; color: var(--gz-ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color 0.25s var(--ease); }
+.nv-opt:hover { color: var(--gz-ink); }
+.nv-opt[aria-checked="true"] { color: var(--gz-accent-ink); }
+.nv-opt:focus-visible { outline-offset: -2px; }
+
+/* Glaze's own items: a chip each, with the bar's own icon. */
+.nv-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.nv-chip {
+  display: inline-flex; align-items: center; gap: 0.45rem; height: 2.35rem; padding: 0 0.9rem 0 0.7rem; border-radius: 999px; font-size: 0.9rem; font-weight: 500; color: var(--gz-ink-muted);
+  background: var(--glass); border: 1px solid var(--edge); -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+  transition: color 0.2s var(--ease), background 0.2s var(--ease), border-color 0.2s var(--ease), box-shadow 0.25s var(--ease), transform 0.15s var(--ease);
+}
+.nv-chip svg { flex: none; width: 1.15rem; height: 1.15rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: stroke 0.2s var(--ease); }
+.nv-chip:hover { color: var(--gz-ink); border-color: var(--gz-line-strong); }
+.nv-chip:active { transform: scale(0.96); }
+.nv-chip[aria-pressed="true"] { color: var(--gz-ink); border-color: var(--gz-accent); background: color-mix(in srgb, var(--gz-accent) 20%, var(--glass)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gz-accent) 22%, transparent); }
+.nv-chip[aria-pressed="true"] svg { stroke: var(--gz-accent-hi); }
+html[data-tone="light"] .nv-chip[aria-pressed="true"] svg { stroke: color-mix(in srgb, var(--gz-accent) 80%, var(--gz-ink)); }
+
+/* ---- the preview ---- */
+.nv-preview {
+  container-type: inline-size; width: 100%;
+  --nv-on: 1; --nv-top: 0; --nv-rw: 8.6; --nv-lab: 1; --nv-g: 0.6;
+  transition: --nv-on 0.45s var(--ease), --nv-top 0.55s var(--ease), --nv-rw 0.45s var(--ease), --nv-lab 0.3s var(--ease), --nv-g 0.4s var(--ease);
+}
+html[data-gz-motion="expressive"] .nv-preview { transition-timing-function: var(--ease), var(--spring), var(--spring), var(--ease), var(--ease); transition-duration: 0.5s, 0.7s, 0.6s, 0.3s, 0.45s; }
+.nv-preview[data-on="false"] { --nv-on: 0; }
+.nv-preview[data-place="top"] { --nv-top: 1; }
+.nv-preview[data-rail="icons"], .nv-preview[data-rail="auto"][data-wide="false"] { --nv-rw: 2.9; --nv-lab: 0; }
+.nv-preview[data-style="embed"] { --nv-g: 0; }
+.nv-win {
+  position: relative; width: 36em; height: 25.5em; margin-inline: auto; font-size: calc(100cqw / 36); border-radius: 1.1em; overflow: hidden;
+  background: color-mix(in srgb, var(--gz-surface) 70%, var(--gz-surface-2)); border: 1px solid var(--edge);
+  box-shadow: 0 30px 60px -30px var(--shade), inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+.nv-win i, .nv-win b, .nv-win s { display: block; }
+.nv-win .nv-chrome { position: absolute; inset: 0 0 auto; height: 1.6em; display: flex; align-items: center; gap: 0.35em; padding-inline: 0.8em; background: color-mix(in srgb, var(--gz-surface) 88%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--gz-line) 80%, transparent); }
+.nv-chrome b { width: 0.5em; height: 0.5em; border-radius: 50%; background: var(--gz-line-strong); }
+.nv-chrome s { margin-inline-start: 1.2em; width: 11em; height: 0.75em; border-radius: 0.4em; background: color-mix(in srgb, var(--gz-ink-muted) 16%, transparent); }
+.nv-stage {
+  position: absolute; inset: 1.6em 0 0; overflow: hidden;
+  background: radial-gradient(100% 80% at 0% 0%, color-mix(in srgb, var(--gz-accent-soft) 70%, transparent), transparent 70%), color-mix(in srgb, var(--gz-surface-2) 60%, var(--gz-surface));
+}
+
+/* The site's own menu, when Glaze's bar is off: plain, in grey. */
+.nv-site {
+  position: absolute; inset: 0 0 auto; height: 2.3em; display: flex; align-items: center; gap: 0.9em; padding-inline: 1.1em;
+  background: color-mix(in srgb, var(--gz-ink-faint) 16%, var(--gz-surface-2)); border-bottom: 1px solid color-mix(in srgb, var(--gz-line) 80%, transparent);
+  opacity: calc(1 - var(--nv-on)); transform: translateY(calc(var(--nv-on) * -100%));
+}
+.nv-site i { width: 1.2em; height: 1.2em; border-radius: 0.3em; background: color-mix(in srgb, var(--gz-ink-faint) 55%, transparent); }
+.nv-site b { width: 2.6em; height: 0.45em; border-radius: 0.3em; background: color-mix(in srgb, var(--gz-ink-faint) 45%, transparent); }
+
+/* The page: its room is what the bar leaves. */
+.nv-page {
+  position: absolute; right: 1.2em; bottom: 0;
+  left: calc((var(--nv-on) * (1 - var(--nv-top)) * (var(--nv-rw) + 2 * var(--nv-g))) * 1em + 1.2em);
+  top: calc((var(--nv-on) * var(--nv-top) * (2.7 + 2 * var(--nv-g)) + (1 - var(--nv-on)) * 2.3) * 1em + 1.1em);
+  display: grid; align-content: start; gap: 0.9em;
+}
+.nv-page .title { width: 9em; max-width: 60%; height: 0.8em; border-radius: 0.4em; background: color-mix(in srgb, var(--gz-ink) 70%, transparent); }
+.nv-page .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.8em; }
+.nv-page .card, .nv-page .wide { display: grid; align-content: start; gap: 0.5em; padding: 0.8em; border-radius: 0.8em; background: color-mix(in srgb, var(--gz-surface) 92%, transparent); border: 1px solid var(--edge); }
+.nv-page .card { height: 6.4em; }
+.nv-page .wide { height: 7em; }
+.nv-page .card b, .nv-page .wide b { height: 0.45em; border-radius: 0.3em; background: color-mix(in srgb, var(--gz-ink-muted) 32%, transparent); }
+.nv-page .card b:first-child { width: 55%; height: 1.6em; border-radius: 0.45em; background: linear-gradient(135deg, color-mix(in srgb, var(--gz-accent) 60%, transparent), color-mix(in srgb, var(--gz-bg-2) 50%, transparent)); }
+.nv-page .card b:nth-child(3) { width: 70%; }
+.nv-page .wide b:first-child { width: 35%; background: color-mix(in srgb, var(--gz-ink) 55%, transparent); }
+
+/* Glaze's bar: a rail as wide as --nv-rw, or a bar across the top, floating in its gutter or set into the edge. */
+.nv-bar {
+  position: absolute; z-index: 1; display: flex; flex-direction: column; gap: 0.55em; overflow: hidden;
+  left: calc(var(--nv-g) * 1em); top: calc(var(--nv-g) * 1em);
+  width: calc((1 - var(--nv-top)) * var(--nv-rw) * 1em + var(--nv-top) * (100% - 2 * var(--nv-g) * 1em));
+  height: calc((1 - var(--nv-top)) * (100% - 2 * var(--nv-g) * 1em) + var(--nv-top) * 2.7em);
+  padding: 0.5em 0.4em; border-radius: calc(var(--nv-g) * 1.5em);
+  background: color-mix(in srgb, var(--gz-surface) 90%, transparent); border: 1px solid color-mix(in srgb, var(--gz-line-strong) 60%, transparent);
+  box-shadow: 0 0.9em 1.8em -1.1em var(--shade);
+  opacity: var(--nv-on); transform: translate(calc((var(--nv-on) - 1) * (1 - var(--nv-top)) * 3em), calc((var(--nv-on) - 1) * var(--nv-top) * 3em));
+}
+.nv-preview[data-place="top"] .nv-bar { flex-direction: row; align-items: center; gap: 0.3em; padding: 0 0.45em; }
+.nv-items { display: flex; flex-direction: column; gap: 0.12em; }
+.nv-preview[data-place="top"] .nv-items { flex-direction: row; align-items: center; gap: 0.1em; }
+.nv-item, .nv-brand { position: relative; flex: none; display: flex; align-items: center; gap: 0.6em; height: 1.52em; padding-inline: 0.55em; border-radius: 0.5em; color: var(--gz-ink-muted); white-space: nowrap; }
+.nv-item svg { flex: none; width: 1.05em; height: 1.05em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.nv-label { flex: none; width: 3.6em; height: 0.42em; border-radius: 0.3em; background: color-mix(in srgb, var(--gz-ink-muted) 48%, transparent); opacity: var(--nv-lab); }
+.nv-items .nv-item:nth-child(2) .nv-label { width: 3em; }
+.nv-items .nv-item:nth-child(3) .nv-label { width: 4.2em; }
+.nv-items .nv-item:nth-child(4) .nv-label { width: 3.3em; }
+.nv-items .nv-item:nth-child(5) .nv-label { width: 2.7em; }
+.nv-own .nv-label { width: 3.2em; background: color-mix(in srgb, var(--gz-accent-hi) 45%, transparent); }
+html[data-tone="light"] .nv-own .nv-label { background: color-mix(in srgb, var(--gz-accent) 50%, transparent); }
+.nv-own { color: var(--gz-ink); }
+.nv-item.on { color: var(--gz-ink); background: color-mix(in srgb, var(--gz-accent-hi) 15%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gz-accent-hi) 24%, transparent); }
+.nv-item.on .nv-label { background: color-mix(in srgb, var(--gz-ink) 70%, transparent); }
+.nv-item.on::before { content: ''; position: absolute; left: -0.4em; top: 0.38em; width: 0.18em; height: 0.75em; border-radius: 0 0.2em 0.2em 0; background: var(--gz-accent-hi); }
+html[data-tone="light"] .nv-item.on { background: color-mix(in srgb, var(--gz-accent) 14%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gz-accent) 30%, transparent); }
+html[data-tone="light"] .nv-item.on::before { background: var(--gz-accent); }
+.nv-brand { height: 1.7em; padding-inline: 0.45em; gap: 0.55em; }
+.nv-brand .logo { flex: none; width: 1.25em; height: 1.25em; border-radius: 0.38em; background: linear-gradient(135deg, var(--gz-accent-hi), var(--gz-accent)); }
+.nv-brand .nv-label { width: 3.4em; height: 0.55em; background: color-mix(in srgb, var(--gz-ink) 70%, transparent); }
+.nv-div { flex: none; height: 1px; margin: 0.3em 0.5em; background: color-mix(in srgb, var(--gz-line-strong) 70%, transparent); }
+.nv-foot { margin-top: auto; }
+.nv-me .face { flex: none; width: 1.1em; height: 1.1em; border-radius: 50%; background: linear-gradient(135deg, var(--gz-bg-1), var(--gz-bg-3)); }
+.nv-me .nv-label { width: 3.8em; }
+.nv-bar .nv-ghost { position: absolute; margin: 0; pointer-events: none; }
+/* Across the top: items in a row, short labels, Glaze's own as icons, the account at the far end. */
+.nv-preview[data-place="top"] :is(.nv-item, .nv-brand) { height: 1.85em; padding-inline: 0.42em; gap: 0.35em; }
+.nv-preview[data-place="top"] .nv-items .nv-label { width: 1.3em; opacity: 1; }
+.nv-preview[data-place="top"] .nv-bar :is(.nv-brand, .nv-own, .nv-me) .nv-label { display: none; }
+.nv-preview[data-place="top"] .nv-item.on::before { left: 0.6em; right: 0.6em; top: auto; bottom: -0.42em; width: auto; height: 0.16em; border-radius: 0.2em 0.2em 0 0; }
+.nv-preview[data-place="top"] .nv-div { width: 1px; height: 1.2em; margin: 0 0.3em; }
+.nv-preview[data-place="top"] .nv-foot { margin-top: 0; margin-inline-start: auto; }
+/* Set into the edge: square, and nothing floats. */
+.nv-preview[data-style="embed"] .nv-bar { box-shadow: none; border-color: color-mix(in srgb, var(--gz-line-strong) 45%, transparent); background: var(--gz-surface); }
+
+/* Auto: labels on a wide window, icons on a narrow one; with motion, the window shows both in turn. */
+html:not([data-gz-motion="off"]) .nv-preview[data-rail="auto"][data-place="rail"][data-on="true"] .nv-win { animation: nv-auto 8s var(--ease) infinite; }
+html[data-gz-motion="subtle"] .nv-preview[data-rail="auto"][data-place="rail"][data-on="true"] .nv-win { animation-duration: 11s; }
+@keyframes nv-auto {
+  0%, 36% { width: 36em; --nv-rw: 8.6; --nv-lab: 1; }
+  50%, 86% { width: 27em; --nv-rw: 2.9; --nv-lab: 0; }
+  100% { width: 36em; --nv-rw: 8.6; --nv-lab: 1; }
+}
+
+/* The step comes in: the page rises, the choices after it. */
+html:not([data-gz-motion="off"]) #nav[data-in] .nv-win { animation: nv-rise 0.6s var(--ease) both 0.08s; }
+html:not([data-gz-motion="off"]) #nav[data-in] .nv-controls > *, html:not([data-gz-motion="off"]) #nav[data-in] .nv-choices > * { animation: pop 0.5s var(--ease) both; }
+html:not([data-gz-motion="off"]) #nav[data-in] .nv-choices > :nth-child(1) { animation-delay: 60ms; }
+html:not([data-gz-motion="off"]) #nav[data-in] .nv-choices > :nth-child(2) { animation-delay: 100ms; }
+html:not([data-gz-motion="off"]) #nav[data-in] .nv-choices > :nth-child(3) { animation-delay: 140ms; }
+html:not([data-gz-motion="off"]) #nav[data-in] .nv-choices > :nth-child(4) { animation-delay: 180ms; }
+html[data-gz-motion="expressive"] #nav[data-in] .nv-win { animation: nv-rise-x 0.8s var(--spring) both 0.08s; }
+@keyframes nv-rise { from { opacity: 0; transform: translateY(18px); } }
+@keyframes nv-rise-x { from { opacity: 0; transform: translateY(30px) scale(0.96); filter: blur(6px); } }
+
+@media (max-width: 820px) {
+  .nv { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 1.25rem; }
+  .nv-preview { order: -1; width: min(100%, 30rem); }
+  .nv-controls { width: min(100%, 30rem); }
+}
+@media (forced-colors: active) {
+  .nv-place, .nv-seg, .nv-chip { border: 1px solid CanvasText; }
+  .nv-place[aria-checked="true"], .nv-chip[aria-pressed="true"] { outline: 3px solid Highlight; }
+  .nv-seg .thumb { background: Highlight; }
+  .nv-opt[aria-checked="true"] { color: HighlightText; }
+}

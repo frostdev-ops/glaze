@@ -3969,5 +3969,7 @@
   "School": "School",
   "Setup": "Instellen",
   "You’re all set": "Alles is klaar",
-  "{n} on": "{n} aan"
+  "{n} on": "{n} aan",
+  "Icons": "Pictogrammen",
+  "Shortcuts": "Snelkoppelingen"
 };

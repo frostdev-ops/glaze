@@ -3969,5 +3969,7 @@
   "School": "Centro",
   "Setup": "Configuración inicial",
   "You’re all set": "Todo listo",
-  "{n} on": "{n} activadas"
+  "{n} on": "{n} activadas",
+  "Icons": "Iconos",
+  "Shortcuts": "Accesos directos"
 };

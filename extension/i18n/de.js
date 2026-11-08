@@ -3969,5 +3969,7 @@
   "School": "Schule",
   "Setup": "Einrichtung",
   "You’re all set": "Alles bereit",
-  "{n} on": "{n} an"
+  "{n} on": "{n} an",
+  "Icons": "Symbole",
+  "Shortcuts": "Verknüpfungen"
 };

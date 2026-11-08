@@ -86,3 +86,47 @@ test('on a fresh install with nothing stored, the items picked are the whole rec
   assert.deepEqual(w.sync.navbarItems, { items: {}, groups: [], tabs: [], glaze: ['search'], links: [] });
   assert.equal('navItems' in w.sync, false, 'the older rail\'s record is not written');
 });
+
+// The step's own rules (settings/setup-nav.js).
+const S = require('../../extension/settings/setup-nav.js');
+const G = require('../../extension/content/defaults.js');
+const M = require('../../extension/navigation/navbar.js');
+
+test('every choice the step shows is a value of the bar\'s setting, and its icons are the bar\'s own', () => {
+  for (const [key, table] of [['place', S.PLACES], ['rail', S.RAILS], ['style', S.STYLES]]) {
+    assert.deepEqual(table.map(([v]) => v), G.GZ_SPEC.navbar[key][1], key);
+    for (const [, label] of table) assert.match(label, /^\p{Lu}/u, `${key}: a label`);
+  }
+  assert.deepEqual(Object.keys(S.NAMES), M.GLAZE, 'one name for each of Glaze\'s own items, in the bar\'s order');
+  for (const g of M.GLAZE) assert.ok(M.ICONS[S.iconOf(g)], g);
+  assert.equal(S.iconOf('settings'), 'glaze', 'the settings item wears the bar\'s drop, as navbar.js build gives it');
+  for (const name of S.NATIVE) assert.ok(M.ICONS[name], name);
+});
+
+test('Glaze\'s items are read as the bar reads them, and one turns on or off in the bar\'s order', () => {
+  assert.deepEqual(S.items({}, true), ['settings'], 'a fresh install has the settings item');
+  assert.deepEqual(S.items({}, false), [], 'a device joining an account waits for sync');
+  assert.deepEqual(S.items({ navbarItems: { glaze: ['todo', 'notes', 'mail'] } }, true), ['notes', 'todo']);
+  assert.deepEqual(S.items({ navItems: { order: [] } }, true), [], 'an older rail\'s student is not given the item');
+  assert.deepEqual(S.flip(['settings'], 'notes'), ['notes', 'settings']);
+  assert.deepEqual(S.flip(['notes', 'settings'], 'settings'), ['notes']);
+  assert.deepEqual(S.flip([], 'search'), ['search']);
+});
+
+test('the done step names the bar as Settings does', () => {
+  const n = G.GZ_SANITIZE({}).navbar;
+  assert.equal(S.summary(n), 'Side rail');
+  assert.equal(S.summary({ ...n, place: 'top' }), 'Top bar');
+  assert.equal(S.summary({ ...n, place: 'top', on: false }), 'Off');
+});
+
+test('the step saves through the worker\'s first-screen messages only, fetches nothing, and writes text as text', () => {
+  const js = read('settings/setup-nav.js');
+  assert.match(js, /api\.save\(`navbar\.\$\{key\}`, value, \{ type: 'glaze:navbar', patch: \{ \[key\]: value \} \}\)/);
+  assert.match(js, /api\.save\('navbarItems\.glaze', list, \{ type: 'glaze:navbarItems', glaze: list \}\)/);
+  assert.doesNotMatch(js, /chrome\.storage\.\w+\.set|\bfetch\(|XMLHttpRequest|innerHTML|insertAdjacentHTML|chrome\.permissions\./);
+  const html = read('settings/welcome.html');
+  const at = (f) => html.indexOf(`<script src="${f}"></script>`);
+  for (const f of ['../navigation/nav.js', '../navigation/nav-items.js', '../navigation/navlayout.js', '../navigation/navbar.js']) assert.ok(at(f) > 0 && at(f) < at('setup-nav.js'), `${f} loads before the step`);
+  assert.ok(at('setup-nav.js') < at('setup.js'), 'the step registers before the wizard mounts its parts');
+});
