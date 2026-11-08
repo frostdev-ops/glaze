@@ -4,9 +4,8 @@
 // NODE_PATH=<playwright node_modules> node checks/courses/stream-colors-check.js [evidence-directory]
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
-const env = require('../../tools/dev/check-env.js');
-const ext = env.staged(path.join(__dirname, '../../extension'), ['https://bb.school.test/*']), G = require(path.join(ext, 'content/defaults.js'));
-const site = 'https://bb.school.test', out = process.argv[2], lock = env.lockPath();
+const ext = require('../../tools/dev/check-env.js').staged(path.join(__dirname, '../../extension'), ['https://bb.school.test/*']), G = require(path.join(ext, 'content/defaults.js'));
+const site = 'https://bb.school.test', out = process.argv[2], lock = require('../../tools/dev/check-env.js').lockPath();
 const card = (id, slot, course, name) => `<li id="${id}" class="stream-item-container"><div class="stream-item"><div class="stream-item-contents"><div class="element-card stream-panel-activity-card"><ng-switch><div class="element-image stream-panel-activity-icon"><ng-switch><bb-ui-content-icon><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M5 3h14v18H5z" fill="none" stroke="currentColor" stroke-width="2"></path></svg></bb-ui-content-icon></ng-switch></div></ng-switch><div class="element-details${slot ? ` course-color-${slot}` : ''}"><div class="timestamp"><div><div class="js-split-datetime"><span class="date">Oct 20</span></div></div></div><div class="context">${course ? `<a href="${site}/ultra/courses/${course}/outline"><span>Sample course ${course}</span></a>` : 'School notice'}</div><div class="name"><ng-switch><span>${name}</span></ng-switch></div></div></div></div></div></li>`;
 const fixture = `<!doctype html><html lang="en-US"><head><base href="https://cdn.school.test/ultra/"><style>body{font:16px system-ui;padding:24px}.element-card{display:flex;padding:20px;border:1px solid}.element-details{border-left:2px solid}.stream-item-container{margin-bottom:28px;list-style:none}</style></head><body><div id="site-wrap"><section class="js-base-stream-container route-view-container"><h1>Activity Stream</h1><div id="activity-stream" class="activity-stream"><div class="activity-group"><h2 class="activity-group-title">Upcoming</h2><ul class="activity-feed">${card('own', 3, '_200_1', 'Practice essay')}${card('shared', 3, '_101_1', 'Practice quiz')}${card('other', 10, '_300_1', 'Discussion')}${card('none', 0, '', 'Library hours')}</ul></div></div></section></div></body></html>`;
 // Two courses in slot 3: the newer (_200_1) keeps it, the older takes the first slot no course holds (1).
@@ -20,7 +19,7 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
     fs.mkdirSync(lock); held = true; tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-stream-colors-'));
     await require('../../tools/dev/wait-for-browser.js')();
     context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
-      headless: true, ...env.chromeLaunch(), viewport: { width: 1200, height: 800 },
+      headless: true, ...require('../../tools/dev/check-env.js').chromeLaunch(), viewport: { width: 1200, height: 800 },
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'],
     });
     context.setDefaultTimeout(12000);
@@ -42,7 +41,7 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
     const page = await context.newPage(); page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(`chrome-extension://${id}/popup.html`);
     await worker.evaluate(() => queue);
-    await env.ultraReady(page);
+    await require('../../tools/dev/check-env.js').ultraReady(page);
     await page.goto(`${site}/ultra/stream`);
     await page.waitForFunction(() => getComputedStyle(document.querySelector('#own .element-details')).getPropertyValue('--gz-course-raw').trim() === '#ffe12b');
     // Glaze's own resolution of a course's color, on a probe: the slot's class, plus a course's own color on top.
