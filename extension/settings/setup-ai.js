@@ -26,7 +26,7 @@ var GZ_SETUP_AI = globalThis.GZ_SETUP_AI || (() => {
     : { on: true, model: { use: choice, model: '' } });
   // A provider connected (ids: the models it lists): its model as Settings suggests for a first key (ai/settings.js
   // suggest), over whatever was the overall one; one of its own already chosen stays.
-  const keyed = (cur, id, ids) => (cur.model.use === id && cur.model.model ? { on: true }
+  const keyed = (cur, id, ids) => (choiceOf(cur) !== KEYED ? {} : cur.model.use === id && cur.model.model ? { on: true }
     : { on: true, ...(A().suggest({ ...cur, model: { ...NONE } }, id, ids) || { model: { use: id, model: '' } }) });
   const feature = (cur, f, on) => ({ features: { ...cur.features, [f]: on } });
   const pct = (x) => `${Math.round(x * 100)}%`;
@@ -237,7 +237,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (globalTh
       const r = await send({ op: 'models', id });
       const list = r.ok && Array.isArray(r.models) ? r.models.map((m) => m?.id).filter((x) => typeof x === 'string') : [];
       if (G.choiceOf(s) !== KEYED || want !== id) return;
-      await write((cur) => (cur.on ? G.keyed(cur, id, list) : {}));
+      await write((cur) => G.keyed(cur, id, list));
     };
     const say = (text) => { note = text; render(); };
     const refusal = (r) => (r.reason === 'request-rejected' && [401, 403].includes(r.status) ? t('Key refused') : X.reason(r.reason || r.error, t));
