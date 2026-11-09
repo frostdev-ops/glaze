@@ -409,8 +409,9 @@ test('a Glaze sheet that loads after the sweep began brings one full pass, which
   assert.equal(p.events.filter(([kind, node]) => kind === 'style' && node === el).length, 1);
 });
 
-test('the editor\'s writing area keeps Canvas\'s white and ink on a dark palette: nothing is written into its frame', async () => {
-  // Colours an author picks or pastes there (a #fbeeb8 highlight, an #ecf0f1 cell, #000) are chosen against white.
+test('the sweep writes nothing into the editor\'s frame; Canvas\'s takes the palette from its own page feature, Moodle\'s stays white', async () => {
+  // The owner chose to theme Canvas's typing area (2026-11-09): courses/page/rce-ink.js does it, with an author's dark colours
+  // lifted and highlights kept readable (test/courses/rce-ink.test.js). The sweep itself still leaves the frame alone.
   const p = await boot(), frame = new p.El('iframe'), head = new p.El('head'), body = new p.El('body');
   body.className = 'mce-content-body';
   frame.className = 'tox-edit-area__iframe';
@@ -421,9 +422,10 @@ test('the editor\'s writing area keeps Canvas\'s white and ink on a dark palette
   p.sweep().deliver([added(p, [frame])]); await p.advance(150);
   assert.deepEqual(head.children, [], 'no style in the writing area');
   assert.equal(body.attrs.size, 0);
-  for (const [f, rule] of [['content/canvas.css', /\.tox\.tox-tinymce \.tox-edit-area__iframe \{([^}]*)\}/], ['content/moodle.css', /html \.tox \.tox-edit-area__iframe \{([^}]*)\}/]]) {
-    const css = read(f).match(rule)?.[1] || '';
-    assert.match(css, /background: #fff;/, `${f}: the frame is white behind the page in it`);
-    assert.match(css, /color-scheme: light;/, `${f}: and light, so the page's own canvas stays clear`);
-  }
+  const canvas = read('content/canvas.css').match(/\.tox\.tox-tinymce \.tox-edit-area__iframe \{([^}]*)\}/)?.[1] || '';
+  assert.match(canvas, /background: var\(--gz-surface-paint, var\(--gz-surface\)\);/, 'content/canvas.css: the palette behind the page in the frame');
+  assert.doesNotMatch(canvas, /color-scheme/, 'content/canvas.css: the frame follows the page\'s scheme');
+  const moodle = read('content/moodle.css').match(/html \.tox \.tox-edit-area__iframe \{([^}]*)\}/)?.[1] || '';
+  assert.match(moodle, /background: #fff;/, 'content/moodle.css: the frame is white behind the page in it');
+  assert.match(moodle, /color-scheme: light;/, 'content/moodle.css: and light, so the page\'s own canvas stays clear');
 });

@@ -331,7 +331,7 @@ test('until Glaze has the rubric, the discussion and attempt links still open Ul
 test('routes: courses/page/rubric.js loads on Ultra\'s overview, attempt and discussion pages, and Canvas\'s assignment page', async () => {
   const where = async (site, pathname) => {
     const loaded = [];
-    const ctx = vm.createContext({ GZ_CTX: { site, need: async (f) => { loaded.push(f); ctx.GZ_RUBRIC_UI = { sync() {} }; ctx.GZ_ANNOUNCE = { sync() {} }; ctx.GZ_EDITOR_MENU = { sync() {} }; ctx.GZ_STICKY_FOLD = { sync() {} }; } }, location: { pathname, search: '' }, Set, Promise });
+    const ctx = vm.createContext({ GZ_CTX: { site, need: async (f) => { loaded.push(f); ctx.GZ_RUBRIC_UI = { sync() {} }; ctx.GZ_ANNOUNCE = { sync() {} }; ctx.GZ_EDITOR_MENU = { sync() {} }; ctx.GZ_STICKY_FOLD = { sync() {} }; ctx.GZ_RCE_INK = { sync() {} }; } }, location: { pathname, search: '' }, Set, Promise });
     ctx.globalThis = ctx;
     vm.runInContext(fs.readFileSync(path.join(root, 'content/routes.js'), 'utf8'), ctx);
     ctx.GZ_ROUTES.sync(); await settle();
