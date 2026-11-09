@@ -215,7 +215,10 @@ test('one switch for Writer on every site (owner, 2026-11-09): Glaze Writer name
   assert.doesNotMatch(info, /stays Blackboard's/, 'a box Writer can\'t keep stays the site\'s, on either');
   assert.match(html, /<section id="writer-setup" data-editor-section="writer\/setup" data-sites="Canvas · Blackboard Ultra"/);
   for (const f of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
-    require(`../../extension/i18n/${f}.js`);
+    const file = require.resolve(`../../extension/i18n/${f}.js`);
+    delete require.cache[file];
+    require(file);
+    delete require.cache[file]; // the catalogue test below loads each afresh
     assert.match(globalThis.GZ_LANGS[f][info] || '', /Canvas/, `${f}: the info text in its language, naming Canvas`);
   }
 });
