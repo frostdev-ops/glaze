@@ -19,14 +19,14 @@ const listing = (lang) => read(`../store/listing${lang ? `-${lang}` : ''}.md`);
 const part = (text, heading) => text.split(`\n## ${heading}`)[1].replace(/^[^\n]*\n\n/, '').split(/\n## /)[0];
 const description = (lang) => part(listing(lang), 'Detailed description');
 
-// From 3.4: install access covers hosted LMS domains, the gallery and relay; a school's own address is added in Sites.
+// Install access covers hosted LMS domains, the gallery and relay; a school's own address is added in School.
 const access = {
-  '': ['Settings › Privacy and data › Sites', 'course tab sketches stay in memory'],
-  de: ['Einstellungen › Datenschutz und Daten › Websites', 'Skizzen der Kurs-Tabs bleiben im Arbeitsspeicher'],
-  es: ['Ajustes › Privacidad y datos › Sitios', 'bocetos de las pestañas de cursos se quedan en la memoria'],
-  fr: ['Réglages › Confidentialité et données › Sites', 'esquisses des onglets de cours restent en mémoire'],
-  nl: ['Instellingen › Privacy en gegevens › Sites', 'schetsen van cursustabbladen blijven in het geheugen'],
-  'pt-BR': ['Configurações › Privacidade e dados › Sites', 'esboços das abas de cursos ficam na memória'],
+  '': ['Settings › Privacy and data › School', 'course tab sketches stay in memory'],
+  de: ['Einstellungen › Datenschutz und Daten › Schule', 'Skizzen der Kurs-Tabs bleiben im Arbeitsspeicher'],
+  es: ['Ajustes › Privacidad y datos › Centro', 'bocetos de las pestañas de cursos se quedan en la memoria'],
+  fr: ['Réglages › Confidentialité et données › Établissement', 'esquisses des onglets de cours restent en mémoire'],
+  nl: ['Instellingen › Privacy en gegevens › School', 'schetsen van cursustabbladen blijven in het geheugen'],
+  'pt-BR': ['Configurações › Privacidade e dados › Escola', 'esboços das abas de cursos ficam na memória'],
 };
 const disclosures = {
   '': ['Glaze does not collect or sell your data.', 'ordinary network requests', 'encoded streams and visible pixels remain', 'editor recovery', 'Files-folder zips', 'unread counts', 'up to 4 course pages'],
@@ -52,7 +52,8 @@ const release405 = {
   '': 'NEW IN 4.0.5', de: 'NEU IN 4.0.5', es: 'NOVEDADES DE 4.0.5', fr: 'NOUVEAUTÉS DE LA VERSION 4.0.5', nl: 'NIEUW IN 4.0.5', 'pt-BR': 'NOVO NA 4.0.5',
 };
 for (const [lang, heading] of Object.entries(release405)) test(`4.0.5 release notes ${lang || 'en'} label the setup guide for Chrome and Firefox and send the fixes to every store`, () => {
-  const text = listing(lang), block = part(text, 'Release notes');
+  const text = listing(lang), notes = part(text, 'Release notes');
+  const block = notes.slice(notes.indexOf(heading));
   const context = {};
   if (lang) vm.runInNewContext(read(`i18n/${lang}.js`), context);
   const ui = (key) => lang ? context.GZ_LANGS[lang][key] : key;
@@ -91,12 +92,13 @@ for (const [lang, expected] of Object.entries(terms)) test(`listing ${lang || 'e
   for (const term of expected) assert.ok(text.includes(term), term);
 });
 
-test('4.0.5 versions agree and the exact pure notes transform fits Apple', () => {
-  assert.equal(JSON.parse(read('manifest.json')).version, '4.0.5');
-  assert.equal(JSON.parse(read('../safari/Glaze/Glaze Extension/Resources/manifest.json')).version, '4.0.5');
-  // The helper and its Claude Desktop bundle, glaze-mcp-4.0.5.mcpb on the GitHub release, carry Glaze's version.
-  assert.equal(JSON.parse(read('../mcp/package.json')).version, '4.0.5');
-  assert.equal(JSON.parse(read('../mcp/mcpb/manifest.json')).version, '4.0.5');
+test('release versions agree and the exact pure notes transform fits Apple', () => {
+  const version = JSON.parse(read('manifest.json')).version;
+  assert.match(version, /^\d+\.\d+\.\d+$/);
+  assert.equal(JSON.parse(read('../safari/Glaze/Glaze Extension/Resources/manifest.json')).version, version);
+  // The helper and its Claude Desktop bundle on the GitHub release carry Glaze's version.
+  assert.equal(JSON.parse(read('../mcp/package.json')).version, version);
+  assert.equal(JSON.parse(read('../mcp/mcpb/manifest.json')).version, version);
   // Extract only this synchronous reader. Do not import or execute the release command or its top-level operations.
   const script = read('../tools/release/store-release.mjs');
   const body = script.slice(script.indexOf('function notes(source) {'), script.indexOf('\nasync function build('));
@@ -108,7 +110,7 @@ test('4.0.5 versions agree and the exact pure notes transform fits Apple', () =>
   });
   const result = notes(path.join(root, '..'));
   assert.ok(result.length <= 4000, `${result.length} characters`);
-  assert.match(result, /^Added\n/);
+  assert.match(result, /^(Added|Changed|Fixed)\n/);
   assert.ok(result.length <= 3000, `AMO: ${result.length} characters`);
   assert.ok(!result.includes('## [3.4.5]'));
 });

@@ -171,7 +171,7 @@ test('AMO and Apple filter browser-labelled bullets; Chrome keeps the full listi
   const { readListings } = await load();
   const de = real('../store/listing-de.md'), fr = real('../store/listing-fr.md');
   const block = (text, heading, bullets) => text.replace(`${heading}\n\n`, `${heading}\n\n${bullets}\n`);
-  const labelled = '• Chrome: nur Chrome.\n• Firefox: nur Firefox.\n• Safari: nur Safari.';
+  const labelled = '• Chrome: nur Chrome.\n• Firefox: nur Firefox.\n• Safari: nur Safari.\n• Gemeinsame Korrektur.';
   const listings = readListings(readWith({
     'store/listing-de.md': block(block(de, `NEU IN ${version}`, labelled), 'CANVAS', labelled.replace(/nur/g, 'Beschreibung nur')),
     'store/listing-fr.md': block(fr, `NOUVEAUTÉS DE LA VERSION ${version}`, '• Safari : seulement Safari.'),
@@ -182,7 +182,7 @@ test('AMO and Apple filter browser-labelled bullets; Chrome keeps the full listi
   assert.ok(firefox.description.includes('Beschreibung nur Firefox') && !firefox.description.includes('Beschreibung nur Chrome') && !firefox.description.includes('Beschreibung nur Safari'), 'AMO filters the description too');
   assert.ok(firefox.notes.includes('nur Firefox') && !firefox.notes.includes('nur Chrome') && !firefox.notes.includes('nur Safari'));
   assert.ok(apple.whatsNew.includes('nur Safari') && !apple.whatsNew.includes('nur Chrome') && !apple.whatsNew.includes('nur Firefox'));
-  assert.ok(firefox.notes.includes('Rime fragen') && apple.whatsNew.includes('Rime fragen'), 'unlabelled bullets go everywhere');
+  assert.ok(firefox.notes.includes('Gemeinsame Korrektur.') && apple.whatsNew.includes('Gemeinsame Korrektur.'), 'unlabelled bullets go everywhere');
   assert.ok(!listings.fr.firefox.notes.includes('seulement Safari') && listings.fr.apple.whatsNew.includes('seulement Safari'), 'French spacing before the colon');
 });
 

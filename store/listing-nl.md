@@ -61,7 +61,7 @@ MOODLE
 
 OP JE SCHOOL
 
-Werkt direct na installatie op instructure.com, blackboard.com en moodlecloud.com. Bij installatie wordt ook toegang tot frostdev.io en share.frostdev.io gevraagd; andere hosts vragen toestemming wanneer dat nodig is. Voeg het eigen adres van je school toe in Instellingen › Privacy en gegevens › Sites; “Back-up maken…” en “Herstellen…” daar bewaren alles in één bestand. Glaze wijzigt nooit cijfers. Wat je schrijft komt alleen in Blackboard via de eigen knoppen om te plaatsen, te reageren, te versturen of in te leveren, als jij erop drukt; het inleverscherm van Volledige Writer voegt je .docx bij en levert die in na jouw bevestiging. Wat-als-cijfers blijven op je apparaat.
+Werkt direct na installatie op instructure.com, blackboard.com en moodlecloud.com. Bij installatie wordt ook toegang tot frostdev.io en share.frostdev.io gevraagd; andere hosts vragen toestemming wanneer dat nodig is. Voeg het eigen adres van je school toe in Instellingen › Privacy en gegevens › School; “Back-up maken…” en “Herstellen…” daar bewaren alles in één bestand. Glaze wijzigt nooit cijfers. Wat je schrijft komt alleen in Blackboard via de eigen knoppen om te plaatsen, te reageren, te versturen of in te leveren, als jij erop drukt; het inleverscherm van Volledige Writer voegt je .docx bij en levert die in na jouw bevestiging. Wat-als-cijfers blijven op je apparaat.
 
 PRIVACY
 

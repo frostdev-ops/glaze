@@ -61,7 +61,7 @@ MOODLE
 
 AN DEINER SCHULE
 
-Funktioniert ab der Installation auf instructure.com, blackboard.com und moodlecloud.com. Bei der Installation wird auch Zugriff auf frostdev.io und share.frostdev.io angefordert; weitere Hosts werden bei Bedarf angefragt. Füge die eigene Adresse deiner Schule unter Einstellungen › Datenschutz und Daten › Websites hinzu; „Sichern…“ und „Wiederherstellen…“ dort speichern alles in einer Datei. Glaze ändert keine Noten. Was du schreibst, erreicht Blackboard nur über dessen eigene Schaltflächen zum Posten, Antworten, Senden oder Abgeben, wenn du sie drückst; das Abgabefenster von Voller Writer hängt deine .docx an und gibt sie nach deiner Bestätigung ab. Was-wäre-wenn-Werte bleiben auf deinem Gerät.
+Funktioniert ab der Installation auf instructure.com, blackboard.com und moodlecloud.com. Bei der Installation wird auch Zugriff auf frostdev.io und share.frostdev.io angefordert; weitere Hosts werden bei Bedarf angefragt. Füge die eigene Adresse deiner Schule unter Einstellungen › Datenschutz und Daten › Schule hinzu; „Sichern…“ und „Wiederherstellen…“ dort speichern alles in einer Datei. Glaze ändert keine Noten. Was du schreibst, erreicht Blackboard nur über dessen eigene Schaltflächen zum Posten, Antworten, Senden oder Abgeben, wenn du sie drückst; das Abgabefenster von Voller Writer hängt deine .docx an und gibt sie nach deiner Bestätigung ab. Was-wäre-wenn-Werte bleiben auf deinem Gerät.
 
 DATENSCHUTZ
 
@@ -77,7 +77,7 @@ NEU IN 4.0.6
 
 • Die Einstellungen bieten übersichtliche Design- und Bewegungsauswahl, eine Papiervorschau für Writer und eine leicht erreichbare Gesamtvorschau auf schmalen Bildschirmen.
 • Frost stellt jetzt das vollständige Standarddesign wieder her. Palette zurücksetzen behält Schriftarten, Hintergründe und Look-Extras bei.
-• Geschwindigkeit bündelt sofortiges Öffnen, Vorladen und Ladeanzeigen. Bewertungsbalken stehen bei den Noten; Hochschule und Verbindungseinstellungen sind leichter zu finden.
+• Tempo bündelt sofortiges Öffnen, Vorladen und Ladeanzeigen. Bewertungsbalken stehen bei den Noten; Schule und Verbindungseinstellungen sind leichter zu finden.
 • Schlüssel und Passphrasen nehmen / an, ohne die Einstellungssuche zu öffnen. Abhängige Optionen behalten ihre gespeicherte Auswahl, wenn die übergeordnete Funktion ausgeschaltet ist.
 • Blackboard-Aktivitätskarten folgen der Farbe ihres Kurses, auch wenn Karten beim Scrollen wiederverwendet werden.
 • Tests in Blackboard-Organisationen nutzen die Seitenleiste und halten Editormenüs im sichtbaren Bereich. Notenreiter teilen sich eine abgerundete Fläche.

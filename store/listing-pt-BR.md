@@ -61,7 +61,7 @@ MOODLE
 
 NA SUA ESCOLA
 
-Funciona desde a instalação em instructure.com, blackboard.com e moodlecloud.com. A instalação também pede acesso a frostdev.io e share.frostdev.io; outros hosts são solicitados conforme necessário. Adicione o endereço próprio da sua escola em Configurações › Privacidade e dados › Sites; ali, “Fazer backup…” e “Restaurar…” salvam tudo em um só arquivo. O Glaze nunca altera notas. O que você escreve só chega ao Blackboard pelos próprios botões de publicar, responder, enviar ou entregar, quando você os aperta; a janela de entrega do Writer completo anexa seu .docx e o entrega após sua confirmação. As notas simuladas ficam no seu dispositivo.
+Funciona desde a instalação em instructure.com, blackboard.com e moodlecloud.com. A instalação também pede acesso a frostdev.io e share.frostdev.io; outros hosts são solicitados conforme necessário. Adicione o endereço próprio da sua escola em Configurações › Privacidade e dados › Escola; ali, “Fazer backup…” e “Restaurar…” salvam tudo em um só arquivo. O Glaze nunca altera notas. O que você escreve só chega ao Blackboard pelos próprios botões de publicar, responder, enviar ou entregar, quando você os aperta; a janela de entrega do Writer completo anexa seu .docx e o entrega após sua confirmação. As notas simuladas ficam no seu dispositivo.
 
 PRIVACIDADE
 
@@ -77,7 +77,7 @@ NOVO NA 4.0.6
 
 • As configurações têm opções mais claras de tema e movimento, uma prévia da página do Writer e uma prévia completa ao alcance em telas estreitas.
 • Frost agora restaura o tema padrão completo. Redefinir paleta mantém fontes, planos de fundo e extras do Look.
-• Velocidade reúne abertura instantânea, pré-carregamento e indicadores de carregamento. As barras de pontuação ficam com as notas; a instituição e as conexões são mais fáceis de encontrar.
+• Velocidade reúne abertura instantânea, pré-carregamento e indicadores de carregamento. As barras de pontuação ficam com as notas; a Escola e as conexões são mais fáceis de encontrar.
 • Chaves e frases secretas aceitam / sem abrir a busca das configurações. As opções dependentes mantêm a escolha salva quando a função principal está desativada.
 • Os cartões de Atividade do Blackboard seguem a cor do curso, inclusive quando são reutilizados durante a rolagem.
 • As provas de organizações do Blackboard usam a barra lateral e mantêm os menus do editor visíveis. As abas de notas compartilham uma superfície arredondada.

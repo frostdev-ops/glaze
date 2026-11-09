@@ -61,7 +61,7 @@ MOODLE
 
 DANS VOTRE ÉTABLISSEMENT
 
-Fonctionne dès l’installation sur instructure.com, blackboard.com et moodlecloud.com. L’installation demande aussi l’accès à frostdev.io et share.frostdev.io ; les autres hôtes sont autorisés à la demande. Ajoutez l’adresse de votre établissement dans Réglages › Confidentialité et données › Sites ; « Sauvegarder… » et « Restaurer… » y gardent tout dans un seul fichier. Glaze ne modifie jamais les notes. Ce que vous écrivez n’arrive sur Blackboard que par ses propres boutons de publication, de réponse, d’envoi ou de remise, quand vous les utilisez ; la fenêtre de remise de Writer complet joint votre .docx et le remet après votre confirmation. Les notes simulées restent sur votre appareil.
+Fonctionne dès l’installation sur instructure.com, blackboard.com et moodlecloud.com. L’installation demande aussi l’accès à frostdev.io et share.frostdev.io ; les autres hôtes sont autorisés à la demande. Ajoutez l’adresse de votre établissement dans Réglages › Confidentialité et données › Établissement ; « Sauvegarder… » et « Restaurer… » y gardent tout dans un seul fichier. Glaze ne modifie jamais les notes. Ce que vous écrivez n’arrive sur Blackboard que par ses propres boutons de publication, de réponse, d’envoi ou de remise, quand vous les utilisez ; la fenêtre de remise de Writer complet joint votre .docx et le remet après votre confirmation. Les notes simulées restent sur votre appareil.
 
 CONFIDENTIALITÉ
 

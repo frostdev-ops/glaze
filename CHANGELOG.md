@@ -11,7 +11,7 @@ All notable changes to Glaze are documented here. The format follows
 ### Changed
 
 - Settings uses setup’s theme thumbnails and motion choices, with a live paper-setting sample in Writer. The full preview stays in reach on narrow screens.
-- Speed groups instant pages, course-data prefetch and loading feedback; Score bars live with Grades. School and setup are directly accessible, and School links to connection settings. Existing section addresses and advanced controls remain available.
+- Settings → Course pages → Speed groups instant pages, course-data prefetch and loading feedback; Score bars live with Grades. School and setup are directly accessible, and Settings → Privacy and data → School links to connection settings. Existing section addresses and advanced controls remain available.
 
 ### Fixed
 

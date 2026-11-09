@@ -61,7 +61,7 @@ MOODLE
 
 EN TU CENTRO
 
-Funciona desde la instalación en instructure.com, blackboard.com y moodlecloud.com. La instalación también pide acceso a frostdev.io y share.frostdev.io; los demás hosts se solicitan cuando hacen falta. Añade la dirección propia de tu centro en Ajustes › Privacidad y datos › Sitios; ahí, «Hacer una copia…» y «Restaurar…» guardan todo en un solo archivo. Glaze nunca cambia calificaciones. Lo que escribes llega a Blackboard solo con sus propios botones de publicar, responder, enviar o entregar, cuando los pulsas; la ventana de entrega de Writer completo adjunta tu .docx y lo entrega tras tu confirmación. Las calificaciones hipotéticas se quedan en tu dispositivo.
+Funciona desde la instalación en instructure.com, blackboard.com y moodlecloud.com. La instalación también pide acceso a frostdev.io y share.frostdev.io; los demás hosts se solicitan cuando hacen falta. Añade la dirección propia de tu centro en Ajustes › Privacidad y datos › Centro; ahí, «Hacer una copia…» y «Restaurar…» guardan todo en un solo archivo. Glaze nunca cambia calificaciones. Lo que escribes llega a Blackboard solo con sus propios botones de publicar, responder, enviar o entregar, cuando los pulsas; la ventana de entrega de Writer completo adjunta tu .docx y lo entrega tras tu confirmación. Las calificaciones hipotéticas se quedan en tu dispositivo.
 
 PRIVACIDAD
 

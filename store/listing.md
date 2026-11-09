@@ -69,7 +69,7 @@ MOODLE
 
 AT YOUR SCHOOL
 
-Works from install on instructure.com, blackboard.com and moodlecloud.com. Install access also covers frostdev.io and share.frostdev.io; other hosts are requested when needed. Add your school's own address in Settings › Privacy and data › Sites; Back up… and Restore… there save everything in one file. Glaze never changes grades. What you write reaches Blackboard only through its own Post, Reply, Send or Submit, when you press it; Full writer's submit sheet attaches your .docx and submits it after you confirm. What-if scores stay on your device.
+Works from install on instructure.com, blackboard.com and moodlecloud.com. Install access also covers frostdev.io and share.frostdev.io; other hosts are requested when needed. Add your school's own address in Settings › Privacy and data › School; Back up… and Restore… there save everything in one file. Glaze never changes grades. What you write reaches Blackboard only through its own Post, Reply, Send or Submit, when you press it; Full writer's submit sheet attaches your .docx and submits it after you confirm. What-if scores stay on your device.
 
 PRIVACY
 
