@@ -59,11 +59,12 @@
   // Assignments 2's Text Entry (SubmissionManager.jsx, TextEntry.jsx): Canvas saves the box as a draft a second after its
   // last change (CreateSubmissionDraft, through the page's fetch, which Apollo's HttpLink looks up at each request), and
   // Submit sends that draft. From the moment Writer first touches such a box, each draft save Canvas begins is seen here:
-  // what it carried, and whether Canvas took it. The draft holds the box when the last save begun since then was taken
-  // with exactly the box's content, or, none begun, the box is as it was then.
+  // what it carried, and whether Canvas took it. Canvas applies responses in completion order: no save may still be in
+  // flight, and the last successful response must hold the box's content; a refused save never replaces Canvas's draft.
   const drafted = (ta) => ta.id === 'textentry_text';
   const bases = new WeakMap(); // editor → { content, seq } when Writer first touched it
-  let draft = null, seq = 0, seeing = false; // the last text entry draft save begun: { seq, body, done, ok }
+  const saving = new Set();
+  let draft = null, seq = 0, seeing = false; // seq advances on both request and completion
   const see = (ed) => {
     if (!bases.has(ed)) bases.set(ed, { content: ed.getContent(), seq });
     const f = window.fetch;
@@ -75,16 +76,18 @@
         const url = String(input !== null && typeof input === 'object' && 'url' in input ? input.url : input);
         const q = init && typeof init.body === 'string' && /^(?:https?:\/\/[^/?#]+)?\/api\/graphql(?:[?#]|$)/.test(url) ? JSON.parse(init.body) : null;
         if (q?.operationName === 'CreateSubmissionDraft' && q.variables?.activeSubmissionType === 'online_text_entry') {
-          const d = draft = { seq: ++seq, body: typeof q.variables.body === 'string' ? q.variables.body : '', done: false, ok: false };
+          const d = { seq: ++seq, body: typeof q.variables.body === 'string' ? q.variables.body : '', done: false, ok: false };
+          saving.add(d);
           Promise.resolve(res).then((r) => (r?.ok ? r.clone().json() : null))
             .then((j) => { const c = j?.data?.createSubmissionDraft; d.ok = !!c?.submissionDraft && !c.errors?.length && !j.errors; }, () => {})
-            .finally(() => { d.done = true; });
+            .finally(() => { d.done = true; d.seq = ++seq; if (d.ok) draft = d; saving.delete(d); });
         }
       } catch { /* the page's own request, whatever its shape */ }
       return res;
     };
   };
   const kept = (ed) => {
+    if (saving.size) return false;
     const base = bases.get(ed), content = ed.getContent(), d = draft;
     return d && d.seq > base.seq ? d.done && d.ok && d.body === content : content === base.content;
   };
