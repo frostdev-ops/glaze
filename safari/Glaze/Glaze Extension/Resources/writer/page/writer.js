@@ -441,11 +441,12 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const FLUSH_WAIT = 3000;
   const holdSend = (box, b) => {
     if (box.flushWait || box.sending) return; // pressed again: the first press goes on
+    const destination = orphanKey(box, X.draftAt(box.editor));
     const go = (ok) => {
       clearTimeout(box.flushWait?.timer);
       box.flushWait = null;
       if (!ok) { box.port?.postMessage({ type: 'held' }); return; }
-      if (boxes.get(box.editor) !== box || !sameBox(box) || !b.isConnected || !A().enabled(b)) return;
+      if (boxes.get(box.editor) !== box || !sameBox(box) || !b.isConnected || !A().enabled(b) || A().sendOf(box.editor, box.kind) !== b || orphanKey(box, X.draftAt(box.editor)) !== destination) return;
       remember(box);
       globalThis.GZ_DRAFT_UI?.sent?.(box.editor);
       if (SENDS.has(box.kind)) box.sending = true;
