@@ -46,6 +46,31 @@ const ASSIGNMENT = (() => {
   return (raw.slice(0, from) + wrap + raw.slice(to)).replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
     .replace('</body>', '<script src="/tinymce/tinymce.min.js"></script><script src="/gz-check/canvas.js"></script></body>');
 })();
+// The discussion topic's reply box, opened, its RCE remounted as Canvas mounts one (DiscussionEdit's own controls kept:
+// Attach, Cancel, Reply), and the same stand-in for what Canvas does around it.
+const DISCUSSION = (() => {
+  const raw = fixture('canvas-writer-discussion.html'), c = raw.indexOf('<div data-testid="DiscussionEdit-container"'), from = raw.indexOf('<div class="canvas-rce__skins--root rce-wrapper"', c);
+  const to = raw.indexOf('</span><div><span dir="ltr" direction="row" wrap="no-wrap"', from);
+  assert.ok(c > 0 && from > c && to > from, 'the discussion fixture has its reply box');
+  const wrap = '<div class="canvas-rce__skins--root rce-wrapper" style="margin-bottom: 0.5rem;"><div style="display: block;"><textarea id="message-body-root" data-testid="message-body" style="height: 300px;"></textarea></div></div>';
+  return (raw.slice(0, from) + wrap + raw.slice(to)).replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
+    .replace('</body>', '<script src="/tinymce/tinymce.min.js"></script><script src="/gz-check/discussion.js"></script></body>');
+})();
+// DiscussionEdit around its RCE (ui/features/discussion_topics_post/react/components/DiscussionEdit): tinymce-react's state
+// on 'change keyup setcontent', Reply sending that state (createDiscussionEntry, recorded here), Cancel unmounting the box,
+// and the RCE focused 1000 ms after it is up.
+const REPLY = `(() => {
+  window.__entries = []; window.__state = '';
+  tinymce.init({ selector: '#message-body-root', base_url: '/tinymce', suffix: '.min', skin: false, content_css: false, menubar: false, statusbar: false, plugins: 'lists', height: 300,
+    init_instance_callback: (ed) => {
+      ed.getElement().dataset.rich_text = true;
+      ed.on('change keyup setcontent', () => { __state = ed.getContent(); });
+      setTimeout(() => ed.focus(), 1000);
+    } });
+  const box = document.querySelector('[data-testid="DiscussionEdit-container"]');
+  box.querySelector('[data-testid="DiscussionEdit-submit"]').addEventListener('click', () => __entries.push(__state));
+  box.querySelector('[data-testid="DiscussionEdit-cancel"]').addEventListener('click', () => { tinymce.get('message-body-root').remove(); box.remove(); });
+})();`;
 // What Canvas does around an RCE, in the page (packages/canvas-rce RCEWrapper onInit, wrapInitCb, tinymce-react; the Text
 // Entry form's submit, ui/features/submit_assignment/jquery/index.jsx). ?html= puts that in the box first.
 const CANVAS = `(() => {
@@ -107,6 +132,8 @@ const CANVAS = `(() => {
       const f = u.pathname.slice('/tinymce/'.length);
       if (u.pathname.startsWith('/tinymce/') && bytes[f]) return r.fulfill({ contentType: 'text/javascript', body: bytes[f] });
       if (u.pathname === '/gz-check/canvas.js') return r.fulfill({ contentType: 'text/javascript', body: CANVAS });
+      if (u.pathname === '/gz-check/discussion.js') return r.fulfill({ contentType: 'text/javascript', body: REPLY });
+      if (req.isNavigationRequest() && u.pathname === '/courses/34/discussion_topics/80') return r.fulfill({ contentType: 'text/html', body: DISCUSSION });
       if (req.isNavigationRequest() && u.pathname === '/courses/34/assignments/238') return r.fulfill({ contentType: 'text/html', body: ASSIGNMENT });
       if (req.isNavigationRequest()) return r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Blank</title>' });
       if (u.pathname === '/api/v1/courses/34/assignments/238/submissions/self') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(submitted || { body: null, workflow_state: 'unsubmitted' }) });
@@ -294,6 +321,31 @@ const CANVAS = `(() => {
     }
     const field = await until(() => p.evaluate(() => document.querySelector('textarea[data-gz-writer-recovery]')?.value), 'the recovery field');
     check(squash(field) === 'Words Canvas never took.' && squash((await tiny(p)).text) === 'Words Canvas never took.', `a dead frame: its text in a field to copy (${field}), Canvas's editor holding it too`);
+    await p.close();
+
+    // ---- a discussion reply: Writer in the topic's reply box; Ctrl/Cmd+Enter and Reply send exactly its text, once ----
+    p = await open('/courses/34/discussion_topics/80');
+    let r = await box(p, 'reply');
+    check(await p.evaluate(() => getComputedStyle(document.querySelector('[data-testid="DiscussionEdit-container"] .rce-wrapper')).display === 'none'
+      && ['DiscussionEdit-cancel', 'DiscussionEdit-submit', 'attach-btn'].every((t) => document.querySelector(`[data-testid="${t}"]`).offsetHeight > 0)), 'Writer stands in for the reply\'s RCE; Attach, Cancel and Reply stay Canvas\'s, shown');
+    await until(() => p.evaluate(() => document.activeElement?.matches('iframe.gz-writer[data-gz-writer-frame="reply"]')), 'the reply box focused', 5000);
+    await pause(1300); // Canvas focuses its RCE 1000 ms after it is up: the focus must still be Writer's after that
+    check(await p.evaluate(() => document.activeElement?.matches('iframe.gz-writer[data-gz-writer-frame="reply"]')), 'the reply box opens with the caret in Writer, and Canvas\'s focus a second later leaves it there');
+    await r.fr.click('.ProseMirror');
+    await until(() => r.fr.evaluate(() => document.hasFocus() && !!document.activeElement?.closest('.ProseMirror')), 'the caret in Writer');
+    await p.keyboard.type('I agree, and the river is also a ledger.', { delay: 0 });
+    await p.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
+    await until(() => p.evaluate(() => __entries.length >= 1), 'the reply sent');
+    check(JSON.stringify(await p.evaluate(() => __entries)) === JSON.stringify(['<p>I agree, and the river is also a ledger.</p>']), `Ctrl/Cmd+Enter replies once, with exactly Writer's text (${await p.evaluate(() => JSON.stringify(__entries))})`);
+    await p.evaluate(() => { __entries.length = 0; });
+    await r.fr.click('.ProseMirror');
+    await p.keyboard.type(' More.', { delay: 0 });
+    await p.evaluate(() => document.querySelector('[data-testid="DiscussionEdit-submit"]').click());
+    await until(() => p.evaluate(() => __entries.length >= 1), 'Reply pressed');
+    check(JSON.stringify(await p.evaluate(() => __entries)) === JSON.stringify(['<p>I agree, and the river is also a ledger. More.</p>']), 'Reply waits for Writer\'s last words, then sends them once');
+    await p.evaluate(() => document.querySelector('[data-testid="DiscussionEdit-cancel"]').click());
+    await until(() => p.evaluate(() => !document.querySelector('iframe.gz-writer') && !document.querySelector('[data-gz-writer]')), 'Writer gone with the box');
+    check(true, 'Cancel: the box and Writer\'s frame go together, nothing left behind');
     await p.close();
 
     const sent = requests.filter((r) => r.method !== 'GET');
