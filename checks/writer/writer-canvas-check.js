@@ -79,6 +79,7 @@ const REPLY = `(() => {
 const INBOX = fixture('canvas-writer-inbox.html').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
   .replace('</body>', '<script src="/gz-check/inbox.js"></script></body>');
 const MESSAGE = `(() => {
+  document.documentElement.style.cssText = ''; // captured with the dialog open, the page held fixed; without Canvas's CSS it scrolls
   window.__sends = []; window.__body = '';
   const ta = document.querySelector('#compose-message-modal textarea[data-testid="message-body"]');
   const desc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
@@ -87,7 +88,7 @@ const MESSAGE = `(() => {
   ta.addEventListener('input', () => { const now = desc.get.call(ta); if (now !== tracked) { tracked = now; __body = now; } });
   const render = (v) => { __body = v; ta.value = v; }; // setBody, then React writes the value
   setTimeout(() => render(__body + '\\n\\n---\\nSam Taylor'), 1500);
-  window.__translate = (on) => { ta.disabled = on; };
+  window.__translate = (on) => { ta.disabled = on; ta.className = on ? 'css-1nh1ze9-textArea' : 'css-4y58qe-textArea'; }; // InstUI restyles it
   document.querySelector('[data-testid="send-button"]').addEventListener('click', () => __sends.push(__body));
   const set = (sel, v) => { const i = document.querySelector(sel); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, v); };
   set('input[data-testid="course-select-modal"]', 'ENG 1100');
@@ -234,7 +235,7 @@ const CANVAS = `(() => {
     // ---- typing, then Submit at once: exactly Writer's text goes ----
     await typeIn(p, a, 'Reading response: the river is the archive.');
     await p.keyboard.press('Enter');
-    await p.keyboard.type('- first point **kept** and the last words', { delay: 0 });
+    await p.keyboard.type('- First point **kept** and the last words', { delay: 0 });
     await submit(p);
     await until(() => p.evaluate(() => __submits.length >= 1), 'the submit recorded');
     await pause(300); // a second submit, if the hold let two through, would be recorded by now
@@ -242,7 +243,7 @@ const CANVAS = `(() => {
     const typed = await writerText(a.fr);
     check(subs.length === 1, `one press, one submit (${subs.length})`);
     check(squash(subs[0].text) === squash(typed) && /the last words$/.test(squash(subs[0].text)), `Submit sends Writer's text, its last words included (${squash(subs[0].text)})`);
-    check(/<ul>\s*<li>first point <strong>kept<\/strong> and the last words<\/li>\s*<\/ul>/.test(subs[0].body), `in Canvas's dialect (${subs[0].body.replace(/\n/g, '')})`);
+    check(/<ul>\s*<li>First point <strong>kept<\/strong> and the last words<\/li>\s*<\/ul>/.test(subs[0].body), `in Canvas's dialect (${subs[0].body.replace(/\n/g, '')})`);
     await p.evaluate(() => { __submits.length = 0; });
 
     // ---- a press Canvas's editor won't take is held, and says so ----
@@ -401,10 +402,13 @@ const CANVAS = `(() => {
     const lines = await p.evaluate(() => __sends.slice());
     check(JSON.stringify(lines) === JSON.stringify(['Hello Jordan,\n**not bold** and “curled”\n\n---\nSam Taylor']), `Send sends Writer's lines as plain text, the signature kept, through React's own state (${JSON.stringify(lines)})`);
     await p.evaluate(() => { __sends.length = 0; });
+    // A send already made waits for an edit before the keys send again (a held-down key sends once).
     await m.fr.evaluate(() => GZ_WRITER_FRAME.editor().focus());
+    await p.keyboard.type(' Thanks.', { delay: 0 });
     await p.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
     await until(() => p.evaluate(() => __sends.length >= 1), 'sent with the keys');
-    check((await p.evaluate(() => __sends.length)) === 1, 'Ctrl/Cmd+Enter sends once');
+    const keyed = await p.evaluate(() => __sends.slice());
+    check(keyed.length === 1 && keyed[0].startsWith('Hello Jordan,\n**not bold** and “curled” Thanks.'), `Ctrl/Cmd+Enter sends once, with the last edit (${JSON.stringify(keyed)})`);
     // Translating: Canvas disables the field; the box is Canvas's until it is enabled again.
     await p.evaluate(() => __translate(true));
     await until(() => p.evaluate(() => !document.querySelector('iframe.gz-writer[data-gz-writer-frame="message"]')), 'Writer away while translating');
