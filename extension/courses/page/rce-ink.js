@@ -11,8 +11,8 @@ var GZ_RCE_INK = globalThis.GZ_RCE_INK || (() => {
   const FRAMES = 'iframe.tox-edit-area__iframe';
   const VARS = ['--gz-surface', '--gz-surface-paint', '--gz-ink', '--gz-ink-faint', '--gz-accent', '--gz-accent-soft'];
   const html = document.documentElement;
-  const known = new WeakSet();
-  let watch = null, frame = 0, key = '', css = '';
+  const known = new Set();
+  let active = false, watch = null, frame = 0, key = '', css = '';
   // The palette as content.js wrote it on <html>, and whether it is dark: the sheet is built again only when that changes,
   // not for the other variables <html> carries (a course tab's frame writes its viewport there as it scrolls).
   const keyNow = () => VARS.map((v) => html.style.getPropertyValue(v)).join('|') + html.hasAttribute('data-gz-dark-theme');
@@ -43,11 +43,14 @@ var GZ_RCE_INK = globalThis.GZ_RCE_INK || (() => {
     // Last in the head, after the content CSS TinyMCE adds as it starts.
     if (doc.head.lastElementChild !== el) doc.head.append(el);
   };
-  const later = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; sync(); }); };
+  const release = (f) => { f.removeEventListener('load', later); ink(f, ''); known.delete(f); };
+  const later = () => { if (active && !frame) frame = requestAnimationFrame(() => { frame = 0; if (active) sync(); }); };
   const sync = () => {
     if (!ctx.on()) return off();
-    const frames = document.querySelectorAll(FRAMES);
-    if (!frames.length) return;
+    const frames = new Set(document.querySelectorAll(FRAMES));
+    for (const f of known) if (!frames.has(f)) release(f);
+    if (!frames.size) return off();
+    active = true;
     const now = keyNow();
     if (now !== key) { key = now; css = sheet(); }
     for (const f of frames) {
@@ -57,9 +60,10 @@ var GZ_RCE_INK = globalThis.GZ_RCE_INK || (() => {
     if (!watch) { watch = new MutationObserver(later); watch.observe(html, { attributes: true, attributeFilter: ['style', 'data-gz-dark-theme'] }); }
   };
   const off = () => {
+    active = false;
     watch?.disconnect(); watch = null;
     cancelAnimationFrame(frame); frame = 0; key = '';
-    for (const f of document.querySelectorAll(FRAMES)) ink(f, '');
+    for (const f of known) release(f);
   };
   return { sync, off };
 })();

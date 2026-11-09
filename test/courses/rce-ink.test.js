@@ -18,7 +18,8 @@ const frameDoc = () => {
     getElementById: (id) => head.kids.find((k) => k.id === id) || null };
 };
 const iframe = () => {
-  const f = { doc: frameDoc(), listeners: {}, addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }, get contentDocument() { return this.doc; } };
+  const f = { doc: frameDoc(), listeners: {}, addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); },
+    removeEventListener(type, fn) { this.listeners[type] = (this.listeners[type] || []).filter((f) => f !== fn); }, get contentDocument() { return this.doc; } };
   return f;
 };
 
@@ -116,6 +117,32 @@ test('Glaze stopping, or leaving the page, takes the style out and stops watchin
     else { c.glazeOn = false; observers[0].fn(); tick(); }
     assert.equal(ink(c.frames[0]), null, how);
     assert.equal(observers[0].on, false, `${how}: no longer watching`);
+  }
+});
+
+test('leaving a route releases frame loads and stale callbacks cannot restart it', () => {
+  const { ui, c, ink, observers, tick } = load();
+  const f = c.frames[0];
+  ui.sync();
+  const lateLoad = f.listeners.load[0], lateMutation = observers[0].fn;
+  ui.off(); // Glaze is still on; only this routed feature has stopped.
+  lateLoad(); lateMutation(); tick();
+  assert.equal(ink(f), null, 'late delivery must not repaint after route teardown');
+  assert.equal(f.listeners.load.length, 0, 'the frame no longer retains a load listener');
+  ui.sync();
+  assert.ok(ink(f), 'returning to the route starts it again');
+  assert.equal(f.listeners.load.length, 1, 'one listener after restarting');
+});
+
+test('removed editor frames release their styles and listeners on a pass or teardown', () => {
+  for (const how of ['sync', 'off']) {
+    const { ui, c, ink } = load();
+    const f = c.frames[0];
+    ui.sync();
+    c.frames = [];
+    ui[how]();
+    assert.equal(ink(f), null, `${how}: a removed editor retains no palette`);
+    assert.equal(f.listeners.load.length, 0, `${how}: a removed editor retains no listener`);
   }
 });
 
