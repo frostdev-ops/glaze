@@ -11,7 +11,9 @@
 //     link) with the caret at the end of the box;
 //   gz-writer:canvas-watch { id } from then on says gz-writer:canvas-changed { id } when Canvas changes the box itself
 //     (its reset after Reply, its autosave restored, an undo), never for Writer's own writes;
-//   each answered by gz-writer:done { id, ok, html, text } (the Inbox's: { id, ok, text }).
+//   gz-writer:canvas-draft { id }, for Assignments 2's box only, says whether the draft Canvas saved holds the box as it is
+//     now (kept): its Submit sends that draft, never the box;
+//   each answered by gz-writer:done { id, ok, html, text } (the Inbox's: { id, ok, text }; a draft's: { id, ok, kept }).
 // The box is the textarea whose data-gz-writer-id is `id`: an RCE's must be the element of a drawn, shown TinyMCE 5-7 editor
 // Canvas has marked ready (data-rich_text); the Inbox's is its compose dialog's message field. Nothing here moves focus but
 // exec, which Canvas's tools need. Runs once per document.
@@ -54,6 +56,39 @@
   const TOOLS = new Set(['instructureTrayForImages', 'mceInstructureImage', 'instructureRecord', 'instructureTrayForMedia', 'mceInstructureDocuments',
     'instructureTrayForDocuments', 'instructureEquation', 'instructureTrayForCourseLinks', 'instructureLinkCreate']);
 
+  // Assignments 2's Text Entry (SubmissionManager.jsx, TextEntry.jsx): Canvas saves the box as a draft a second after its
+  // last change (CreateSubmissionDraft, through the page's fetch, which Apollo's HttpLink looks up at each request), and
+  // Submit sends that draft. From the moment Writer first touches such a box, each draft save Canvas begins is seen here:
+  // what it carried, and whether Canvas took it. The draft holds the box when the last save begun since then was taken
+  // with exactly the box's content, or, none begun, the box is as it was then.
+  const drafted = (ta) => ta.id === 'textentry_text';
+  const bases = new WeakMap(); // editor → { content, seq } when Writer first touched it
+  let draft = null, seq = 0, seeing = false; // the last text entry draft save begun: { seq, body, done, ok }
+  const see = (ed) => {
+    if (!bases.has(ed)) bases.set(ed, { content: ed.getContent(), seq });
+    const f = window.fetch;
+    if (seeing || typeof f !== 'function') return;
+    seeing = true;
+    window.fetch = function (input, init) {
+      const res = f.apply(this, arguments);
+      try {
+        const url = String(input !== null && typeof input === 'object' && 'url' in input ? input.url : input);
+        const q = init && typeof init.body === 'string' && /^(?:https?:\/\/[^/?#]+)?\/api\/graphql(?:[?#]|$)/.test(url) ? JSON.parse(init.body) : null;
+        if (q?.operationName === 'CreateSubmissionDraft' && q.variables?.activeSubmissionType === 'online_text_entry') {
+          const d = draft = { seq: ++seq, body: typeof q.variables.body === 'string' ? q.variables.body : '', done: false, ok: false };
+          Promise.resolve(res).then((r) => (r?.ok ? r.clone().json() : null))
+            .then((j) => { const c = j?.data?.createSubmissionDraft; d.ok = !!c?.submissionDraft && !c.errors?.length && !j.errors; }, () => {})
+            .finally(() => { d.done = true; });
+        }
+      } catch { /* the page's own request, whatever its shape */ }
+      return res;
+    };
+  };
+  const kept = (ed) => {
+    const base = bases.get(ed), content = ed.getContent(), d = draft;
+    return d && d.seq > base.seq ? d.done && d.ok && d.body === content : content === base.content;
+  };
+
   const done = (m) => document.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify(m) }));
   const answer = (ed) => ({ html: ed.getBody().innerHTML, text: ed.getBody().textContent });
   let own = false; // Writer's own write in progress: its events are no change of Canvas's
@@ -75,6 +110,7 @@
     }
     const ed = editor(ta);
     if (!ed || m.text !== undefined || !dialect(m.html)) return null;
+    if (drafted(ta)) see(ed);
     own = true;
     try { ed.setContent(m.html); ed.undoManager.add(); ed.fire('change'); } finally { own = false; }
     return answer(ed);
@@ -89,9 +125,16 @@
     ed.execCommand(m.command);
     return answer(ed);
   });
+  on('gz-writer:canvas-draft', (ta) => {
+    const ed = drafted(ta) && editor(ta);
+    if (!ed) return null;
+    see(ed);
+    return { kept: kept(ed) };
+  });
   on('gz-writer:canvas-watch', (ta) => {
     const ed = editor(ta);
     if (!ed) return null;
+    if (drafted(ta)) see(ed);
     if (!watched.has(ed)) {
       watched.add(ed);
       ed.on('SetContent Change Undo Redo', () => {
