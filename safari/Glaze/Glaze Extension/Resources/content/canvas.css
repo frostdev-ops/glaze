@@ -1167,8 +1167,8 @@ html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) 
 #application [data-testid="file-preview"] :is(div, iframe)[style*="border-left"] { border-left-color: var(--gz-border-line, var(--gz-line)) !important; }
 [data-testid="more-options-file-select"] div[style*="border-bottom"] { border-bottom-color: var(--gz-border-line, var(--gz-line)) !important; }
 /* The upload box's "or" divider is a 1px div Canvas colours inline, #6a7883 (FileUpload.jsx). The sweep reads that as a light fill and repaints it with the surface,
-   which hides the line on a dark Look: a separator, so the Look's line colour, over the sweep's !important. */
-#application [data-testid="upload-box"] div[style*="position: absolute"][style*="background-color"] { background-color: var(--gz-border-line, var(--gz-line)) !important; }
+   which hides the line on a dark Look: the Look's strong line colour, so it stays a line you can see as Canvas drew it, over the sweep's !important. */
+#application [data-testid="upload-box"] div[style*="position: absolute"][style*="background-color"] { background-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
 /* "Submitted … late" on a submission's details, and in an assignment's sidebar, is Canvas's literal red. */
 #application :is(.submission-details-header__time.late, #sidebar_content .late) { color: var(--gz-err); }
 /* "Saved at 12:51" while taking a quiz is Canvas's literal #666. */
