@@ -2806,7 +2806,10 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
         if (isInline(n) && !hasBlock(n)) { run.push(n); continue; }
         flush();
         if (n.nodeName === 'UL' || n.nodeName === 'OL') items(n, o, level + 1, out);
-        else for (const b of blocks(el('div', {}, [n]), o)) take(b, kind, level, out, o);
+        else {
+          if (o.canvas) o.lost.add('format'); // list items hold inline text, not independently formatted blocks
+          for (const b of blocks(el('div', {}, [n]), o)) take(b, kind, level, out, o);
+        }
       }
       flush();
       if (out.length === start) out.push({ ordered: kind, li: blockClass(el('li', o.paper ? { ...c.attrs } : {}), level, align) });
