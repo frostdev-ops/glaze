@@ -51,6 +51,8 @@
     const head = $('menu').querySelector('[data-insert-head]');
     if (head) head.textContent = t('Insert from Canvas');
     for (const b of $('menu').querySelectorAll('[data-insert]')) b.textContent = t(INSERT[b.dataset.insert]);
+    for (const b of $('gw').querySelectorAll('[data-offer-action]')) b.textContent = t(b.dataset.offerAction);
+    if (note && !note.hidden) note.textContent = t('Not sent: Canvas didn’t take your text. Try again.');
     count();
   };
   // The page's language: its catalogue loads beside the frame (i18n/<lang>.js); English until then.
@@ -159,7 +161,7 @@
     bar.append(msg);
     for (const [label, restore] of [['Restore', true], ['Dismiss', false]]) {
       const b = document.createElement('button');
-      b.type = 'button'; b.textContent = t(label);
+      b.type = 'button'; b.dataset.offerAction = label; b.textContent = t(label);
       b.addEventListener('click', () => {
         bar.remove();
         if (restore && ed?.text?.().trim()) return; // Canvas may have restored newer text since this offer opened.
