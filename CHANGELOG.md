@@ -22,7 +22,7 @@ All notable changes to Glaze are documented here. The format follows
 ### Fixed
 
 - Hovering rows, tabs and the editor's buttons on Canvas no longer flashes white, and the last module item you pointed at no longer stays white.
-- The lines above the text entry box and above the Submit bar on Canvas's newer submission page (Assignments 2) are your Look's border colour, not white, in a dark Look.
+- On Canvas's newer submission page (Assignments 2), the lines above the text entry box and the Submit bar, a submitted file's preview edge and the Canvas Files picker's heading line are your Look's border colour, not white, in a dark Look.
 
 - Typing `/` with a switch or choice focused opens Settings search again.
 - Google Drive's daily backup keeps Notes and the Pet habitat on for a new install, so restoring it no longer turns them off.
