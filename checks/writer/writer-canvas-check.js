@@ -12,7 +12,10 @@
 // its editor within 10 s gets Writer's unsynced text; a dead frame leaves its text to copy. A classic quiz's essays: each
 // RCE Canvas has drawn is Writer's as a test (no AI there), the one drawn later too; Canvas's answer backup (its change →
 // get_code of every essay) carries Writer's text, and Submit Quiz, pressed at once after typing, submits every essay's last
-// words. Every non-GET is aborted.
+// words. Assignments 2: Writer opens on the draft Canvas loaded; its Submit, pressed at once after typing, and pressed while an
+// earlier draft save is still on its way, sends exactly Writer's text, once Canvas's draft (createSubmissionDraft) holds
+// it; a draft Canvas couldn't save holds the press with the reason shown. Every non-GET is aborted, but the Assignments 2
+// stand-in's draft saves, answered here.
 // glaze-remote -o <evidence directory> -- node checks/writer/writer-canvas-check.js /out (CLAUDE.md)
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
@@ -30,6 +33,7 @@ const FILES = {
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const out = process.argv[2], lock = require('../../tools/dev/check-env.js').lockPath();
 const checks = [], requests = [], errors = []; let passed = false;
+let draftSave = { ms: 150, ok: true }; // how the Assignments 2 stand-in's draft saves are answered
 let submitted = null; // the assignment's submission as Canvas's API answers it, once "submitted" (drafts: a posted copy)
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 10000) => {
@@ -130,6 +134,48 @@ const TAKE = `(() => {
     __submits.push({ action: form.getAttribute('action'), answers: Object.fromEntries(essays.map((ta) => [ta.name, ta.value])) });
   });
 })();`;
+// Assignments 2 (assignment 253, the flag on for HIST 2010): the captured page, its RCE as Canvas mounts one, and what
+// Canvas does around it (ui/features/assignments_show_student: TextEntry.jsx, SubmissionManager.jsx). The RCE opens on the
+// draft Canvas loaded (?draft=), set in RCEWrapper's onInit right after data-rich_text; each change of tinymce-react's
+// state marks the draft saving (Submit disabled) and saves it a second after the last one, through fetch, as Apollo does
+// (CreateSubmissionDraft, answered by the check); Submit sends the draft as React last drew it, never the box. React 18
+// draws a change from outside its own events a task later.
+const ASSIGNMENT2 = (() => {
+  const raw = fixture('canvas-writer-a2.html'), at = raw.indexOf('data-testid="text-editor"'), from = raw.indexOf('<div class="canvas-rce__skins--root rce-wrapper"', at);
+  assert.ok(at > 0 && from > at && raw.includes('data-testid="submit-button"'), 'the Assignments 2 fixture has its RCE and Submit');
+  let depth = 0, to = from;
+  for (const m of raw.slice(from).matchAll(/<(\/?)div\b[^>]*>/g)) { depth += m[1] ? -1 : 1; if (!depth) { to = from + m.index + m[0].length; break; } }
+  const wrap = '<div class="canvas-rce__skins--root rce-wrapper"><div style="display: block;"><textarea id="textentry_text" style="height: 300px; resize: none;"></textarea></div></div>';
+  return (raw.slice(0, from) + wrap + raw.slice(to)).replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
+    .replace('</body>', '<script src="/tinymce/tinymce.min.js"></script><script src="/gz-check/a2.js"></script></body>');
+})();
+const A2 = `(() => {
+  window.__submits = []; window.__drafts = [];
+  const ta = document.getElementById('textentry_text'), button = document.querySelector('[data-testid="submit-button"]');
+  const loaded = new URLSearchParams(location.search).get('draft');
+  let draft = loaded === null ? null : { body: loaded, meetsTextEntryCriteria: !!loaded }, status = null, drawn = { draft };
+  const ch = new MessageChannel();
+  ch.port1.onmessage = () => { drawn = { draft }; button.disabled = status === 'saving'; };
+  const render = () => ch.port2.postMessage(0);
+  let last = null, timer = null, initted = false;
+  const save = (body) => fetch('/api/graphql', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ operationName: 'CreateSubmissionDraft',
+    variables: { id: 'U3VibWlzc2lvbi0xMjYx', activeSubmissionType: 'online_text_entry', attempt: 1, body }, query: 'mutation CreateSubmissionDraft($id: ID!, $activeSubmissionType: DraftableSubmissionType!, $attempt: Int!, $body: String) { createSubmissionDraft(input: {submissionId: $id, activeSubmissionType: $activeSubmissionType, attempt: $attempt, body: $body}) { submissionDraft { body meetsTextEntryCriteria } errors { message } } }' }) })
+    .then((r) => r.json()).then((j) => { const d = j.data.createSubmissionDraft; if (d.errors) throw Error('refused'); draft = d.submissionDraft; status = 'saved'; __drafts.push(body); render(); })
+    .catch(() => { status = 'error'; render(); });
+  const changed = (c) => {
+    if (!initted || (draft === null && c === '') || c === last) return;
+    last = c; status = 'saving'; render();
+    clearTimeout(timer); timer = setTimeout(() => save(c), 1000);
+  };
+  tinymce.init({ selector: '#textentry_text', base_url: '/tinymce', suffix: '.min', skin: false, content_css: false, menubar: false, statusbar: false, plugins: 'lists', height: 300,
+    init_instance_callback: (ed) => {
+      ta.dataset.rich_text = true;
+      ed.setContent(draft?.body || ''); last = ed.getContent(); initted = true;
+      let state = last;
+      ed.on('change keyup setcontent', () => { const c = ed.getContent(); if (c !== state) { state = c; changed(c); } });
+    } });
+  button.addEventListener('click', () => { const d = drawn.draft; __submits.push(d?.meetsTextEntryCriteria ? { body: d.body } : { empty: true }); });
+})();`;
 // What Canvas does around an RCE, in the page (packages/canvas-rce RCEWrapper onInit, wrapInitCb, tinymce-react; the Text
 // Entry form's submit, ui/features/submit_assignment/jquery/index.jsx). ?html= puts that in the box first.
 const CANVAS = `(() => {
@@ -187,6 +233,12 @@ const CANVAS = `(() => {
       const req = r.request(), u = new URL(req.url());
       if (u.protocol === 'chrome-extension:') return r.continue();
       requests.push({ method: req.method(), origin: u.origin, path: u.pathname });
+      if (req.method() === 'POST' && u.origin === site && u.pathname === '/api/graphql' && JSON.parse(req.postData() || '{}').operationName === 'CreateSubmissionDraft') {
+        const { ms, ok } = draftSave, body = JSON.parse(req.postData()).variables.body;
+        requests.at(-1).answered = true;
+        await pause(ms);
+        return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: { createSubmissionDraft: ok ? { submissionDraft: { body, meetsTextEntryCriteria: !!body }, errors: null } : { submissionDraft: null, errors: [{ message: 'not saved' }] } } }) }).catch(() => {});
+      }
       if (req.method() !== 'GET' || u.origin !== site) return r.abort();
       const f = u.pathname.slice('/tinymce/'.length);
       if (u.pathname.startsWith('/tinymce/') && bytes[f]) return r.fulfill({ contentType: 'text/javascript', body: bytes[f] });
@@ -194,6 +246,8 @@ const CANVAS = `(() => {
       if (u.pathname === '/gz-check/discussion.js') return r.fulfill({ contentType: 'text/javascript', body: REPLY });
       if (u.pathname === '/gz-check/inbox.js') return r.fulfill({ contentType: 'text/javascript', body: MESSAGE });
       if (u.pathname === '/gz-check/quiz.js') return r.fulfill({ contentType: 'text/javascript', body: TAKE });
+      if (u.pathname === '/gz-check/a2.js') return r.fulfill({ contentType: 'text/javascript', body: A2 });
+      if (req.isNavigationRequest() && u.pathname === '/courses/36/assignments/253') return r.fulfill({ contentType: 'text/html', body: ASSIGNMENT2 });
       if (req.isNavigationRequest() && u.pathname === '/courses/36/quizzes/56/take') return r.fulfill({ contentType: 'text/html', body: QUIZ });
       if (req.isNavigationRequest() && u.pathname === '/conversations') return r.fulfill({ contentType: 'text/html', body: INBOX });
       if (u.pathname === '/api/v1/courses') return r.fulfill({ contentType: 'application/json', body: JSON.stringify([{ id: 34, name: 'ENG 1100', course_code: 'ENG 1100', enrollments: [{ type: 'student', user_id: 3 }] }]) });
@@ -502,8 +556,62 @@ const CANVAS = `(() => {
     check(JSON.stringify(got) === JSON.stringify(inWriter.map(squash)) && got[2].endsWith('last words too!'), `Submit Quiz submits every essay's text as Writer holds it, last words included (${JSON.stringify(got)})`);
     await p.close();
 
-    const sent = requests.filter((r) => r.method !== 'GET');
-    check(sent.length === 0, `nothing but GETs left the page (${sent.map((r) => `${r.method} ${r.path}`).join(', ')})`);
+    // ---- Assignments 2: Submit sends Canvas's saved draft, so it waits for that draft to hold Writer's text ----
+    const draftOf = (q) => `/courses/36/assignments/253?draft=${encodeURIComponent(q)}`;
+    const a2Submit = (p) => p.evaluate(() => document.querySelector('[data-testid="submit-button"]').click());
+    const a2Text = (p, h) => p.evaluate((x) => new DOMParser().parseFromString(x, 'text/html').body.textContent, h);
+    p = await open(draftOf('<p>A saved draft.</p>'));
+    let a2 = await box(p, 'assignment');
+    check(await p.evaluate(() => getComputedStyle(document.querySelector('[data-testid="text-editor"] .rce-wrapper')).display === 'none' && document.querySelector('iframe.gz-writer').nextElementSibling?.matches('.rce-wrapper')), 'Assignments 2: Writer stands in for the Text Entry RCE');
+    check(squash(await writerText(a2.fr)) === 'A saved draft.', `Writer opens on the draft Canvas loaded into its editor as it came up (${await writerText(a2.fr)})`);
+    await typeIn(p, a2, ' And the last words, typed and submitted at once.');
+    await a2Submit(p);
+    await until(() => p.evaluate(() => __submits.length >= 1), 'Assignments 2 submitted', 15000);
+    await pause(300);
+    let a2Subs = await p.evaluate(() => __submits.slice()), a2Drafts = await p.evaluate(() => __drafts.slice()), inA2 = squash(await writerText(a2.fr));
+    check(a2Subs.length === 1 && a2Subs[0].body && squash(await a2Text(p, a2Subs[0].body)) === inA2 && inA2.endsWith('submitted at once.'), `Submit, pressed at once, sends exactly Writer's text, once Canvas's draft holds it (${JSON.stringify(a2Subs)})`);
+    check(a2Drafts.at(-1) === a2Subs[0].body, `the draft Canvas saved (createSubmissionDraft) is Writer's text (${a2Drafts.at(-1)})`);
+    await p.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
+    await pause(1500);
+    check(await p.evaluate(() => __submits.length === 1), 'Ctrl/Cmd+Enter never submits an assignment');
+    await p.close();
+
+    // An earlier draft still on its way when the next words go in: Submit, on again once that earlier one lands, waits for
+    // the draft of the last words.
+    draftSave = { ms: 1500, ok: true };
+    p = await open(draftOf('<p>Start.</p>'));
+    a2 = await box(p, 'assignment');
+    const posts = () => requests.filter((r) => r.answered).length, savesBefore = posts();
+    await typeIn(p, a2, ' First words.');
+    await until(() => posts() > savesBefore, 'the first draft save on its way', 5000);
+    await typeIn(p, a2, ' Then the last ones.');
+    await until(() => p.evaluate(() => !document.querySelector('[data-testid="submit-button"]').disabled && __drafts.length === 1), 'the earlier draft saved, Submit on', 10000);
+    await a2Submit(p);
+    await until(() => p.evaluate(() => __submits.length >= 1), 'submitted', 15000);
+    a2Subs = await p.evaluate(() => __submits.slice());
+    check(a2Subs.length === 1 && squash(await a2Text(p, a2Subs[0].body)) === 'Start. First words. Then the last ones.', `pressed while the last words' draft was still to be saved: Submit waits for it and sends them (${JSON.stringify(a2Subs)})`);
+    await p.close();
+
+    // A draft Canvas can't save: nothing is submitted, and Writer says so; once it saves, Submit goes.
+    draftSave = { ms: 150, ok: false };
+    p = await open(draftOf('<p>Kept here.</p>'));
+    a2 = await box(p, 'assignment');
+    await typeIn(p, a2, ' Not saved yet.');
+    await until(() => p.evaluate(() => !document.querySelector('[data-testid="submit-button"]').disabled), 'Canvas\'s failed save turns Submit back on', 10000);
+    await a2Submit(p);
+    const heldNote = await until(() => a2.fr.evaluate(() => { const n = document.getElementById('note'); return n && !n.hidden && n.textContent; }), 'the held note', 20000);
+    check(heldNote === 'Not sent: Canvas didn’t take your text. Try again.' && await p.evaluate(() => __submits.length === 0), `a draft Canvas couldn't save holds the press, nothing submitted, and the bar says why ("${heldNote}")`);
+    draftSave = { ms: 150, ok: true };
+    await typeIn(p, a2, ' Saved now.');
+    await until(() => p.evaluate(() => __drafts.length === 1 && !document.querySelector('[data-testid="submit-button"]').disabled), 'saved', 10000);
+    await a2Submit(p);
+    await until(() => p.evaluate(() => __submits.length >= 1), 'submitted', 15000);
+    a2Subs = await p.evaluate(() => __submits.slice());
+    check(a2Subs.length === 1 && squash(await a2Text(p, a2Subs[0].body)) === 'Kept here. Not saved yet. Saved now.', `once Canvas saves it, Submit sends Writer's text (${JSON.stringify(a2Subs)})`);
+    await p.close();
+
+    const sent = requests.filter((r) => r.method !== 'GET' && !r.answered);
+    check(sent.length === 0, `nothing but GETs and the stand-in's draft saves, answered here, left the page (${sent.map((r) => `${r.method} ${r.path}`).join(', ')})`);
     check(errors.length === 0, `no page errors (${errors.join('; ')})`);
     passed = true;
   } finally {

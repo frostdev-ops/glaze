@@ -24,7 +24,7 @@ const pageWorld = ({ major = '5' } = {}) => {
     const body = { innerHTML: '<p><br data-mce-bogus="1"></p>', contentEditable: 'true', getAttribute(k) { return k === 'contenteditable' ? this.contentEditable : null; }, get textContent() { return this.innerHTML.replace(/<[^>]*>/g, ''); } };
     const ed = {
       id: ta.id, initialized: true, removed: false, hidden: false, body,
-      getElement: () => ta, getBody: () => body, isHidden() { return this.hidden; },
+      getElement: () => ta, getBody: () => body, getContent: () => body.innerHTML, isHidden() { return this.hidden; },
       on: (names, fn) => { for (const n of names.split(' ')) handlers.push([n.toLowerCase(), fn]); },
       fire(name, args) { calls.push(['fire', ta.id, name]); for (const [n, fn] of handlers) if (n === name.toLowerCase()) fn(args || {}); },
       setContent(html) { calls.push(['setContent', ta.id, html]); body.innerHTML = html; this.fire('SetContent'); },
@@ -37,9 +37,9 @@ const pageWorld = ({ major = '5' } = {}) => {
   };
   const textarea = (id, extra = {}) => ({ id, tagName: 'TEXTAREA', disabled: false, attrs: { 'data-rich_text': 'true', ...extra.attrs }, modal: !!extra.modal, getAttribute(k) { return this.attrs[k] ?? null; },
     closest(sel) { return sel === '#compose-message-modal' && this.modal ? {} : null; } });
-  const areas = { 'gzw-1': textarea('submission_body'), 'gzw-2': textarea('question_input_0'), 'gzw-3': textarea('TextArea___0', { attrs: { 'data-rich_text': null, 'data-testid': 'message-body' }, modal: true }), 'gzw-4': textarea('elsewhere') };
+  const areas = { 'gzw-1': textarea('submission_body'), 'gzw-2': textarea('question_input_0'), 'gzw-3': textarea('TextArea___0', { attrs: { 'data-rich_text': null, 'data-testid': 'message-body' }, modal: true }), 'gzw-4': textarea('elsewhere'), 'gzw-5': textarea('textentry_text') };
   for (const [k, a] of Object.entries(areas)) a.attrs['data-gz-writer-id'] = k;
-  const editors = { submission_body: editor(areas['gzw-1']), question_input_0: editor(areas['gzw-2']), elsewhere: editor(textarea('elsewhere')) };
+  const editors = { submission_body: editor(areas['gzw-1']), question_input_0: editor(areas['gzw-2']), elsewhere: editor(textarea('elsewhere')), textentry_text: editor(areas['gzw-5']) };
   doc.querySelector = (sel) => { const m = /^textarea\[data-gz-writer-id="([^"]+)"\]$/.exec(sel); return m ? areas[m[1]] || null : null; };
   // The textarea's own value setter, as React's value tracker sees it; an input event the page hears.
   class HTMLTextAreaElement {}
@@ -60,7 +60,7 @@ const pageWorld = ({ major = '5' } = {}) => {
     doc.removeEventListener('gz-writer:done', hear);
     return got;
   };
-  return { run, ask, calls, editors, areas, changed, tinymce };
+  return { run, ask, calls, editors, areas, changed, tinymce, window: ctx.window };
 };
 
 test('set writes Canvas\'s dialect into the box\'s own editor as an edit Canvas hears, undoable, without touching focus', () => {
@@ -168,6 +168,91 @@ test('the Inbox: its lines through the textarea\'s own value setter and a bubbli
   p.areas['gzw-3'].disabled = true;
   assert.deepEqual(p.ask('canvas-set', { id: 'gzw-3', text: 'x' }), [{ id: 'gzw-3', ok: false }], 'translating');
   assert.deepEqual(p.calls, []);
+});
+
+// Assignments 2's Submit sends the draft Canvas saved (createSubmissionDraft, a second after the box's last change), never
+// the box itself (SubmissionManager.jsx submitAssignment, TextEntry.jsx saveSubmissionDraft; Apollo's HttpLink fetches
+// /api/graphql through the page's fetch as it is at each request). draft says whether that saved draft holds the box as it
+// is now: the last draft Canvas began saving since Writer first touched the box finished, unrefused, with exactly the box's
+// content; or nothing has changed since then and no save began.
+test('Assignments 2: draft says whether the draft Canvas saved, which its Submit sends, holds the box as it is now', async () => {
+  const p = pageWorld();
+  const fetches = [];
+  const original = p.window.fetch = function (input, init) {
+    let done;
+    const res = new Promise((r) => { done = r; });
+    fetches.push({ input, init, self: this, res, answer: (json, ok = true) => done({ ok, clone: () => ({ json: async () => json }) }), fail: () => done(Promise.reject(new TypeError('Failed to fetch'))) });
+    return res;
+  };
+  p.run();
+  assert.equal(p.window.fetch, original, 'the page\'s fetch is its own until an Assignments 2 box is asked about');
+  assert.deepEqual(p.ask('canvas-draft', { id: 'gzw-1' }), [{ id: 'gzw-1', ok: false }], 'a classic Text Entry has no server draft');
+  assert.equal(p.window.fetch, original);
+  const ed = p.editors.textentry_text;
+  ed.body.innerHTML = '<p>Saved draft</p>';
+  const kept = () => { const r = p.ask('canvas-draft', { id: 'gzw-5' }); assert.equal(r.length, 1); assert.equal(r[0].ok, true); return r[0].kept; };
+  assert.equal(kept(), true, 'opened on the draft Canvas loaded, nothing changed: it holds the box');
+  assert.notEqual(p.window.fetch, original, 'from then on Canvas\'s draft saves are seen');
+  const draft = (body, extra = {}) => p.window.fetch('/api/graphql', { method: 'POST', body: JSON.stringify({ operationName: 'CreateSubmissionDraft', variables: { id: 'U3VibWlzc2lvbi0x', activeSubmissionType: 'online_text_entry', attempt: 1, body, ...extra }, query: 'mutation CreateSubmissionDraft { x }' }) });
+  const saved = (body) => ({ data: { createSubmissionDraft: { submissionDraft: { body }, errors: null } } });
+  const settle = () => new Promise((r) => setImmediate(r));
+
+  p.ask('canvas-set', { id: 'gzw-5', html: '<p>Writer one</p>' });
+  assert.equal(kept(), false, 'Writer changed the box: no draft holds it yet');
+  const one = draft('<p>Writer one</p>');
+  assert.equal(fetches.at(-1).res, one, 'the page gets its own fetch\'s promise');
+  assert.equal(kept(), false, 'its save is on its way');
+  fetches.at(-1).answer(saved('<p>Writer one</p>'));
+  await settle();
+  assert.equal(kept(), true, 'saved with exactly the box\'s content');
+
+  p.ask('canvas-set', { id: 'gzw-5', html: '<p>Writer two</p>' });
+  assert.equal(kept(), false, 'a later change: the saved draft is the earlier one');
+  draft('<p>Writer two</p>');
+  const late = fetches.at(-1);
+  p.window.fetch('/api/graphql', { method: 'POST', body: JSON.stringify({ operationName: 'StudentViewQuery', variables: {}, query: 'query StudentViewQuery { x }' }) });
+  fetches.at(-1).answer({ data: {} });
+  await settle();
+  assert.equal(kept(), false, 'a query finishing is no draft');
+  p.ask('canvas-set', { id: 'gzw-5', html: '<p>Writer three</p>' });
+  draft('<p>Writer three</p>');
+  late.answer(saved('<p>Writer two</p>'));
+  await settle();
+  assert.equal(kept(), false, 'an earlier save finishing after a later one began is not the draft Submit will send');
+  fetches.at(-1).answer({ data: { createSubmissionDraft: { submissionDraft: null, errors: [{ message: 'no' }] } } });
+  await settle();
+  assert.equal(kept(), false, 'a save Canvas refused');
+  draft('<p>Writer three</p>');
+  fetches.at(-1).fail();
+  await settle();
+  assert.equal(kept(), false, 'a save that never arrived');
+  draft('<p>Writer three</p>');
+  fetches.at(-1).answer(saved('<p>Writer three</p>'), false);
+  await settle();
+  assert.equal(kept(), false, 'an HTTP error');
+  draft('<p>Writer three</p>', { activeSubmissionType: 'online_url' });
+  fetches.at(-1).answer(saved('<p>Writer three</p>'));
+  await settle();
+  assert.equal(kept(), false, 'another submission type\'s draft');
+  draft('<p>Writer three</p>');
+  fetches.at(-1).answer(saved('<p>Writer three</p>'));
+  await settle();
+  assert.equal(kept(), true, 'and saved at last');
+
+  // The page's other requests go through untouched, whatever their shape.
+  for (const [input, init] of [['/api/v1/courses'], [{ url: 'https://school.instructure.com/api/graphql' }, { method: 'POST', body: new Map() }], ['/api/graphql', { method: 'POST', body: '{not json' }], [undefined, undefined]]) {
+    const n = fetches.length, got = p.window.fetch.call('self', input, init);
+    assert.equal(fetches.length, n + 1);
+    assert.equal(fetches.at(-1).input, input);
+    assert.equal(fetches.at(-1).init, init);
+    assert.equal(fetches.at(-1).self, 'self');
+    assert.equal(got, fetches.at(-1).res);
+  }
+  assert.equal(kept(), true);
+  p.run();
+  const wrapped = p.window.fetch;
+  kept();
+  assert.equal(p.window.fetch, wrapped, 'watched once per document');
 });
 
 test('it runs once per document', () => {

@@ -232,14 +232,29 @@ test('its native editor is Canvas\'s, and it has no Ultra attempt pages', () => 
   assert.deepEqual(C.KINDS, ['assignment', 'reply', 'message', 'test', 'unknown']);
 });
 
-test('the surfaces Writer opens on now: classic assignments, replies, the Inbox and quiz essays; Assignments 2 waits for its step', () => {
+test('the surfaces Writer opens on: classic assignments, replies, the Inbox, quiz essays and Assignments 2', () => {
   const [assignment] = C.boxes(drawn(page('assignment')), { path: AT.assignment });
   const [reply] = C.boxes(drawn(page('discussion')), { path: AT.discussion });
   const [message] = C.boxes(page('inbox'), { path: AT.inbox });
   const [quiz] = C.boxes(drawn(page('quiz')), { path: AT.quiz });
   const [a2] = C.boxes(drawn(page('a2')), { path: AT.a2 });
-  assert.deepEqual([assignment, reply, message, quiz, a2].map((b) => [b.kind, C.live(b)]),
-    [['assignment', true], ['reply', true], ['message', true], ['test', true], ['assignment', false]]);
+  assert.deepEqual([assignment, reply, message, quiz, a2].map((b) => [b.kind, C.live?.(b) !== false]),
+    [['assignment', true], ['reply', true], ['message', true], ['test', true], ['assignment', true]]);
+});
+
+// Assignments 2's Submit sends the draft Canvas saved, not the box: its press waits until writer-main-canvas.js says that
+// draft holds the box as it is now (canvas-draft). Every other box's send reads the box itself.
+test('Assignments 2: Submit waits for Canvas\'s saved draft to hold the box; other boxes don\'t ask', () => {
+  const [a2] = C.boxes(drawn(page('a2')), { path: AT.a2 });
+  const [assignment] = C.boxes(drawn(page('assignment')), { path: AT.assignment });
+  const asked = [];
+  const main = (answers) => (op, m) => { asked.push([op, m]); return answers; };
+  assert.equal(C.kept({ ...assignment, id: 'gzw-a' }, main([])), true);
+  assert.deepEqual(asked, [], 'a classic Text Entry sends its box');
+  assert.equal(C.kept({ ...a2, id: 'gzw-b' }, main([{ id: 'gzw-b', ok: true, kept: true }])), true);
+  assert.deepEqual(asked, [['canvas-draft', { id: 'gzw-b' }]]);
+  for (const answers of [[], [{ id: 'gzw-b', ok: true, kept: false }], [{ id: 'gzw-b', ok: false }], [{ id: 'gzw-b', ok: true, kept: 'yes' }], [null]])
+    assert.equal(C.kept({ ...a2, id: 'gzw-b' }, main(answers)), false, JSON.stringify(answers));
 });
 
 // One question at a time, Canvas's Next and Previous record the answer (record_answer) as Submit Quiz does: each holds the
