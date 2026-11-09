@@ -229,3 +229,33 @@ test('its native editor is Canvas\'s, and it has no Ultra attempt pages', () => 
   assert.equal(C.attemptAt('/courses/36/quizzes/56/take'), null);
   assert.deepEqual(C.KINDS, ['assignment', 'reply', 'message', 'test', 'unknown']);
 });
+
+test('the surfaces Writer opens on now: classic assignments, replies and the Inbox; quiz essays and Assignments 2 wait for their steps', () => {
+  const [assignment] = C.boxes(drawn(page('assignment')), { path: AT.assignment });
+  const [reply] = C.boxes(drawn(page('discussion')), { path: AT.discussion });
+  const [message] = C.boxes(page('inbox'), { path: AT.inbox });
+  const [quiz] = C.boxes(drawn(page('quiz')), { path: AT.quiz });
+  const [a2] = C.boxes(drawn(page('a2')), { path: AT.a2 });
+  assert.deepEqual([assignment, reply, message, quiz, a2].map((b) => [b.kind, C.live(b)]),
+    [['assignment', true], ['reply', true], ['message', true], ['test', false], ['assignment', false]]);
+});
+
+test('a send on Canvas waits for the frame\'s last words; Insert from Canvas runs Canvas\'s own tools', () => {
+  assert.equal(C.HOLD, true);
+  assert.deepEqual(C.TOOLS, { image: 'mceInstructureImage', media: 'instructureRecord', document: 'mceInstructureDocuments', equation: 'instructureEquation', link: 'instructureTrayForCourseLinks' });
+});
+
+test('giving the box back focuses Canvas\'s editor: the RCE\'s frame body, or the Inbox\'s field', () => {
+  const body = drawn(page('assignment'));
+  const [box] = C.boxes(body, { path: AT.assignment });
+  const frame = body.querySelector('#submission_body_ifr'), seen = [];
+  frame.contentWindow = { focus: () => seen.push('window') };
+  frame.contentDocument.body.focus = () => seen.push('body');
+  C.focus(box.editor);
+  assert.deepEqual(seen, ['window', 'body']);
+  const [inbox] = C.boxes(page('inbox'), { path: AT.inbox });
+  let focused = 0;
+  inbox.editor.focus = () => focused++;
+  C.focus(inbox.editor);
+  assert.equal(focused, 1);
+});
