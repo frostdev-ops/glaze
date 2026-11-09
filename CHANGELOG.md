@@ -6,6 +6,10 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Glaze Writer on Canvas: a classic assignment's text entry box opens in Writer, in your Look. Submit waits until Canvas's editor holds exactly what you wrote and says so in Writer's bar if it doesn't; ⋯ → Canvas editor gives the box back, and ⋯ → Insert from Canvas adds an image, media, a document, an equation or a course link with Canvas's own tools. Settings → Writer → Glaze Writer turns it off on both sites.
+
 ### Changed
 
 - Canvas pages float on your Look's panels, as Blackboard's do: assignments, discussions, grades, pages, the syllabus, files, people, the inbox and settings. Header bars are rounded, and Canvas's editor and submission form wear your Look.
