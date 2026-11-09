@@ -2612,6 +2612,8 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     span: ['data-gz-color', 'data-gz-highlight', 'data-gz-caps'], ...Object.fromEntries(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((h) => [h, ['data-gz']])) };
 
   const tree = (html, o) => {
+    // An empty span.post_mention is where Canvas puts a reply's caret (DiscussionEdit's positionCursor), not a mention.
+    if (o.canvas) html = String(html ?? '').replace(/<span class="post_mention"><\/span>/g, '');
     const root = el('body'), stack = [{ e: root, src: 'body' }];
     let skip = null, depth = 0, at = 0, tokens = 0;
     const top = () => stack.at(-1).e;

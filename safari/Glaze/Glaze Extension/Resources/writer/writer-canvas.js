@@ -93,7 +93,9 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     if (!rules.every((r) => STYLE[tag]?.test(r)) || (tag === 'SPAN' && !rules.length)) return false;
     return tag !== 'A' || /^(https?:|mailto:|tel:\+?\d)/i.test(attrs.href || '');
   };
-  const editable = (html) => [...String(html ?? '').matchAll(/<([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g)].every((m) => tagOk(m[1].toUpperCase(), m[2]));
+  // An empty <span class="post_mention"> is where Canvas puts a reply's caret a second after the box opens (DiscussionEdit's
+  // positionCursor): bookkeeping, as TinyMCE's own is.
+  const editable = (html) => [...String(html ?? '').replace(/<span class="post_mention"><\/span>/g, '').matchAll(/<([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g)].every((m) => tagOk(m[1].toUpperCase(), m[2]));
   const canEdit = (ed) => plain(ed) ? !ed.disabled && !ed.readOnly && !ed.hasAttribute('disabled') && !ed.hasAttribute('readonly')
     : !!bodyOf(ed) && bodyOf(ed).getAttribute('contenteditable') !== 'false' && editable(read(ed).html);
 
@@ -135,6 +137,8 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
   const HOLD = true;
   // ⋯ → Insert from Canvas: the frame's tool → Canvas's command (writer-main-canvas.js TOOLS), run once the box is Canvas's.
   const TOOLS = Object.freeze({ image: 'mceInstructureImage', media: 'instructureRecord', document: 'mceInstructureDocuments', equation: 'instructureEquation', link: 'instructureTrayForCourseLinks' });
+  // A reply box opens to be written in: Canvas focuses its RCE a second after it is up, so Writer takes the caret as it opens.
+  const focuses = (kind) => kind === 'reply';
   // Where the Text Entry form says an empty box won't submit. Canvas then focuses its editor, which is hidden under Writer.
   const errorsOf = (ed) => (ed.id === 'submission_body' && ed.closest('form#submit_online_text_entry_form')?.querySelector('#body_errors')) || null;
   // Back to Canvas's editor: the caret into its frame's body (TinyMCE follows its focus), or the Inbox's field.
@@ -155,7 +159,7 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     return { editor, container: containerOf(editor), root: rootOf(editor), kind, mode: modeOf(kind), send: sendOf(editor, kind), context: contextOf(editor, kind), identity: identity(editor) };
   }).filter(Boolean);
 
-  return { EDITOR, INBOX, KINDS, NATIVE, HOLD, TOOLS, live, focus, errorsOf, boxes, kindOf, rootOf, containerOf, identity, sendOf, enabled, contextOf, canEdit, editable, read, write, watch, attemptAt, paragraphs, linesOf };
+  return { EDITOR, INBOX, KINDS, NATIVE, HOLD, TOOLS, live, focus, focuses, errorsOf, boxes, kindOf, rootOf, containerOf, identity, sendOf, enabled, contextOf, canEdit, editable, read, write, watch, attemptAt, paragraphs, linesOf };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_CANVAS;
 GZ_WRITER_CANVAS;

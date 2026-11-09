@@ -15,7 +15,8 @@
 //                 own: writer-paper.js; delta: its Quill ops, what the page writes into Ultra's editor), send (Mod-Enter),
 //                 native (back to Blackboard's editor; with a reason, the box holds what Writer can't keep and nothing was
 //                 written), insert { tool } (Canvas's image, media, document, equation or link tool, after the box goes back),
-//                 flushed { request, html }, offer (the copy offered was restored or dismissed); and the later parts' attachments, focus-mode, view { full, px, from, to }, room { on } and
+//                 flushed { request, html }, offer (the copy offered was restored or dismissed), blur (the frame lost the
+//                 focus); and the later parts' attachments, focus-mode, view { full, px, from, to }, room { on } and
 //                 submit:*; in view mode view:shown, view:failed and view:esc.
 // Besides that pass it asks the extension only for the student's Writer settings (writer/writer-settings.js); its later
 // parts keep the paper (writer/writer-papers.js) and ask for proofing and AI on their own channels.
@@ -273,6 +274,8 @@
     },
   };
 
+  // The focus leaving the frame: the page checks it didn't go to the site's hidden editor.
+  addEventListener('blur', () => { if (ed) say({ type: 'blur' }); });
   // One box per frame, and only with the one-use pass the page's Glaze got from the worker for this tab before it opened
   // the frame: a site that frames this page itself can't get one, since web pages can't message the worker.
   let taken = false;
