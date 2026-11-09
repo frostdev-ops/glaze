@@ -63,6 +63,9 @@ test('TinyMCE\'s frame body in: styled spans, padding indents, nested lists, its
   assert.equal(doc.child(2).child(1).attrs.indent, 1);
   assert.equal(S.text(doc).text, 'a u s\n\nx\ny');
   assert.equal(S.parse(K, '<p style="padding-left: 400px;">far</p>').firstChild.attrs.indent, 8, 'clamped');
+  // TinyMCE's getContent() writes an empty block as one no-break space: that is Canvas's empty paragraph, not a space.
+  assert.equal(out('<p>a</p>\n<p>&nbsp;</p>\n<h3>&nbsp;</h3>\n<ul><li>&nbsp;</li></ul>'), '<p>a</p><p><br></p><h3><br></h3><ul><li><br></li></ul>');
+  assert.equal(out('<p>&nbsp;x</p><p>&nbsp;&nbsp;</p>'), '<p>&nbsp;x</p><p>&nbsp;&nbsp;</p>', 'more than that is text');
 });
 
 test('Canvas\'s dialect round trips: what it writes reads back the same, and writes the same again', () => {
