@@ -175,8 +175,8 @@ const UNSEEN = [
   '.fc-event', '.fc-title', '.fc-time', '.fc-more', '.agenda-event__icon', '.agenda-event__title',
   // The Files app's preview overlay and a file's own preview frame (a local Canvas previews through Google's viewer).
   '#file-preview-iframe', '.ef-file-preview-frame', '.ef-file-preview-stretch', '.file_preview',
-  // The inbox's compose dialog (open: it is the old modal on other Canvas builds) and its fields.
-  '#compose-message-modal', '[data-testid="subject-input"]', '[data-testid="address-book-tag"]',
+  // A recipient chip in the inbox's compose dialog (canvas-writer-inbox.html has it open, with no recipient yet).
+  '[data-testid="address-book-tag"]',
   // Submission details, annotated and uploaded submissions, rubrics and outcomes the seed doesn't have.
   '.annotated-document-submission', '.file-upload-submission-table', '.rubric-title',
   '.wellBelowMasteryShader',

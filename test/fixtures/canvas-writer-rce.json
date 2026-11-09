@@ -1,0 +1,405 @@
+{
+  "note": "Glaze test fixture: facts read from each Canvas RCE surface on the local Canvas 1c9f0bb8 (seed: ~/Projects/canvas-lms/glaze/seed.rb) as the student, 2026-11-09, read-only (non-GET requests other than GraphQL queries aborted). quiz: practice quiz 56 (six essay questions) added locally for this capture, with one attempt started; a2: assignments_2_student turned on for course 36 for the capture, then off.",
+  "canvas": "1c9f0bb8",
+  "pages": {
+    "assignment": {
+      "url": "/courses/34/assignments/238",
+      "tinymce": {
+        "major": "5",
+        "minor": "10.9"
+      },
+      "editors": [
+        {
+          "id": "submission_body",
+          "target": "TEXTAREA",
+          "richText": "true",
+          "textareaClass": "",
+          "name": "submission[body]",
+          "testid": null,
+          "mode": "design",
+          "inline": false,
+          "iframe": true,
+          "wrapper": true,
+          "wrappers": 1,
+          "autosave": false,
+          "initialized": true,
+          "toolCommands": [
+            "instructure_image",
+            "instructure_record",
+            "instructure_documents",
+            "instructure_equation",
+            "instructure_links"
+          ]
+        }
+      ],
+      "questionInputs": 0,
+      "richTextAreas": 1,
+      "testids": {
+        "DiscussionEdit-submit": [],
+        "DiscussionEdit-container": [],
+        "message-body": [],
+        "send-button": [],
+        "submit-button": [],
+        "RCE_RestoreAutoSaveModal": [],
+        "text-editor": []
+      },
+      "submitForm": true,
+      "quizForm": false
+    },
+    "discussion": {
+      "url": "/courses/34/discussion_topics/80",
+      "tinymce": {
+        "major": "5",
+        "minor": "10.9"
+      },
+      "editors": [
+        {
+          "id": "message-body-root",
+          "target": "TEXTAREA",
+          "richText": "true",
+          "textareaClass": "input-block-level",
+          "name": "content",
+          "testid": "message-body",
+          "mode": "design",
+          "inline": false,
+          "iframe": true,
+          "wrapper": true,
+          "wrappers": 1,
+          "autosave": false,
+          "initialized": true,
+          "toolCommands": [
+            "instructure_image",
+            "instructure_record",
+            "instructure_documents",
+            "instructure_equation",
+            "instructure_links"
+          ]
+        }
+      ],
+      "questionInputs": 0,
+      "richTextAreas": 1,
+      "testids": {
+        "DiscussionEdit-submit": [
+          "BUTTON"
+        ],
+        "DiscussionEdit-container": [
+          "DIV"
+        ],
+        "message-body": [
+          "TEXTAREA"
+        ],
+        "send-button": [],
+        "submit-button": [],
+        "RCE_RestoreAutoSaveModal": [],
+        "text-editor": []
+      },
+      "submitForm": false,
+      "quizForm": false
+    },
+    "thread": {
+      "url": "/courses/34/discussion_topics/80",
+      "tinymce": {
+        "major": "5",
+        "minor": "10.9"
+      },
+      "editors": [
+        {
+          "id": "message-body-102",
+          "target": "TEXTAREA",
+          "richText": "true",
+          "textareaClass": "input-block-level",
+          "name": "content",
+          "testid": "message-body",
+          "mode": "design",
+          "inline": false,
+          "iframe": true,
+          "wrapper": true,
+          "wrappers": 1,
+          "autosave": false,
+          "initialized": true,
+          "toolCommands": [
+            "instructure_image",
+            "instructure_record",
+            "instructure_documents",
+            "instructure_equation",
+            "instructure_links"
+          ]
+        }
+      ],
+      "questionInputs": 0,
+      "richTextAreas": 1,
+      "testids": {
+        "DiscussionEdit-submit": [
+          "BUTTON"
+        ],
+        "DiscussionEdit-container": [
+          "DIV"
+        ],
+        "message-body": [
+          "TEXTAREA"
+        ],
+        "send-button": [],
+        "submit-button": [],
+        "RCE_RestoreAutoSaveModal": [],
+        "text-editor": []
+      },
+      "submitForm": false,
+      "quizForm": false
+    },
+    "announcement": {
+      "url": "/courses/34/discussion_topics/78",
+      "tinymce": {
+        "major": "5",
+        "minor": "10.9"
+      },
+      "editors": [
+        {
+          "id": "message-body-root",
+          "target": "TEXTAREA",
+          "richText": "true",
+          "textareaClass": "input-block-level",
+          "name": "content",
+          "testid": "message-body",
+          "mode": "design",
+          "inline": false,
+          "iframe": true,
+          "wrapper": true,
+          "wrappers": 1,
+          "autosave": false,
+          "initialized": true,
+          "toolCommands": [
+            "instructure_image",
+            "instructure_record",
+            "instructure_documents",
+            "instructure_equation",
+            "instructure_links"
+          ]
+        }
+      ],
+      "questionInputs": 0,
+      "richTextAreas": 1,
+      "testids": {
+        "DiscussionEdit-submit": [
+          "BUTTON"
+        ],
+        "DiscussionEdit-container": [
+          "DIV"
+        ],
+        "message-body": [
+          "TEXTAREA"
+        ],
+        "send-button": [],
+        "submit-button": [],
+        "RCE_RestoreAutoSaveModal": [],
+        "text-editor": []
+      },
+      "submitForm": false,
+      "quizForm": false
+    },
+    "inbox": {
+      "url": "/conversations",
+      "tinymce": {
+        "major": "5",
+        "minor": "10.9"
+      },
+      "editors": [],
+      "questionInputs": 0,
+      "richTextAreas": 0,
+      "testids": {
+        "DiscussionEdit-submit": [],
+        "DiscussionEdit-container": [],
+        "message-body": [
+          "TEXTAREA"
+        ],
+        "send-button": [
+          "BUTTON"
+        ],
+        "submit-button": [],
+        "RCE_RestoreAutoSaveModal": [],
+        "text-editor": []
+      },
+      "submitForm": false,
+      "quizForm": false
+    },
+    "quiz": {
+      "url": "/courses/36/quizzes/56/take",
+      "tinymce": {
+        "major": "5",
+        "minor": "10.9"
+      },
+      "editors": [
+        {
+          "id": "question_input_0",
+          "target": "TEXTAREA",
+          "richText": "true",
+          "textareaClass": "question_input",
+          "name": "question_442",
+          "testid": null,
+          "mode": "design",
+          "inline": false,
+          "iframe": true,
+          "wrapper": true,
+          "wrappers": 5,
+          "autosave": false,
+          "initialized": true,
+          "toolCommands": [
+            "instructure_image",
+            "instructure_record",
+            "instructure_documents",
+            "instructure_equation",
+            "instructure_links"
+          ]
+        },
+        {
+          "id": "question_input_1",
+          "target": "TEXTAREA",
+          "richText": "true",
+          "textareaClass": "question_input",
+          "name": "question_443",
+          "testid": null,
+          "mode": "design",
+          "inline": false,
+          "iframe": true,
+          "wrapper": true,
+          "wrappers": 5,
+          "autosave": false,
+          "initialized": true,
+          "toolCommands": [
+            "instructure_image",
+            "instructure_record",
+            "instructure_documents",
+            "instructure_equation",
+            "instructure_links"
+          ]
+        },
+        {
+          "id": "question_input_2",
+          "target": "TEXTAREA",
+          "richText": "true",
+          "textareaClass": "question_input",
+          "name": "question_444",
+          "testid": null,
+          "mode": "design",
+          "inline": false,
+          "iframe": true,
+          "wrapper": true,
+          "wrappers": 5,
+          "autosave": false,
+          "initialized": true,
+          "toolCommands": [
+            "instructure_image",
+            "instructure_record",
+            "instructure_documents",
+            "instructure_equation",
+            "instructure_links"
+          ]
+        },
+        {
+          "id": "question_input_3",
+          "target": "TEXTAREA",
+          "richText": "true",
+          "textareaClass": "question_input",
+          "name": "question_445",
+          "testid": null,
+          "mode": "design",
+          "inline": false,
+          "iframe": true,
+          "wrapper": true,
+          "wrappers": 5,
+          "autosave": false,
+          "initialized": true,
+          "toolCommands": [
+            "instructure_image",
+            "instructure_record",
+            "instructure_documents",
+            "instructure_equation",
+            "instructure_links"
+          ]
+        },
+        {
+          "id": "question_input_4",
+          "target": "TEXTAREA",
+          "richText": "true",
+          "textareaClass": "question_input",
+          "name": "question_446",
+          "testid": null,
+          "mode": "design",
+          "inline": false,
+          "iframe": true,
+          "wrapper": true,
+          "wrappers": 5,
+          "autosave": false,
+          "initialized": true,
+          "toolCommands": [
+            "instructure_image",
+            "instructure_record",
+            "instructure_documents",
+            "instructure_equation",
+            "instructure_links"
+          ]
+        }
+      ],
+      "questionInputs": 5,
+      "richTextAreas": 5,
+      "testids": {
+        "DiscussionEdit-submit": [],
+        "DiscussionEdit-container": [],
+        "message-body": [],
+        "send-button": [],
+        "submit-button": [],
+        "RCE_RestoreAutoSaveModal": [],
+        "text-editor": []
+      },
+      "submitForm": false,
+      "quizForm": true
+    },
+    "a2": {
+      "url": "/courses/36/assignments/253",
+      "tinymce": {
+        "major": "5",
+        "minor": "10.9"
+      },
+      "editors": [
+        {
+          "id": "textentry_text",
+          "target": "TEXTAREA",
+          "richText": "true",
+          "textareaClass": "input-block-level",
+          "name": "content",
+          "testid": null,
+          "mode": "design",
+          "inline": false,
+          "iframe": true,
+          "wrapper": true,
+          "wrappers": 1,
+          "autosave": false,
+          "initialized": true,
+          "toolCommands": [
+            "instructure_image",
+            "instructure_record",
+            "instructure_documents",
+            "instructure_equation",
+            "instructure_links"
+          ]
+        }
+      ],
+      "questionInputs": 0,
+      "richTextAreas": 1,
+      "testids": {
+        "DiscussionEdit-submit": [],
+        "DiscussionEdit-container": [],
+        "message-body": [],
+        "send-button": [],
+        "submit-button": [
+          "BUTTON"
+        ],
+        "RCE_RestoreAutoSaveModal": [],
+        "text-editor": [
+          "DIV"
+        ]
+      },
+      "submitForm": false,
+      "quizForm": false
+    }
+  }
+}
