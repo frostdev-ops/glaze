@@ -446,6 +446,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (group.some((box) => box.flushWait || box.sending)) return; // pressed again: the first press goes on
     const pending = new Set(group), failed = new Set(), destinations = new Map(group.map((box) => [box, orphanKey(box, X.draftAt(box.editor))]));
     const still = (box) => boxes.get(box.editor) === box && sameBox(box) && holds(box, b) && orphanKey(box, X.draftAt(box.editor)) === destinations.get(box);
+    // Until the first frame is ready, Canvas's visible editor owns edits. A recovering frame still owns its buffered copy.
+    const syncCurrent = (box) => sync(box, !box.ready && !box.recovered && !box.snapshot ? A().read(box.editor).html : box.latest, null);
     const settle = (box, ok) => {
       if (!pending.delete(box)) return;
       if (!ok) failed.add(box);
@@ -453,13 +455,14 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       for (const x of failed) x.port?.postMessage({ type: 'held' });
       if (failed.size || !b.isConnected || !A().enabled(b) || !group.every(still)) return;
       // An earlier frame can edit again while another is answering. Its native copy must still hold the current text.
-      for (const x of group) if (!sync(x, x.latest, null)) { x.port?.postMessage({ type: 'held' }); return; }
+      for (const x of group) if (!syncCurrent(x)) { x.port?.postMessage({ type: 'held' }); return; }
+      if (!b.isConnected || !A().enabled(b) || !group.every(still)) return;
       for (const x of group) { remember(x); globalThis.GZ_DRAFT_UI?.sent?.(x.editor); if (SENDS.has(x.kind)) x.sending = true; }
       try { passing = b; b.click(); } finally { passing = null; }
     };
     for (const box of group) {
       const go = (ok) => { clearTimeout(box.flushWait?.timer); box.flushWait = null; settle(box, ok); };
-      if (!box.ready || !box.port) { go(sync(box, box.latest, null)); continue; }
+      if (!box.ready || !box.port) { go(syncCurrent(box)); continue; }
       const request = crypto.randomUUID();
       box.flushWait = { request, go, at: Date.now(), timer: setTimeout(() => { if (box.flushWait?.request === request) go(false); }, FLUSH_WAIT) };
       box.port.postMessage({ type: 'flush', request });
