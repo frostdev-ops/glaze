@@ -2,7 +2,8 @@
 // copy of the extension that holds the local host. Mac only (CLAUDE.md: Canvas browser runs on the Mac, one at a time, under
 // lockf). Signs in, then aborts every request that isn't a GET or a GraphQL query: nothing typed here reaches Canvas. Each
 // send is pressed for real and its aborted request read back: the classic assignment's form POST (submission[body]) must
-// hold exactly Writer's text, and so must each reply's createDiscussionEntry (a topic's, a thread's, an announcement's).
+// hold exactly Writer's text, and so must each reply's createDiscussionEntry (a topic's, a thread's, an announcement's) and
+// a new Inbox message's createConversation.
 // WRITER_SHOTS names where the screenshots go (a light and a dark Look each surface).
 //   NODE_PATH=… PLAYWRIGHT_BROWSERS_PATH=… nice -n 10 lockf -k /private/tmp/claude-501/glaze-heavy.lock node checks/writer/writer-canvas-live-check.js [evidence directory]
 const { chromium } = require('playwright');
@@ -78,6 +79,7 @@ const textOf = (p, html) => p.evaluate((h) => new DOMParser().parseFromString(h,
     const shot = async (p, el, name) => {
       fs.mkdirSync(shots, { recursive: true });
       await el.scrollIntoViewIfNeeded();
+      await p.mouse.move(1, 1); // no hover tooltip over the frame
       const r = await el.evaluate((e) => { const b = (e.closest('form, [data-testid="DiscussionEdit-container"], #compose-message-modal [role="dialog"], #compose-message-modal') || e).getBoundingClientRect(); return { x: Math.max(0, b.left - 16), y: Math.max(0, b.top - 16), width: Math.min(innerWidth, b.width + 32), height: Math.min(innerHeight, b.height + 32) }; });
       const f = path.join(shots, name);
       await p.screenshot({ path: f, clip: r });
@@ -171,6 +173,32 @@ const textOf = (p, html) => p.evaluate((h) => new DOMParser().parseFromString(h,
         await p.locator('[data-testid="DiscussionEdit-cancel"]').first().click().catch(() => {});
         await until(() => p.evaluate(() => !document.querySelector('iframe.gz-writer[data-gz-writer-frame="reply"]')), 'Writer gone with Cancel');
         check(true, 'Cancel takes the box and Writer with it');
+      }
+      await p.close();
+    }
+
+    // ---- the Inbox: a new message in Writer; Send's createConversation holds exactly Writer's lines ----
+    for (const preset of ['Paper', 'Midnight']) {
+      await wear(preset);
+      const p = await open('/conversations');
+      await p.click('[data-testid="compose"]');
+      const m = await box(p, 'message');
+      check(await m.fr.evaluate(() => document.documentElement.dataset.dialect === 'plain'), `Inbox (${preset}): a new message opens in Writer, as plain text`);
+      await p.click('input[data-testid="course-select-modal"]');
+      await p.locator('[role="option"]', { hasText: 'College Writing' }).first().click();
+      await p.click('input[data-testid="compose-modal-header-address-book-input"]');
+      await p.keyboard.type('Avery', { delay: 20 });
+      await p.locator('[role="menuitem"]', { hasText: 'Avery Chen' }).first().click();
+      await p.fill('input[data-testid="subject-input"]', 'Lab question');
+      const words = preset === 'Midnight' ? 'A dark Look in the Inbox.' : 'Hello Avery,\nCould we go over the lab write-up on Thursday?';
+      await typeIn(p, m, words);
+      await shot(p, m.el, `inbox-${preset.toLowerCase()}.png`);
+      if (preset === 'Paper') {
+        const typed = await writerText(m), from = blocked.length;
+        await p.click('[data-testid="send-button"]');
+        const sent = await until(() => blocked.slice(from).find((b) => b.path === '/api/graphql' && /createConversation|addConversationMessage/i.test(b.body)), 'createConversation, aborted');
+        const body = JSON.parse(sent.body).variables?.body;
+        check(body === typed && body === 'Hello Avery,\nCould we go over the lab write-up on Thursday?', `the blocked createConversation's body is Writer's lines (${JSON.stringify(body)})`);
       }
       await p.close();
     }
