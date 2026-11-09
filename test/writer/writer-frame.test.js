@@ -425,3 +425,31 @@ test('frame: a flush answers with the document as it is now; a held send says wh
   ed.opts.onChange({ html: '<p>x</p>', text: 'x', words: 1, docChanged: true });
   assert.equal(note.hidden, true, 'the next edit clears it');
 });
+
+test('frame: a copy Glaze kept is offered at the top: Restore puts it in and tells the page; Dismiss only tells it', async () => {
+  for (const restore of [true, false]) {
+    const f = frame({ host: 'https://school.instructure.com' });
+    const p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+    f.to(p, { ...CANVAS, html: '<p><br></p>', offer: { html: '<p>Kept words</p>', text: 'Glaze kept a copy of what you wrote here (5 minutes ago).' } });
+    const bar = f.doc.getElementById('gw').querySelector('.gw-offer');
+    assert.ok(bar, 'the offer');
+    assert.equal(bar.querySelector('span').textContent, 'Glaze kept a copy of what you wrote here (5 minutes ago).');
+    const [yes, no] = bar.querySelectorAll('button');
+    assert.deepEqual([yes.textContent, no.textContent], ['Restore', 'Dismiss']);
+    p.sent.length = 0;
+    (restore ? yes : no).dispatchEvent({ type: 'click' });
+    const [ed] = f.made;
+    if (restore) {
+      assert.deepEqual(ed.set, ['<p>Kept words</p>']);
+      assert.deepEqual(p.sent.map((m) => m.type), ['change', 'change', 'offer'], 'the stand-in reports its own change; the page hears the restored document, then the offer settled');
+      assert.equal(p.sent[1].html, '<p>Kept words</p>');
+    } else {
+      assert.deepEqual(ed.set, []);
+      assert.deepEqual(p.sent, [{ type: 'offer' }]);
+    }
+    assert.equal(bar.isConnected ?? !!bar.parentNode, false, 'the offer goes');
+  }
+  const f = frame({ host: 'https://school.instructure.com' }), p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+  f.to(p, { ...CANVAS, offer: { html: 7, text: 'x' } });
+  assert.equal(f.doc.getElementById('gw').querySelector('.gw-offer'), null, 'no offer without its document');
+});
