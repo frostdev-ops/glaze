@@ -168,7 +168,7 @@ const frame = ({ claim = true, host = 'https://school.blackboard.com', readyStat
   doc.querySelector = (s) => doc.root.querySelector(s);
   doc.addEventListener = () => {};
   doc.createElement = (t) => new El(t, doc);
-  const listeners = [], loads = [], ticks = [], asked = [], made = [], announced = [];
+  const listeners = [], loads = [], ticks = [], asked = [], made = [], announced = [], lost = [];
   const editor = (opts) => {
     let html = opts.html;
     const ed = { opts, set: [], focused: 0, view: { state: { doc: 'the doc' } }, html: () => html, words: () => (html.replace(/<[^>]*>/g, ' ').match(/\S+/g) || []).length, setHTML: (h) => { ed.set.push(h); html = h; opts.onChange({ html: h, text: h, words: 1, docChanged: true }); }, focus: () => { ed.focused++; }, run: () => true, active: () => ({}) };
@@ -185,7 +185,7 @@ const frame = ({ claim = true, host = 'https://school.blackboard.com', readyStat
     chrome: { runtime: { sendMessage: async (m) => { asked.push(m); return { ok: claim }; } } },
     GZ_WRITER_EDITOR: { create: editor },
     // writer/writer-schema.js as the frame uses it: compose's ops for a doc, and what a box holds that compose can't keep.
-    GZ_WRITER_SCHEMA: { compose: 'compose', paper: 'paper', delta: (doc) => [{ insert: `ops of ${doc}\n` }], loses: (schema, h) => [...(/class="attachment"/.test(h) ? ['attachment'] : []), ...(h.length > 5000 ? ['limit'] : [])] },
+    GZ_WRITER_SCHEMA: { compose: 'compose', paper: 'paper', canvas: 'canvas', plain: 'plain', delta: (doc) => [{ insert: `ops of ${doc}\n` }], loses: (schema, h) => { lost.push(schema); return [...(/class="attachment"/.test(h) ? ['attachment'] : []), ...(h.length > 5000 ? ['limit'] : [])]; } },
   });
   ctx.globalThis = ctx;
   vm.runInContext(read('core/i18n.js'), ctx);
@@ -195,7 +195,7 @@ const frame = ({ claim = true, host = 'https://school.blackboard.com', readyStat
   const to = (p, m) => p.onmessage({ data: m });
   const loaded = () => { for (const f of loads) f(); };
   const tick = () => { for (const f of ticks.splice(0)) f(); };
-  return { doc, hand, to, asked, made, ctx, announced, loaded, tick };
+  return { doc, hand, to, asked, made, ctx, announced, loaded, tick, lost };
 };
 const INIT = { type: 'init', mode: 'compose', kind: 'reply', html: '<p>Hi there</p>', placeholder: 'Type a reply', context: { post: { id: '_201_1' } }, locale: 'en',
   look: { tokens: { '--gz-accent': '#17c8f4', '--gz-font': '"Glaze Inter", sans-serif', '--gz-bad': 'url(https://x.test/a)', '--other': 'red', '--gz-ink': 'red;}body{' }, dark: true, motion: 'off' } };
@@ -361,4 +361,67 @@ test('page world: attachment filenames and Markdown append as literal Quill text
   assert.equal(p.ask('append', JSON.stringify({ id: 'gzw-1', text }))[0].ok, true);
   assert.deepEqual(JSON.parse(JSON.stringify(updates)), [{ ops: [{ retain: 15 }, { insert: `\n${text}\n` }], source: 'user' }]);
   assert.equal(p.calls.length, 0, 'no clipboard conversion or HTML parsing');
+});
+
+// ---- Canvas: init's site picks the dialect, ⋯'s words and its Insert from Canvas --------------------------------------
+const CANVAS = { ...INIT, site: 'canvas', kind: 'assignment', html: '<p>Hi there</p>', context: {} };
+const menuItems = (f) => f.doc.getElementById('menu').querySelectorAll('[role="menuitem"]').map((b) => b.textContent);
+
+test('frame: Canvas compose is Canvas\'s dialect: its editor, its check, no Quill ops, ⋯ → Canvas editor and Insert from Canvas', async () => {
+  const f = frame({ host: 'https://school.instructure.com' });
+  const p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+  f.to(p, CANVAS);
+  const [ed] = f.made;
+  assert.deepEqual([ed.opts.mode, ed.opts.dialect], ['compose', 'canvas']);
+  assert.deepEqual(f.lost, ['canvas'], 'what the box holds is checked against Canvas\'s dialect');
+  assert.equal(f.doc.root.dataset.site, 'canvas');
+  assert.deepEqual(menuItems(f), ['Canvas editor', 'Image', 'Media', 'Document', 'Equation', 'Course link']);
+  assert.equal(f.doc.getElementById('menu').querySelector('[data-insert-head]').textContent, 'Insert from Canvas');
+  p.sent.length = 0;
+  ed.opts.onChange({ html: '<p>Hi there, Jordan</p>', text: 'Hi there, Jordan', words: 3, docChanged: true });
+  assert.deepEqual(p.sent, [{ type: 'change', html: '<p>Hi there, Jordan</p>', text: 'Hi there, Jordan', words: 3, delta: null }], 'no Quill ops on Canvas');
+  p.sent.length = 0;
+  const items = f.doc.getElementById('menu').querySelectorAll('[data-insert]');
+  for (const b of items) b.dispatchEvent({ type: 'click' });
+  assert.deepEqual(p.sent, ['image', 'media', 'document', 'equation', 'link'].map((tool) => ({ type: 'insert', tool })));
+});
+
+test('frame: the Inbox is plain text: its schema, no Insert, Canvas editor in ⋯', async () => {
+  const f = frame({ host: 'https://school.instructure.com' });
+  const p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+  f.to(p, { ...CANVAS, mode: 'plain', kind: 'message' });
+  const [ed] = f.made;
+  assert.deepEqual([ed.opts.mode, ed.opts.dialect, f.doc.root.dataset.mode, f.doc.root.dataset.dialect], ['compose', 'plain', 'compose', 'plain']);
+  assert.deepEqual(f.lost, ['plain']);
+  assert.deepEqual(menuItems(f), ['Canvas editor']);
+  p.sent.length = 0;
+  ed.opts.onChange({ html: '<p>Hello</p>', text: 'Hello', words: 1, docChanged: true });
+  assert.deepEqual(p.sent.map((m) => [m.type, m.delta]), [['change', null]], 'plain text goes to the page as compose\'s does');
+});
+
+test('frame: Ultra\'s box keeps Blackboard editor and no Insert from Canvas', async () => {
+  const f = frame(), p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+  f.to(p, INIT);
+  assert.deepEqual([f.made[0].opts.dialect, f.lost], [null, ['compose']]);
+  assert.deepEqual(menuItems(f), ['Blackboard editor']);
+});
+
+test('frame: a flush answers with the document as it is now; a held send says why in the bar until the next edit', async () => {
+  const f = frame({ host: 'https://school.instructure.com' });
+  const p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+  f.to(p, CANVAS);
+  const [ed] = f.made;
+  ed.setHTML('<p>The last words</p>');
+  p.sent.length = 0;
+  f.to(p, { type: 'flush', request: 'r-1' });
+  assert.deepEqual(p.sent, [{ type: 'flushed', request: 'r-1', html: '<p>The last words</p>' }]);
+  f.to(p, { type: 'flush', request: 7 });
+  assert.equal(p.sent.length, 1, 'a request is a string');
+  const note = f.doc.getElementById('note');
+  assert.equal(note.hidden, true);
+  f.to(p, { type: 'held' });
+  assert.equal(note.hidden, false);
+  assert.equal(note.textContent, 'Not sent: Canvas didn’t take your text. Try again.');
+  ed.opts.onChange({ html: '<p>x</p>', text: 'x', words: 1, docChanged: true });
+  assert.equal(note.hidden, true, 'the next edit clears it');
 });
