@@ -9,7 +9,7 @@ var GZ_RCE_INK = globalThis.GZ_RCE_INK || (() => {
   if (!ctx) return null;
   const ID = 'gz-rce-ink';
   const FRAMES = 'iframe.tox-edit-area__iframe';
-  const VARS = ['--gz-surface', '--gz-surface-paint', '--gz-ink', '--gz-ink-faint', '--gz-accent', '--gz-accent-soft'];
+  const VARS = ['--gz-surface', '--gz-surface-paint', '--gz-surface-color', '--gz-surface-tint-strength', '--gz-surface-course', '--gz-surface-course-weight', '--gz-ink', '--gz-ink-faint', '--gz-accent', '--gz-accent-soft'];
   const html = document.documentElement;
   const known = new Set();
   let active = false, watch = null, frame = 0, key = '', css = '';

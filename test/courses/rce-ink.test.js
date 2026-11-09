@@ -24,6 +24,7 @@ const iframe = () => {
 };
 
 const load = ({ dark = true, frames = [iframe()] } = {}) => {
+  const palette = { ...PALETTE };
   const vars = { '--gz-surface': '#0d1b2e', '--gz-ink': '#e6edf5', '--gz-accent': '#17c8f4' };
   const attrs = new Set(dark ? ['data-gz-dark-theme'] : []);
   const html = { style: { getPropertyValue: (v) => vars[v] || '' }, hasAttribute: (a) => attrs.has(a) };
@@ -40,7 +41,7 @@ const load = ({ dark = true, frames = [iframe()] } = {}) => {
       },
     },
     frames,
-    getComputedStyle: (probe) => { reads++; return { get color() { return PALETTE[probe.style.color.replace(/^var\((.*)\)$/, '$1')] || 'rgb(0, 0, 0)'; } }; },
+    getComputedStyle: (probe) => { reads++; return { get color() { return palette[probe.style.color.replace(/^var\((.*)\)$/, '$1')] || 'rgb(0, 0, 0)'; } }; },
     MutationObserver: class { constructor(fn) { this.fn = fn; this.on = false; observers.push(this); } observe() { this.on = true; } disconnect() { this.on = false; } },
     requestAnimationFrame: (fn) => { rafs.push(fn); return rafs.length; },
     cancelAnimationFrame: () => { rafs = []; },
@@ -52,7 +53,7 @@ const load = ({ dark = true, frames = [iframe()] } = {}) => {
   const ui = vm.runInContext(read('courses/page/rce-ink.js'), c);
   const tick = () => { const run = rafs; rafs = []; for (const f of run) f(); };
   const ink = (f) => f.contentDocument.getElementById('gz-rce-ink');
-  return { c, ui, html, vars, attrs, observers, tick, ink, reads: () => reads };
+  return { c, ui, html, vars, palette, attrs, observers, tick, ink, reads: () => reads };
 };
 
 test('each editor frame gets the palette as values, last in its head', () => {
@@ -106,6 +107,20 @@ test('a frame TinyMCE writes anew gets the style back on its load', () => {
   for (const fn of f.listeners.load) fn();
   tick();
   assert.ok(ink(f), 'back after the frame loaded');
+});
+
+test('custom surface paint updates even when the base palette stays the same', () => {
+  // looks/page/surfaces.css derives --gz-surface-paint from these inputs; it is not an inline value on html.
+  for (const token of ['--gz-surface-color', '--gz-surface-tint-strength', '--gz-surface-course', '--gz-surface-course-weight']) {
+    const { ui, c, vars, palette, observers, tick, ink, reads } = load();
+    ui.sync();
+    const first = reads();
+    vars[token] = token.endsWith('strength') || token.endsWith('weight') ? '25%' : '#341234';
+    palette['--gz-surface-paint, var(--gz-surface)'] = 'rgb(52, 18, 52)';
+    observers[0].fn(); tick();
+    assert.ok(reads() > first, `${token}: resolve the changed paint`);
+    assert.match(ink(c.frames[0]).textContent, /background:rgb\(52, 18, 52\)/, token);
+  }
 });
 
 test('Glaze stopping, or leaving the page, takes the style out and stops watching', () => {
