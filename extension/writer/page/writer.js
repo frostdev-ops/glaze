@@ -401,7 +401,10 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const send = (box, until = Date.now() + 1000) => {
     if (Date.now() >= until || box.sending || box.retry || box.path !== location.pathname || !SENDS.has(box.kind) || A().kindOf(box.editor, { path: location.pathname }) !== box.kind || !sync(box, box.latest)) return;
     const b = A().sendOf(box.editor, box.kind);
-    if (b?.isConnected && A().enabled(b)) { remember(box); globalThis.GZ_DRAFT_UI?.sent?.(box.editor); box.sending = true; b.click(); }
+    if (b?.isConnected && A().enabled(b)) {
+      if (A().HOLD) { holdSend(box, b); return; }
+      remember(box); globalThis.GZ_DRAFT_UI?.sent?.(box.editor); box.sending = true; b.click();
+    }
     else if (box.text) box.retry = setTimeout(() => { box.retry = null; if (boxes.get(box.editor) === box) send(box, until); }, 60);
   };
   // A compact native action must read the frame's current document, not merely its last delivered change. The frame
@@ -434,7 +437,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // doesn't take the text, nothing is sent and the frame's bar says so.
   const FLUSH_WAIT = 3000;
   const holdSend = (box, b) => {
-    if (box.flushWait) return; // pressed again: the first press goes on
+    if (box.flushWait || box.sending) return; // pressed again: the first press goes on
     const go = (ok) => {
       clearTimeout(box.flushWait?.timer);
       box.flushWait = null;
