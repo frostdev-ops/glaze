@@ -6,6 +6,10 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Typing `/` with a switch or choice focused opens Settings search again.
+
 ## [4.0.6] — 2026-11-09
 
 ### Changed

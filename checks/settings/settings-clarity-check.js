@@ -38,6 +38,8 @@ const check = async (name, run) => { try { await run(); results.push({ name, ok:
       await page.locator('h2').first().focus().catch(() => {});
       await page.locator('.brand').click(); await page.keyboard.press('/');
       assert.equal(await page.evaluate(() => document.activeElement.id), 'find');
+      await open('look/motion'); await page.locator('input[name="motion.level"][value="subtle"]').focus(); await page.keyboard.press('/');
+      assert.equal(await page.evaluate(() => document.activeElement.id), 'find', 'from a motion choice');
     });
     await check('Frost is a complete theme and survives reopening', async () => {
       await open('look/palette'); await page.locator('#looks .look[data-look="Synthwave"]').click();

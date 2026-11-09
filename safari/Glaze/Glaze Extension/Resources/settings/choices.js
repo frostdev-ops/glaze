@@ -10,8 +10,11 @@ var GZ_CHOICES = globalThis.GZ_CHOICES || (() => {
   // Frost restores the whole default Look, keeping the student's automatic light/dark preference as setup always has.
   const theme = (s, L) => { const { auto, ...rest } = D.GZ_LOOK_APPLY(s, L); return L === OWN ? rest : { auto, ...rest }; };
   const themes = (list) => [{ id: OWN.name, name: OWN.name, kind: 'builtin', ...OWN, L: OWN }, ...list];
+  // A switch, a choice or a button takes no text, so / still searches from it.
+  const NO_TEXT = new Set(['checkbox', 'radio', 'range', 'color', 'button', 'submit', 'reset', 'file', 'image']);
+  const typing = (el) => !!el && !(el.tagName === 'INPUT' && NO_TEXT.has(String(el.type).toLowerCase()));
   const shortcut = (e) => e.key === '/' && !e.defaultPrevented && !e.isComposing && !e.ctrlKey && !e.metaKey && !e.altKey
-    && !e.target?.closest?.('input, select, textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"]');
+    && !typing(e.target?.closest?.('input, select, textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"]'));
   const themeArt = (make) => {
     const art = make('span', { className: 'mock' }, make('i', { className: 'sky' }), make('i', { className: 'side' }),
       make('i', { className: 'card' }, make('b'), make('b'), make('b')), make('i', { className: 'pill' }));
