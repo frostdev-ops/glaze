@@ -260,7 +260,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     clearTimeout(box.wait);
     box.unhello?.();
     box.unhello = null;
-    const ed = box.editor, f = box.frame, typing = box.root.contains(document.activeElement);
+    const ed = box.editor, f = box.frame, typing = box.root.contains(document.activeElement) || !!A().focuses?.(box.kind);
     const l = look();
     worn = JSON.stringify(l);
     const native = A().read(ed);
