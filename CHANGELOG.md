@@ -11,6 +11,7 @@ All notable changes to Glaze are documented here. The format follows
 - Glaze Writer on Canvas: a classic assignment's text entry box opens in Writer, in your Look. Submit waits until Canvas's editor holds exactly what you wrote and says so in Writer's bar if it doesn't; ⋯ → Canvas editor gives the box back, and ⋯ → Insert from Canvas adds an image, media, a document, an equation or a course link with Canvas's own tools. Settings → Writer → Glaze Writer turns it off on both sites.
 - Writer on Canvas in discussion and announcement replies, a topic's or a thread's: the box opens with the caret in Writer, Reply and Ctrl/Cmd+Enter send exactly what you wrote, and Canvas's Attach and Cancel stay where they are.
 - Writer in the Canvas Inbox, as plain text: a new message opens in Writer, Canvas's signature shows as it arrives, Send and Ctrl/Cmd+Enter send exactly your lines, and the Inbox's draft backup goes on keeping your message.
+- Writer on a Canvas quiz's essay questions, with AI off and proofing on: each answer goes into Canvas as you type, so its autosave and its timer have it, and Submit Quiz, Next and Previous wait for every essay's last words.
 - Writer on Canvas keeps what you write on this device beside Canvas's own autosave. Canvas's restore question still comes first; a box that opens empty offers Glaze's copy back in Writer (Restore or Dismiss), unless Canvas already has that text as your submission or post.
 
 ### Changed
