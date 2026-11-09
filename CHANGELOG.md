@@ -9,6 +9,7 @@ All notable changes to Glaze are documented here. The format follows
 ### Added
 
 - Glaze Writer on Canvas: a classic assignment's text entry box opens in Writer, in your Look. Submit waits until Canvas's editor holds exactly what you wrote and says so in Writer's bar if it doesn't; ⋯ → Canvas editor gives the box back, and ⋯ → Insert from Canvas adds an image, media, a document, an equation or a course link with Canvas's own tools. Settings → Writer → Glaze Writer turns it off on both sites.
+- Writer on Canvas keeps what you write on this device beside Canvas's own autosave. Canvas's restore question still comes first; a box that opens empty offers Glaze's copy back in Writer (Restore or Dismiss), unless Canvas already has that text as your submission or post.
 
 ### Changed
 

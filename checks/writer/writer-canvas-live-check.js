@@ -117,6 +117,29 @@ const textOf = (p, html) => p.evaluate((h) => new DOMParser().parseFromString(h,
       await p.close();
     }
 
+    // ---- a reload: Canvas's own restore first, Writer's only into an empty box; one of them, never both ----
+    {
+      const p = await open(A);
+      await p.click('.submit_assignment_link');
+      const first = await until(() => p.evaluate(() => (document.querySelector('[data-testid="RCE_RestoreAutoSaveModal"]') ? 'canvas' : document.querySelector('iframe.gz-writer[data-gz-writer-frame="assignment"]:not([style*="opacity"])') ? 'writer' : '')), 'Canvas\'s restore dialog or Writer');
+      let a;
+      if (first === 'canvas') {
+        check(await p.evaluate(() => !document.querySelector('iframe.gz-writer:not([style*="opacity"])')), 'Canvas\'s restore dialog comes first: Writer waits behind it');
+        await p.click('[data-testid="RCE_RestoreAutoSaveModal"] button:has-text("Yes")');
+        a = await box(p, 'assignment');
+        check(squash(await writerText(a)).startsWith('A dark Look.') || squash(await writerText(a)).length > 0, `answered Yes: Writer opens on what Canvas restored (${squash(await writerText(a))})`);
+        check(!await a.fr.evaluate(() => !!document.querySelector('.gw-offer')), 'and offers nothing of its own over it');
+      } else {
+        a = await box(p, 'assignment');
+        const o = await until(() => a.fr.evaluate(() => document.querySelector('.gw-offer span')?.textContent), 'Writer\'s offer');
+        check(/^Glaze kept a copy/.test(o), `no Canvas autosave to restore: Writer offers its own copy ("${o}")`);
+        await a.fr.click('.gw-offer button:first-of-type');
+        await until(async () => squash(await writerText(a)).length > 0, 'restored');
+        check(true, `Restore puts it back (${squash(await writerText(a))})`);
+      }
+      await p.close();
+    }
+
     // Canvas's autosave copies of what was typed here go (its RCE keeps them in this origin's localStorage for a day).
     const last = await open('/');
     const left = await last.evaluate(() => { const keys = Object.keys(localStorage).filter((k) => k.startsWith('rceautosave')); for (const k of keys) localStorage.removeItem(k); return Object.keys(localStorage).filter((k) => k.startsWith('rceautosave')).length; });
