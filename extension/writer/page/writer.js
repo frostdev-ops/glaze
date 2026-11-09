@@ -7,11 +7,14 @@
 // in the frame clicks Post, Reply or Send when Ultra allows it (never an attempt's Submit). ⋯ → Blackboard editor gives
 // the box back, to Ultra and to draft backup (writer/page/drafts.js skips boxes marked data-gz-writer). Whatever fails leaves
 // Ultra's editor, or keeps the draft in Writer until a native write succeeds. An assignment's paper is the exception, below.
+// What differs by site (which boxes, their send buttons, reading and writing the native editor) comes from the site's
+// adapter, loaded on demand: writer/writer-ultra.js here.
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const X = globalThis.GZ_CTX;
   if (!X) return null; // a frame-only injection can outlive its document
-  const U = () => globalThis.GZ_WRITER_ULTRA;
+  const ADAPTERS = { ultra: ['writer/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA] };
+  const A = () => ADAPTERS[X.site]?.[1]();
   const html = document.documentElement;
   const boxes = new Map(); // Ultra's editor → its box
   let activeCurrent = null, pinnedCurrent = null;
@@ -44,7 +47,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const PAPER_HEIGHT = 'max(640px, calc(100vh - 120px))';
   const paged = (box) => box.mode === 'paper' && (box.full || box.room);
   const FRAME_RETRIES = 2;
-  const on = () => X.on() && X.site === 'ultra' && X.settings().enabled !== false && !!X.settings().enhance?.writer;
+  const on = () => X.on() && Object.hasOwn(ADAPTERS, X.site) && X.settings().enabled !== false && !!X.settings().enhance?.writer;
 
   // The Look as the frame wears it: the palette, radius and font on <html>, light or dark, and the motion level; and its
   // surfaces (looks/page/surfaces.css), resolved: the page's ground (transparent over a background), the glass mix and edges.
@@ -87,13 +90,13 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // An assignment's paper is the same when Ultra numbers its attempt in the address (/attempt/create → /attempt/_N_1).
   const samePath = (box) => {
     if (box.path === location.pathname) return true;
-    const was = box.mode === 'paper' && U().attemptAt(box.path), now = was && U().attemptAt(location.pathname);
+    const was = box.mode === 'paper' && A().attemptAt(box.path), now = was && A().attemptAt(location.pathname);
     return !!now && now.course === was.course && now.content === was.content;
   };
-  const sameBox = (box) => samePath(box) && box.editor.isConnected && box.root === U().rootOf(box.editor) &&
-    box.container === box.editor.closest('.ql-container') && box.editor.id === box.editorId &&
-    U().kindOf(box.editor, { path: location.pathname, attempt: box.kind === 'test' ? 'test' : '' }) === box.kind &&
-    (box.kind !== 'reply' || U().replyTo(box.editor) === (box.context.post?.id || ''));
+  const sameBox = (box) => samePath(box) && box.editor.isConnected && box.root === A().rootOf(box.editor) &&
+    box.container === A().containerOf(box.editor) && box.editor.id === box.editorId &&
+    A().kindOf(box.editor, { path: location.pathname, attempt: box.kind === 'test' ? 'test' : '' }) === box.kind &&
+    A().identity(box.editor, box.kind) === box.identity;
   // Ultra can finish collapsing an empty native composer after its replacement has taken focus. Once Writer is ready,
   // its own Cancel ends that session; a native blur must leave both the Writer and its native Post action reachable.
   const postControls = (box) => {
@@ -114,13 +117,14 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     finally { clearTimeout(timer); }
   };
   const paperOf = async () => {
-    const a = U().attemptAt(location.pathname);
+    const a = A().attemptAt(location.pathname);
     const uid = a ? await Promise.race([Promise.resolve().then(() => X.account()).then(String), new Promise((r) => setTimeout(r, 5000, ''))]).catch(() => '') : '';
     return /^_\d+_\d+$/.test(uid) ? { school: location.host.toLowerCase(), user: uid, course: a.course, content: a.content, url: location.origin + location.pathname } : null;
   };
   let seq = 0;
   const mount = async (b) => {
-    const box = { ...b, id: `gzw-${Date.now().toString(36)}-${(seq++).toString(36)}`, frame: null, port: null, text: squash(b.editor.textContent), latest: b.editor.innerHTML, delta: null, path: location.pathname, editorId: b.editor.id, destination: X.draftAt(b.editor), display: null,
+    const native = A().read(b.editor);
+    const box = { ...b, id: `gzw-${Date.now().toString(36)}-${(seq++).toString(36)}`, frame: null, port: null, text: squash(native.text), latest: native.html, delta: null, path: location.pathname, editorId: b.editor.id, destination: X.draftAt(b.editor), display: null,
       full: b.mode === 'paper' && X.settings().writer?.full === true, room: false, px: 0 };
     boxes.set(b.editor, box);
     const owner = box.mode === 'compose' && SENDS.has(box.kind) ? askOwnerOf() : Promise.resolve(null);
@@ -221,10 +225,10 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const wrap = document.createElement('div'), field = document.createElement('textarea'), back = document.createElement('button');
     field.setAttribute('data-gz-writer-recovery', '');
     field.setAttribute('aria-label', X.t('Glaze Writer'));
-    field.value = box.snapshot?.text || box.editor.textContent;
+    field.value = box.snapshot?.text || A().read(box.editor).text;
     field.style.cssText = 'display:block;width:100%;min-height:190px;font:inherit;color:inherit;background:transparent';
     back.type = 'button';
-    back.textContent = X.t('Blackboard editor');
+    back.textContent = X.t(A().NATIVE);
     back.addEventListener('click', () => giveBack(box, true));
     field.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); } });
     field.addEventListener('input', () => {
@@ -246,14 +250,15 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const ed = box.editor, f = box.frame, typing = box.root.contains(document.activeElement);
     const l = look();
     worn = JSON.stringify(l);
-    if (!box.recovered) { box.latest = ed.innerHTML; box.delta = null; }
-    box.nativeHTML = ed.innerHTML;
+    const native = A().read(ed);
+    if (!box.recovered) { box.latest = native.html; box.delta = null; }
+    box.nativeHTML = native.html;
     box.ready = true;
-    const selection = typing && box.mode === 'compose' && !box.recovered ? main('get', { id: box.id }).find((r) => r?.ok && r.html === ed.innerHTML && r.selection)?.selection : null;
+    const selection = typing && box.mode === 'compose' && !box.recovered ? A().selection?.(box, main) : null;
     if (box.mode === 'paper') box.context = { ...box.context, recovery: location.origin + location.pathname };
     box.port.postMessage({ type: 'init', mode: box.mode, kind: box.kind, askOwner: box.askOwner, html: box.latest, selection, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale() });
-    if (['post', 'reply', 'message', 'journal'].includes(box.kind)) X.need('writer/writer-context-discussion.js', () => globalThis.GZ_WRITER_CONTEXT_DISCUSSION).then(() => globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.watch(box, X), () => {});
-    if (box.kind === 'reply') X.need('writer/page/writer-quote.js', () => globalThis.GZ_WRITER_QUOTE).then(() => globalThis.GZ_WRITER_QUOTE?.arm(box), () => {});
+    if (X.site === 'ultra' && ['post', 'reply', 'message', 'journal'].includes(box.kind)) X.need('writer/writer-context-discussion.js', () => globalThis.GZ_WRITER_CONTEXT_DISCUSSION).then(() => globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.watch(box, X), () => {});
+    if (X.site === 'ultra' && box.kind === 'reply') X.need('writer/page/writer-quote.js', () => globalThis.GZ_WRITER_QUOTE).then(() => globalThis.GZ_WRITER_QUOTE?.arm(box), () => {});
     box.display ||= [box.root.style.getPropertyValue('display'), box.root.style.getPropertyPriority('display')];
     box.root.style.setProperty('display', 'none', 'important');
     for (const k of ['position', 'opacity', 'pointer-events']) f.style.removeProperty(k);
@@ -262,25 +267,26 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (box.kind === 'post') box.editor.closest('form').setAttribute('data-gz-writer-post', '');
     postControls(box);
     if (box.mode === 'paper') { X.need('writer/writer-context-assignment.js', () => globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT).then(() => GZ_WRITER_CONTEXT_ASSIGNMENT.send(X, box, () => boxes.get(ed) === box)).catch(() => {}); return; }
-    // Ultra changing its own editor (a post sent and cleared, its saved draft put back): the frame shows it. Its text, not
-    // its markup, says so: Quill tidies markup after each sync.
-    box.observer = new MutationObserver(() => {
+    // The site changing its own editor (a post sent and cleared, its saved draft put back): the frame shows it. Its text,
+    // not its markup, says so: the native editor tidies markup after each sync.
+    const observe = (el, fn) => { const o = new MutationObserver(fn); o.observe(el, { childList: true, subtree: true, characterData: true }); return o; };
+    box.observer = A().watch(box, () => {
       if (!sameBox(box)) return;
-      if (ed.innerHTML === box.nativeHTML) return;
-      if (!U().canEdit(ed)) { drop(box); return; }
+      const native = A().read(ed);
+      if (native.html === box.nativeHTML) return;
+      if (!A().canEdit(ed)) { drop(box); return; }
       if (box.unsynced) return;
-      const now = squash(ed.textContent);
+      const now = squash(native.text);
       if (now === box.text) return;
       if (box.snapshot && !box.sending) { box.unsynced = true; return; }
       remember(box);
       box.text = now;
-      box.latest = box.nativeHTML = ed.innerHTML;
+      box.latest = box.nativeHTML = native.html;
       box.delta = null;
       box.posted = box.kind === 'post' && box.sending && !now;
       box.sending = false;
-      box.port.postMessage({ type: 'html', html: ed.innerHTML });
-    });
-    box.observer.observe(ed, { childList: true, subtree: true, characterData: true });
+      box.port.postMessage({ type: 'html', html: native.html });
+    }, observe);
   };
   const hear = (box, m) => {
     if (m.type === 'ask:binding') {
@@ -348,28 +354,28 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     for (let e = el.parentElement; e; e = e.parentElement) { const o = getComputedStyle(e).overflowY; if ((o === 'auto' || o === 'scroll') && e.scrollHeight > e.clientHeight) return e; }
     return document.scrollingElement;
   };
-  // A page-world reply is untrusted. Check the native DOM too, and keep Writer's copy on every failure.
+  // A page-world reply is untrusted. Check the native editor too, and keep Writer's copy on every failure.
   // An explicit body keeps fragment-leading whitespace and head-like elements in the text being verified.
-  const sameText = (ed, h) => new DOMParser().parseFromString('<body>' + h, 'text/html').body.textContent === ed.textContent;
+  const sameText = (native, h) => new DOMParser().parseFromString('<body>' + h, 'text/html').body.textContent === native.text;
   // h: what the frame shows; d: its Quill ops, or null when it came from Ultra's editor (which then already holds it).
   const sync = (box, h, d = h === box.latest ? box.delta : null) => {
     if (!sameBox(box)) { box.latest = h; box.delta = d; box.unsynced = true; return false; }
     if (h !== box.latest) { box.posted = false; box.sending = false; clearTimeout(box.retry); box.retry = null; }
-    if (!box.unsynced && h === box.latest && box.nativeHTML === box.editor.innerHTML && sameText(box.editor, h)) return true;
+    if (!box.unsynced && h === box.latest) { const was = A().read(box.editor); if (box.nativeHTML === was.html && sameText(was, h)) return true; }
     box.latest = h;
     box.delta = d;
-    const said = d ? main('set', { id: box.id, delta: d }) : [{ ok: box.editor.innerHTML === h, html: box.editor.innerHTML }];
-    const ok = said.some((r) => r?.ok && r.html === box.editor.innerHTML) && sameText(box.editor, h);
+    const said = A().write(box, h, d, main), native = A().read(box.editor);
+    const ok = said.some((r) => r?.ok && r.html === native.html) && sameText(native, h);
     box.unsynced = !ok;
-    if (ok) { box.text = squash(box.editor.textContent); box.nativeHTML = box.editor.innerHTML; }
+    if (ok) { box.text = squash(native.text); box.nativeHTML = native.html; }
     return ok;
   };
   // Ctrl/Cmd+Enter: Post, Reply or Send, once, when Ultra allows it (its Angular may enable the button a moment after
   // the edit that fills the box).
   const send = (box, until = Date.now() + 1000) => {
-    if (Date.now() >= until || box.sending || box.retry || box.path !== location.pathname || !SENDS.has(box.kind) || U().kindOf(box.editor, { path: location.pathname }) !== box.kind || !sync(box, box.latest)) return;
-    const b = U().sendOf(box.editor, box.kind);
-    if (b?.isConnected && U().enabled(b)) { remember(box); globalThis.GZ_DRAFT_UI?.sent?.(box.editor); box.sending = true; b.click(); }
+    if (Date.now() >= until || box.sending || box.retry || box.path !== location.pathname || !SENDS.has(box.kind) || A().kindOf(box.editor, { path: location.pathname }) !== box.kind || !sync(box, box.latest)) return;
+    const b = A().sendOf(box.editor, box.kind);
+    if (b?.isConnected && A().enabled(b)) { remember(box); globalThis.GZ_DRAFT_UI?.sent?.(box.editor); box.sending = true; b.click(); }
     else if (box.text) box.retry = setTimeout(() => { box.retry = null; if (boxes.get(box.editor) === box) send(box, until); }, 60);
   };
   // A compact native action must read the frame's current document, not merely its last delivered change. The frame
@@ -387,7 +393,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (box.full || !sameBox(box) || !b) { endFlush(box, 'page'); return; }
     if (Date.now() - f.at >= 60000) { endFlush(box, 'save'); return; }
     if (Date.now() - since >= SUBMIT_ON) { endFlush(box, f.action === 'submit' ? 'submit' : 'page'); return; }
-    if (U().enabled(b)) { try { passing = b; b.click(); } finally { passing = null; endFlush(box); } return; }
+    if (A().enabled(b)) { try { passing = b; b.click(); } finally { passing = null; endFlush(box); } return; }
     setTimeout(() => turnOn(box, f, since), 100);
   };
   const endFlush = (box, reason = null) => {
@@ -406,7 +412,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (b.getAttribute('ng-click') === 'messageControl.onCancelClick()') {
       for (const box of boxes.values()) if (box.kind === 'post' && !box.text && sameBox(box) && box.editor.closest('form')?.contains(b)) drop(box);
     }
-    for (const box of boxes.values()) if (SENDS.has(box.kind) && sameBox(box) && U().sendOf(box.editor, box.kind) === b && U().enabled(b)) {
+    for (const box of boxes.values()) if (SENDS.has(box.kind) && sameBox(box) && A().sendOf(box.editor, box.kind) === b && A().enabled(b)) {
       if (!sync(box, box.latest)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
       remember(box);
       globalThis.GZ_DRAFT_UI?.sent?.(box.editor);
@@ -430,7 +436,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       if (box.mode !== 'paper' || !sameBox(box) || (!includeArmed && box.full && globalThis.GZ_WRITER_SUBMIT?.armed?.(box))) continue;
       const buttons = box.editor.closest('bb-assignment-attempt-authoring-panel')?.querySelectorAll('button[data-analytics-id]') || [];
       for (const b of buttons) {
-        if (!/\.footer\..*(?:submit|saveAndClose)$/.test(b.getAttribute('data-analytics-id') || '') || U().enabled(b)) continue;
+        if (!/\.footer\..*(?:submit|saveAndClose)$/.test(b.getAttribute('data-analytics-id') || '') || A().enabled(b)) continue;
         const r = b.getBoundingClientRect();
         if (r.right > r.left && r.bottom > r.top && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return { box, b };
       }
@@ -562,12 +568,12 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const tests = new Set();
   const submissions = new WeakMap(); // a rendered submission editor belongs to the assessment where it was seen
   const attempt = () => {
-    const a = U().attemptAt(location.pathname);
+    const a = A().attemptAt(location.pathname);
     if (!a) { told = null; return ''; }
     let rows;
     try { rows = X.bookFor(a.course)?.results; } catch { /* no gradebook yet */ }
     const assessment = `${a.course}|${a.content}`;
-    let kind = U().pageKind(document, rows, a.content);
+    let kind = A().pageKind(document, rows, a.content);
     if (kind === 'assignment') {
       const editor = document.querySelector('#bb-editorassignment-attempt-authoring-submission');
       if (submissions.has(editor) && submissions.get(editor) !== assessment) kind = '';
@@ -598,17 +604,17 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     for (const box of [...boxes.values()]) {
       if (!sameBox(box)) drop(box);
       else if (box.kind === 'post' && (!box.display || box.posted) && !box.text && box.editor.closest('form')?.querySelector('.panel-editor-controls.ng-hide, .panel-editor-controls[aria-hidden="true"]')) drop(box);
-      else if (box.kind === 'journal' && !U().sendOf(box.editor, 'journal')) drop(box); // its Cancel, or the entry sent
+      else if (box.kind === 'journal' && !A().sendOf(box.editor, 'journal')) drop(box); // its Cancel, or the entry sent
       else if (box.frame && !box.frame.isConnected) { if (box.unsynced || box.mode === 'paper') reopen(box); else drop(box); }
       // An attached PDF, deck or spreadsheet: Open in Glaze beside its link while its switch is on
       // (writer/writer-context-assignment.js).
       else if (box.mode === 'paper' && (box.files?.length || box.openers?.size)) globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT?.decorate(X, box);
       postControls(box);
     }
-    if (!U()) { X.need('writer/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA).then(() => on() && pass(), () => {}); return; }
+    if (!A()) { X.need(...ADAPTERS[X.site]).then(() => on() && pass(), () => {}); return; }
     const at = { path: location.pathname, attempt: attempt() };
-    if (U().attemptAt(at.path) && !at.attempt) return;
-    for (const b of U().boxes(document, at, (ed) => boxes.has(ed) || declined.has(ed) || Date.now() - (failed.get(ed) || 0) < 60000)) {
+    if (A().attemptAt(at.path) && !at.attempt) return;
+    for (const b of A().boxes(document, at, (ed) => boxes.has(ed) || declined.has(ed) || Date.now() - (failed.get(ed) || 0) < 60000)) {
       mount(b);
     }
   };

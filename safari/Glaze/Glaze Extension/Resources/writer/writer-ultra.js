@@ -100,7 +100,7 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
   };
 
   // Every writable Quill box under `root` that Glaze's editor can stand in for, as
-  // { editor, container, root, kind, mode, send, context }.
+  // { editor, container, root, kind, mode, send, context, identity }.
   const boxes = (root, at = {}, skip = () => false) => [...root.querySelectorAll(EDITOR)].map((editor) => {
     if (skip(editor)) return null;
     const kind = kindOf(editor, at), container = editor.closest('.ql-container');
@@ -113,10 +113,24 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
     }
     // A journal's new entry opens on a click too, drawing its toolbar and its Cancel and Post; Cancel removes them again.
     if (kind === 'journal' && (!rootOf(editor).querySelector('.bb-editor-toolbar') || !sendOf(editor, kind))) return null;
-    return kind === 'unknown' || !container || !canEdit(editor) ? null : { editor, container, root: rootOf(editor), kind, mode: MODE[kind] || 'compose', send: sendOf(editor, kind), context: contextOf(editor, kind) };
+    if (kind === 'unknown' || !container || !canEdit(editor)) return null;
+    const context = contextOf(editor, kind);
+    return { editor, container, root: rootOf(editor), kind, mode: MODE[kind] || 'compose', send: sendOf(editor, kind), context, identity: kind === 'reply' ? context.post?.id || '' : '' };
   }).filter(Boolean);
 
-  return { EDITOR, KINDS, boxes, kindOf, rootOf, sendOf, enabled, contextOf, replyTo, canEdit, attemptAt, attemptKind, pageKind };
+  // What writer/page/writer.js asks of a site (writer/writer-canvas.js answers the same): the box's container (it carries
+  // data-gz-writer-id, how writer/writer-main.js finds the box), what the box answers (a reply's post: the same box can be
+  // put to another), its native HTML and text, writing Writer's document in (Quill ops through writer-main.js; without ops,
+  // the box holds it already), Ultra's own edits to it, the caret Ultra's Quill had, and the native editor's name.
+  const containerOf = (ed) => ed.closest('.ql-container');
+  const identity = (ed, kind) => (kind === 'reply' ? replyTo(ed) : '');
+  const read = (ed) => ({ html: ed.innerHTML, text: ed.textContent });
+  const write = (box, html, delta, main) => (delta ? main('set', { id: box.id, delta }) : [{ ok: box.editor.innerHTML === html, html: box.editor.innerHTML }]);
+  const watch = (box, fn, observe) => observe(box.editor, fn);
+  const selection = (box, main) => main('get', { id: box.id }).find((r) => r?.ok && r.html === box.editor.innerHTML && r.selection)?.selection;
+  const NATIVE = 'Blackboard editor';
+
+  return { EDITOR, KINDS, NATIVE, boxes, kindOf, rootOf, containerOf, identity, sendOf, enabled, contextOf, replyTo, canEdit, read, write, watch, selection, attemptAt, attemptKind, pageKind };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_ULTRA;
 GZ_WRITER_ULTRA;
