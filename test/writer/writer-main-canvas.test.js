@@ -241,11 +241,11 @@ test('Assignments 2: draft says whether the draft Canvas saved, which its Submit
 
   // The page's other requests go through untouched, whatever their shape.
   for (const [input, init] of [['/api/v1/courses'], [{ url: 'https://school.instructure.com/api/graphql' }, { method: 'POST', body: new Map() }], ['/api/graphql', { method: 'POST', body: '{not json' }], [undefined, undefined]]) {
-    const n = fetches.length, got = p.window.fetch.call('self', input, init);
+    const self = {}, n = fetches.length, got = p.window.fetch.call(self, input, init);
     assert.equal(fetches.length, n + 1);
     assert.equal(fetches.at(-1).input, input);
     assert.equal(fetches.at(-1).init, init);
-    assert.equal(fetches.at(-1).self, 'self');
+    assert.equal(fetches.at(-1).self, self);
     assert.equal(got, fetches.at(-1).res);
   }
   assert.equal(kept(), true);
