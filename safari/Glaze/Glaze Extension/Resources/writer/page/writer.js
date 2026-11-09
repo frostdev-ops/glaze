@@ -291,7 +291,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.observer = A().watch(box, () => {
       if (!sameBox(box)) return;
       const native = A().read(ed);
-      if (native.html === box.nativeHTML) return;
+      // On Canvas the box can stop being editable with its text unchanged (the Inbox's field disabled while it translates).
+      if (native.html === box.nativeHTML && (!A().HOLD || A().canEdit(ed))) return;
       if (!A().canEdit(ed)) { drop(box); return; }
       if (box.unsynced) return;
       const now = squash(native.text);
@@ -342,8 +343,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     else if (m.type === 'height' && Number.isFinite(m.px)) { box.px = Math.max(40, Math.min(20000, Math.round(m.px))); if (!paged(box) && !box.focused) box.frame.style.height = `${box.px}px`; }
     else if (m.type === 'change' && typeof m.html === 'string' && typeof m.text === 'string') {
       // A compact paper is in Writer's storage already: Ultra's editor takes its text, the draft backup nothing.
+      // The Inbox's copy goes where the message is going now (course, recipients, subject), not where it was when Writer opened.
       if (box.mode !== 'paper') {
-        box.snapshot = { ...box.destination, html: m.html, text: m.text, at: Date.now() };
+        box.snapshot = { ...(box.mode === 'plain' ? X.draftAt(box.editor) : box.destination), html: m.html, text: m.text, at: Date.now() };
         clearTimeout(box.backup);
         box.backup = setTimeout(() => remember(box), 1000);
       }
