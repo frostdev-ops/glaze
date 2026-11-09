@@ -139,12 +139,13 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
   };
   const NATIVE = 'Canvas editor';
   const attemptAt = () => null; // Canvas has no Ultra-style attempt pages: a quiz essay is a test by its route
-  // Where Writer opens today: a classic assignment's Text Entry, replies, the Inbox and a classic quiz's essays (each change
-  // goes into Canvas's editor at once, as its timer's submit can't be held). Assignments 2 stays Canvas's until its step
-  // (the plan's 10) brings its draft saves.
-  const live = (b) => b.editor.id !== 'textentry_text';
   // Every Canvas send waits for the frame's document as it is now (writer/page/writer.js hold), not only its last change.
   const HOLD = true;
+  // Assignments 2's Submit sends the draft Canvas saves a second after the box's last change (createSubmissionDraft), never
+  // the box: its press waits until writer-main-canvas.js says that draft holds the box as it is now. Every other box's
+  // send reads the box itself.
+  const drafts = (ed) => ed.id === 'textentry_text';
+  const kept = (box, main) => !drafts(box.editor) || main('canvas-draft', { id: box.id }).some((r) => r?.ok === true && r.kept === true);
   // ⋯ → Insert from Canvas: the frame's tool → Canvas's command (writer-main-canvas.js TOOLS), run once the box is Canvas's.
   const TOOLS = Object.freeze({ image: 'mceInstructureImage', media: 'instructureRecord', document: 'mceInstructureDocuments', equation: 'instructureEquation', link: 'instructureTrayForCourseLinks' });
   // A reply box opens to be written in: Canvas focuses its RCE a second after it is up, so Writer takes the caret as it opens.
@@ -169,7 +170,7 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     return { editor, container: containerOf(editor), root: rootOf(editor), kind, mode: modeOf(kind), send: sendOf(editor, kind), context: contextOf(editor, kind), identity: identity(editor) };
   }).filter(Boolean);
 
-  return { EDITOR, INBOX, KINDS, NATIVE, HOLD, TOOLS, live, focus, focuses, errorsOf, boxes, kindOf, rootOf, containerOf, identity, sendOf, sends, enabled, contextOf, canEdit, editable, read, write, watch, attemptAt, paragraphs, linesOf };
+  return { EDITOR, INBOX, KINDS, NATIVE, HOLD, TOOLS, drafts, kept, focus, focuses, errorsOf, boxes, kindOf, rootOf, containerOf, identity, sendOf, sends, enabled, contextOf, canEdit, editable, read, write, watch, attemptAt, paragraphs, linesOf };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_CANVAS;
 GZ_WRITER_CANVAS;

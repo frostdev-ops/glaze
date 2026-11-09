@@ -10,7 +10,8 @@
 // What differs by site (which boxes, their send buttons, reading and writing the native editor) comes from the site's
 // adapter, loaded on demand: writer/writer-ultra.js or writer/writer-canvas.js. On Canvas (writer/writer-main-canvas.js in
 // the page's world) the frame writes Canvas's dialect or the Inbox's text, every send button waits for the frame's
-// document as it is now (holdSend), and ⋯ → Insert from Canvas gives the box back and runs Canvas's own tool.
+// document as it is now (holdSend), Assignments 2's Submit also for the draft Canvas saves to hold it, and ⋯ → Insert from
+// Canvas gives the box back and runs Canvas's own tool.
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const X = globalThis.GZ_CTX;
@@ -443,22 +444,41 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const holds = (box, b) => (A().sends?.(box.editor, box.kind) || [A().sendOf(box.editor, box.kind)]).includes(b);
   const holdSend = (group, b) => {
     group = [].concat(group);
-    if (group.some((box) => box.flushWait || box.sending)) return; // pressed again: the first press goes on
+    if (group.some((box) => box.flushWait || box.sending || box.keeping)) return; // pressed again: the first press goes on
     const pending = new Set(group), failed = new Set(), destinations = new Map(group.map((box) => [box, orphanKey(box, X.draftAt(box.editor))]));
     const still = (box) => boxes.get(box.editor) === box && sameBox(box) && holds(box, b) && orphanKey(box, X.draftAt(box.editor)) === destinations.get(box);
     // Until the first frame is ready, Canvas's visible editor owns edits. A recovering frame still owns its buffered copy.
     const syncCurrent = (box) => sync(box, !box.ready && !box.recovered && !box.snapshot ? A().read(box.editor).html : box.latest, null);
+    const press = () => {
+      for (const x of group) { remember(x); globalThis.GZ_DRAFT_UI?.sent?.(x.editor); if (SENDS.has(x.kind)) x.sending = true; }
+      try { passing = b; b.click(); } finally { passing = null; }
+    };
+    // Assignments 2's Submit sends the draft Canvas saves a second after the box's last change, not the box, and keeps
+    // itself off while it saves: the press waits, SUBMIT_ON at most, until that draft holds every box's text as it is now
+    // (the adapter's kept), seen on two looks a moment apart so that Canvas's page has drawn it, then goes. A draft Canvas
+    // doesn't save in that time holds the press, with the reason shown.
+    const keep = (since = Date.now(), seen = false) => {
+      const end = () => { for (const x of group) x.keeping = false; };
+      if (!group.every(still)) { end(); return; }
+      for (const x of group) x.keeping = true;
+      if (!group.every(syncCurrent)) { end(); for (const x of group) x.port?.postMessage({ type: 'held' }); return; }
+      const now = b.isConnected && A().enabled(b) && group.every((x) => A().kept(x, main));
+      if (now && seen) { end(); press(); return; }
+      if (Date.now() - since >= SUBMIT_ON) { end(); for (const x of group) x.port?.postMessage({ type: 'held' }); return; }
+      setTimeout(() => keep(since, now), 100);
+    };
     const settle = (box, ok) => {
       if (!pending.delete(box)) return;
       if (!ok) failed.add(box);
       if (pending.size) return;
       for (const x of failed) x.port?.postMessage({ type: 'held' });
-      if (failed.size || !b.isConnected || !A().enabled(b) || !group.every(still)) return;
+      if (failed.size || !group.every(still)) return;
+      if (group.some((x) => A().drafts?.(x.editor))) { keep(); return; }
+      if (!b.isConnected || !A().enabled(b)) return;
       // An earlier frame can edit again while another is answering. Its native copy must still hold the current text.
       for (const x of group) if (!syncCurrent(x)) { x.port?.postMessage({ type: 'held' }); return; }
       if (!b.isConnected || !A().enabled(b) || !group.every(still)) return;
-      for (const x of group) { remember(x); globalThis.GZ_DRAFT_UI?.sent?.(x.editor); if (SENDS.has(x.kind)) x.sending = true; }
-      try { passing = b; b.click(); } finally { passing = null; }
+      press();
     };
     for (const box of group) {
       const go = (ok) => { clearTimeout(box.flushWait?.timer); box.flushWait = null; settle(box, ok); };
@@ -705,10 +725,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (!A()) { X.need(...ADAPTERS[X.site]).then(() => on() && pass(), () => {}); return; }
     const at = { path: location.pathname, attempt: attempt() };
     if (A().attemptAt(at.path) && !at.attempt) return;
-    for (const b of A().boxes(document, at, (ed) => boxes.has(ed) || declined.has(ed) || Date.now() - (failed.get(ed) || 0) < 60000)) {
-      if (A().live?.(b) === false) continue;
-      mount(b);
-    }
+    for (const b of A().boxes(document, at, (ed) => boxes.has(ed) || declined.has(ed) || Date.now() - (failed.get(ed) || 0) < 60000)) mount(b);
   };
   return { pass, drop: dropAll, pinCurrent, current };
 })();
