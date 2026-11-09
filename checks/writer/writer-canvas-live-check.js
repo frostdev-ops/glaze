@@ -5,7 +5,10 @@
 // hold exactly Writer's text, and so must each reply's createDiscussionEntry (a topic's, a thread's, an announcement's) and
 // a new Inbox message's createConversation. On a classic quiz (practice quiz 56, six essays, all on one page; quiz 57, one
 // question at a time), every essay Canvas draws is Writer's: Canvas's own answer backup (…/submissions/backup) and Submit Quiz's
-// POST must hold exactly Writer's text for each essay, and one question at a time, so must Next's record_answer.
+// POST must hold exactly Writer's text for each essay, and one question at a time, so must Next's record_answer. On
+// Assignments 2 (assignment 253: its course flag assignments_2_student must be on for HIST 2010 while this runs), Canvas saves
+// the box as a draft (CreateSubmissionDraft) and Submit sends that draft (CreateSubmission): each draft save is answered here
+// as Canvas answers one, never reaching it, and Submit's mutation is aborted; both must hold exactly Writer's text.
 // WRITER_SHOTS names where the screenshots go (a light and a dark Look each surface).
 //   NODE_PATH=… PLAYWRIGHT_BROWSERS_PATH=… nice -n 10 lockf -k <the heavy-job lock, CLAUDE.md> node checks/writer/writer-canvas-live-check.js [evidence directory]
 const { chromium } = require('playwright');
@@ -27,6 +30,12 @@ const check = (v, label) => { assert.ok(v, label); checks.push(label); console.l
 const squash = (s) => String(s).replace(/\s+/g, ' ').trim();
 // What the page shows as text, from HTML, as Canvas's own empty check reads it (a page's DOMParser).
 const textOf = (p, html) => p.evaluate((h) => new DOMParser().parseFromString(h, 'text/html').body.textContent, html);
+// Assignments 2's draft save, answered as Canvas answers it (the SubmissionDraft fragment, ui/shared/assignments/graphql/student),
+// so its Submit has the draft to send.
+const draftAnswer = (v) => ({ data: { createSubmissionDraft: { __typename: 'CreateSubmissionDraftPayload', errors: null, submissionDraft: {
+  __typename: 'SubmissionDraft', _id: '990001', activeSubmissionType: v.activeSubmissionType, attachments: [], body: v.body ?? null, externalTool: null, ltiLaunchUrl: null,
+  mediaObject: null, meetsMediaRecordingCriteria: false, meetsAssignmentCriteria: !!v.body, meetsBasicLtiLaunchCriteria: false, meetsTextEntryCriteria: !!v.body,
+  meetsUploadCriteria: false, meetsUrlCriteria: false, meetsStudentAnnotationCriteria: false, resourceLinkLookupUuid: null, url: null } } } });
 
 (async () => {
   let context, tmp;
@@ -61,6 +70,12 @@ const textOf = (p, html) => p.evaluate((h) => new DOMParser().parseFromString(h,
       let query = false;
       if (u.pathname === '/api/graphql') { try { query = !/^\s*mutation\b/.test(JSON.parse(body).query || ''); } catch { query = false; } }
       if (query) return r.continue();
+      let op = null;
+      try { op = u.pathname === '/api/graphql' ? JSON.parse(body) : null; } catch { op = null; }
+      if (op?.operationName === 'CreateSubmissionDraft') {
+        blocked.push({ method: req.method(), path: u.pathname, body, answered: true });
+        return r.fulfill({ contentType: 'application/json', body: JSON.stringify(draftAnswer(op.variables || {})) });
+      }
       blocked.push({ method: req.method(), path: u.pathname, body });
       return r.abort();
     });
@@ -83,7 +98,7 @@ const textOf = (p, html) => p.evaluate((h) => new DOMParser().parseFromString(h,
       fs.mkdirSync(shots, { recursive: true });
       await el.scrollIntoViewIfNeeded();
       await p.mouse.move(1, 1); // no hover tooltip over the frame
-      const r = await el.evaluate((e) => { const b = (e.closest('.question, form, [data-testid="DiscussionEdit-container"], #compose-message-modal [role="dialog"], #compose-message-modal') || e).getBoundingClientRect(); return { x: Math.max(0, b.left - 16), y: Math.max(0, b.top - 16), width: Math.min(innerWidth, b.width + 32), height: Math.min(innerHeight, b.height + 32) }; });
+      const r = await el.evaluate((e) => { const b = (e.closest('.question, form, [data-testid="text-editor"], [data-testid="DiscussionEdit-container"], #compose-message-modal [role="dialog"], #compose-message-modal') || e).getBoundingClientRect(); return { x: Math.max(0, b.left - 16), y: Math.max(0, b.top - 16), width: Math.min(innerWidth, b.width + 32), height: Math.min(innerHeight, b.height + 32) }; });
       const f = path.join(shots, name);
       await p.screenshot({ path: f, clip: r });
       return f;
@@ -283,6 +298,29 @@ const textOf = (p, html) => p.evaluate((h) => new DOMParser().parseFromString(h,
       await reader.close();
     }
 
+    // ---- Assignments 2: Canvas saves the box as a draft and Submit sends that draft; both hold exactly Writer's text ----
+    const A2 = '/courses/36/assignments/253';
+    for (const [preset, dark] of [['Paper', false], ['Midnight', true]]) {
+      await wear(preset);
+      const from = blocked.length;
+      const p = await open(A2);
+      const a = await box(p, 'assignment');
+      check(await p.evaluate(() => getComputedStyle(document.querySelector('[data-testid="text-editor"] .rce-wrapper')).display === 'none' && !!document.getElementById('textentry_text')), `Assignments 2 (${preset}): Writer stands in for the Text Entry RCE on the live page`);
+      if (dark) { await typeIn(p, a, 'A dark Look on Assignments 2.'); await shot(p, a.el, 'a2-midnight.png'); await p.close(); continue; }
+      await typeIn(p, a, 'Museum reflection, live: the gallery kept the maps the town lost.\nA second paragraph, saved as the draft.');
+      await shot(p, a.el, 'a2-paper.png');
+      const typed = await writerText(a);
+      await until(() => p.evaluate(() => !document.querySelector('[data-testid="submit-button"]').disabled), 'Submit on once Canvas has saved the draft');
+      const subFrom = blocked.length;
+      await p.click('[data-testid="submit-button"]');
+      const sent = await until(() => blocked.slice(subFrom).find((b) => b.path === '/api/graphql' && JSON.parse(b.body).operationName === 'CreateSubmission'), 'CreateSubmission, aborted');
+      const v = JSON.parse(sent.body).variables, saved = blocked.slice(from, subFrom).filter((b) => b.answered).map((b) => JSON.parse(b.body).variables);
+      check(v.type === 'online_text_entry' && squash(await textOf(p, v.body)) === squash(typed), `the blocked CreateSubmission's body is Writer's text (${v.body})`);
+      check(/<p>Museum reflection, live: the gallery kept the maps the town lost\.<\/p>\s*<p>A second paragraph, saved as the draft\.<\/p>/.test(v.body), `in Canvas's dialect (${v.body.replace(/\n/g, '')})`);
+      check(saved.length > 0 && saved.at(-1).body === v.body && saved.at(-1).activeSubmissionType === 'online_text_entry', `Canvas's last draft save before Submit (CreateSubmissionDraft, ${saved.length} in all, answered here) held exactly that text`);
+      await p.close();
+    }
+
     // Canvas's autosave copies of what was typed here go (its RCE keeps them in this origin's localStorage for a day).
     const last = await open('/');
     const left = await last.evaluate(() => { const keys = Object.keys(localStorage).filter((k) => k.startsWith('rceautosave')); for (const k of keys) localStorage.removeItem(k); return Object.keys(localStorage).filter((k) => k.startsWith('rceautosave')).length; });
@@ -295,6 +333,6 @@ const textOf = (p, html) => p.evaluate((h) => new DOMParser().parseFromString(h,
     await context?.close();
     if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
     fs.mkdirSync(out, { recursive: true });
-    fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ passed, checks, errors, blocked: blocked.map((b) => ({ method: b.method, path: b.path, bytes: b.body.length })) }, null, 2) + '\n');
+    fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify({ passed, checks, errors, blocked: blocked.map((b) => ({ method: b.method, path: b.path, bytes: b.body.length, ...(b.answered && { answered: true }) })) }, null, 2) + '\n');
   }
 })().catch((e) => { console.error(e); fs.mkdirSync(out, { recursive: true }); fs.writeFileSync(path.join(out, 'failure.txt'), e.stack + '\n'); process.exitCode = 1; });
