@@ -309,3 +309,31 @@ test('restored draft HTML is parsed inertly with DOMParser, never assigned as ma
   assert.doesNotMatch(src, /\.(?:inner|outer)HTML\s*=/);
   assert.match(src, /parseFromString\(/);
 });
+
+// Writer on Canvas (writer/page/writer.js): what it holds of a Rich Content Editor's box is kept per site, signed-in user,
+// page and the box's textarea, beside Canvas's own autosave.
+test('Canvas RCE copies are kept per site, signed-in user, page and box, and belong to that Canvas site', () => {
+  const m = { origin: 'https://school.instructure.com', user: '3', path: '/courses/34/assignments/238', id: 'submission_body' };
+  const key = D.canvasRceKey(m);
+  assert.equal(key, 'draft:canvas-rce:https://school.instructure.com/3/courses/34/assignments/238#submission_body');
+  for (const change of [{ origin: 'https://other.instructure.com' }, { user: '4' }, { path: '/courses/34/assignments/239' }, { id: 'message-body-root' }]) assert.notEqual(D.canvasRceKey({ ...m, ...change }), key, JSON.stringify(change));
+  for (const change of [{ user: '' }, { user: '_7_1' }, { user: undefined }, { origin: 'school.instructure.com' }, { origin: 'https://a.test/x' }, { path: 'courses/34' }, { path: '/courses/34#x' }, { id: '' }, { id: 'a b' }, { id: 'x'.repeat(81) }])
+    assert.equal(D.canvasRceKey({ ...m, ...change }), null, JSON.stringify(change));
+  assert.deepEqual(D.owner(key), { site: 'canvas', origin: 'https://school.instructure.com', user: '3' });
+  assert.deepEqual(D.owner(D.canvasRceKey({ ...m, origin: 'http://localhost:3000' })), { site: 'canvas', origin: 'http://localhost:3000', user: '3' });
+  for (const bad of ['draft:canvas-rce:https://school.instructure.com/3/courses/34', 'draft:canvas-rce:https://school.instructure.com/x/courses/34#a', 'draft:canvas-rce:notaurl/3/c#a'])
+    assert.equal(D.owner(bad), null, bad);
+  const now = Date.UTC(2026, 10, 9);
+  assert.deepEqual(D.stale({ [key]: { at: now - 15 * 864e5 }, [key + 'x']: { at: now } }, now), [key], 'expire after 14 days as every copy does');
+});
+
+test('a Canvas RCE copy is stored without an Inbox destination, and its text shows in what was posted once it went', async () => {
+  const key = D.canvasRceKey({ origin: 'https://school.instructure.com', user: '3', path: '/courses/34/discussion_topics/80', id: 'message-body-root' });
+  const store = {}, local = { get: async () => ({ ...store }), set: async (v) => { Object.assign(store, v); return true; }, remove: async (k) => { for (const x of [].concat(k)) delete store[x]; return true; } };
+  const r = await D.change({ key, at: Date.now(), put: { html: `<p>${essay}</p>`, text: essay, at: Date.now(), id: 'tab0000000a' } }, local);
+  assert.equal(r.ok, true);
+  assert.equal(r.copies[0].text, essay);
+  assert.equal(D.postedIn(essay, ['<p>Other</p>', `<div><p>My response to the&nbsp;reading:</p> <p>the author <strong>argues</strong> that</p></div>`]), true);
+  assert.equal(D.postedIn(essay, ['<p>My response to the reading</p>']), false, 'only part of it');
+  assert.equal(D.postedIn('short', ['<p>short</p>']), false, 'too short to say');
+});
