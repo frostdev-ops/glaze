@@ -150,6 +150,7 @@ const CANVAS = `(() => {
       const p = await context.newPage();
       p.on('pageerror', (e) => errors.push(`page: ${e.message}`));
       p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(`console: ${m.text()}`); });
+      await p.bringToFront();
       await p.goto(`${site}${url}`);
       await p.waitForFunction(() => document.documentElement.hasAttribute('data-gz-motion'));
       return p;
@@ -172,10 +173,13 @@ const CANVAS = `(() => {
     // Submit pressed as the page's own click: the frame above it can still change height as its later parts load, and a
     // pointer click then lands on Writer (checks/writer/writer-canvas-live-check.js presses it with the pointer, live).
     const submit = (p) => p.evaluate(() => document.querySelector('#submit_online_text_entry_form button[type="submit"]').click());
-    // Typing goes where the caret is: into Writer once its editor has the focus.
+        // Typing goes where the caret is: at the end of Writer's text, once its editor has the focus (placed there, not clicked:
+    // a click can land while the frame is still settling its height).
     const typeIn = async (p, b, text) => {
-      await b.fr.click('.ProseMirror');
-      await until(() => b.fr.evaluate(() => document.hasFocus() && !!document.activeElement?.closest('.ProseMirror')), 'the caret in Writer');
+      await until(async () => {
+        await b.el.evaluate((f) => f.focus());
+        return b.fr.evaluate(() => { const v = GZ_WRITER_FRAME.editor().view; v.focus(); v.dispatch(v.state.tr.setSelection(GZ_PM.state.Selection.atEnd(v.state.doc))); return !!document.activeElement?.closest('.ProseMirror'); });
+      }, 'the caret in Writer');
       await p.keyboard.type(text, { delay: 0 });
     };
 
@@ -227,10 +231,12 @@ const CANVAS = `(() => {
     check(true, 'the next edit clears the note and syncs again');
 
     // ---- ⋯ → Canvas editor: the box back, with the text and the focus ----
-    const before = await writerText(a.fr);
-    await menu(a.fr, '#menu [data-do="native"]');
+    await menu(a.fr);
+    const before = await writerText(a.fr); // as it stands once the caret has left the text (autocorrect may finish a word then)
+    await a.fr.click('#menu [data-do="native"]');
     await until(() => p.evaluate(() => !document.querySelector('iframe.gz-writer') && getComputedStyle(document.querySelector('.rce-wrapper')).display !== 'none'), 'the RCE back');
-    check(squash((await tiny(p)).text) === squash(before), 'Canvas editor gives the box back holding Writer\'s text');
+    const back = squash((await tiny(p)).text);
+    check(back === squash(before), `Canvas editor gives the box back holding Writer's text (${back} | ${squash(before)})`);
     check(await until(() => p.evaluate(() => document.activeElement?.id === 'submission_body_ifr'), 'focus in the RCE'), 'and puts the caret in Canvas\'s editor');
     await p.close();
 
@@ -332,14 +338,13 @@ const CANVAS = `(() => {
     await pause(1300); // Canvas focuses its RCE 1000 ms after it is up: the focus must still be Writer's after that
     check(await p.evaluate(() => document.activeElement?.matches('iframe.gz-writer[data-gz-writer-frame="reply"]')), 'the reply box opens with the caret in Writer, and Canvas\'s focus a second later leaves it there');
     await r.fr.click('.ProseMirror');
-    await until(() => r.fr.evaluate(() => document.hasFocus() && !!document.activeElement?.closest('.ProseMirror')), 'the caret in Writer');
+    await until(() => r.fr.evaluate(() => !!document.activeElement?.closest('.ProseMirror')), 'the caret in Writer');
     await p.keyboard.type('I agree, and the river is also a ledger.', { delay: 0 });
     await p.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
     await until(() => p.evaluate(() => __entries.length >= 1), 'the reply sent');
     check(JSON.stringify(await p.evaluate(() => __entries)) === JSON.stringify(['<p>I agree, and the river is also a ledger.</p>']), `Ctrl/Cmd+Enter replies once, with exactly Writer's text (${await p.evaluate(() => JSON.stringify(__entries))})`);
     await p.evaluate(() => { __entries.length = 0; });
-    await r.fr.click('.ProseMirror');
-    await p.keyboard.type(' More.', { delay: 0 });
+    await typeIn(p, r, ' More.');
     await p.evaluate(() => document.querySelector('[data-testid="DiscussionEdit-submit"]').click());
     await until(() => p.evaluate(() => __entries.length >= 1), 'Reply pressed');
     check(JSON.stringify(await p.evaluate(() => __entries)) === JSON.stringify(['<p>I agree, and the river is also a ledger. More.</p>']), 'Reply waits for Writer\'s last words, then sends them once');

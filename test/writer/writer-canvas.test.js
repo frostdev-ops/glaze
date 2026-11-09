@@ -269,3 +269,7 @@ test('a classic assignment\'s errors line: where Canvas says an empty box won\'t
   const [reply] = C.boxes(drawn(page('discussion')), { path: AT.discussion });
   assert.equal(C.errorsOf(reply.editor), null);
 });
+
+test('Canvas focuses a reply box once it is up (DiscussionEdit, 1000 ms after init): Writer takes the caret there; the rest wait for a click', () => {
+  assert.deepEqual(C.KINDS.map((k) => [k, C.focuses(k)]), [['assignment', false], ['reply', true], ['message', false], ['test', false], ['unknown', false]]);
+});
