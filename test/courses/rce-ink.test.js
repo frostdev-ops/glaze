@@ -66,7 +66,7 @@ test('each editor frame gets the palette as values, last in its head', () => {
   const s = ink(f);
   assert.ok(s, 'a style in the frame');
   assert.equal(f.doc.head.lastElementChild, s, 'after the content CSS');
-  assert.match(s.textContent, /body\.mce-content-body\{background:rgb\(13, 27, 46\)!important;color:rgb\(230, 237, 245\)!important\}/);
+  assert.match(s.textContent, /body\.mce-content-body\{--ic-brand-font-color-dark:#e6edf5;background:transparent!important;color:rgb\(230, 237, 245\)!important\}/);
   assert.match(s.textContent, /color-scheme:dark/);
   assert.match(s.textContent, /a\{color:rgb\(23, 200, 244\)\}/);
   assert.match(s.textContent, /\[data-mce-placeholder\][^{]*::before\{color:rgb\(120, 130, 140\)\}/);
@@ -97,6 +97,37 @@ test('an authored body element sharing the style id is never rewritten, moved or
   assert.equal(doc.head.querySelector('style#gz-rce-ink')?.tag, 'style');
   ui.off();
   assert.equal(saved(), before, 'the content TinyMCE saves is unchanged after teardown');
+});
+
+const bodyStyles = (css) => {
+  const body = css.match(/body\.mce-content-body\{([^}]+)\}/)[1];
+  return Object.fromEntries([...body.matchAll(/([\w-]+):([^;]+)/g)].map(([, k, v]) => [k, v.replace(/!important/g, '')]));
+};
+
+test('Canvas highlighting does not save the palette ink as an authored foreground', () => {
+  const { ui, c, ink, vars } = load();
+  ui.sync();
+  const css = ink(c.frames[0]).textContent;
+  const declarations = bodyStyles(css);
+  // Canvas's instructure_color/clickCallback.tsx reads the selected node's computed color and the
+  // body's --ic-brand-font-color-dark. ColorPicker.tsx saves foreground whenever those differ,
+  // even if the user only selected a highlight. Its background default is always white.
+  const foregroundDefault = declarations['--ic-brand-font-color-dark'] || '#2d3b45';
+  const currentForeground = vars['--gz-ink']; // clickCallback normalizes the computed color to hex.
+  const highlightSave = { bgcolor: '#fbeeb8' };
+  if (currentForeground !== foregroundDefault) highlightSave.fgcolor = currentForeground;
+  assert.deepEqual(highlightSave, { bgcolor: '#fbeeb8' }, 'highlighting must not save the Look\'s ink');
+});
+
+test('Canvas coloring a root selection does not save the palette surface as a highlight', () => {
+  const { ui, c, ink } = load();
+  ui.sync();
+  const css = ink(c.frames[0]).textContent;
+  const currentBackground = bodyStyles(css).background;
+  const foregroundSave = { fgcolor: '#c71f23' };
+  if (currentBackground !== 'transparent' && currentBackground !== '#ffffff') foregroundSave.bgcolor = currentBackground;
+  assert.deepEqual(foregroundSave, { fgcolor: '#c71f23' }, 'coloring a root selection must not save the Look\'s surface');
+  assert.match(css, /html\{[^}]*background:rgb\(13, 27, 46\)/, 'the root still paints the editor surface');
 });
 
 test('passes keep one style and read the palette again only when it changes', () => {

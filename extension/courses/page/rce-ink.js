@@ -27,8 +27,11 @@ var GZ_RCE_INK = globalThis.GZ_RCE_INK || (() => {
     probe.remove();
     const dark = html.hasAttribute('data-gz-dark-theme');
     const body = 'body.mce-content-body';
+    // Canvas's color picker compares its hex text color to this native default. Paint the surface on html only:
+    // a body fill would look like an authored highlight when the picker reads a selection rooted at the body.
+    const defaultInk = html.style.getPropertyValue('--gz-ink').trim().toLowerCase();
     return `html{color-scheme:${dark ? 'dark' : 'light'};background:${surface}}`
-      + `${body}{background:${surface}!important;color:${ink}!important}${body} a{color:${accent}}`
+      + `${body}{--ic-brand-font-color-dark:${defaultInk};background:transparent!important;color:${ink}!important}${body} a{color:${accent}}`
       + `${body} ::selection{background:${soft};color:${ink}}${body}[data-mce-placeholder]:not(.mce-visualblocks)::before{color:${faint}}`
       + (dark ? `${body} [style*="color"]{-webkit-text-fill-color:oklch(from currentColor max(l, 0.78) c h)}${body} [style*="background-color"]{-webkit-text-fill-color:#14181f}` : '');
   };
