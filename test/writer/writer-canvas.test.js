@@ -114,7 +114,9 @@ test('the Inbox: plain mode in its compose dialog, its field the root, sent by S
   const [box, ...rest] = C.boxes(body, { path: AT.inbox });
   assert.equal(rest.length, 0);
   assert.deepEqual(shape(box), ['message', 'plain', 'TextArea___0', 'BUTTON', true, true]);
-  assert.equal(box.root.getAttribute('data-cid'), 'TextArea');
+  // The field itself, inside InstUI's TextArea label: the label's messages (Canvas's "insert a message body") stay shown.
+  assert.equal(box.root, box.editor.parentElement);
+  assert.ok(box.root.closest('label[data-cid="TextArea"]') && box.root.closest('label[data-cid="TextArea"]') !== box.root);
   assert.equal(box.send.getAttribute('data-testid'), 'send-button');
   assert.deepEqual(C.boxes(body, { path: '/courses/34' }), [], 'the dialog only on the Inbox');
   box.editor.setAttribute('disabled', '');
@@ -279,4 +281,21 @@ test('Canvas\'s caret marker in a reply (DiscussionEdit\'s positionCursor, a sec
   assert.equal(C.editable('<p>Hi <span class="post_mention"></span></p>'), true);
   assert.equal(C.editable('<p><span class="post_mention">@Kim</span></p>'), false, 'a marker holding text is something else');
   assert.equal(C.editable('<p><span class="mceNonEditable mention" data-mention="5">@Kim</span></p>'), false, 'a mention stays Canvas\'s');
+});
+
+test('the Inbox: Canvas changing the field\'s value itself (its signature, added once loaded) is noticed without an input event', async () => {
+  const [box] = C.boxes(page('inbox'), { path: AT.inbox });
+  let n = 0;
+  box.editor.ownerDocument = { addEventListener() {}, removeEventListener() {} };
+  box.editor.addEventListener = () => {}; box.editor.removeEventListener = () => {};
+  const w = C.watch({ ...box, id: 'gzw-9' }, () => n++, () => ({ disconnect() {} }), () => []);
+  box.editor.value = 'Hi\n\n---\nSam Taylor';
+  await new Promise((r) => setTimeout(r, 700));
+  assert.equal(n, 1);
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(n, 1, 'once per change');
+  w.disconnect();
+  box.editor.value = 'changed after';
+  await new Promise((r) => setTimeout(r, 600));
+  assert.equal(n, 1, 'not after it is let go');
 });
