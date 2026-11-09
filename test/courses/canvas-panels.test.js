@@ -92,3 +92,33 @@ test('the Assignments 2 divider rule leaves the editor inside it and the rest of
     ['a styled div elsewhere', node('div', { style: 'border-top: 1px solid red;' }, chain('div#application', 'div#content'))],
   ]) assert.ok(!matches(el, sel), `${sel} must not reach ${name}`);
 });
+
+// The sticky Submit/Next bar of the same page is styled inline too, `background-color: white; border-color: grey1214`
+// (StudentFooter.jsx), so its top edge is the same white line on a dark Look.
+const a2Footer = () => {
+  const footer = { tag: 'div', id: 'assignments-student-footer', cls: [], parent: chain('div#application', 'div') };
+  footer.attrs = { style: 'background-color: rgb(255, 255, 255); border-color: rgb(232, 234, 236);' };
+  return footer;
+};
+
+test('the Assignments 2 footer\'s border takes the Look\'s border colour over Canvas\'s inline one', () => {
+  const hit = winner(rules, a2Footer(), 'border(?:-top)?-color');
+  assert.ok(hit, 'a rule paints the footer\'s border');
+  const [value, sel] = hit;
+  assert.equal(value, 'var(--gz-border-line, var(--gz-line))');
+  const decl = rules.find(([s]) => s === sel)[1].match(/(?:^|;)\s*border(?:-top)?-color\s*:\s*([^;]+)/)[1];
+  assert.match(decl, /!important\s*$/, `${sel} loses to the inline border-color without !important`);
+});
+
+test('the Assignments 2 footer rule leaves the rest of the page alone', () => {
+  const hit = rules.find(([s, b]) => /assignments-student-footer/.test(s) && /border-color/.test(b));
+  assert.ok(hit, 'a rule scoped to the footer paints its border');
+  const sel = hit[0];
+  assert.ok(matches(a2Footer(), sel), `${sel} reaches the footer`);
+  const node = (tag, attrs, parent) => ({ tag, id: '', cls: [], attrs, parent });
+  for (const [name, el] of [
+    ['the page panel', chain('div#application', 'div#content')],
+    ['a styled div elsewhere', node('div', { style: 'border-color: red;' }, chain('div#application', 'div#content'))],
+    ['the footer without Canvas\'s inline colour', Object.assign(a2Footer(), { attrs: {} })],
+  ]) assert.ok(!matches(el, sel), `${sel} must not reach ${name}`);
+});
