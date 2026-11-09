@@ -461,12 +461,19 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   };
   // Writer opening an empty Canvas RCE box: the newest copy kept of it (another page's, a crash's), unless Canvas already has
   // its text as what was submitted or posted, which then goes. Writer offers it (offerText); settle takes it away.
-  const rcePosted = async (d) => {
-    const a = location.pathname.match(/^\/courses\/(\d+)\/assignments\/(\d+)\/?$/), t = location.pathname.match(/^\/(courses|groups)\/(\d+)\/discussion_topics\/(\d+)\/?$/);
+  const rcePosted = async (d, at) => {
+    const a = at.path.match(/^\/courses\/(\d+)\/assignments\/(\d+)\/?$/), t = at.path.match(/^\/(courses|groups)\/(\d+)\/discussion_topics\/(\d+)\/?$/);
     try {
-      if (a) return GZ_DRAFTS.postedIn(d.text, [(await capi(`/courses/${a[1]}/assignments/${a[2]}/submissions/self`))?.body]);
+      if (a) {
+        const s = await capi(`/courses/${a[1]}/assignments/${a[2]}/submissions/self`);
+        return Date.parse(s?.submitted_at) >= d.at - 1000 && GZ_DRAFTS.postedIn(d.text, [s?.body]);
+      }
       if (t) {
-        const mine = [], walk = (es) => { for (const e of Array.isArray(es) ? es : []) { if (String(e?.user_id) === account.user) mine.push(e.message); walk(e?.replies); } };
+        const parent = at.id === 'message-body-root' ? null : at.id.match(/^message-body-(\d+)$/)?.[1];
+        const mine = [], walk = (es, above = null) => { for (const e of Array.isArray(es) ? es : []) {
+          if (String(e?.user_id) === account.user && String(e.parent_id ?? above) === String(parent) && Date.parse(e.created_at) >= d.at - 1000) mine.push(e.message);
+          walk(e?.replies, e?.id);
+        } };
         walk((await capi(`/${t[1]}/${t[2]}/discussion_topics/${t[3]}/view`))?.view);
         return GZ_DRAFTS.postedIn(d.text, mine);
       }
@@ -476,12 +483,15 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const offer = async (ed) => {
     if (!ctx.settings().enhance.drafts || !ctx.on() || !rce(ed)) return null;
     await loadAccount();
+    const at = ctx.draftAt(ed);
     const key = account && draftKey(ed);
     if (!key) return null;
     let timer;
     const got = await new Promise((yes) => { timer = setTimeout(() => yes(false), 1500); read(key, () => yes(true)); }).finally(() => clearTimeout(timer));
     for (let d; got && (d = held.get(key)?.[0]);) {
-      if (!await rcePosted(d)) return { ...d, key };
+      const posted = await rcePosted(d, at);
+      if (!ed.isConnected || location.pathname !== at.path || draftKey(ed) !== key || !ctx.settings().enhance.drafts || !ctx.on()) return null;
+      if (!posted) return { ...d, key };
       resolve(key, d);
     }
     return null;
