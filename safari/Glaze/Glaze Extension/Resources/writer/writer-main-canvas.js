@@ -44,7 +44,7 @@
       const attrs = [...raw.matchAll(/\s([a-z-]+)="([^"<>]*)"/g)];
       if (raw.replace(/\s([a-z-]+)="([^"<>]*)"/g, '').trim()) return false;
       for (const [, k, v] of attrs) {
-        if (k === 'href' && tag === 'a' && v.length <= 2048 && /^(https?:\/\/|mailto:|tel:\+?\d)/i.test(v)) continue;
+        if (k === 'href' && tag === 'a' && v.replace(/&(amp|quot|lt|gt);/g, 'x').length <= 2048 && /^(https?:\/\/|mailto:|tel:\+?\d)/i.test(v)) continue;
         if (k === 'style' && STYLE[tag]?.test(v)) continue;
         return false;
       }
