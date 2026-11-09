@@ -123,3 +123,11 @@ test('plain mode: paragraphs of text only, written as the Canvas adapter reads t
   assert.equal(S.text(S.parse(PL, '<p>one</p><p></p><p>three</p>')).text, 'one\n\nthree');
   assert.deepEqual(S.loses(PL, '<p><span style="color: red;">x</span></p><table><tr><td>t</td></tr></table>'), []);
 });
+
+test('plain mode refuses takeover when its input cannot be parsed within the schema limits', () => {
+  for (const html of ['x'.repeat(S.MAX_INPUT + 1), '<p></p>'.repeat(S.MAX_TOKENS),
+    '<blockquote>'.repeat(S.MAX_DEPTH + 1) + 'x' + '</blockquote>'.repeat(S.MAX_DEPTH + 1)]) {
+    assert.throws(() => S.parse(PL, html), { code: 'WRITER_INPUT_LIMIT' });
+    assert.deepEqual(S.loses(PL, html), ['limit']);
+  }
+});
