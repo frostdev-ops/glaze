@@ -8,7 +8,7 @@ const { parse } = require('../fixture-dom.js');
 
 // The real Canvas adapter and page controller over the captured LMS boxes. Native clicks pass through the controller's
 // capture listener, including its replay; frame messages and the clock are driven explicitly by each test.
-const page = async ({ fixture = 'discussion', helper = 'ok' } = {}) => {
+const page = async ({ fixture = 'discussion', helper = 'ok', ready = () => true } = {}) => {
   const doc = { activeElement: null }, ports = [], clicks = [], timers = new Map(), observers = [], kept = [];
   let seq = 0, now = 100000, mode = helper;
   doc.root = doc.documentElement = new El('html', doc);
@@ -72,9 +72,10 @@ const page = async ({ fixture = 'discussion', helper = 'ok' } = {}) => {
   });
   run('writer/page/writer.js');
   const settle = async () => { await new Promise(setImmediate); };
-  const boot = async () => {
+  const boot = async (start = () => true) => {
     ctx.GZ_WRITER.pass(); await settle();
     for (const frame of doc.querySelectorAll('iframe.gz-writer')) {
+      if (!start(frame)) continue;
       const port = ports.find((p) => !p.closed && !p.started);
       if (!port) continue;
       port.started = true;
@@ -89,7 +90,7 @@ const page = async ({ fixture = 'discussion', helper = 'ok' } = {}) => {
     assert.ok(request, 'a send requests the frame document');
     emit({ type: 'flushed', request, html }, p);
   };
-  await boot();
+  await boot(ready);
   return { ctx, doc, ports, clicks, timers, observers, kept, location, destination, box, emit, press, flush, boot, load, prepare,
     helper: (value) => { mode = value; }, clock: (value) => { now = value; },
     tick: (ms) => { for (const [id, t] of [...timers]) if (t.ms === ms) { if (!t.repeat) timers.delete(id); t.f(); } } };
@@ -200,6 +201,26 @@ test('Canvas quiz: Writer opens on each drawn essay as a test, and Ctrl/Cmd+Ente
   c.emit({ type: 'send' }, quizFrames(c)[0]);
   assert.equal(c.clicks.length, 0);
   assert.ok(!quizFrames(c)[0].sent.some((m) => m.type === 'flush'), 'the keys ask nothing of the frame');
+});
+test('Canvas quiz: submitting while Writer loads preserves edits made in Canvas after mount', async () => {
+  const c = await page({ fixture: 'quiz', ready: () => false });
+  const native = c.doc.querySelector('#question_input_0_ifr').contentDocument.body;
+  native.innerHTML = '<p>Typed in Canvas while Writer loads.</p>';
+  const submit = c.doc.querySelector('#submit_quiz_button');
+  c.press(submit);
+  assert.deepEqual(c.clicks, [submit]);
+  assert.equal(native.textContent, 'Typed in Canvas while Writer loads.', 'an unready frame does not own the visible native editor');
+});
+test('Canvas quiz: a native essay can keep changing while a ready essay flushes', async () => {
+  const c = await page({ fixture: 'quiz', ready: (frame) => !!frame.nextElementSibling.querySelector('#question_input_0') });
+  const native = c.doc.querySelector('#question_input_4_ifr').contentDocument.body;
+  native.innerHTML = '<p>Native answer.</p>';
+  const submit = c.doc.querySelector('#submit_quiz_button');
+  c.press(submit);
+  native.innerHTML = '<p>Native answer, revised while waiting.</p>';
+  flushAll(c);
+  assert.deepEqual(c.clicks, [submit]);
+  assert.equal(native.textContent, 'Native answer, revised while waiting.', 'the final check must use the visible native editor until Writer is ready');
 });
 test('Canvas quiz: Submit Quiz waits for every essay\'s frame, then goes once with all their words', async () => {
   const c = await page({ fixture: 'quiz' });
