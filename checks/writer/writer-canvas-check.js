@@ -12,8 +12,8 @@
 // its editor within 10 s gets Writer's unsynced text; a dead frame leaves its text to copy. A classic quiz's essays: each
 // RCE Canvas has drawn is Writer's as a test (no AI there), the one drawn later too; Canvas's answer backup (its change →
 // get_code of every essay) carries Writer's text, and Submit Quiz, pressed at once after typing, submits every essay's last
-// words. Assignments 2: Writer opens on the draft Canvas loaded; its Submit, pressed at once after typing, and pressed while an
-// earlier draft save is still on its way, sends exactly Writer's text, once Canvas's draft (createSubmissionDraft) holds
+// words. Assignments 2: Writer opens on the draft Canvas loaded; its Submit, pressed after typing, and pressed while the
+// last words' draft is still to be saved (an earlier one just landed), sends exactly Writer's text, once Canvas's draft (createSubmissionDraft) holds
 // it; a draft Canvas couldn't save holds the press with the reason shown. Every non-GET is aborted, but the Assignments 2
 // stand-in's draft saves, answered here.
 // glaze-remote -o <evidence directory> -- node checks/writer/writer-canvas-check.js /out (CLAUDE.md)
@@ -558,18 +558,19 @@ const CANVAS = `(() => {
 
     // ---- Assignments 2: Submit sends Canvas's saved draft, so it waits for that draft to hold Writer's text ----
     const draftOf = (q) => `/courses/36/assignments/253?draft=${encodeURIComponent(q)}`;
-    const a2Submit = (p) => p.evaluate(() => document.querySelector('[data-testid="submit-button"]').click());
+    // Pressed as a student can: as soon as Canvas has Submit on (it is off while a draft saves).
+    const a2Submit = (p) => until(() => p.evaluate(() => { const b = document.querySelector('[data-testid="submit-button"]'); if (b.disabled) return false; b.click(); return true; }), 'Submit pressed', 10000);
     const a2Text = (p, h) => p.evaluate((x) => new DOMParser().parseFromString(x, 'text/html').body.textContent, h);
     p = await open(draftOf('<p>A saved draft.</p>'));
     let a2 = await box(p, 'assignment');
     check(await p.evaluate(() => getComputedStyle(document.querySelector('[data-testid="text-editor"] .rce-wrapper')).display === 'none' && document.querySelector('iframe.gz-writer').nextElementSibling?.matches('.rce-wrapper')), 'Assignments 2: Writer stands in for the Text Entry RCE');
     check(squash(await writerText(a2.fr)) === 'A saved draft.', `Writer opens on the draft Canvas loaded into its editor as it came up (${await writerText(a2.fr)})`);
-    await typeIn(p, a2, ' And the last words, typed and submitted at once.');
+    await typeIn(p, a2, ' And the last words, then Submit.');
     await a2Submit(p);
     await until(() => p.evaluate(() => __submits.length >= 1), 'Assignments 2 submitted', 15000);
     await pause(300);
     let a2Subs = await p.evaluate(() => __submits.slice()), a2Drafts = await p.evaluate(() => __drafts.slice()), inA2 = squash(await writerText(a2.fr));
-    check(a2Subs.length === 1 && a2Subs[0].body && squash(await a2Text(p, a2Subs[0].body)) === inA2 && inA2.endsWith('submitted at once.'), `Submit, pressed at once, sends exactly Writer's text, once Canvas's draft holds it (${JSON.stringify(a2Subs)})`);
+    check(a2Subs.length === 1 && a2Subs[0].body && squash(await a2Text(p, a2Subs[0].body)) === inA2 && inA2.endsWith('then Submit.'), `Submit sends exactly Writer's text, once Canvas's draft holds it (${JSON.stringify(a2Subs)})`);
     check(a2Drafts.at(-1) === a2Subs[0].body, `the draft Canvas saved (createSubmissionDraft) is Writer's text (${a2Drafts.at(-1)})`);
     await p.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
     await pause(1500);
