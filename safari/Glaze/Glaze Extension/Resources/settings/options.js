@@ -1776,7 +1776,8 @@ GZ_UI.load().then((s) => {
     hint(t('Preferences reset and files kept for backgrounds removed. Your presets and other local data are kept.'));
     chrome.runtime.sendMessage({ type: 'glaze:media', op: 'reset' }, (r) => { if (chrome.runtime.lastError || !r?.ok) hint(t("Couldn't remove the files kept for backgrounds. Try again in a moment."), true); });
     // And the sites said yes to (Sites, below): Glaze asks again on each.
-    chrome.runtime.sendMessage({ type: 'glaze:sites', op: 'reset' }).catch(() => {});
+    const sitesFailed = () => hint(t("Couldn't reset your school sites. Try again in a moment."), true);
+    chrome.runtime.sendMessage({ type: 'glaze:sites', op: 'reset' }).then((r) => { if (!r?.ok) sitesFailed(); }).catch(() => sitesFailed());
   });
 
   // ---- Sites: school access and its permission flow have their own module.

@@ -1861,6 +1861,7 @@
   "Phone": "Téléphone",
   "Preferences reset and files kept for backgrounds removed. Your presets and other local data are kept.": "Préférences réinitialisées et fichiers conservés pour les arrière-plans supprimés. Vos préréglages et autres données locales sont conservés.",
   "Couldn't remove the files kept for backgrounds. Try again in a moment.": "Impossible de supprimer les fichiers conservés pour les arrière-plans. Réessayez dans un instant.",
+  "Couldn't reset your school sites. Try again in a moment.": "Impossible de réinitialiser les sites de votre établissement. Réessayez dans un instant.",
   "Privacy": "Confidentialité",
   "Quiz": "Quiz",
   "Reset section": "Réinitialiser la section",

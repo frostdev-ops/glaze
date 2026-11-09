@@ -1861,6 +1861,7 @@
   "Phone": "Teléfono",
   "Preferences reset and files kept for backgrounds removed. Your presets and other local data are kept.": "Preferencias restablecidas y archivos guardados para fondos eliminados. Tus paletas y demás datos locales se conservan.",
   "Couldn't remove the files kept for backgrounds. Try again in a moment.": "No se pudieron quitar los archivos guardados para fondos. Inténtalo de nuevo en un momento.",
+  "Couldn't reset your school sites. Try again in a moment.": "No se pudieron restablecer los sitios de tu escuela. Inténtalo de nuevo en un momento.",
   "Privacy": "Privacidad",
   "Quiz": "Cuestionario",
   "Reset section": "Restablecer sección",

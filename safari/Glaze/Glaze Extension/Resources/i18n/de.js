@@ -1861,6 +1861,7 @@
   "Phone": "Smartphone",
   "Preferences reset and files kept for backgrounds removed. Your presets and other local data are kept.": "Einstellungen zurückgesetzt und für Hintergründe behaltene Dateien entfernt. Deine Vorlagen und anderen lokalen Daten bleiben erhalten.",
   "Couldn't remove the files kept for backgrounds. Try again in a moment.": "Die für Hintergründe behaltenen Dateien konnten nicht entfernt werden. Versuche es gleich noch einmal.",
+  "Couldn't reset your school sites. Try again in a moment.": "Deine Schulseiten konnten nicht zurückgesetzt werden. Versuche es gleich noch einmal.",
   "Privacy": "Datenschutz",
   "Quiz": "Test",
   "Reset section": "Abschnitt zurücksetzen",

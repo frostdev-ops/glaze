@@ -1861,6 +1861,7 @@
   "Phone": "Telefoon",
   "Preferences reset and files kept for backgrounds removed. Your presets and other local data are kept.": "Voorkeuren hersteld en bewaarde bestanden voor achtergronden verwijderd. Je voorinstellingen en andere lokale gegevens blijven bewaard.",
   "Couldn't remove the files kept for backgrounds. Try again in a moment.": "De bewaarde bestanden voor achtergronden konden niet worden verwijderd. Probeer het zo opnieuw.",
+  "Couldn't reset your school sites. Try again in a moment.": "Je schoolsites konden niet worden teruggezet. Probeer het zo opnieuw.",
   "Privacy": "Privacy",
   "Quiz": "Toets",
   "Reset section": "Onderdeel herstellen",

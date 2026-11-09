@@ -10,6 +10,7 @@ All notable changes to Glaze are documented here. The format follows
 
 - Typing `/` with a switch or choice focused opens Settings search again.
 - Google Drive's daily backup keeps Notes and the Pet habitat on for a new install, so restoring it no longer turns them off.
+- Reset everything says so when it couldn't reset your school sites.
 
 ## [4.0.6] — 2026-11-09
 
