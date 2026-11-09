@@ -484,6 +484,8 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
 #application .collapsed_module > .ig-header { border-bottom: 0; border-radius: calc(var(--gz-radius) - calc(var(--gz-radius, 12px) * 1 / 12)); }
 #application .ig-row { background: transparent; border-width: 0 0 1px; color: var(--gz-ink-muted); transition: background var(--gz-t) var(--gz-ease); }
 #application .ig-row:hover { background: var(--gz-row-hover); }
+/* A module item's own box lights #f9f9f9 or white under the pointer, round the row that washes: clear, whatever it is tagged. */
+#application li.context_module_item:is(:hover, :focus-within, [data-gz-hover], [data-gz-light]) { background: transparent !important; }
 #application li:last-child > .ig-row, #application .ig-row:last-child { border-bottom-width: 0; }
 #application .ig-title { color: var(--gz-ink); transition: color var(--gz-t) var(--gz-ease); }
 #application a.ig-title:hover { color: var(--gz-accent); }
@@ -735,6 +737,9 @@ html :is([data-cid~="IconButton"], [data-cid~="Button"]):is([disabled], [aria-di
 #application #minical .fc-button { background: transparent; border: 0; color: var(--gz-ink-muted); }
 #application #minical .fc-button:hover { color: var(--gz-accent); }
 #application .context-list-toggle-box { border-radius: calc(var(--gz-radius, 12px) * 1 / 4); }
+/* The calendars beside the grid light Canvas's #f2f4f4 under the pointer: the row wash. */
+#application #calendars-context-list .context_list_context { border-radius: var(--gz-radius-sm); }
+#application #calendars-context-list .context_list_context:is(:hover, :focus-within) { background: var(--gz-row-hover) !important; }
 /* An unchecked calendar's box is Canvas's light grey square: an empty box with an edge. */
 #application .context_list_context:not(.checked) .context-list-toggle-box { background-color: transparent !important; box-shadow: inset 0 0 0 1px var(--gz-line-strong); }
 
@@ -915,7 +920,7 @@ body > :is(.ui-dialog, .ui-menu, .ui-datepicker, span:not([class])) :where(*) { 
 .ui-tabs .ui-tabs-nav li { background: transparent; border: 0; border-radius: var(--gz-radius-sm) var(--gz-radius-sm) 0 0; margin-bottom: -1px; transition: background var(--gz-t) var(--gz-ease); }
 .ui-tabs .ui-tabs-nav li a { color: var(--gz-ink-muted); transition: color var(--gz-t) var(--gz-ease); }
 .ui-tabs .ui-tabs-nav li:hover { background: var(--gz-row-hover); }
-.ui-tabs .ui-tabs-nav li.ui-tabs-active { background: transparent; box-shadow: inset 0 -2px 0 var(--gz-accent); }
+.ui-tabs .ui-tabs-nav li.ui-tabs-active { background: transparent !important; box-shadow: inset 0 -2px 0 var(--gz-accent); }
 .ui-tabs .ui-tabs-nav li.ui-tabs-active a, .ui-tabs .ui-tabs-nav li a:hover { color: var(--gz-ink); }
 .ui-tabs .ui-tabs-panel { color: var(--gz-ink); }
 /* Menus and the date picker. Canvas fills the chosen row with the brand colour and writes the text white. */
@@ -1020,7 +1025,11 @@ html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) 
 /* The text and highlight colour icons paint their letter with a fill attribute (their colour bar is the chosen colour, left alone). */
 .tox.tox-tinymce .tox-tbtn svg g[fill="#2B3B46"] { fill: currentColor; }
 .tox.tox-tinymce .tox-tbtn[data-gz-light] { background: transparent !important; }
-.tox.tox-tinymce :is(.tox-tbtn, .tox-mbtn):is(:hover, :focus-visible, [aria-expanded="true"]) { background: var(--gz-accent-soft) !important; color: var(--gz-accent); }
+.tox.tox-tinymce :is(.tox-tbtn, .tox-mbtn):is(:hover, :focus, :focus-visible, [aria-expanded="true"]) { background: var(--gz-accent-soft) !important; color: var(--gz-accent); }
+/* A split button (text colour, highlight, lists) lights #f2f2f2 whole, and white round its arrow: one wash, its halves clear. */
+.tox.tox-tinymce .tox-split-button { border-radius: var(--gz-radius-sm); transition: background var(--gz-t) var(--gz-ease); }
+.tox.tox-tinymce .tox-split-button:is(:hover, :focus, :focus-within) { background: var(--gz-accent-soft) !important; box-shadow: none; }
+.tox.tox-tinymce .tox-split-button:is(:hover, :focus, :focus-within) .tox-tbtn { background: transparent !important; color: var(--gz-accent); }
 .tox.tox-tinymce :is(.tox-tbtn--enabled, .tox-tbtn--enabled:hover, .tox-mbtn--active) { background: var(--gz-accent-soft) !important; color: var(--gz-accent); }
 .tox.tox-tinymce :is(.tox-tbtn--disabled, .tox-tbtn--disabled:hover, .tox-mbtn--disabled, .tox-mbtn--disabled:hover, .tox-tbtn:disabled) { background: transparent !important; color: var(--gz-ink-faint); opacity: 0.6; cursor: default; }
 .tox.tox-tinymce :is(.tox-tbtn, .tox-mbtn):focus-visible { box-shadow: inset 0 0 0 2px var(--gz-accent); }
@@ -1190,7 +1199,9 @@ html[data-gz-dark-theme] [data-cid~="MenuItem"]:not([aria-disabled="true"]):is(:
 
 /* jQuery UI tab strips (the people page's groups): jQuery UI marks the tab it is over or focused with a white
    ui-state class; the tab washes like a row instead. */
-.ui-tabs .ui-tabs-nav li:is(.ui-state-hover, .ui-state-focus, :focus-within):not(.ui-tabs-active) { background: var(--gz-row-hover) !important; }
+.ui-tabs .ui-tabs-nav li:is(.ui-state-hover, .ui-state-focus, :focus-within, :hover):not(.ui-tabs-active) { background: var(--gz-row-hover) !important; }
+/* Canvas's own :hover white on a tab (the open one too) beats a class rule: it eased in before the first-contact check. */
+html body .ui-tabs .ui-tabs-nav li.ui-tabs-active:hover { background: transparent !important; }
 .ui-tabs .ui-tabs-nav li a:hover { color: var(--gz-accent); }
 
 /* ---- Extras on Canvas ---- */
