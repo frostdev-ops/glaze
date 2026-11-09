@@ -132,3 +132,24 @@ test('Canvas: replacing the frame retires its outstanding send request', async (
   c.press(c.box().send); c.flush();
   assert.equal(c.clicks.length, 1, 'a new press asks the replacement frame, without waiting on the retired frame');
 });
+
+for (const fixture of ['assignment', 'inbox']) test(`Canvas: ${fixture} carry-over cannot fill another destination with the same editor id`, async () => {
+  const c = await page({ fixture, helper: 'fail' });
+  c.emit({ type: 'change', html: '<p>Private unsynced words.</p>', text: 'Private unsynced words.' });
+  c.doc.body.remove(); c.ctx.GZ_WRITER.pass(); // Keep the orphan before navigation.
+  if (fixture === 'assignment') c.location.pathname = '/courses/34/assignments/239';
+  else c.destination.to = ['address-book-label-9-user'];
+  c.doc.body = c.load(); c.prepare(c.doc.body);
+  await c.boot();
+  assert.equal(c.ports.at(-1).sent.find((m) => m.type === 'init').html, '<p><br></p>', 'the editor id alone does not identify its destination');
+});
+
+test('Canvas: a remount at the same destination keeps its unsynced words', async () => {
+  const c = await page({ fixture: 'assignment', helper: 'fail' });
+  c.emit({ type: 'change', html: '<p>Private unsynced words.</p>', text: 'Private unsynced words.' });
+  c.doc.body.remove(); c.ctx.GZ_WRITER.pass();
+  c.doc.body = c.load(); c.prepare(c.doc.body); c.helper('ok');
+  await c.boot();
+  assert.equal(c.ports.at(-1).sent.find((m) => m.type === 'init').html, '<p>Private unsynced words.</p>');
+  assert.equal(c.ctx.GZ_WRITER_CANVAS.read(c.box().editor).text, 'Private unsynced words.');
+});
