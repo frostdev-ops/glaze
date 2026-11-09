@@ -279,14 +279,14 @@ const CANVAS = `(() => {
     a = await box(p, 'assignment');
     const offer = await until(() => offerOf(a.fr), 'the offer in Writer');
     check(/^Glaze kept a copy of what you wrote here \(.+\)\.$/.test(offer.text) && offer.buttons.join() === 'Restore,Dismiss', `an empty box offers the copy back in Writer ("${offer.text}" ${offer.buttons.join(' ')})`);
-    await a.fr.click('.gw-offer button:first-of-type');
+    await a.fr.evaluate(() => document.querySelector('.gw-offer button:first-of-type').click());
     await until(async () => squash(await writerText(a.fr)) === KEPT && squash((await tiny(p)).text) === KEPT, 'restored into Writer and Canvas');
     check(!await offerOf(a.fr), 'Restore puts the copy in Writer and in Canvas\'s editor, and the offer goes');
     await p.close();
     p = await open(A);
     a = await box(p, 'assignment');
     await until(() => offerOf(a.fr), 'offered again on the next visit');
-    await a.fr.click('.gw-offer button:last-of-type');
+    await a.fr.evaluate(() => document.querySelector('.gw-offer button:last-of-type').click());
     check(!await offerOf(a.fr) && !squash(await writerText(a.fr)), 'Dismiss takes the offer away, the box left empty');
     await p.close();
     p = await open(A);
