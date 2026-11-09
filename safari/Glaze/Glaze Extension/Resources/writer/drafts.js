@@ -1,4 +1,5 @@
-// Backing up Ultra editors and Canvas new Inbox messages: the parts that don't touch the page, so node can test them.
+// Backing up Ultra editors, Canvas new Inbox messages and what Glaze Writer holds of a Canvas Rich Content Editor's box: the
+// parts that don't touch the page, so node can test them.
 // Classic script for the content script; module.exports for node.
 // Loaded on demand (content.js need()): a second injection into the same frame keeps the first.
 var GZ_DRAFTS = globalThis.GZ_DRAFTS || (() => {
@@ -23,6 +24,14 @@ var GZ_DRAFTS = globalThis.GZ_DRAFTS || (() => {
   // for the post and the editor, as content.js draftAt reads them). null where there is no user to keep it for.
   const ultraKey = (m) => (m && /^https?:\/\/[^/]+$/.test(m.origin) && typeof m.user === 'string' && /^[\w.-]{1,64}$/.test(m.user) && typeof m.path === 'string' && m.path.startsWith('/')
     ? `draft:ultra:${m.origin}/${m.user}${m.path}#${m.near ?? ''}/${m.id ?? ''}` : null);
+  // Glaze Writer on Canvas (writer/page/writer.js): a Rich Content Editor's box, per site, signed-in user, page and the box's
+  // textarea (m: origin, user, path, id). null where there is no user to keep it for.
+  const canvasRceKey = (m) => (m && /^https?:\/\/[^/]+$/.test(m.origin) && typeof m.user === 'string' && /^\d{1,20}$/.test(m.user) && typeof m.path === 'string' && /^\/[\w./-]{0,500}$/.test(m.path)
+    && typeof m.id === 'string' && /^[\w-]{1,80}$/.test(m.id) ? `draft:canvas-rce:${m.origin}/${m.user}${m.path}#${m.id}` : null);
+  // Whether all of a copy's text shows in one of the bodies the student posted since (HTML, as Canvas's API gives them).
+  const ENTITY = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
+  const textOfHTML = (h) => String(h ?? '').replace(/<[^>]*>/g, ' ').replace(/&(amp|lt|gt|quot|apos|nbsp|#39);/g, (_, k) => ENTITY[k]);
+  const postedIn = (text, bodies) => worth(text) && (bodies || []).some((b) => squash(textOfHTML(b)).includes(squash(text)));
   // What is stored for one editor: the newest copy, and in `prev` older ones, at most COPIES. Each is a page's own (`id`, one
   // a page, which only that page's next copy replaces) and stays until it is restored, dismissed, posted or 14 days old.
   const COPIES = 3;
@@ -99,6 +108,8 @@ var GZ_DRAFTS = globalThis.GZ_DRAFTS || (() => {
   const owner = (key) => {
     try {
       if (key.startsWith('draft:pending:')) key = decodeURIComponent(key.split(':')[2]);
+      const rce = key.match(/^draft:canvas-rce:(https?:\/\/[^/]+)\/(\d+)(\/[^#]*)#([\w-]+)$/);
+      if (rce) return canvasRceKey({ origin: rce[1], user: rce[2], path: rce[3], id: rce[4] }) === key && new URL(rce[1]).origin === rce[1] ? { site: 'canvas', origin: rce[1], user: rce[2] } : null;
       if (key.startsWith('draft:canvas:')) {
         const [origin, user, course, to, subject] = JSON.parse(key.slice(13));
         return canvasKey({ origin, user, course, to, subject }) === key ? { site: 'canvas', origin, user } : null;
@@ -180,7 +191,7 @@ var GZ_DRAFTS = globalThis.GZ_DRAFTS || (() => {
     const old = stale(await local.get(keys), now);
     return { ok: !old.length || await local.remove(old) };
   };
-  return { squash, worth, count, posted, stale, ultraKey, pack, unpack, canvasKey, canvasRecipient, sent, change, tidy, sweep, load, fold, pendingKey, pendingPrefix, owner, superseded, mark, restoreHTML };
+  return { squash, worth, count, posted, postedIn, stale, ultraKey, canvasRceKey, pack, unpack, canvasKey, canvasRecipient, sent, change, tidy, sweep, load, fold, pendingKey, pendingPrefix, owner, superseded, mark, restoreHTML };
 })();
 
 // Node takes the module; a page that loaded this on demand gets it as the script's last value, which is how

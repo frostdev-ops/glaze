@@ -39,6 +39,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (![...boxes.values()].some((b) => b.frame === e.target)) { activeCurrent = null; pinnedCurrent = null; }
   }, true);
   const declined = new WeakSet(); // editors given back to Blackboard's editor: Ultra's from then on, on this page
+  const orphans = new Map(); // identity → what Writer held, unsynced, of a box whose editor the site took away (10 s)
   const failed = new WeakMap(); // editor → when its frame last failed to open; tried again a minute later
   const SENDS = new Set(['post', 'reply', 'message', 'journal']);
   // A paper (an assignment's attempt) in its full view (Settings → Writer → Full writer) is a page of its own: as tall as the
@@ -134,6 +135,15 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (boxes.get(b.editor) !== box || !sameBox(box)) { drop(box); return; }
     box.askOwner = await owner;
     if (boxes.get(b.editor) !== box || !sameBox(box)) { drop(box); return; }
+    // Canvas redrew this box's editor while Writer held words it hadn't taken (a React remount): Writer opens with them, and
+    // writes them in. Else an empty Rich Content Editor box gets the copy Glaze kept of it offered back in the frame.
+    const orphan = orphans.get(b.identity);
+    orphans.delete(b.identity);
+    if (orphan && orphan.kind === b.kind && Date.now() - orphan.at < 10000 && !squash(native.text)) { box.latest = orphan.html; box.snapshot = orphan.snapshot; box.recovered = box.carried = true; }
+    else if (A().HOLD && b.mode === 'compose' && !squash(native.text)) {
+      box.offer = await Promise.resolve(globalThis.GZ_DRAFT_UI?.offer?.(b.editor)).catch(() => null);
+      if (boxes.get(b.editor) !== box || !sameBox(box)) { drop(box); return; }
+    }
     if (b.mode === 'paper') {
       const paper = await paperOf();
       if (boxes.get(b.editor) !== box || !sameBox(box)) { drop(box); return; }
@@ -259,7 +269,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.ready = true;
     const selection = typing && box.mode === 'compose' && !box.recovered ? A().selection?.(box, main) : null;
     if (box.mode === 'paper') box.context = { ...box.context, recovery: location.origin + location.pathname };
-    box.port.postMessage({ type: 'init', site: X.site, mode: box.mode, kind: box.kind, askOwner: box.askOwner, html: box.latest, selection, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale() });
+    const offer = box.offer && { html: box.offer.html, text: GZ_DRAFT_UI.offerText(box.offer) };
+    box.port.postMessage({ type: 'init', site: X.site, mode: box.mode, kind: box.kind, askOwner: box.askOwner, html: box.latest, selection, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale(), ...(offer && { offer }) });
+    if (box.carried) { box.carried = false; sync(box, box.latest, null); }
     if (X.site === 'ultra' && ['post', 'reply', 'message', 'journal'].includes(box.kind)) X.need('writer/writer-context-discussion.js', () => globalThis.GZ_WRITER_CONTEXT_DISCUSSION).then(() => globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.watch(box, X), () => {});
     if (X.site === 'ultra' && box.kind === 'reply') X.need('writer/page/writer-quote.js', () => globalThis.GZ_WRITER_QUOTE).then(() => globalThis.GZ_WRITER_QUOTE?.arm(box), () => {});
     box.display ||= [box.root.style.getPropertyValue('display'), box.root.style.getPropertyPriority('display')];
@@ -340,6 +352,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     else if (m.type === 'send') send(box);
     else if (m.type === 'flushed') flushed(box, m);
     else if (m.type === 'insert' && typeof m.tool === 'string') insert(box, m.tool);
+    else if (m.type === 'offer') { if (box.offer) globalThis.GZ_DRAFT_UI?.settle?.(box.offer); box.offer = null; }
     else if (m.type === 'native' && typeof m.reason === 'string' && m.reason) refuse(box);
     else if (m.type === 'native') giveBack(box, true);
   };
@@ -655,7 +668,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const pass = () => {
     if (!on()) { dropAll(); return; }
     for (const box of [...boxes.values()]) {
-      if (!sameBox(box)) drop(box);
+      if (!sameBox(box)) { if (box.unsynced && box.mode !== 'paper' && box.path === location.pathname) orphans.set(box.identity, { kind: box.kind, html: box.latest, snapshot: box.snapshot, at: Date.now() }); drop(box); }
       else if (box.kind === 'post' && (!box.display || box.posted) && !box.text && box.editor.closest('form')?.querySelector('.panel-editor-controls.ng-hide, .panel-editor-controls[aria-hidden="true"]')) drop(box);
       else if (box.kind === 'journal' && !A().sendOf(box.editor, 'journal')) drop(box); // its Cancel, or the entry sent
       else if (box.frame && !box.frame.isConnected) { if (box.unsynced || box.mode === 'paper') reopen(box); else drop(box); }

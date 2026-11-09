@@ -2,7 +2,8 @@
 // opens in the box's place. An extension page, so the editor has the workers and WebAssembly the LMS page's CSP keeps from
 // a content script (proofing needs both), its own fonts and styles. It opens only with a one-use pass from the worker
 // (background/background.js 'glaze:writer'). After a public boot signal, it talks to the page over that job's MessageChannel:
-//   page → frame: init { site, mode, kind, html, selection, placeholder, look { tokens, dark, glass, motion }, context, locale }
+//   page → frame: init { site, mode, kind, html, selection, placeholder, look { tokens, dark, glass, motion }, context, locale,
+//                 offer { html, text } (a copy Glaze kept of this box, offered back at the top: Restore or Dismiss) }
 //                 (site 'canvas': compose in Canvas's dialect, or mode 'plain' for the Inbox's text; ⋯ says Canvas editor and,
 //                 but in plain, offers Insert from Canvas),
 //                 look { look }, context { context }, focus, html { html } (Ultra changed its own editor: a post went, a
@@ -14,7 +15,7 @@
 //                 own: writer-paper.js; delta: its Quill ops, what the page writes into Ultra's editor), send (Mod-Enter),
 //                 native (back to Blackboard's editor; with a reason, the box holds what Writer can't keep and nothing was
 //                 written), insert { tool } (Canvas's image, media, document, equation or link tool, after the box goes back),
-//                 flushed { request, html }; and the later parts' attachments, focus-mode, view { full, px, from, to }, room { on } and
+//                 flushed { request, html }, offer (the copy offered was restored or dismissed); and the later parts' attachments, focus-mode, view { full, px, from, to }, room { on } and
 //                 submit:*; in view mode view:shown, view:failed and view:esc.
 // Besides that pass it asks the extension only for the student's Writer settings (writer/writer-settings.js); its later
 // parts keep the paper (writer/writer-papers.js) and ask for proofing and AI on their own channels.
@@ -146,6 +147,32 @@
   document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !menu.contains(e.target) && !more.contains(e.target)) shut(); }, true);
   document.addEventListener('focusin', (e) => { if (!tb.contains(e.target) && !e.target.closest?.('.ProseMirror')) hide(tb); if (!menu.hidden && !menu.contains(e.target) && e.target !== more) shut(); });
 
+  // A copy Glaze kept of this box (writer/page/drafts.js), offered back above the editor while it is empty: Restore puts it
+  // in, as an edit the page writes into the site's editor; either button tells the page, which settles the copy.
+  const offered = (o) => {
+    const bar = document.createElement('div'), msg = document.createElement('span');
+    bar.className = 'gw-offer';
+    bar.setAttribute('role', 'status');
+    msg.textContent = o.text.slice(0, 300);
+    bar.append(msg);
+    for (const [label, restore] of [['Restore', true], ['Dismiss', false]]) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = t(label);
+      b.addEventListener('click', () => {
+        bar.remove();
+        if (restore && ed) {
+          ed.setHTML(o.html);
+          words = ed.words();
+          count();
+          say({ type: 'change', html: ed.html(), text: ed.text?.() ?? '', words, delta: null });
+          ed.focus();
+        }
+        say({ type: 'offer' });
+      });
+      bar.append(b);
+    }
+    $('gw').prepend(bar);
+  };
   // ⋯ → Insert from Canvas: each of Canvas's tools gives the box back to Canvas, which then runs it (the page does both).
   const inserts = () => {
     const head = document.createElement('div');
@@ -168,6 +195,7 @@
     words = c.words;
     count();
     if (note && !note.hidden && c.docChanged !== false) { note.hidden = true; note.textContent = ''; }
+    if (c.docChanged !== false) document.querySelector('.gw-offer')?.remove(); // writing instead: the copy stays for next time
     if (quiet || c.docChanged === false) return;
     // A paper stays in Writer's storage (writer-paper.js): the page hears compose's changes only.
     if (root.dataset.mode === 'compose') say({ type: 'change', html: c.html, text: c.text, words: c.words, delta: ed?.view && site !== 'canvas' ? GZ_WRITER_SCHEMA.delta(ed.view.state.doc) : null });
@@ -206,6 +234,7 @@
       lang(m.locale);
       emit('ready', ed, m);
       if (dialect === 'canvas') inserts(); // last in ⋯, after what the frame's parts add on ready
+      if (m.offer && typeof m.offer.html === 'string' && typeof m.offer.text === 'string') offered(m.offer);
       height(); // after the parts' ready: a paper's shows its compact box or its pages (writer-paper.js)
     },
     look: (m) => { look(m.look); emit('look', m.look); },
