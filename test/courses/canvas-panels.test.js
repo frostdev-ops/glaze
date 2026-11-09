@@ -175,3 +175,39 @@ test('the file upload edge rules leave the rest of the page and the modal alone'
     ['a styled div in the page', elem('div', { style: 'border-bottom: 1px solid red;' }, chain('div#application', 'div#content'))],
   ]) assert.ok(!matches(el, bottom[0]), `${bottom[0]} must not reach ${name}`);
 });
+
+// The file upload box's "or" divider is a 1px div Canvas colours inline, #6a7883 (FileUpload.jsx). The sweep reads that as a light
+// fill and repaints it with the surface, so on a dark Look the line Canvas draws vanishes. A separator takes the Look's line colour,
+// over the sweep's !important.
+const orLine = (style = 'height: 100%; width: 1px; left: 50%; position: absolute; background-color: rgb(106, 120, 131);') =>
+  elem('div', { style, 'data-gz-light': '' },
+    elem('div', { style: 'display: flex; height: 100%; position: relative; flex-direction: column; justify-content: center; align-items: center;' },
+      elem('div', {}, elem('div', { 'data-testid': 'upload-box' }, chain('div#application', 'div#content')))));
+const mobileStyle = 'height: 1px; width: 100%; left: 0px; position: absolute; background-color: rgb(106, 120, 131);';
+
+test('the upload box\'s "or" divider is painted with the Look\'s line colour, upright or lying down, over the sweep\'s repaint', () => {
+  for (const [name, el] of [['upright', orLine()], ['lying down', orLine(mobileStyle)]]) {
+    const hit = winner(rules, el, 'background(?:-color)?');
+    assert.ok(hit, `a rule paints the ${name} divider`);
+    const [value, sel] = hit;
+    assert.equal(value, 'var(--gz-border-line, var(--gz-line))', `${name}: won by ${sel}`);
+    assert.match(rules.find(([s]) => s === sel)[1], /background(?:-color)?\s*:[^;]*!important/, `${sel} loses to the sweep's !important`);
+  }
+});
+
+test('the "or" divider rule leaves the label, its box and every other positioned fill alone', () => {
+  const hit = rules.find(([s, b]) => /upload-box/.test(s) && /background(?:-color)?\s*:\s*var\(--gz-border-line/.test(b));
+  assert.ok(hit, 'a rule scoped to the upload box paints the divider');
+  const sel = hit[0];
+  assert.ok(matches(orLine(), sel) && matches(orLine(mobileStyle), sel), `${sel} reaches the divider`);
+  const line = orLine();
+  const label = elem('span', { style: 'display: block; width: 100%; z-index: 99; background-color: rgb(242, 244, 244); padding: 1.5rem 0px;', 'data-gz-light': '' }, line.parent);
+  const tab = elem('div', { 'data-testid': 'attempt-tab' }, chain('div#application', 'div#content'));
+  for (const [name, el] of [
+    ['the "or" label', label],
+    ['the divider\'s flex box', line.parent],
+    ['the upload box', line.parent.parent.parent],
+    ['a positioned fill outside the upload box', elem('div', { style: 'position: absolute; background-color: red;' }, tab)],
+    ['a positioned fill in the box without Canvas\'s inline colour', Object.assign(orLine(), { attrs: { style: 'position: absolute;' } })],
+  ]) assert.ok(!matches(el, sel), `${sel} must not reach ${name}`);
+});
