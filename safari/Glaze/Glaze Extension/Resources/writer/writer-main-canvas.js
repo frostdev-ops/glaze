@@ -24,7 +24,7 @@
     const t = window.tinymce;
     if (!ta || ta.getAttribute('data-rich_text') !== 'true' || !t || !/^[5-7]$/.test(String(t.majorVersion)) || typeof t.get !== 'function') return null;
     const ed = t.get(ta.id);
-    return ed && ed.getElement() === ta && ed.initialized && !ed.removed && !ed.isHidden() && ed.getBody() ? ed : null;
+    return ed && ed.getElement() === ta && ed.initialized && !ed.removed && !ed.isHidden() && ed.getBody() && ed.getBody().getAttribute('contenteditable') !== 'false' ? ed : null;
   };
 
   // Canvas's dialect, and nothing else: its tags, a link's address, and the styles Writer writes (alignment and 40px
@@ -68,7 +68,7 @@
   });
   on('gz-writer:canvas-set', (ta, m) => {
     if (inbox(ta)) {
-      if (ta.disabled || typeof m.text !== 'string' || m.text.length > 200000 || /[\u0000-\u0008\u000b-\u001f\u007f]/.test(m.text) || m.html !== undefined) return null;
+      if (ta.disabled || ta.readOnly || typeof m.text !== 'string' || m.text.length > 200000 || /[\u0000-\u0008\u000b-\u001f\u007f]/.test(m.text) || m.html !== undefined) return null;
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(ta, m.text);
       ta.dispatchEvent(new Event('input', { bubbles: true }));
       return { text: ta.value };

@@ -94,7 +94,8 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     return tag !== 'A' || /^(https?:|mailto:|tel:\+?\d)/i.test(attrs.href || '');
   };
   const editable = (html) => [...String(html ?? '').matchAll(/<([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g)].every((m) => tagOk(m[1].toUpperCase(), m[2]));
-  const canEdit = (ed) => plain(ed) || (!!bodyOf(ed) && editable(read(ed).html));
+  const canEdit = (ed) => plain(ed) ? !ed.disabled && !ed.readOnly && !ed.hasAttribute('disabled') && !ed.hasAttribute('readonly')
+    : !!bodyOf(ed) && bodyOf(ed).getAttribute('contenteditable') !== 'false' && editable(read(ed).html);
 
   // The Inbox's text as Writer's plain document holds it: a paragraph a line. Its text is what that HTML reads as.
   const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -136,7 +137,7 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     if (skip(editor)) return null;
     const kind = kindOf(editor, at);
     if (kind === 'unknown') return null;
-    if (plain(editor) ? editor.disabled || editor.hasAttribute('disabled') || !rootOf(editor) : !ready(editor) || !canEdit(editor)) return null;
+    if (plain(editor) ? !canEdit(editor) || !rootOf(editor) : !ready(editor) || !canEdit(editor)) return null;
     return { editor, container: containerOf(editor), root: rootOf(editor), kind, mode: modeOf(kind), send: sendOf(editor, kind), context: contextOf(editor, kind), identity: identity(editor) };
   }).filter(Boolean);
 
