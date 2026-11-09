@@ -208,6 +208,18 @@ test('Settings → Writer: its own tab and six sections, the two switches first,
   assert.match(html, /<script src="settings\/editor-writer\.js"><\/script>/);
 });
 
+test('one switch for Writer on every site (owner, 2026-11-09): Glaze Writer names Canvas, and there is no Canvas-only key', () => {
+  assert.ok(!('writerCanvas' in D.GZ_DEFAULTS.enhance), 'no enhance.writerCanvas');
+  const info = /<div class="info-pop" id="info-enhance-writer" popover><span class="desc">([^<]+)</.exec(html)?.[1];
+  assert.match(info, /Blackboard Ultra and Canvas/);
+  assert.doesNotMatch(info, /stays Blackboard's/, 'a box Writer can\'t keep stays the site\'s, on either');
+  assert.match(html, /<section id="writer-setup" data-editor-section="writer\/setup" data-sites="Canvas · Blackboard Ultra"/);
+  for (const f of ['de', 'es', 'fr', 'nl', 'pt-BR']) {
+    require(`../../extension/i18n/${f}.js`);
+    assert.match(globalThis.GZ_LANGS[f][info] || '', /Canvas/, `${f}: the info text in its language, naming Canvas`);
+  }
+});
+
 test('every word settings/editor-writer.js shows is in the five catalogues', () => {
   const src = read('settings/editor-writer.js');
   const words = [...src.matchAll(/\bt\('((?:[^'\\]|\\.)+)'/g)].map((m) => m[1].replace(/\\(.)/g, '$1'));
