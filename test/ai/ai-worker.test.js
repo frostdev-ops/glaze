@@ -334,7 +334,7 @@ test('Glaze\'s writer frame may ask from a course page it sits in; from a quiz, 
     assert.equal(await ask(w, frame(page)), 'allowed', page);
     assert.equal(await ask(w, frame(page), 'syllabus'), 'allowed', page);
   }
-  for (const page of [`${CANVAS}/courses/1/quizzes/3/take`, `${CANVAS}/courses/1/external_tools/9`, `${ULTRA}/ultra/courses/_101_1/outline/lti/launch`, 'https://evil.example.com/', `${ULTRA}/ultra/courses/_101_1/assessment/_7_1/overview`]) {
+  for (const page of [`${CANVAS}/courses/1/quizzes/3/take`, `${CANVAS}/courses/1/quizzes/3/take/questions/9`, `${CANVAS}/courses/1/external_tools/9`, `${ULTRA}/ultra/courses/_101_1/outline/lti/launch`, 'https://evil.example.com/', `${ULTRA}/ultra/courses/_101_1/assessment/_7_1/overview`]) {
     w.page = page;
     await seat(w);
     assert.equal(await ask(w, frame(page)), 'hung up', page);

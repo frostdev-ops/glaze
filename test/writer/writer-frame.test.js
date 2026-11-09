@@ -14,14 +14,14 @@ const root = path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 
 // ---- the worker -----------------------------------------------------------------------------------------------------
-test('a writer pass: only from an Ultra page Glaze runs on, which also gets writer/writer-main.js in its own world', async () => {
+test('a writer pass: an Ultra page Glaze runs on also gets writer/writer-main.js in its own world', async () => {
   const w = worker();
   const injected = [];
   w.context.chrome.scripting.executeScript = async (x) => { injected.push(x); return [{}]; };
   const ultra = { id: 'glaze', tab: { id: 7 }, frameId: 0, documentId: 'doc-1', url: 'https://school.blackboard.com/ultra/courses/_1_1/discussion/_2_1' };
-  const canvas = { id: 'glaze', tab: { id: 7 }, frameId: 0, url: 'https://school.instructure.com/courses/1' };
+  const moodle = { id: 'glaze', tab: { id: 7 }, frameId: 0, url: 'https://school.moodlecloud.com/mod/forum/view.php?id=1' };
   const pass = crypto.randomUUID();
-  assert.deepEqual(await w.send({ type: 'glaze:writer', op: 'job', pass }, canvas), { ok: false }, 'not from another LMS');
+  assert.deepEqual(await w.send({ type: 'glaze:writer', op: 'job', pass }, moodle), { ok: false }, 'not from an LMS Writer has no hand in');
   assert.deepEqual(await w.send({ type: 'glaze:writer', op: 'job', pass: 'short' }, ultra), { ok: false }, 'not a guessable pass');
   assert.equal(injected.length, 0);
   assert.deepEqual(await w.send({ type: 'glaze:writer', op: 'job', pass }, ultra), { ok: true });
