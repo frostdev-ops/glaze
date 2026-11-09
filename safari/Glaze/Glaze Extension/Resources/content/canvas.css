@@ -1159,8 +1159,9 @@ html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) 
 /* The submission form under an assignment: the open tab's box with the panels' corners, and a comments field a few lines tall. */
 #application #submit_assignment .ui-tabs-panel { border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); border-start-start-radius: 0; }
 #application #submit_assignment textarea.submission_comment_textarea { box-sizing: border-box; width: min(100%, 40rem); min-height: 4.5rem; resize: vertical; }
-/* Assignments 2 draws the line above its submission box inline, #e8eaec on every Look (AttemptTab.jsx): white on a dark one. */
+/* Assignments 2 draws the line above its submission box and its footer bar's edge inline, #e8eaec on every Look (AttemptTab.jsx, StudentFooter.jsx): white on a dark one. */
 #application [data-testid="attempt-tab"] > div[style*="border-top"] { border-top-color: var(--gz-border-line, var(--gz-line)) !important; }
+#application #assignments-student-footer[style*="border-color"] { border-color: var(--gz-border-line, var(--gz-line)) !important; }
 /* "Submitted … late" on a submission's details, and in an assignment's sidebar, is Canvas's literal red. */
 #application :is(.submission-details-header__time.late, #sidebar_content .late) { color: var(--gz-err); }
 /* "Saved at 12:51" while taking a quiz is Canvas's literal #666. */
