@@ -454,6 +454,9 @@ const FAST_INTERVALS = [
   // Sync to Google Drive's transfers: a 25 s extension call (Chrome's and Firefox's idle stop is 30 s) only while the run's
   // last step sends or brings a file larger than one request; cleared when it ends. Never on Safari.
   ['background/background.js', 'setInterval(ping, 25000)', 1, /\bclearInterval\s*\(\s*beat\s*\)/],
+  // Writer in Canvas's Inbox: React sets the field's value (the signature) and disables it (translating) without an event,
+  // so its value is compared twice a second, only while Writer holds that field; cleared when Writer lets it go.
+  ['writer/writer-canvas.js', 'setInterval(() => { if (ed.value !== last || ed.disabled !== off) { last = ed.value; off = ed.disabled; fn(); } }, 500)', 1, /\bclearInterval\s*\(\s*look\s*\)/],
 ];
 
 test('no setInterval fires faster than once a minute unless it is reviewed, and its clear is still there', () => {

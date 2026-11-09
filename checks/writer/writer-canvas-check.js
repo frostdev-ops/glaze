@@ -25,7 +25,7 @@ const FILES = {
   'plugins/lists/plugin.min.js': '2e7d9385c8fd8248220ff2c5f34b30ad92a6bf34e65f05b611f24c9fd820a2a2',
 };
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
-const out = process.argv[2], lock = env.lockPath();
+const out = process.argv[2], lock = require('../../tools/dev/check-env.js').lockPath();
 const checks = [], requests = [], errors = []; let passed = false;
 let submitted = null; // the assignment's submission as Canvas's API answers it, once "submitted" (drafts: a posted copy)
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -147,7 +147,7 @@ const CANVAS = `(() => {
 
     ext = env.staged(root, [`${site}/*`]);
     await require('../../tools/dev/wait-for-browser.js')();
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--host-resolver-rules=MAP * ~NOTFOUND', '--disable-background-networking'] });
     env.noFirstRun(context); context.setDefaultTimeout(10000);
     await context.route('**/*', async (r) => {
       const req = r.request(), u = new URL(req.url());

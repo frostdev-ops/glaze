@@ -5,7 +5,7 @@
 // hold exactly Writer's text, and so must each reply's createDiscussionEntry (a topic's, a thread's, an announcement's) and
 // a new Inbox message's createConversation.
 // WRITER_SHOTS names where the screenshots go (a light and a dark Look each surface).
-//   NODE_PATH=… PLAYWRIGHT_BROWSERS_PATH=… nice -n 10 lockf -k /private/tmp/claude-501/glaze-heavy.lock node checks/writer/writer-canvas-live-check.js [evidence directory]
+//   NODE_PATH=… PLAYWRIGHT_BROWSERS_PATH=… nice -n 10 lockf -k <the heavy-job lock, CLAUDE.md> node checks/writer/writer-canvas-live-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
@@ -35,7 +35,8 @@ const textOf = (p, html) => p.evaluate((h) => new DOMParser().parseFromString(h,
     m.content_scripts.find((s) => s.matches.includes('https://*.instructure.com/*')).matches.push('http://localhost/*');
     for (const w of m.web_accessible_resources) w.matches.push('http://localhost/*');
     fs.writeFileSync(mf, JSON.stringify(m, null, 2));
-    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...env.chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`] });
+    await require('../../tools/dev/wait-for-browser.js')();
+    context = await chromium.launchPersistentContext(path.join(tmp, 'profile'), { ...require('../../tools/dev/check-env.js').chromeLaunch(), headless: true, viewport: { width: 1280, height: 900 }, locale: 'en-US', args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`] });
     env.noFirstRun(context); context.setDefaultTimeout(20000);
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     const G = require(path.join(root, 'content/defaults.js'));
