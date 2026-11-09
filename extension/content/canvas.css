@@ -378,6 +378,14 @@ html[data-gz-nav-size="large"] { --gz-nav-wide: 100px; --gz-nav-narrow: 64px; --
   backdrop-filter: blur(var(--gz-glass)) saturate(1.4);
   border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
 }
+/* Without the course strip in the row (Glaze's top bar holds it, or it is off) the row is a panel of its own, inset under the
+   bar as Ultra's routed header is; with the strip, the inset panel is drawn below (#gz-ctabs). */
+@media (min-width: 768px) {
+  #application .ic-app-nav-toggle-and-crumbs:not(:has(> #gz-ctabs)) {
+    margin: var(--gz-float-gap, 12px) var(--gz-float-end, 12px) 0 var(--gz-float-start, 12px) !important;
+    border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+  }
+}
 #application #breadcrumbs { background: transparent; }
 #application #breadcrumbs :is(a, a *) { color: var(--gz-ink-muted) !important; transition: color var(--gz-t) var(--gz-ease); }
 #application #breadcrumbs :is(a:hover, a:hover *) { color: var(--gz-accent) !important; }
@@ -448,11 +456,12 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
   .discussions-v2__container-image, #calendar-list-holder, #minical, .ic-Layout-contentMain > div:not([class])) {
   background: transparent !important;
 }
-/* The dashboard title bar sticks while the cards scroll under it, so it is glass, not clear. */
+/* The dashboard title bar sticks while the cards scroll under it, so it is glass, not clear: a panel with the cards' corners. */
 #application .ic-Dashboard-header__layout {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-surface-opacity, 40%), transparent) !important;
   backdrop-filter: blur(max(var(--gz-glass), 10px)) saturate(1.4);
-  border-bottom: 1px solid var(--gz-border-line, var(--gz-line));
+  border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+  padding-inline: clamp(0.75rem, 1.5vw, 1.25rem); box-sizing: border-box;
 }
 
 /* ---- page frame ---- */
@@ -463,6 +472,41 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
 #right-side :is(h2, h3) { color: var(--gz-ink-muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; border-bottom: 1px solid var(--gz-border-line, var(--gz-line)); padding-bottom: 0.5rem; }
 #right-side a { color: var(--gz-accent); }
 /* The column's room, width and modes are the sidebar's (navigation/page/sidebar.css), on every page that has it. */
+
+/* ---- floating panels ----
+   As on Ultra (theme.css's routed headers and content regions): what a page shows floats on the Look's panel surface, with
+   its radius, edge and resting shadow, a gap clear of the bars above it. A page that is one piece (an assignment, a page,
+   grades, the syllabus, people, files, a quiz, settings, the inbox) is one panel: #content. A page made of cards (the
+   dashboard, modules, the assignment, quiz and discussion lists, the calendar) keeps its cards, and a discussion is a panel
+   per post (below). */
+#application #content:not(:has(> #dashboard, > .item-group-container, > #context_modules_sortable_container, > #calendar-app, .context_module, [class*="discussions-v2__wrapper"], #discussion-redesign-layout)) {
+  box-sizing: border-box; margin: var(--gz-float-gap, 12px) var(--gz-float-end, 12px) var(--gz-float-gap, 12px) var(--gz-float-start, 12px); padding: clamp(1rem, 2vw, 1.5rem);
+  background: var(--gz-surface-grain, none), var(--gz-panel) !important; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+}
+/* The course menu beside a page (a user's settings and files; a course's, without Glaze's bar holding it). */
+#application #left-side #section-tabs {
+  margin-block: var(--gz-float-gap, 12px); padding: 0.5rem 0.5rem 0.5rem 1rem;
+  background: var(--gz-surface-grain, none), var(--gz-panel); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+}
+/* On a panel, what the sweep found painted white (a roster row, the inbox's header, the editor's wrapper) is the panel itself:
+   white was Canvas's page. Controls keep their own fill. */
+#application :is(#content, [data-testid="discussion-topic-container"], [data-testid="discussion-root-entry-container"] > div) [data-gz-light]:is(table, tr, td, th, .rce-wrapper, div[class*="css-"]:not([class*="alert"], [class*="avatar"], [class*="baseButton"], [class*="tray"], [class*="popover"], [class*="menu"])) { background-color: transparent !important; }
+/* Glaze's document tools stick at the top of what they read: on a panel only their buttons do, with no band. */
+#application #content #gz-doc-tools { width: fit-content; margin-inline-start: auto; background: none; }
+
+/* A discussion (and an announcement, which Canvas shows as one): the topic is a panel, each thread under it another, a gap
+   apart, in place of the rules Canvas draws between replies. The toolbar above them sticks while they scroll under it, so it
+   is a glass panel. */
+#application #discussion-redesign-layout :is([data-testid="discussion-topic-container"], [data-testid="discussion-root-entry-container"] > div) {
+  box-sizing: border-box; background: var(--gz-surface-grain, none), var(--gz-panel); border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+}
+#application #discussion-redesign-layout [data-testid="discussion-root-entry-container"] > div { margin-block-start: var(--gz-float-gap, 12px); padding: 0.25rem 0.75rem; }
+#application #discussion-redesign-layout [data-testid="discussion-root-entry-container"] > div hr[data-testid="post-separator"] { display: none; }
+#application #discussion-redesign-layout #module_sequence_footer_container > div:has([data-testid="sort-order-dropdown"]) {
+  margin-block: var(--gz-float-gap, 12px); padding: 0.5rem 0.75rem;
+  background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important;
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+}
 
 /* ---- lists: modules, assignments, quizzes ----
    A module or an assignment group is one card: a band for its title, rows with hairlines under it. */
@@ -676,6 +720,9 @@ html[data-gz-motion="expressive"] :is(.ic-DashboardCard, .ig-row, .ic-item-row):
 #application :is(.btn, .Button).active:not(.btn-primary, .Button--primary), #application :is(.btn, .Button)[aria-pressed="true"], #application .calendar_view_buttons .ui-state-active {
   background: var(--gz-accent-soft); color: var(--gz-on-soft); border-color: var(--gz-accent);
 }
+/* The Assignments page's Show by Date / Type is InstUI's toggle radio, its chosen half Canvas's green: the chosen segment. */
+#application :is(#show_by_date, #show_by_type):checked + [class*="-radioInput__control"] > [class*="-radioInput__facade"] { background: var(--gz-accent-soft); border-color: var(--gz-accent); }
+#application :is(#show_by_date, #show_by_type):checked + [class*="-radioInput__control"] > [class*="-radioInput__label"] { color: var(--gz-on-soft); }
 /* An InstUI dropdown's highlighted row is filled Canvas blue with white text. */
 li[class*="optionItem"]:has(> [role="option"][aria-selected="true"]) { background: var(--gz-accent-soft); }
 li[class*="optionItem"] > [role="option"][aria-selected="true"] { color: var(--gz-on-soft); }
@@ -696,10 +743,14 @@ html [data-cid~="BaseButton"]:not([disabled], [aria-disabled="true"]) [class*="b
 html [data-cid~="BaseButton"]:not([disabled], [aria-disabled="true"]):is(:hover, :focus-visible) [class*="baseButton__iconSVG"] svg[data-gz-dark] { color: var(--gz-accent) !important; }
 html [data-cid~="BaseButton"]:is([disabled], [aria-disabled="true"]) svg[data-gz-dark] { color: var(--gz-ink-faint) !important; }
 html :is([data-cid~="IconButton"], [data-cid~="Button"]):is([disabled], [aria-disabled="true"]) { color: var(--gz-ink-faint); }
-/* Previous / Next under a page: a glass bar, as the other bars are. */
+/* Previous / Next under a page: a glass bar with the panels' corners, as the other bars are; at the foot of a page's panel,
+   a row under a hairline. */
 #application .module-sequence-footer-content {
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint-2, var(--gz-surface-2)) var(--gz-glass-mix, 100%), transparent) !important;
-  backdrop-filter: blur(var(--gz-glass)) saturate(1.4); border-color: var(--gz-border-line, var(--gz-line));
+  backdrop-filter: blur(var(--gz-glass)) saturate(1.4); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
+}
+#application #content:not(:has(#discussion-redesign-layout)) .module-sequence-footer-content {
+  background: transparent !important; backdrop-filter: none; border-width: 1px 0 0; border-radius: 0; box-shadow: none; padding-inline: 0;
 }
 /* Canvas fixes the bar to the window's bottom (inline), where Glaze's bar is below 900px, over its z-index of 100: it
    stands on Glaze's bar. */
@@ -975,8 +1026,9 @@ html :is(body > .event-details, .ui-kyle-menu) { background-color: var(--gz-surf
 
 /* ---- user content: what instructors write (pages, assignments, syllabus, topics) ---- */
 .user_content { color: var(--gz-ink); }
-/* Art stays around the reading areas; their ink needs the palette's solid surface behind it. */
-html[data-gz-dark-theme][data-gz-bg]:not([data-gz-bg="solid"]) .user_content { background-color: var(--gz-surface-fill, var(--gz-surface)); }
+/* Art stays around the reading areas; their ink needs the palette's solid surface behind it. In the page's content that is a
+   panel (floating panels, above); elsewhere (a popover, the sidebar) the reading area is its own. */
+html[data-gz-dark-theme][data-gz-bg]:not([data-gz-bg="solid"]) .user_content:not(#content *) { background-color: var(--gz-surface-fill, var(--gz-surface)); }
 html[data-gz-dark-theme][data-gz-bg]:not([data-gz-bg="solid"]) #right-side { --gz-ground: var(--gz-surface); }
 html[data-gz-dark-theme] :is(.user_content, .user_content *)[data-gz-dark="highlight"] { color: #14181f !important; }
 /* An instructor's dark colour (navy, dark green) the sweep found unreadable: the same hue, lifted to a light tone (the
