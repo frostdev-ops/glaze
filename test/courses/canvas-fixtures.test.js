@@ -145,6 +145,8 @@ const cssNames = () => {
 // Keyed on, but on no fixture: each needs an interaction, a state or content the seed doesn't have. A fixture that
 // shows one makes the last test below ask for it to be taken off this list.
 const UNSEEN = [
+  // Canvas's modules script adds this to an item only once the pointer or focus has touched it (context-modules index.jsx).
+  '.context_module_item_hover',
   // Canvas hides its global rail in embedded layouts; its flyout tray exists only after a menu opens.
   '.hide-global-nav', '.tray-with-space-for-global-nav',
   // Canvas's mark after a link to another site: on a Dashboard card only once a course bookmark (W4) links elsewhere.

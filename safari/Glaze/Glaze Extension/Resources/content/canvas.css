@@ -534,7 +534,7 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
 #application .ig-row { background: transparent; border-width: 0 0 1px; color: var(--gz-ink-muted); transition: background var(--gz-t) var(--gz-ease); }
 #application .ig-row:hover { background: var(--gz-row-hover); }
 /* A module item's own box lights #f9f9f9 or white under the pointer, round the row that washes: clear, whatever it is tagged. */
-#application li.context_module_item:is(:hover, :focus-within, [data-gz-hover], [data-gz-light]) { background: transparent !important; }
+#application li.context_module_item:is(:hover, :focus-within, .context_module_item_hover, [data-gz-hover], [data-gz-light]) { background: transparent !important; }
 #application li:last-child > .ig-row, #application .ig-row:last-child { border-bottom-width: 0; }
 #application .ig-title { color: var(--gz-ink); transition: color var(--gz-t) var(--gz-ease); }
 #application a.ig-title:hover { color: var(--gz-accent); }
