@@ -203,6 +203,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // A crashed or navigated frame gets a fresh one-use channel, initialized from Writer's buffered document.
   const retire = (box) => {
     endFlush(box);
+    box.keeping?.();
     clearTimeout(box.flushWait?.timer);
     box.flushWait = null;
     box.askBinding = null;
@@ -453,19 +454,23 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       for (const x of group) { remember(x); globalThis.GZ_DRAFT_UI?.sent?.(x.editor); if (SENDS.has(x.kind)) x.sending = true; }
       try { passing = b; b.click(); } finally { passing = null; }
     };
+    let keepTimer = null;
+    const endKeep = () => {
+      clearTimeout(keepTimer);
+      for (const x of group) if (x.keeping === endKeep) x.keeping = null;
+    };
     // Assignments 2's Submit sends the draft Canvas saves a second after the box's last change, not the box, and keeps
     // itself off while it saves: the press waits, SUBMIT_ON at most, until that draft holds every box's text as it is now
     // (the adapter's kept), seen on two looks a moment apart so that Canvas's page has drawn it, then goes. A draft Canvas
     // doesn't save in that time holds the press, with the reason shown.
     const keep = (since = Date.now(), seen = false) => {
-      const end = () => { for (const x of group) x.keeping = false; };
-      if (!group.every(still)) { end(); return; }
-      for (const x of group) x.keeping = true;
-      if (!group.every(syncCurrent)) { end(); for (const x of group) x.port?.postMessage({ type: 'held' }); return; }
+      if (!group.every(still)) { endKeep(); return; }
+      for (const x of group) x.keeping = endKeep;
+      if (!group.every(syncCurrent)) { endKeep(); for (const x of group) x.port?.postMessage({ type: 'held' }); return; }
       const now = b.isConnected && A().enabled(b) && group.every((x) => A().kept(x, main));
-      if (now && seen) { end(); press(); return; }
-      if (Date.now() - since >= SUBMIT_ON) { end(); for (const x of group) x.port?.postMessage({ type: 'held' }); return; }
-      setTimeout(() => keep(since, now), 100);
+      if (now && seen) { endKeep(); press(); return; }
+      if (Date.now() - since >= SUBMIT_ON) { endKeep(); for (const x of group) x.port?.postMessage({ type: 'held' }); return; }
+      keepTimer = setTimeout(() => keep(since, now), 100);
     };
     const settle = (box, ok) => {
       if (!pending.delete(box)) return;
