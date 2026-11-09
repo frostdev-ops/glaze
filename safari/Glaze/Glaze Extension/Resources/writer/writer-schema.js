@@ -2774,11 +2774,12 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     if (segs.length > 1 && !segs.at(-1).length) segs.pop();
     return segs.map((s) => rebuild(shallow(e), spaces(s)));
   };
-  const pre = (e) => {
+  const pre = (e, o) => {
     let s = '';
     const walk = (n) => { for (const c of n.childNodes) { if (c.nodeType === 3) s += c.nodeValue; else if (c.nodeName === 'BR') s += '\n'; else walk(c); } };
     walk(e);
-    s = s.replace(/\r\n?/g, '\n').replace(/\n$/, '').replace(/\u00a0/g, ' ');
+    s = s.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ');
+    if (!o.canvas) s = s.replace(/\n$/, '');
     return el('pre', {}, s ? [txt(s)] : []);
   };
   // Lists flattened the way Quill reads nested ones: each item's level is its depth plus its own ql-indent. In a paper an
@@ -2866,7 +2867,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
           if (out.at(-1)?.nodeName !== kind || o.paper && !['data-styles', 'data-continue'].every((k) => out.at(-1).attrs[k] === attrs[k])) out.push(el(kind.toLowerCase(), attrs));
           out.at(-1).childNodes.push(it.li);
         }
-      } else if (name === 'PRE') out.push(pre(n));
+      } else if (name === 'PRE') out.push(pre(n, o));
       else if (name === 'BLOCKQUOTE') {
         const inner = blocks(n, o);
         if (o.paper || o.canvas) { if (inner.length) out.push(el('blockquote', {}, inner)); } else {
@@ -2999,9 +3000,9 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     let out = '';
     for (let i = 0; i < kids.length;) {
       const c = kids[i], list = (n) => n?.type.name === 'bullet_list' || n?.type.name === 'ordered_list';
-      if (c.type.spec.code && c.textContent) {
+      if (c.type.spec.code) {
         const lines = [];
-        while (kids[i]?.type.spec.code && kids[i].textContent) lines.push(kids[i++].textContent);
+        while (kids[i]?.type.spec.code) lines.push(kids[i++].textContent);
         out += `<pre>${escText(lines.join('\n'))}</pre>`;
       } else if (list(c)) {
         const items = [];
