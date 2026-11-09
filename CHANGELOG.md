@@ -6,6 +6,8 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [4.0.6] — 2026-11-09
+
 ### Changed
 
 - Settings uses setup’s theme thumbnails and motion choices, with a live paper-setting sample in Writer. The full preview stays in reach on narrow screens.
@@ -16,6 +18,8 @@ All notable changes to Glaze are documented here. The format follows
 - Typing `/` in a key or passphrase no longer opens Settings search.
 - Frost is available as a complete theme in Settings. The separate palette-only reset is labelled Reset palette.
 - Search and paper-format controls follow their parent features without losing saved preferences.
+- Blackboard Activity cards follow their course’s color, including cards reused while scrolling.
+- Blackboard organization quizzes use the sidebar’s assessment layout and keep editor menus within reach. Grade tabs share one rounded surface.
 
 ## [4.0.5] — 2026-11-07
 

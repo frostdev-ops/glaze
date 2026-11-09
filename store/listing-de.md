@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.5 (German)
+# Chrome Web Store listing — Glaze 4.0.6 (German)
 
 ## Short summary (132 character maximum)
 
@@ -72,6 +72,15 @@ Open Source (MIT): https://github.com/frostdev-ops/glaze
 Canvas ist eine Marke von Instructure, Inc. Blackboard ist eine Marke von Anthology Inc. Moodle ist eine eingetragene Marke von Moodle Pty Ltd. Glaze ist ein unabhängiges Projekt und steht in keiner Verbindung zu diesen Unternehmen oder einer Schule und wird weder von ihnen noch von einer Schule unterstützt.
 
 ## Release notes
+
+NEU IN 4.0.6
+
+• Die Einstellungen bieten übersichtliche Design- und Bewegungsauswahl, eine Papiervorschau für Writer und eine leicht erreichbare Gesamtvorschau auf schmalen Bildschirmen.
+• Frost stellt jetzt das vollständige Standarddesign wieder her. Palette zurücksetzen behält Schriftarten, Hintergründe und Look-Extras bei.
+• Geschwindigkeit bündelt sofortiges Öffnen, Vorladen und Ladeanzeigen. Bewertungsbalken stehen bei den Noten; Hochschule und Verbindungseinstellungen sind leichter zu finden.
+• Schlüssel und Passphrasen nehmen / an, ohne die Einstellungssuche zu öffnen. Abhängige Optionen behalten ihre gespeicherte Auswahl, wenn die übergeordnete Funktion ausgeschaltet ist.
+• Blackboard-Aktivitätskarten folgen der Farbe ihres Kurses, auch wenn Karten beim Scrollen wiederverwendet werden.
+• Tests in Blackboard-Organisationen nutzen die Seitenleiste und halten Editormenüs im sichtbaren Bereich. Notenreiter teilen sich eine abgerundete Fläche.
 
 NEU IN 4.0.5
 
