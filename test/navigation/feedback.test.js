@@ -642,11 +642,11 @@ test('routed on Ultra\'s pages and course tabs\' frames, never the standby, and 
   assert.ok(list.includes('navigation/page/feedback.js'));
 });
 
-test('its switch: on by default, in Blackboard\'s Dashboard section, short and translated', () => {
+test('its switch: on by default, in Speed settings, short and translated', () => {
   assert.equal(D.GZ_DEFAULTS.enhance.feedback, true);
   assert.equal(D.GZ_SANITIZE({ enhance: { feedback: false } }).enhance.feedback, false);
   const opts = read('options.html');
-  const section = opts.slice(opts.indexOf('<section id="bb-dashboard"'), opts.indexOf('</section>', opts.indexOf('<section id="bb-dashboard"')));
+  const section = opts.slice(opts.indexOf('<section id="settings-speed"'), opts.indexOf('</section>', opts.indexOf('<section id="settings-speed"')));
   assert.match(section, /<label class="check"><input type="checkbox" data-key="enhance\.feedback"><span>Show pages loading at once<\/span><\/label>/);
   for (const l of ['de', 'es', 'fr', 'nl', 'pt-BR']) assert.match(read(`i18n/${l}.js`), /^ {2}"Show pages loading at once": "[^"]+",$/m, l);
 });

@@ -112,7 +112,6 @@
   'Share': 'Teilen',
   'Dismiss': 'Schließen',
   'Save as preset': 'Als Vorlage speichern',
-  'Back to Frost': 'Zurück zu Frost',
   "Follow the system's light and dark mode": 'Hellen und dunklen Modus des Systems übernehmen',
   'Auto light and dark': 'Automatisch hell und dunkel',
   'On a schedule': 'Nach Zeitplan',
@@ -1675,7 +1674,6 @@
   "Deleted on the relay — local copy kept": "Auf dem Relay gelöscht — lokale Kopie behalten",
   "Editing devices, last seen. Names are self-chosen; view-only devices cannot announce themselves.": "Bearbeitende Geräte, zuletzt gesehen. Namen sind frei gewählt; Geräte mit Lesezugriff können sich nicht melden.",
   "Forget this session’s keys on this device? Your Notes and To Do copies remain. This does not delete it from the relay.": "Die Schlüssel dieser Sitzung auf diesem Gerät vergessen? Deine Kopien in Notizen und To Do bleiben erhalten. Die Sitzung wird dadurch nicht vom Relay gelöscht.",
-  "Sites": "Websites",
   "No other sites yet.": "Noch keine weiteren Websites.",
   "Removed {site}. Glaze no longer runs there.": "{site} entfernt. Glaze läuft dort nicht mehr.",
   "Invite link": "Einladungslink",
@@ -3974,5 +3972,8 @@
   "Pin Glaze to your toolbar": "Glaze an die Symbolleiste anheften",
   "Your key": "Eigener Schlüssel",
   "Icons": "Symbole",
-  "Shortcuts": "Verknüpfungen"
+  "Shortcuts": "Verknüpfungen",
+  "Reset palette": "Palette zurücksetzen",
+  "Your paper": "Dein Text",
+  "Connections": "Verbindungen"
 };

@@ -17,7 +17,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   const { act } = GZ_WELCOME;
   const { address } = GZ_SITE;
   const $ = (s) => document.querySelector(s);
-  const form = $('#site'), bar = $('.bar'), input = $('#address'), go = $('#go'), label = go.querySelector('.label');
+  const form = $('#site'), bar = $('#site .bar'), input = $('#address'), go = $('#go'), label = go.querySelector('.label');
   const note = $('#note'), error = $('#error'), picks = $('#picks'), kindTag = $('#kind'), all = $('#all'), another = $('#another'), said = $('#said');
   const t = (key, vars) => GZ_I18N.t(key, vars, GZ_I18N.ui());
   const arrow = go.querySelector('.arrow');

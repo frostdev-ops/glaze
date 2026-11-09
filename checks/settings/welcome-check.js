@@ -75,7 +75,7 @@ const stub = (required) => {
       return page;
     };
     const state = (page) => page.evaluate(() => ({
-      act: document.querySelector('#go').dataset.act, label: document.querySelector('#go .label').textContent, bar: document.querySelector('.bar').dataset.state || '',
+      act: document.querySelector('#go').dataset.act, label: document.querySelector('#go .label').textContent, bar: document.querySelector('#site .bar').dataset.state || '',
       disabled: document.querySelector('#go').getAttribute('aria-disabled'), error: !document.querySelector('#note').hidden, readOnly: document.querySelector('#address').readOnly,
       focus: document.activeElement?.id, all: document.querySelector('#all').getAttribute('aria-pressed'), another: !document.querySelector('#another').hidden,
       said: document.querySelector('#said').textContent, busy: document.querySelector('#go').hasAttribute('data-busy'),
@@ -259,6 +259,7 @@ const stub = (required) => {
       await shot(page, `${w}-2-typed`);
 
       await type(page, 'school.instructure.com');
+      await until(async () => (await state(page)).act === 'open');
       s = await state(page);
       check(s.act === 'open' && s.bar === 'ready' && s.label === 'Open', `${w}: a built-in host can be opened straight away`);
       await shot(page, `${w}-3-builtin`);
@@ -287,7 +288,7 @@ const stub = (required) => {
       await page.click('#go');
       await pause(200);
       await page.evaluate(() => globalThis.__gz.answer(true));
-      await page.waitForFunction(() => document.querySelector('.bar').dataset.state === 'done', null, { timeout: 8000 });
+      await page.waitForFunction(() => document.querySelector('#site .bar').dataset.state === 'done', null, { timeout: 8000 });
       await pause(300);
       s = await state(page);
       check(s.bar === 'done' && s.act === 'open' && s.focus === 'go' && s.another && s.said === 'Allowed bb.school.edu', `${w}: granted and checked, the bar settles and Open has focus`);
@@ -333,7 +334,7 @@ const stub = (required) => {
       await pause(200);
       check(JSON.stringify(await page.evaluate(() => globalThis.__gz.asked.at(-1))) === '["https://bb.school.edu/*"]', `${w}: picking it asks for that site`);
       await page.evaluate(() => globalThis.__gz.answer(true));
-      await page.waitForFunction(() => document.querySelector('.bar').dataset.state === 'done', null, { timeout: 8000 });
+      await page.waitForFunction(() => document.querySelector('#site .bar').dataset.state === 'done', null, { timeout: 8000 });
       check(await page.inputValue('#address') === 'bb.school.edu', `${w}: and it settles there`);
       await page.click('#another');
       await type(page, 'bb.nowhere.edu');

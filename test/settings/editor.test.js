@@ -8,19 +8,19 @@ const cards = require(path.join(root, 'courses/cards.js'));
 const TABS = ['look', 'navigation', 'courses', 'study', 'pages', 'writer', 'sharing', 'mods', 'ai', 'backup', 'about'];
 const GROUP = { stream: 'pages/dashboard', docreview: 'pages/documents', auto: 'look/palette', look: 'look/type', bg: 'look/background', motion: 'look/motion', extras: 'look/extras', nav: 'navigation/bar', navbar: 'navigation/bar', sidebar: 'navigation/sidebar', tabs: 'navigation/tabs', todo: 'study/todo', widgets: 'study/widgets', remind: 'study/reminders', declutter: 'pages/declutter', card: 'courses/cards', courses: 'courses/list', mods: 'backup/privacy', announce: 'pages/popups', popup: 'pages/popups', rubric: 'pages/popups' };
 const ENHANCE = {
-  'pages/content': ['urgency', 'clamp', 'scores', 'reading', 'fold', 'previews', 'progress', 'newcontent', 'drafts', 'download', 'place'],
+  'pages/content': ['urgency', 'clamp', 'reading', 'fold', 'previews', 'progress', 'newcontent', 'drafts', 'download', 'place'],
   'writer/setup': ['writer', 'writerUploads'],
   'pages/shortcuts': ['palette', 'search', 'keys'],
   'pages/documents': ['docPages', 'toggles', 'docTheme', 'docInk', 'quizLight', 'titleScroll', 'bbPreviews', 'pearsonViewer', 'pearsonEmbed', 'pearsonMath'],
   'courses/list': ['coursemenu'],
-  'study/grades': ['inline', 'overall', 'newgrades', 'calc', 'gradeHover', 'gpa', 'gpaPlus', 'gpaWeighted', 'gpaAfter'],
+  'study/grades': ['scores', 'inline', 'overall', 'newgrades', 'calc', 'gradeHover', 'gpa', 'gpaPlus', 'gpaWeighted', 'gpaAfter'],
   'study/todo': ['todo', 'cardTasks', 'gradescope'],
   'study/widgets': ['notes', 'widgets'],
   'navigation/sidebar': ['sidebar'],
   'study/pet': ['pet'],
   'study/reminders': ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'],
   'study/imports': ['syllabus', 'insights'],
-  'navigation/tabs': ['tabs', 'prefetch'], 'pages/dashboard': ['dashboard', 'instant', 'feedback'], 'pages/declutter': ['hideFolders'],
+  'navigation/tabs': ['tabs'], 'pages/speed': ['instant', 'prefetch', 'feedback'], 'pages/dashboard': ['dashboard'], 'pages/declutter': ['hideFolders'],
 };
 const OVERRIDE = {
   enabled: 'header', footer: 'pages/declutter', preset: 'look/palette', presets: 'look/palette',
@@ -74,7 +74,7 @@ const MORE = {
     ...Object.keys(D.GZ_SPEC.sidebar).filter((k) => !['canvas', 'ultra'].includes(k)).map((k) => `sidebar.${k}`),
     ...['width', 'gap', 'radius', 'height', 'icons', 'create'].map((k) => `card.${k}`),
     ...['group', 'rel', 'urgent', 'teacher', 'progress', 'sync', 'cardN', 'cardStatus', 'cardCross', 'gsDaily'].map((k) => `todo.${k}`),
-    ...['gradeHover', 'gpaPlus', 'gpaWeighted', 'gpaAfter', 'urgency', 'clamp', 'scores', 'reading', 'fold', 'place', 'prefetch'].map((k) => `enhance.${k}`),
+    ...['gradeHover', 'gpaPlus', 'gpaWeighted', 'gpaAfter', 'urgency', 'clamp', 'reading', 'fold', 'place'].map((k) => `enhance.${k}`),
     ...['work', 'rest', 'sound', 'quotes', 'quoteMode', 'quoteEvery', 'inhale', 'hold', 'exhale', 'cycles'].map((k) => `widgets.${k}`),
     ...Object.keys(D.GZ_SPEC.docreview).map((k) => `docreview.${k}`), ...Object.keys(D.GZ_SPEC.stream).map((k) => `stream.${k}`),
   ],
@@ -508,7 +508,7 @@ test('IA: long descriptions move behind a "?", short ones and privacy disclosure
   assert.match(html, /<span id="info-more" hidden>More about<\/span>/);
   // Search counts a popover's words for its setting: each one sits in its setting's row, or is a note the control names.
   for (const [, , id] of pops) assert.ok(main.includes(`aria-describedby="${id}"`) || new RegExp(`aria-describedby="[^"]*\\b${id}\\b`).test(main), `#${id}`);
-  const filter = fs.readFileSync(path.join(root, 'settings/options.js'), 'utf8');
+  const filter = fs.readFileSync(path.join(root, 'settings/editor-search.js'), 'utf8');
   assert.match(filter, /querySelectorAll\('\.info-pop'\)[\s\S]*?GZ_FIND\.spans\(pop\.textContent, words\)[\s\S]*?classList\.add\('found'\)/);
 });
 

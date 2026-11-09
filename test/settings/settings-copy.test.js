@@ -73,7 +73,7 @@ const LMS_SECTIONS = {
   'study/schedule': ['Canvas', 'Blackboard Ultra'],
   // Glaze Writer replaces Blackboard Ultra's editors only.
   ...Object.fromEntries(['setup', 'papers', 'typing', 'proofing', 'discussions', 'submitting'].map((s) => [`writer/${s}`, ['Blackboard Ultra']])),
-  'pages/content': ['Canvas', 'Blackboard Ultra'], 'pages/documents': ['Canvas', 'Blackboard Ultra', 'Pearson MyLab'], 'pages/dashboard': ['Blackboard Ultra'],
+  'pages/speed': ['Blackboard Ultra'], 'pages/content': ['Canvas', 'Blackboard Ultra'], 'pages/documents': ['Canvas', 'Blackboard Ultra', 'Pearson MyLab'], 'pages/dashboard': ['Blackboard Ultra'],
   'pages/declutter': ['Canvas', 'Blackboard Ultra'], 'pages/shortcuts': ALL,
   // Announcements open in Glaze's pop-up on all three; the pop-up is every site's.
   'pages/announcements': ALL, 'pages/popups': ALL,

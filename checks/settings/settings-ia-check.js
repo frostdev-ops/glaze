@@ -408,6 +408,8 @@ const check = async (name, test) => {
               await host.evaluate(layoutState, { remember: route });
               await host.setViewportSize({ width: 320, height: 900 });
               await painted(host);
+              // The narrow preview is a closed, always-reachable panel. Sweep every control with it open.
+              await host.evaluate(() => { if (document.querySelector('.preview').checkVisibility() && document.querySelector('#preview-body').hidden) document.querySelector('#preview-toggle').click(); });
               const m = await host.evaluate(layoutState, { route });
               if (m.scroll > 320) problems.push(`${tag}: page is ${m.scroll}px wide`);
               for (const off of m.off) problems.push(`${tag}: ${off}`);
@@ -513,6 +515,7 @@ const check = async (name, test) => {
                 for (const width of [1440, 390, 320]) {
                   await host.setViewportSize({ width, height: 1000 });
                   await painted(host);
+                  await host.evaluate(() => { if (document.querySelector('.preview').checkVisibility() && document.querySelector('#preview-body').hidden) document.querySelector('#preview-toggle').click(); });
                   const m = await host.evaluate(layoutState, width === 1440 ? { remember: route } : { route });
                   const tag = `${lang} ${all ? 'all' : 'default'} ${dir} ${width} ${route}`;
                   if (m.scroll > width) problems.push(`${tag}: page is ${m.scroll}px wide`);

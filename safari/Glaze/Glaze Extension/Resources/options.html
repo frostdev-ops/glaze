@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Glaze settings</title>
 <link rel="stylesheet" href="core/ui.css">
+<link rel="stylesheet" href="settings/choice-art.css">
   <link rel="stylesheet" href="looks/page/surfaces.css">
 <style>
   /* The bundled faces, for the font list. */
@@ -603,6 +604,7 @@
   #mod-prompt p { margin: 0; }
   #mod-prompt .mod-warn:empty { display: none; }
 </style>
+<link rel="stylesheet" href="settings/editor-visual.css">
 </head>
 <body>
   <header class="top">
@@ -612,6 +614,8 @@
       <p class="hint" id="find-status" role="status"></p>
     </div>
     <p class="hint" id="hint" aria-live="polite"></p>
+    <a class="button settings-school" href="#backup/sites" data-editor-alias>School</a>
+    <a class="button settings-setup" href="settings/welcome.html" target="_blank" rel="noopener">Setup</a>
     <label class="all-switch"><input type="checkbox" id="editor-all" data-local><span>All settings</span></label>
     <label class="all-switch"><input type="checkbox" id="enabled"><span>Enable Glaze</span></label>
     <div class="embed-tools" hidden><button type="button" id="embed-tab">Open in a new tab</button><button type="button" id="embed-close" class="primary">Close</button></div>
@@ -626,12 +630,12 @@
 <div data-editor-jumps="navigation" hidden><a href="#navigation/bar" data-editor-jump>Navigation</a><a href="#navigation/items" data-editor-jump>Navigation items</a><a href="#navigation/tabs" data-editor-jump>Course tabs</a><a href="#navigation/sidebar" data-editor-jump>Sidebar</a></div>
 <div data-editor-jumps="courses" hidden><a href="#courses/list" data-editor-jump>Your courses</a><a href="#courses/cards" data-editor-jump>Course cards</a></div>
 <div data-editor-jumps="study" hidden><a href="#study/todo" data-editor-jump>To Do</a><a href="#study/grades" data-editor-jump>Grades and GPA</a><a href="#study/reminders" data-editor-jump>Reminders and streak</a><a href="#study/widgets" data-editor-jump>Notes and widgets</a><a href="#study/pet" data-editor-jump>Pet habitat</a><a href="#study/imports" data-editor-jump>Syllabus and insights</a><a href="#study/schedule" data-editor-jump>Calendar export</a></div>
-<div data-editor-jumps="pages" hidden><a href="#pages/content" data-editor-jump>Course content</a><a href="#pages/announcements" data-editor-jump>Announcements</a><a href="#pages/documents" data-editor-jump>Documents and quizzes</a><a href="#pages/dashboard" data-editor-jump>Blackboard Dashboard</a><a href="#pages/declutter" data-editor-jump>Declutter</a><a href="#pages/shortcuts" data-editor-jump>Search and shortcuts</a><a href="#pages/popups" data-editor-jump>Pop-ups</a></div>
+<div data-editor-jumps="pages" hidden><a href="#pages/content" data-editor-jump>Course content</a><a href="#pages/announcements" data-editor-jump>Announcements</a><a href="#pages/documents" data-editor-jump>Documents and quizzes</a><a href="#pages/speed" data-editor-jump>Speed</a><a href="#pages/dashboard" data-editor-jump>Blackboard Dashboard</a><a href="#pages/declutter" data-editor-jump>Declutter</a><a href="#pages/shortcuts" data-editor-jump>Search and shortcuts</a><a href="#pages/popups" data-editor-jump>Pop-ups</a></div>
 <div data-editor-jumps="writer" hidden><a href="#writer/setup" data-editor-jump>Writer</a><a href="#writer/papers" data-editor-jump>Papers</a><a href="#writer/typing" data-editor-jump>Typing</a><a href="#writer/proofing" data-editor-jump>Proofing</a><a href="#writer/discussions" data-editor-jump>Discussions</a><a href="#writer/submitting" data-editor-jump>Submitting</a></div>
 <div data-editor-jumps="sharing" hidden><a href="#sharing/sessions" data-editor-jump>Share sessions</a><a href="#sharing/relay" data-editor-jump>Relay</a><a href="#sharing/calendar" data-editor-jump data-gcal-link hidden>Google Calendar sync</a></div>
 <div data-editor-jumps="mods" hidden><a href="#mods/installed" data-editor-jump>Installed mods</a><a href="#mods/add" data-editor-jump>Add a mod</a><a href="#mods/widget" data-editor-jump>Widget builder</a><a href="#mods/dev" data-editor-jump>Mod development</a></div>
 <div data-editor-jumps="ai" hidden><a href="#ai/setup" data-editor-jump>AI</a><a href="#ai/features" data-editor-jump>Features</a><a href="#ai/memory" data-editor-jump>Memory</a><a href="#ai/activity" data-editor-jump>Activity</a><a href="#ai/agents" data-editor-jump>Agents</a></div>
-<div data-editor-jumps="backup" hidden><a href="#backup/privacy" data-editor-jump>Backup and reset</a><a href="#backup/sites" data-editor-jump>Sites</a></div>
+<div data-editor-jumps="backup" hidden><a href="#backup/privacy" data-editor-jump>Backup and reset</a><a href="#backup/sites" data-editor-jump>School</a></div>
 <div data-editor-jumps="about" hidden><a href="#about/glaze" data-editor-jump>About Glaze</a></div>
     </nav>
     </div>
@@ -640,10 +644,7 @@
 <div id="panel-look" role="tabpanel" aria-labelledby="tab-look" data-editor-panel="look">
 <section id="palette" data-editor-section="look/palette" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-look-palette">
 <p class="section-path" data-editor-breadcrumb><a href="#look/palette" data-editor-alias>Looks and colors</a></p><div class="section-heading"><h2 id="heading-look-palette">Looks and colors</h2><button type="button" class="section-reset" data-reset-section="look/palette">Reset section</button></div>
-<div class="group">
-          <h3>Looks</h3>
-          <div class="looks" id="looks"></div>
-        </div>
+<div class="looks theme-cards" id="looks" role="group" aria-label="Theme"></div>
 <div class="swatches" id="presets" data-setting-owner="preset"></div>
 <div class="group">
           <label class="check"><input type="checkbox" data-key="auto.on"><span>Auto light and dark</span></label>
@@ -679,7 +680,7 @@
 <div class="row">
           <input type="text" id="preset-name" maxlength="40" placeholder="Name this palette" aria-label="Preset name">
           <button type="button" id="save-preset">Save as preset</button>
-          <button type="button" id="reset-colors">Back to Frost</button>
+          <button type="button" id="reset-colors">Reset palette</button>
         </div>
 <ul class="mine" id="mine" data-setting-owner="presets" aria-label="Your presets"></ul>
 <div class="row">
@@ -819,12 +820,12 @@
 </details>
 </section>
 <section id="motion" data-editor-section="look/motion" data-sites="Canvas · Blackboard Ultra · Moodle" aria-labelledby="heading-look-motion">
-<p class="section-path" data-editor-breadcrumb><a href="#look/motion" data-editor-alias>Motion</a></p><div class="section-heading"><h2 id="heading-look-motion">Motion</h2><button type="button" class="section-reset" data-reset-section="look/motion">Reset section</button></div>
-<div class="field wide"><span><span id="motion-level-name">Level</span><button type="button" class="info" popovertarget="motion-note" aria-labelledby="info-more motion-level-name" aria-describedby="motion-note"></button></span>
-          <div class="seg" role="radiogroup" aria-label="Motion level" aria-describedby="motion-note">
-            <label><input type="radio" name="motion.level" value="off">Off</label>
-            <label><input type="radio" name="motion.level" value="subtle">Subtle</label>
-            <label><input type="radio" name="motion.level" value="expressive">Expressive</label>
+<p class="section-path" data-editor-breadcrumb><a href="#look/motion" data-editor-alias>Motion</a></p><div class="section-heading"><h2 id="heading-look-motion">Motion</h2><button type="button" class="info" popovertarget="motion-note" aria-labelledby="info-more motion-level-name" aria-describedby="motion-note"></button><button type="button" class="section-reset" data-reset-section="look/motion">Reset section</button></div>
+<div class="field wide"><span><span id="motion-level-name" class="sr-only">Level</span></span>
+          <div class="seg motion-cards" role="radiogroup" aria-label="Motion level" aria-describedby="motion-note">
+            <label class="level lv-off"><input type="radio" name="motion.level" value="off"><span class="motion-art"></span><span class="name">Off</span></label>
+            <label class="level lv-subtle"><input type="radio" name="motion.level" value="subtle"><span class="motion-art"></span><span class="name">Subtle</span></label>
+            <label class="level lv-expressive"><input type="radio" name="motion.level" value="expressive"><span class="motion-art"></span><span class="name">Expressive</span></label>
           </div></div>
 <p class="desc info-pop" id="motion-note" popover>Subtle: pages and cards ease in, panels slide, hover lifts. Expressive adds springier motion, a drifting aurora, livelier backgrounds and a burst when you complete an item. Off holds backgrounds still.</p>
 <label class="check"><input type="checkbox" data-key="motion.followSystem"><span>Turn motion off when the system asks for reduced motion</span></label>
@@ -1047,8 +1048,7 @@
 <label class="check"><input type="checkbox" data-key="tabs.ahead"><span>Open course tabs ahead of time</span></label>
 <label class="field"><span>Renew the waiting page after</span><select data-key="tabs.renew" data-number><option value="2">2 minutes</option><option value="5">5 minutes</option><option value="10">10 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option></select></label>
 <label class="check"><input type="checkbox" data-key="tabs.keep"><span>Keep Course Content ready</span></label>
-<div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.prefetch" aria-describedby="info-enhance-prefetch"><span id="info-enhance-prefetch-name">Load course data ahead of time</span></label><button type="button" class="info" popovertarget="info-enhance-prefetch" aria-labelledby="info-more info-enhance-prefetch-name" aria-describedby="info-enhance-prefetch"></button>
-<div class="info-pop" id="info-enhance-prefetch" popover><span class="desc">On Blackboard, your To Do and grades are read while the page is idle, and a course's content when you point at it, so they open at once.</span></div></div>
+
 <div class="group">
           <h3>Tab buttons</h3>
           <div class="field wide"><span>Shape</span>
@@ -1082,6 +1082,7 @@
         </div>
 </details>
 <p class="desc" id="tabs-memory-note">Still copies of your courses stay in memory, never on disk; Glaze loads a course only once you point at, press or open its tab.</p>
+<a href="#pages/speed" data-editor-alias>Speed</a>
 </section>
 <section id="side-panel" data-editor-section="navigation/sidebar" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-navigation-sidebar">
 <p class="section-path" data-editor-breadcrumb><a href="#navigation/sidebar" data-editor-alias>Sidebar</a></p><div class="section-heading"><h2 id="heading-navigation-sidebar">Sidebar</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="navigation/sidebar">Reset section</button></div>
@@ -1290,6 +1291,8 @@
           <span class="desc">Kept on this device until the real grade arrives; where the rules aren't known, it says it estimates.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.gpa" aria-describedby="info-enhance-gpa"><span id="info-enhance-gpa-name">Grade point average</span></label><button type="button" class="info" popovertarget="info-enhance-gpa" aria-labelledby="info-more info-enhance-gpa-name" aria-describedby="info-enhance-gpa"></button>
 <div class="info-pop" id="info-enhance-gpa" popover><span class="desc">Your GPA from your current grades: on Canvas's Dashboard for each term, on Blackboard's Grades for this term. Set each course's credits, level and grading scale there.</span></div></div>
+<label class="check"><input type="checkbox" data-key="enhance.scores"><span>Score bars</span>
+          <span class="desc">A small bar under each gradebook score for its share of the total.</span></label>
 <details class="more"><summary>More options</summary>
 <label class="check"><input type="checkbox" data-key="enhance.gradeHover"><span>Card grades only on hover</span>
           <span class="desc">Card grades and the GPA stay hidden until you point at them.</span></label>
@@ -1422,8 +1425,7 @@
           <span class="desc">Overdue, due today, or due within three days.</span></label>
 <label class="check"><input type="checkbox" data-key="enhance.clamp"><span>Shorter descriptions</span>
           <span class="desc">Long item descriptions show three lines until you hover or focus them.</span></label>
-<label class="check"><input type="checkbox" data-key="enhance.scores"><span>Score bars</span>
-          <span class="desc">A small bar under each gradebook score for its share of the total.</span></label>
+
 <label class="check"><input type="checkbox" data-key="enhance.reading"><span>Reading width</span>
           <span class="desc">Announcements, posts and documents keep lines to a comfortable length.</span></label>
 <div class="has-badge"><label class="check"><input type="checkbox" data-key="enhance.fold"><span>Compact bars on scroll <span class="site-badge" translate="no">Blackboard</span></span>
@@ -1470,14 +1472,22 @@
 </div>
 </details>
 </section>
+<section id="settings-speed" data-editor-section="pages/speed" data-sites="Blackboard Ultra" aria-labelledby="heading-pages-speed">
+<p class="section-path" data-editor-breadcrumb><a href="#pages/speed" data-editor-alias>Speed</a></p><div class="section-heading"><h2 id="heading-pages-speed">Speed</h2><span class="site-badge" translate="no">Blackboard</span><button type="button" class="section-reset" data-reset-section="pages/speed">Reset section</button></div>
+<label class="check"><input type="checkbox" data-key="enhance.instant"><span>Open pages instantly</span></label>
+<div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.prefetch" aria-describedby="info-enhance-prefetch"><span id="info-enhance-prefetch-name">Load course data ahead of time</span></label><button type="button" class="info" popovertarget="info-enhance-prefetch" aria-labelledby="info-more info-enhance-prefetch-name" aria-describedby="info-enhance-prefetch"></button>
+<div class="info-pop" id="info-enhance-prefetch" popover><span class="desc">On Blackboard, your To Do and grades are read while the page is idle, and a course's content when you point at it, so they open at once.</span></div></div>
+<label class="check"><input type="checkbox" data-key="enhance.feedback"><span>Show pages loading at once</span></label>
+<a href="#navigation/tabs" data-editor-alias>Course tabs</a>
+</section>
 <section id="bb-dashboard" data-editor-section="pages/dashboard" data-sites="Blackboard Ultra" aria-labelledby="heading-pages-dashboard">
 <p class="section-path" data-editor-breadcrumb><a href="#pages/dashboard" data-editor-alias>Blackboard Dashboard</a></p><div class="section-heading"><h2 id="heading-pages-dashboard">Blackboard Dashboard</h2><span class="site-badge" translate="no">Blackboard</span><button type="button" class="section-reset" data-reset-section="pages/dashboard">Reset section</button></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="enhance.dashboard" aria-describedby="info-enhance-dashboard"><span id="info-enhance-dashboard-name">Glaze Dashboard</span></label><button type="button" class="info" popovertarget="info-enhance-dashboard" aria-labelledby="info-more info-enhance-dashboard-name" aria-describedby="info-enhance-dashboard"></button>
 <div class="info-pop" id="info-enhance-dashboard" popover><span class="desc">Blackboard's Institution page becomes Glaze's Dashboard: your widgets and Better To Do, in a layout of its own. Its Institution page tab shows Blackboard's own.</span></div></div>
 <div class="has-info"><label class="check"><input type="checkbox" data-key="widgets.land" aria-describedby="info-widgets-land"><span id="info-widgets-land-name">Open Blackboard on the dashboard</span></label><button type="button" class="info" popovertarget="info-widgets-land" aria-labelledby="info-more info-widgets-land-name" aria-describedby="info-widgets-land"></button>
 <div class="info-pop" id="info-widgets-land" popover><span class="desc">When Blackboard opens on its start page right after you sign in, go on to Glaze's Dashboard, once. A page you open by its address, a bookmark or a link is left alone.</span></div></div>
-<label class="check"><input type="checkbox" data-key="enhance.instant"><span>Open pages instantly</span></label>
-<label class="check"><input type="checkbox" data-key="enhance.feedback"><span>Show pages loading at once</span></label>
+
+
 <a href="#study/widgets" data-editor-alias>Notes and widgets</a>
 <details class="more"><summary>More options</summary>
 <div class="group" id="bb-stream"><h3>Activity Stream</h3>
@@ -1487,6 +1497,7 @@
 <label class="check"><input type="checkbox" data-key="stream.encouragement"><span>Show encouragement</span></label>
 </div>
 </details>
+<a href="#pages/speed" data-editor-alias>Speed</a>
 </section>
 <section id="bb-declutter" data-editor-section="pages/declutter" data-sites="Canvas · Blackboard Ultra" aria-labelledby="heading-pages-declutter">
 <p class="section-path" data-editor-breadcrumb><a href="#pages/declutter" data-editor-alias>Declutter</a></p><div class="section-heading"><h2 id="heading-pages-declutter">Declutter</h2><span class="site-badge" translate="no">Canvas · Blackboard</span><button type="button" class="section-reset" data-reset-section="pages/declutter">Reset section</button></div>
@@ -1812,7 +1823,7 @@
 <a href="https://frostdev.io/glaze/privacy" target="_blank" rel="noopener">Privacy</a>
 </section>
 <section id="sites" data-editor-section="backup/sites" data-sites="Extension only" aria-labelledby="heading-backup-sites">
-<p class="section-path" data-editor-breadcrumb><a href="#backup/sites" data-editor-alias>Sites</a></p><div class="section-heading"><h2 id="heading-backup-sites" tabindex="-1">Sites</h2></div>
+<p class="section-path" data-editor-breadcrumb><a href="#backup/sites" data-editor-alias>School</a></p><div class="section-heading"><h2 id="heading-backup-sites" tabindex="-1">School</h2></div>
 <form class="row site-add" id="site-add" novalidate autocomplete="off">
   <label class="field wide"><span>School address</span><input id="site-address" type="text" inputmode="url" enterkeyhint="go" autocapitalize="off" spellcheck="false" translate="no" placeholder="canvas.school.edu" aria-describedby="site-error"></label>
   <button type="submit" class="primary" id="site-allow">Allow</button>
@@ -1927,7 +1938,11 @@
   <script src="sharing/share.js"></script>
   <script src="sharing/relay.js"></script>
   <script src="sharing/sharing.js"></script>
-  <script src="settings/editor.js"></script>
+  <script src="settings/choices.js"></script>
+<script src="settings/editor-visual.js"></script>
+<script src="settings/editor-search.js"></script>
+<script src="settings/editor-sites.js"></script>
+<script src="settings/editor.js"></script>
   <script src="settings/editor-info.js"></script>
   <script src="looks/glsl.js"></script>
   <script src="looks/media.js"></script>

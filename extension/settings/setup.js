@@ -10,9 +10,10 @@
 // and the motion level; the opening splash wears the Frostdev Look. Classic script; module.exports for node.
 var GZ_SETUP = globalThis.GZ_SETUP || (() => {
   const D = typeof GZ_DEFAULTS !== 'undefined' ? { GZ_DEFAULTS, GZ_LOOKS, GZ_LOOK_APPLY, GZ_LOOK_ON } : require('../content/defaults.js');
+  const C = typeof GZ_CHOICES !== 'undefined' ? GZ_CHOICES : require('./choices.js');
   const STEPS = ['start', 'theme', 'motion', 'nav', 'features', 'ai', 'school', 'done'];
   // A new paper's formats (settings/editor-writer.js FORMATS): names, the same in every language but Blank's.
-  const FORMATS = [['mla9', 'MLA 9', true], ['apa7', 'APA 7', true], ['chicago17', 'Chicago 17', true], ['plain', 'Blank']];
+  const FORMATS = C.FORMATS;
   // One slide each: its words, its picture (welcome.html [data-art]), its switches as [setting, label, needs], and pick: a
   // choice of one as [setting, label, options ([value, name, raw]), needs].
   const FEATURES = [
@@ -20,22 +21,22 @@ var GZ_SETUP = globalThis.GZ_SETUP || (() => {
     { id: 'todo', title: 'To Do', says: 'Everything due, grouped by day, with tasks of your own.', keys: [['enhance.todo', 'Better To Do'], ['enhance.dashboard', 'Glaze Dashboard']] },
     { id: 'notes', title: 'Notes', says: 'Notes with folders and checklists, kept on this device.', keys: [['enhance.notes', 'Notes']] },
     { id: 'writer', title: 'Writer', says: 'A calmer editor in Blackboard’s discussion, message and assignment boxes.', keys: [['enhance.writer', 'Glaze Writer']],
-      pick: ['writer.format', 'Format for new papers', FORMATS, 'enhance.writer'] },
-    { id: 'search', title: 'Search', says: '{keys} jumps to a course, a page or a setting.', keys: [['enhance.palette', 'Command palette'], ['enhance.search', 'Search in your courses', 'enhance.palette'], ['enhance.keys', 'Keyboard shortcuts']] },
+      pick: ['writer.format', 'Format for new papers', FORMATS, C.NEEDS['writer.format']] },
+    { id: 'search', title: 'Search', says: '{keys} jumps to a course, a page or a setting.', keys: [['enhance.palette', 'Command palette'], ['enhance.search', 'Search in your courses', C.NEEDS['enhance.search']], ['enhance.keys', 'Keyboard shortcuts']] },
     { id: 'grades', title: 'Grades', says: 'See what’s new, how you did, and what you need.', keys: [['enhance.newgrades', 'New-grade badges'], ['enhance.scores', 'Score bars'], ['enhance.calc', 'What-if calculator']] },
     { id: 'speed', title: 'Speed', says: 'Pages open at once, with your courses loaded ahead.', keys: [['enhance.instant', 'Open pages instantly'], ['enhance.prefetch', 'Load course data ahead of time'], ['enhance.feedback', 'Show pages loading at once']] },
     { id: 'buddy', title: 'Study buddy', says: 'A buddy that grows with the work you hand in.', keys: [['enhance.pet', 'Pet habitat'], ['enhance.streak', 'Streak']] },
     { id: 'reminders', title: 'Reminders', says: 'A note on the site’s pages before work is due.', keys: [['enhance.remind', 'Due-date reminders'], ['enhance.remindExam', 'Exam reminders'], ['enhance.remindPlan', 'Plan reminders'], ['enhance.remindClass', 'Class reminders']] },
   ];
-  const LEVELS = [['off', 'Off'], ['subtle', 'Subtle'], ['expressive', 'Expressive']];
+  const LEVELS = C.LEVELS;
   const get = (s, key) => key.split('.').reduce((o, k) => o?.[k], s);
   // What one switch writes: its whole group, with the one value changed (sync holds a group as one item).
   const change = (s, key, on) => { const [g, k] = key.split('.'); return { [g]: { ...s[g], [k]: on } }; };
   // Glaze's own theme: the default palette, look and background, worn as a Look is (a student's tooltips, hints and picture
   // kept), with light and dark left as they are.
-  const OWN = Object.freeze({ name: 'Frost', colors: D.GZ_DEFAULTS.colors, palette: D.GZ_DEFAULTS.preset, look: {}, bg: {} });
+  const OWN = C.OWN;
   const LOOKS = [OWN, ...D.GZ_LOOKS];
-  const theme = (s, L) => { const { auto, ...rest } = D.GZ_LOOK_APPLY(s, L); return L === OWN ? rest : { auto, ...rest }; };
+  const theme = C.theme;
   const worn = (s) => LOOKS.find((L) => D.GZ_LOOK_ON(s, L)) || null;
   // The motion the page shows: the student's level, off where the system asks for less and they follow it.
   const level = (s, reduced) => (s.motion.followSystem && reduced ? 'off' : s.motion.level);
@@ -53,7 +54,7 @@ var GZ_SETUP = globalThis.GZ_SETUP || (() => {
   };
   // How many of the wizard's switches are on.
   const count = (s) => FEATURES.flatMap((f) => f.keys).filter(([k]) => get(s, k) === true).length;
-  return { STEPS, FEATURES, LEVELS, OWN, LOOKS, get, change, theme, worn, level, at, hashOf, move, count };
+  return { themeArt: C.themeArt, motionArt: C.motionArt, STEPS, FEATURES, LEVELS, OWN, LOOKS, get, change, theme, worn, level, at, hashOf, move, count };
 })();
 
 if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
@@ -199,9 +200,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     b.style.setProperty('--i', String(i));
     for (const [k, v] of [['--c-ground', c['--gz-surface-2']], ['--c-surface', c['--gz-surface']], ['--c-accent', c['--gz-accent']], ['--c-hi', c['--gz-accent-hi']],
       ['--c-ink', c['--gz-ink']], ['--c-muted', c['--gz-ink-muted']], ['--c-line', c['--gz-line-strong']], ['--c-1', three[0]], ['--c-2', three[1]], ['--c-3', three[2]]]) b.style.setProperty(k, v);
-    const art = make('span', { className: 'mock' }, make('i', { className: 'sky' }), make('i', { className: 'side' }),
-      make('i', { className: 'card' }, make('b'), make('b'), make('b')), make('i', { className: 'pill' }));
-    art.setAttribute('aria-hidden', 'true');
+    const art = S.themeArt(make);
     b.append(art, make('span', { className: 'name', textContent: L.name }), tick());
     b.addEventListener('click', () => pickLook(L, b));
     return b;
@@ -254,7 +253,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
   const levelsBox = $('#levels');
   const levelCards = S.LEVELS.map(([v, label]) => {
     const b = make('button', { type: 'button', className: `level lv-${v}` },
-      make('span', { className: 'demo' }, make('i'), make('i'), make('i'), make('em')), make('span', { className: 'name', textContent: t(label) }), tick());
+      S.motionArt(make), make('span', { className: 'name', textContent: t(label) }), tick());
     b.setAttribute('role', 'radio');
     b.querySelector('.demo').setAttribute('aria-hidden', 'true');
     b.dataset.level = v;

@@ -83,7 +83,7 @@ site needs your yes first: on Chrome, Edge and Firefox the popup checks the page
 tab or Settings is checked through the site's APIs after access is granted. Browser-menu grants are checked too; a failed
 check leaves that access unused. With All sites, in Safari and on installs from before 3.4.0, Glaze asks on unapproved
 course sites (**Use Glaze on example.edu?**) before theming them, reading their APIs or keeping course data. **Settings →
-Privacy and data → Sites** lists your sites, with Remove, which also forgets the courses and due dates Glaze read there.
+Privacy and data → School** lists your sites, with Remove, which also forgets the courses and due dates Glaze read there.
 See [Adding a school's own site](../PRIVACY.md#adding-a-schools-own-site).
 
 Pearson's switches under Course pages → Documents and quizzes start off. On browsers with optional hosts, turning one on

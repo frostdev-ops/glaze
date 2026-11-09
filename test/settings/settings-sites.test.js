@@ -41,7 +41,7 @@ const sites = ({ lists = {}, hosts = NARROW, held = [], granted = true, found = 
     t: (k, v) => I.t(k, v, 'en'), GZ_BUILT_IN: require('../../extension/content/defaults.js').GZ_BUILT_IN });
   vm.runInContext(read('core/site.js'), ctx);
   Object.assign(ctx.GZ_SITE, { probe: async () => found, nearby: async () => near });
-  const src = read('settings/options.js');
+  const src = read('settings/editor-sites.js');
   const block = src.slice(src.indexOf('  // ---- Sites:'), src.indexOf('\n', src.indexOf('  const readSites')));
   vm.runInContext(`${block}; this.readSites = readSites;`, ctx);
   ctx.readSites();

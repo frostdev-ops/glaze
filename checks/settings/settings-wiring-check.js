@@ -1,11 +1,12 @@
 // Real editor handlers -> sync storage -> sanitization -> reopened controls, in a disposable Chromium profile.
 // NODE_PATH=<playwright> node checks/settings/settings-wiring-check.js [evidence directory or report.json]
 // WIRING_CASE=cards runs only the preview regression. Network requests outside the extension are blocked.
+// Pearson hosts stand in for granted access; its real permission flow has its own access check.
 // This complements settings-ia-check's real clicks/layout and the feature-specific runtime checks; dispatched
 // input/change events here deliberately reach conditional controls without enabling connected services.
 const { chromium } = require('playwright');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
-const env = require('../../tools/dev/check-env.js'), root = fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension'));
+const env = require('../../tools/dev/check-env.js'), root = env.staged(fs.realpathSync(process.env.EXT || path.join(__dirname, '../../extension')), env.PEARSON_HOSTS);
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const lock = require('../../tools/dev/check-env.js').lockPath(), chromeLaunch = require('../../tools/dev/check-env.js').chromeLaunch(), results = [];
 let context, scratch, held = false;

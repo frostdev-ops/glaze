@@ -127,7 +127,7 @@ const GZ_UI = (() => {
   // One card per Look of `all` (looks/looks.js list: built in, then the student's saved and gallery Looks, under a heading each
   // when more than one group has any): its name in its own text color on its own surface, fading into its background's
   // colors (GZ_CATALOG.tone), with its accent down the edge; pressed when it is the one the page is wearing. onPick(E).
-  const looks = (box, s, onPick, all = GZ_CATALOG.list()) => {
+  const looks = (box, s, onPick, all = GZ_CATALOG.list(), visual = false) => {
     const focused = box.contains(document.activeElement) ? document.activeElement?.dataset.look : null;
     const worn = GZ_CATALOG.worn(s, all), groups = GZ_CATALOG.groups(all), t = (k) => GZ_I18N.t(k, {}, GZ_I18N.ui());
     const heads = { builtin: t('Built in'), saved: t('Saved'), gallery: t('Gallery') };
@@ -140,12 +140,20 @@ const GZ_UI = (() => {
         b.type = 'button';
         b.className = 'look';
         b.textContent = E.name;
+        if (visual) {
+          const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+          const bg = { ...GZ_DEFAULTS.bg, ...E.bg }, three = GZ_BG_COLORS(bg.colors, c);
+          b.dataset.bg = bg.kind;
+          for (const [k, value] of Object.entries({ ground: c['--gz-surface-2'], surface: c['--gz-surface'], accent: c['--gz-accent'], hi: c['--gz-accent-hi'], ink: c['--gz-ink'], muted: c['--gz-ink-muted'], line: c['--gz-line-strong'], 1: three[0], 2: three[1], 3: three[2] })) b.style.setProperty(`--c-${k}`, value);
+          b.replaceChildren(GZ_CHOICES.themeArt(make), make('span', { className: 'name', textContent: E.name }));
+        }
         b.dataset.look = E.id;
         b.setAttribute('translate', 'no');
         b.setAttribute('aria-pressed', String(E === worn));
-        b.style.color = c['--gz-ink'];
-        b.style.borderColor = c['--gz-line-strong'];
-        b.style.background = `linear-gradient(90deg, ${c['--gz-accent']} 0 4px, transparent 4px), linear-gradient(120deg, ${c['--gz-surface']} 45%, ${GZ_CATALOG.tone(E).join(', ')})`;
+        if (!visual) b.style.color = c['--gz-ink'];
+        if (!visual) b.style.borderColor = c['--gz-line-strong'];
+        if (!visual) b.style.background = `linear-gradient(90deg, ${c['--gz-accent']} 0 4px, transparent 4px), linear-gradient(120deg, ${c['--gz-surface']} 45%, ${GZ_CATALOG.tone(E).join(', ')})`;
+        if (visual) { b.tabIndex = E === worn || (!worn && E === all[0]) ? 0 : -1; b.setAttribute('aria-label', E.name); }
         b.addEventListener('click', () => onPick(E));
         box.append(b);
         if (focused === E.id) b.focus({ preventScroll: true });
@@ -156,11 +164,12 @@ const GZ_UI = (() => {
   // A look is an explicit choice too: palette, fonts, shape and background at once, and its own extras (a Look's parts:
   // pointer, effects) in place of the one before's.
   const pickLook = (s, L) => {
-    Object.assign(s, GZ_LOOK_APPLY(s, L));
+    const own = typeof GZ_CHOICES !== 'undefined' && L === GZ_CHOICES.OWN;
+    Object.assign(s, own ? GZ_CHOICES.theme(s, L) : GZ_LOOK_APPLY(s, L));
     s.parts = GZ_LOOK_PARTS(L);
     // Course cards only as far as the look names them.
     if (L.card) s.card = GZ_CARDS.settings({ ...s.card, ...L.card });
-    return ['colors', 'preset', 'auto', 'look', 'bg', 'parts', ...(L.card ? ['card'] : [])];
+    return ['colors', 'preset', ...(own ? [] : ['auto']), 'look', 'bg', 'parts', ...(L.card ? ['card'] : [])];
   };
 
   // A theme's name in the history and favorites: the Look it is (of `all`, looks/looks.js), else its palette's name.

@@ -329,7 +329,7 @@ test('reach without the permissions API: where the page set a way out, the contr
 // options.js's embedded part, run on a stand-in page: what it sets up for a frame with and without the APIs.
 const embeddedSettings = ({ permissions, tabs }) => {
   const src = read('settings/options.js');
-  const from = src.indexOf('const embedded = window.top !== window;'), to = src.indexOf('const filter = () =>');
+  const from = src.indexOf('const embedded = window.top !== window;'), to = src.indexOf('const filter = GZ_SETTINGS_SEARCH.mount');
   assert.ok(from > 0 && to > from, 'options.js has its embedded part');
   const sent = [], created = [], posted = [];
   const el = () => Object.assign(new El('div'), { hidden: true, prepend() {}, append() {}, closest: () => null });

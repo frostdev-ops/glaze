@@ -94,10 +94,10 @@ test('a course pointed at for 150 ms has its content read at low priority, with 
   assert.equal(p.doc.filter((x) => !x.win).length, 0);
 });
 
-test('the setting: on by default, in Course tabs\' options, and the file loads on the top page only while it is on', () => {
+test('the setting: on by default, in Speed settings, and the file loads on the top page only while it is on', () => {
   assert.equal(D.GZ_DEFAULTS.enhance.prefetch, true);
   assert.equal(D.GZ_SANITIZE({ enhance: { prefetch: false } }).enhance.prefetch, false);
-  const html = read('options.html'), tabs = html.slice(html.indexOf('<section id="tabs"'), html.indexOf('</section>', html.indexOf('<section id="tabs"')));
+  const html = read('options.html'), tabs = html.slice(html.indexOf('<section id="settings-speed"'), html.indexOf('</section>', html.indexOf('<section id="settings-speed"')));
   assert.match(tabs, /data-key="enhance\.prefetch"/);
   assert.match(read('content/content-ultra.js'), /const syncAhead = \(\) => load\(\(\) => !tabFrame && top\(\)\?\.prefetch, 'courses\/page\/ahead\.js', 'GZ_AHEAD'\);/);
   assert.match(read('content/content-ultra.js'), /syncRemind: \(\) => \(syncRemind\(\), syncAhead\(\)\)/);

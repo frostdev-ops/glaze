@@ -667,11 +667,12 @@ test('ULT-4: the popup shows the active tab\'s site\'s due list, or every site\'
 test('Settings lists the sites said yes to, with their LMS and a Remove only the worker carries out; Reset everything clears them', async () => {
   const html = read('options.html');
   assert.match(html, /<section id="sites" data-editor-section="backup\/sites"[\s\S]*?<ul class="courses sites" id="site-list"><\/ul>[\s\S]*?id="site-empty"[\s\S]*?id="site-status" role="status" aria-live="polite"[\s\S]*?<\/section>/);
-  assert.match(html, /<a href="#backup\/sites" data-editor-alias>Sites<\/a>/, 'in the panel\'s section links');
+  assert.match(html, /<a href="#backup\/sites" data-editor-alias>School<\/a>/, 'in the panel\'s section links');
   const src = read('settings/options.js');
   const reset = src.slice(src.indexOf("$('#reset-all').addEventListener"), src.indexOf('// ---- Sites:'));
   assert.match(reset, /chrome\.runtime\.sendMessage\(\{ type: 'glaze:sites', op: 'reset' \}\)/, 'Reset everything clears the list');
-  const block = src.slice(src.indexOf('  // ---- Sites:'), src.indexOf('\n', src.indexOf('  const readSites')));
+  const sitesSource = fs.readFileSync(path.join(__dirname, '../../extension/settings/editor-sites.js'), 'utf8');
+  const block = sitesSource.slice(sitesSource.indexOf('  // ---- Sites:'), sitesSource.indexOf('\n', sitesSource.indexOf('  const readSites')));
   const nodes = {}, sent = [];
   const mk = (tag) => Object.assign(el(), { tagName: tag.toUpperCase(), attrs: {}, on: {}, setAttribute(k, v) { this.attrs[k] = v; }, addEventListener(t, f) { this.on[t] = f; }, focus() { this.focused = true; } });
   for (const id of ['#site-list', '#site-empty', '#site-status', '#heading-backup-sites', '#site-add', '#site-address', '#site-allow', '#site-note', '#site-error', '#site-picks']) nodes[id] = mk('x');

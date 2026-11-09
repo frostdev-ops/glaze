@@ -84,7 +84,7 @@ test('the built-in hosts are the manifest\'s, in one place', () => {
   }
   assert.equal(D.GZ_BUILT_IN(null, new URL('https://school.instructure.com/')), false, 'no LMS found');
   const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
-  for (const f of ['content/content.js', 'content/content-ultra.js', 'settings/options.js', 'background/background.js']) {
+  for (const f of ['content/content.js', 'content/content-ultra.js', 'settings/editor-sites.js', 'background/background.js']) {
     assert.match(read(f), /GZ_BUILT_IN\(/, f);
     assert.doesNotMatch(read(f), /instructure\\\.com\$|blackboard\\\.com\$|endsWith\('\.(instructure|blackboard)\.com'\)/, `${f} keeps no host list of its own`);
   }

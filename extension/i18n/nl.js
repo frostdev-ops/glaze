@@ -112,7 +112,6 @@
   'Share': 'Delen',
   'Dismiss': 'Sluiten',
   'Save as preset': 'Opslaan als voorinstelling',
-  'Back to Frost': 'Terug naar Frost',
   "Follow the system's light and dark mode": 'De lichte en donkere modus van het systeem volgen',
   'Auto light and dark': 'Automatisch licht en donker',
   'On a schedule': 'Volgens schema',
@@ -1675,7 +1674,6 @@
   "Deleted on the relay — local copy kept": "Verwijderd van de relay — lokale kopie bewaard",
   "Editing devices, last seen. Names are self-chosen; view-only devices cannot announce themselves.": "Apparaten met bewerkrechten, laatst gezien. Namen zijn zelfgekozen; apparaten met alleen leesrechten kunnen zich niet melden.",
   "Forget this session’s keys on this device? Your Notes and To Do copies remain. This does not delete it from the relay.": "De sleutels van deze sessie op dit apparaat vergeten? Je kopieën in Notities en To Do blijven bewaard. Dit verwijdert de sessie niet van de relay.",
-  "Sites": "Sites",
   "No other sites yet.": "Nog geen andere sites.",
   "Removed {site}. Glaze no longer runs there.": "{site} verwijderd. Glaze werkt daar niet meer.",
   "Invite link": "Uitnodigingslink",
@@ -3974,5 +3972,8 @@
   "Pin Glaze to your toolbar": "Zet Glaze vast in de werkbalk",
   "Your key": "Eigen sleutel",
   "Icons": "Pictogrammen",
-  "Shortcuts": "Snelkoppelingen"
+  "Shortcuts": "Snelkoppelingen",
+  "Reset palette": "Palet herstellen",
+  "Your paper": "Je werkstuk",
+  "Connections": "Verbindingen"
 };

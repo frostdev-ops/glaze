@@ -95,91 +95,7 @@ if (embedded) {
       make('p', { textContent: t('This part of Glaze holds your keys, backups and the permissions mods get, so it opens in a tab of its own, where no website can reach it.') }), go));
   }
 }
-// A section's parts are its children, and the children of the boxes in it (groups, More options, the navigation's bodies), each
-// box's own heading aside. A match inside a closed More options opens it; leaving the search closes it again (settings/editor.js).
-const BOX = '.group, .nb-body, .nb-group, .nav-own, .stack, details.more';
-const filter = () => {
-  const words = GZ_FIND.parse(finder.value);
-  const on = words.length > 0;
-  document.body.classList.toggle('finding', on);
-  editor.finding(on); searchPreview(on);
-  const marks = [];
-  const mark = (root, heading = false) => {
-    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    for (let t; (t = w.nextNode());) {
-      for (const [a, b] of GZ_FIND.spans(t.data, words, heading)) {
-        const r = new Range();
-        r.setStart(t, a);
-        r.setEnd(t, b);
-        marks.push(r);
-      }
-    }
-  };
-  const named = (el) => [el, ...el.querySelectorAll('[aria-describedby], [aria-labelledby]')]
-    .flatMap((e) => `${e.getAttribute('aria-describedby') || ''} ${e.getAttribute('aria-labelledby') || ''}`.split(' '))
-    .map((id) => id && document.getElementById(id)).filter(Boolean);
-  const said = (el) => [el, ...el.querySelectorAll('[title], [aria-label], [placeholder]')]
-    .map((e) => `${e.title} ${e.getAttribute('aria-label') || ''} ${e.getAttribute('placeholder') || ''}`).join(' ');
-  let n = 0;
-  for (const b of $$('button.info.found')) b.classList.remove('found');
-  for (const sec of $$('[data-editor-section]')) {
-    const h2 = sec.querySelector('h2'), boxes = [];
-    const partsOf = (box) => [...box.children].flatMap((el) => {
-      if (el.matches('.section-heading, .section-path, summary') || (box !== sec && el.tagName === 'H3')) return [];
-      if (el.matches(BOX)) { boxes.push(el); return partsOf(el); }
-      return [el];
-    });
-    const parts = partsOf(sec);
-    const notes = new Map(parts.map((el) => [el, named(el)]));
-    const isNote = new Set([...notes.values()].flat());
-    for (const el of isNote) el.classList.toggle('miss', on);
-    let any = false;
-    for (const el of parts) {
-      if (isNote.has(el)) continue;
-      const heads = [];
-      for (let box = el.parentElement; box && box !== sec; box = box.parentElement) if (box.matches(BOX)) heads.push(box.querySelector(':scope > h3')?.textContent || '');
-      const text = [el.textContent, said(el), ...notes.get(el).map((x) => x.textContent)].join(' ');
-      const tab = $(`[data-editor-tab="${sec.dataset.editorSection.split('/')[0]}"]`).textContent;
-      const hit = !on || (!el.closest('[hidden]') && GZ_FIND.matches(`${tab} ${h2.textContent} ${heads.join(' ')}`, `${sec.dataset.sites} ${text}`, words));
-      el.classList.toggle('miss', !hit);
-      if (!hit || !on) continue;
-      any = true;
-      n++;
-      for (const x of [el, ...notes.get(el)]) { x.classList.remove('miss'); mark(x); }
-      // A match only in a "?"'s description rings the "?"; opening it shows the words marked.
-      for (const pop of [el, ...notes.get(el)].flatMap((x) => (x.matches('.info-pop') ? [x] : [...x.querySelectorAll('.info-pop')]))) {
-        if (GZ_FIND.spans(pop.textContent, words).length) document.querySelector(`[popovertarget="${pop.id}"]`)?.classList.add('found');
-      }
-    }
-    // Innermost first, so a box holding only empty boxes is empty too.
-    for (const g of boxes.reverse()) {
-      const empty = on && !g.querySelector(':scope > :not(h3, summary, .miss)');
-      g.classList.toggle('miss', empty);
-      if (!on || empty) continue;
-      for (const h3 of g.querySelectorAll(':scope > h3')) mark(h3, true);
-      if (g.matches('details.more')) g.open = true;
-    }
-    sec.classList.toggle('miss', on && !any);
-    if (on && any) mark(h2, true);
-  }
-  for (const panel of $$('[data-editor-panel]')) panel.classList.toggle('miss', on && !panel.querySelector('[data-editor-section]:not(.miss)'));
-  if (window.Highlight) CSS.highlights.set('find', new Highlight(...marks));
-  const msg = !on ? '' : n ? t('{n} settings', { n }) : t('No settings match');
-  if ($('#find-status').textContent !== msg) $('#find-status').textContent = msg;
-};
-finder.addEventListener('input', filter);
-finder.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape' || !finder.value) return;
-  e.preventDefault();
-  finder.value = '';
-  filter();
-});
-addEventListener('keydown', (e) => {
-  if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input:is([type="text"], [type="url"], [type="search"]), textarea, [contenteditable]')) return;
-  e.preventDefault();
-  finder.focus();
-  finder.select();
-});
+const filter = GZ_SETTINGS_SEARCH.mount({ t, finder, editor, searchPreview: (on) => searchPreview(on) });
 
 // ---- what's new: once per version, after an update (settings/news.js) ----
 GZ_NEWS.check((notes) => {
@@ -202,7 +118,8 @@ GZ_UI.load().then((s) => {
   let catalog = GZ_CATALOG.list();
   const previewItems = () => navItems.links.length ? navItems : GZ_NAV.clean({ ...navItems, links: [{ id: 'previewlinkx', n: t('Research resources and academic support'), u: 'https://example.invalid/research', i: 'book', tab: true }] });
   const supportedPages = { ultra: ['courses', 'outline', 'dashboard', 'tabs', 'stream'], canvas: ['courses', 'outline', 'dashboard', 'tabs', 'document', 'quiz'], moodle: ['courses', 'outline', 'dashboard'] };
-  let previewSite = 'ultra', previewPage = 'outline', previewCourse = '', previewCollapsed = false, searchWasOn = false, beforeSearch = false;
+  const narrowPreview = matchMedia('(max-width: 980px)');
+  let previewSite = 'ultra', previewPage = 'outline', previewCourse = '', previewCollapsed = narrowPreview.matches, searchWasOn = false, beforeSearch = false;
   const sizePreview = () => {
     const phone = $('#preview-size').value === 'phone', width = phone ? 375 : 1280, height = phone ? 812 : 900;
     const stage = $('.preview-stage'), available = stage.clientWidth, scale = Math.min(1, available / width);
@@ -246,6 +163,7 @@ GZ_UI.load().then((s) => {
     // part: the box in use inside the section (its id), where its preview differs from the section's.
     let site = previewSite, page = previewPage;
     if (part === 'bb-stream') { site = 'ultra'; page = 'stream'; }
+    else if (route === 'pages/speed') { site = 'ultra'; page = 'outline'; }
     else if (route === 'pages/dashboard') { site = 'ultra'; page = 'dashboard'; }
     else if (route === 'pages/declutter') { site = 'ultra'; page = 'outline'; }
     else if (route === 'pages/documents') { site = 'canvas'; page = 'document'; }
@@ -261,6 +179,11 @@ GZ_UI.load().then((s) => {
   for (const el of $$('#preview-site, #preview-page')) el.addEventListener('change', () => contextPreview($('#preview-site').value, $('#preview-page').value));
   for (const el of $$('#nav-preview-mode, #nav-preview-scheme, #preview-size')) el.addEventListener('change', preview);
   const showPreview = () => { $('#preview-body').hidden = previewCollapsed; $('#preview-toggle').setAttribute('aria-expanded', String(!previewCollapsed)); $('#preview-toggle').textContent = t(previewCollapsed ? 'Show preview' : 'Hide preview'); if (!previewCollapsed) sizePreview(); };
+  narrowPreview.addEventListener('change', () => { previewCollapsed = narrowPreview.matches; showPreview(); });
+  $('.preview').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && narrowPreview.matches && !previewCollapsed) { e.preventDefault(); e.stopPropagation(); previewCollapsed = true; showPreview(); $('#preview-toggle').focus(); }
+  });
+  showPreview();
   $('#preview-toggle').addEventListener('click', () => { previewCollapsed = !previewCollapsed; showPreview(); });
   searchPreview = (on) => { if (on !== searchWasOn) { if (on) { beforeSearch = previewCollapsed; previewCollapsed = true; } else previewCollapsed = beforeSearch; searchWasOn = on; showPreview(); } };
   frame.addEventListener('load', preview);
@@ -451,7 +374,7 @@ GZ_UI.load().then((s) => {
     save(GZ_UI.pickLook(s, E.L));
     fill();
     if (undo) hint(t('{name} replaced this Look’s extras.', { name: E.name }), false, undo);
-  }, catalog);
+  }, GZ_CHOICES.themes(catalog), true);
   const refresh = () => {
     GZ_UI.paint(s, { page: true });
     preview();
@@ -473,6 +396,8 @@ GZ_UI.load().then((s) => {
     $('[data-key="tabs.renew"]').disabled = !s.tabs.ahead;
     $('[data-key="nav.detailed"]').checked = s.nav.detailed;
     pearsonControls();
+    for (const [key] of Object.entries(GZ_CHOICES.NEEDS)) { const control = $(`[data-key="${key}"]`); if (control) control.disabled = GZ_CHOICES.blocked(s, key); }
+    GZ_SETTINGS_VISUAL.render(s);
     $('#auto-times').hidden = s.auto.mode !== 'schedule';
     for (const el of $$('[data-tint]')) el.hidden = !s.courses.tint;
     // A control only where it has an effect (settings/editor.js SHOW); a More options with nothing left to show goes too.
@@ -1854,86 +1779,8 @@ GZ_UI.load().then((s) => {
     chrome.runtime.sendMessage({ type: 'glaze:sites', op: 'reset' }).catch(() => {});
   });
 
-  // ---- Sites: the sites the student said yes to (background/background.js approved), each with Remove, which only the worker does.
-  // Each LMS's own hosts (GZ_BUILT_IN) are Glaze's anyway, so they aren't listed.
-  const KINDS = { canvas: 'Canvas', moodle: 'Moodle', ultra: 'Blackboard Ultra' };
-  const siteSaid = (text) => { $('#site-status').textContent = text; };
-  const renderSites = (r) => {
-    const sites = new Map();
-    for (const kind of Object.keys(KINDS)) for (const x of Array.isArray(r?.[kind]) ? r[kind] : []) {
-      let u;
-      try { u = new URL(String(x).replace(/\/\*$/, '')); } catch { continue; }
-      const automatic = GZ_BUILT_IN(kind, u);
-      if (u.protocol !== 'https:' || automatic) continue;
-      sites.set(u.origin, [...new Set([...sites.get(u.origin) || [], t(KINDS[kind])])]);
-    }
-    $('#site-list').replaceChildren(...[...sites].sort(([a], [b]) => a.localeCompare(b)).map(([origin, kinds]) => {
-      const host = new URL(origin).host;
-      const name = Object.assign(document.createElement('span'), { className: 'name' });
-      name.append(Object.assign(document.createElement('span'), { textContent: host, translate: false }), Object.assign(document.createElement('small'), { textContent: kinds.join(' · ') }));
-      const remove = Object.assign(document.createElement('button'), { type: 'button', textContent: t('Remove') });
-      remove.setAttribute('aria-label', t('Remove {name}', { name: host }));
-      remove.addEventListener('click', async (e) => {
-        if (!e.isTrusted || remove.disabled) return;
-        remove.disabled = true;
-        const done = await chrome.runtime.sendMessage({ type: 'glaze:sites', op: 'remove', origin }).catch(() => null);
-        if (!done?.ok) { remove.disabled = false; siteSaid(t('Not saved. Try again in a moment.')); return; }
-        // And the browser's grant for it, where the student gave one for exactly this site (core/site.js handBack).
-        const site = GZ_SITE.address(origin);
-        if (site?.origin === origin) await GZ_SITE.handBack(site);
-        siteSaid(t('Removed {site}. Glaze no longer runs there.', { site: host }));
-        $('#heading-backup-sites').focus({ preventScroll: true });
-      });
-      const li = document.createElement('li');
-      li.append(name, remove);
-      return li;
-    }));
-    $('#site-empty').hidden = sites.size > 0;
-  };
-  // Add a site, the first screen's way (core/site.js allow): the browser's prompt from the submit itself, then the check;
-  // a course site is listed with its LMS, anything else has its grant handed back, with the course sites nearby to pick.
-  // Where Glaze holds every site (Safari), a school's own site is added from its pages' card instead.
-  const addForm = $('#site-add'), addInput = $('#site-address'), addGo = $('#site-allow');
-  addForm.hidden = !!chrome.runtime.getManifest().host_permissions?.includes('<all_urls>');
-  let adding = false;
-  const addSaid = (text = '', hosts = []) => {
-    $('#site-error').textContent = text;
-    $('#site-picks').replaceChildren(...hosts.map((h) => {
-      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: h });
-      b.setAttribute('translate', 'no');
-      b.addEventListener('click', (e) => { if (!e.isTrusted || adding) return; addInput.value = h; addSite(GZ_SITE.address(h)); });
-      return b;
-    }));
-    $('#site-note').hidden = !text;
-  };
-  const addSite = (site) => {
-    adding = true;
-    addInput.readOnly = true;
-    addGo.setAttribute('aria-busy', 'true');
-    addSaid();
-    siteSaid('');
-    GZ_SITE.allow(site, { checking: () => siteSaid(t('Checking {host}', { host: site.host })) }).then((r) => {
-      adding = false;
-      addInput.readOnly = false;
-      addGo.removeAttribute('aria-busy');
-      siteSaid(r.state === 'done' ? t('Allowed {host}', { host: site.host }) : '');
-      if (r.state === 'done') { addInput.value = ''; addInput.focus(); return; }
-      if (r.state === 'refused') { addInput.focus(); return; }
-      addSaid(t(r.state === 'none' ? 'No course site at {host}' : "Can't reach {host}", { host: site.host }), r.hosts);
-      ($('#site-picks').children[0] || addInput).focus();
-    });
-  };
-  addForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    if (!e.isTrusted || adding) return;
-    const site = GZ_SITE.address(addInput.value);
-    if (!site) { addSaid(t('Not a web address')); return; }
-    addSite(site);
-  });
-  addInput.addEventListener('input', () => addSaid());
-  const readSites = () => chrome.storage.local.get(Object.keys(KINDS), renderSites);
-  readSites();
-  chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && Object.keys(KINDS).some((k) => k in c)) readSites(); });
+  // ---- Sites: school access and its permission flow have their own module.
+  GZ_SETTINGS_SITES.mount({ t });
 
   for (const button of $$('[data-reset-setting]')) {
     const control = $$('[data-key]').find((el) => el.dataset.key === button.dataset.resetSetting);
@@ -1994,6 +1841,7 @@ GZ_UI.load().then((s) => {
   // AI (settings/editor-ai.js): its switch, the providers, the overall model and each feature's own, and the record of calls.
   // Writer (settings/editor-writer.js): the selects' choices, the papers kept by course and the personal dictionary.
   GZ_WRITEREDIT.mount({ t, hint, elsewhere: ownTabAt });
+  GZ_SETTINGS_VISUAL.mount({ t, settings: () => s });
   GZ_AIEDIT.mount({ t, when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at),
     pct: (x) => GZ_I18N.pct(Math.round(x * 100), GZ_I18N.ui()) });
   GZ_MEMORYEDIT.mount({ t, when: (at) => new Intl.DateTimeFormat(GZ_I18N.locale(GZ_I18N.ui()), { dateStyle: 'medium', timeStyle: 'short' }).format(at) });

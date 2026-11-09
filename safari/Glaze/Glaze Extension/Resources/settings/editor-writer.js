@@ -9,7 +9,7 @@
 var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
   const DICT = 'writerWords';
   // writer/writer-styles.js FORMATS' labels: names, the same in every language but Blank's.
-  const FORMATS = [['mla9', 'MLA 9'], ['apa7', 'APA 7'], ['chicago17', 'Chicago 17'], ['plain', 'Blank']];
+  const FORMATS = (typeof GZ_CHOICES !== 'undefined' ? GZ_CHOICES : require('./choices.js')).FORMATS.map(([id, label]) => [id, label]);
   const dialects = (t) => [['en-US', t('American English')], ['en-GB', t('British English')], ['en-CA', t('Canadian English')], ['en-AU', t('Australian English')]];
   // Assignment papers by course, the most first; standalone and recovery papers in Documents.
   const groups = (rows) => {

@@ -148,7 +148,7 @@ const screen = ({ granted = true, found = { kind: 'ultra', url: 'https://bb.scho
 const tick = () => new Promise(setImmediate);
 
 test('first screen waits for the worker to approve and register before offering Open', async () => {
-  const s = screen(), bar = s.element('.bar'), go = s.element('#go');
+  const s = screen(), bar = s.element('#site .bar'), go = s.element('#go');
   await tick();
   s.element('#address').value = 'bb.school.edu';
   s.element('#site').handlers.submit({ preventDefault() {} });
@@ -170,7 +170,7 @@ test('first screen does not report success when the worker rejects the second ch
   await tick();
   s.reply({ ok: false });
   await tick();
-  assert.notEqual(s.element('.bar').dataset.state, 'done');
+  assert.notEqual(s.element('#site .bar').dataset.state, 'done');
   assert.equal(s.element('#go').attributes.has('data-busy'), false, 'the student can retry');
   assert.equal(s.element('#note').hidden, false, 'a failed approval is visible');
 });
@@ -230,6 +230,7 @@ const wizardScreen = (parts = []) => {
   const reads = [], replies = [], events = {};
   const looks = G.GZ_LOOKS.map((l) => l.name === 'Frostdev' ? { ...l, bg: { kind: 'solid' } } : l);
   const context = vm.createContext({ document, ...G, GZ_SETUP_PARTS: parts, GZ_LOOKS: looks, GZ_I18N: { t: (s) => s, ui() {} }, GZ_LOOK_PARTS: () => null, GZ_LX: { CURSORS: {} }, GZ_COLOR: { brightness: () => 0, parse: () => ({}) }, CSS: { supports: () => false }, matchMedia: () => ({ matches: false, addEventListener() {} }), location: { hash: '#/motion', assign() {} }, navigator: { platform: 'Mac' }, getComputedStyle: () => ({ direction: 'ltr' }), addEventListener: (name, fn) => { events[name] = fn; }, scrollTo() {}, requestAnimationFrame() {}, setTimeout() { return 1; }, clearTimeout() {}, CustomEvent: class {}, chrome: { runtime: { id: 'glaze', getURL: (p) => p, sendMessage: () => new Promise((resolve) => replies.push(resolve)) }, storage: { sync: { get: () => new Promise((resolve) => reads.push(resolve)) }, local: { get: async () => ({ freshDefaults: { fresh: true } }) }, onChanged: { addListener: (fn) => { events.changed = fn; } } } } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/settings/choices.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension/settings/setup.js'), 'utf8'), context);
   return { get, reads, replies, events, document, location: context.location };
 };

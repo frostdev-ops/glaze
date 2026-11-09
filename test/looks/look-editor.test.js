@@ -149,6 +149,7 @@ const refreshed = (s, extra = {}) => {
   const element = () => ({ hidden: false, checked: false, value: '', textContent: '', classList: { toggle() {} } });
   const source = between(options, '  const drawLooks = ', '  // Puts every control back in line');
   const context = vm.createContext({
+    GZ_CHOICES: require('../../extension/settings/choices.js'), GZ_SETTINGS_VISUAL: { render() {} },
     s, offer: null, catalog: LC.list(), wearKept() {}, GZ_UI: { paint() {}, looks: (box, v, cb) => { picks.look = cb; }, swatches: (box, v, cb) => { picks.swatch = cb; }, pickLook: UI.pickLook, pickPreset: UI.pickPreset },
     $: element, $$: () => [], get: () => 0, finder: { value: '' }, preview() {}, renderContrast() {}, renderMine() {}, renderHistory() {}, renderExtras() {}, renderBg() {}, renderNav() {}, showResets() {}, pearsonControls() {},
     navbarEditor: null, presetOptions() {}, outputs() {}, GZ_EDITOR_X: { render() {} }, GZ_XEDIT: { render() {} }, document: { body: { classList: { toggle() {} } } },
@@ -159,7 +160,7 @@ const refreshed = (s, extra = {}) => {
   return { picks, saved, hints, log };
 };
 
-test('LOOK-3: a palette swatch changes the palette and keeps the Look’s extras; so does Back to Frost', () => {
+test('LOOK-3: a palette swatch changes the palette and keeps the Look’s extras; so does Reset palette', () => {
   const s = { ...D.GZ_SANITIZE({}), parts: GLOW };
   const keys = UI.pickPreset(s, 'Paper', D.GZ_PRESET('Paper'));
   assert.deepEqual(s.parts, GLOW);

@@ -1,0 +1,34 @@
+/* Setup and Settings: the same miniature pages and motion demonstrations. */
+.mock { position: relative; display: block; aspect-ratio: 16 / 10; border-radius: 12px; overflow: hidden; background: var(--c-ground); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-line) 70%, transparent); }
+.mock i { position: absolute; }
+.mock .sky { inset: 0; background: radial-gradient(70% 90% at 15% 0%, color-mix(in srgb, var(--c-1) 60%, transparent), transparent 70%), radial-gradient(70% 80% at 100% 100%, color-mix(in srgb, var(--c-2) 55%, transparent), transparent 72%), radial-gradient(50% 60% at 70% 20%, color-mix(in srgb, var(--c-3) 35%, transparent), transparent 70%); }
+.look[data-bg="solid"] .mock .sky { opacity: 0.18; }
+.look[data-bg="gradient"] .mock .sky { background: linear-gradient(135deg, var(--c-1), var(--c-2), var(--c-3)); opacity: 0.55; }
+.mock .side { left: 0; top: 0; bottom: 0; width: 17%; background: color-mix(in srgb, var(--c-surface) 92%, transparent); border-right: 1px solid color-mix(in srgb, var(--c-line) 80%, transparent); }
+.mock .side::before { content: ''; position: absolute; left: 30%; right: 30%; top: 14%; aspect-ratio: 1; border-radius: 30%; background: var(--c-accent); }
+.mock .card { left: 25%; right: 7%; top: 17%; bottom: 22%; display: grid; align-content: start; gap: 9%; padding: 7% 8%; border-radius: 7px; background: color-mix(in srgb, var(--c-surface) 92%, transparent); border: 1px solid color-mix(in srgb, var(--c-line) 85%, transparent); }
+.mock .card b { height: 0.28rem; border-radius: 1px; background: color-mix(in srgb, var(--c-ink) 75%, transparent); }
+.mock .card b:first-child { width: 42%; height: 0.32rem; background: var(--c-accent); }
+.mock .card b:nth-child(2) { width: 88%; }
+.mock .card b:nth-child(3) { width: 62%; background: color-mix(in srgb, var(--c-muted) 70%, transparent); }
+.mock .pill { right: 7%; bottom: 7%; width: 24%; height: 9%; border-radius: 99px; background: linear-gradient(90deg, var(--c-accent), var(--c-hi)); }
+html:not([data-gz-motion="off"]) .look:hover .mock .card { transform: translateY(-2px); transition: transform 0.35s var(--ease); }
+.demo {
+  position: relative; display: flex; align-items: center; justify-content: center; gap: 9%; aspect-ratio: 16 / 10; border-radius: 14px; overflow: hidden;
+  background: radial-gradient(90% 80% at 50% 0%, color-mix(in srgb, var(--gz-accent-soft) 70%, transparent), transparent 70%), color-mix(in srgb, var(--gz-surface-2) 70%, var(--gz-surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gz-line) 70%, transparent);
+}
+.demo i { width: 20%; aspect-ratio: 3 / 4; border-radius: 9px; background: var(--gz-surface); border: 1px solid var(--gz-line-strong); box-shadow: 0 6px 14px -8px var(--shade); }
+.demo i::before { content: ''; display: block; margin: 18% 16% 0; height: 12%; border-radius: 3px; background: var(--gz-accent); }
+.demo i::after { content: ''; display: block; margin: 12% 16% 0; height: 30%; border-radius: 3px; background: repeating-linear-gradient(180deg, color-mix(in srgb, var(--gz-ink-muted) 55%, transparent) 0 3px, transparent 3px 8px); }
+.demo em { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; opacity: 0; color: var(--gz-accent-hi);
+  box-shadow: 0 -34px 0 1px currentColor, 24px -24px 0 0 var(--gz-accent), 34px 0 0 1px currentColor, 24px 24px 0 0 var(--gz-accent), 0 34px 0 1px currentColor, -24px 24px 0 0 var(--gz-accent), -34px 0 0 1px currentColor, -24px -24px 0 0 var(--gz-accent); }
+.lv-subtle:is([aria-checked="true"], :hover, :focus-visible) .demo i { animation: d-subtle 3.2s var(--ease) infinite both; }
+.lv-expressive:is([aria-checked="true"], :hover, :focus-visible) .demo i { animation: d-express 3.2s var(--spring) infinite both; }
+.lv-expressive:is([aria-checked="true"], :hover, :focus-visible) .demo em { animation: d-burst 3.2s ease-out infinite both; }
+.demo i:nth-child(2) { animation-delay: 0.12s !important; }
+.demo i:nth-child(3) { animation-delay: 0.24s !important; }
+.lv-off .demo i { opacity: 0.85; }
+@keyframes d-subtle { 0%, 8% { opacity: 0; transform: translateY(10px); } 30%, 82% { opacity: 1; transform: none; } 100% { opacity: 0; transform: none; } }
+@keyframes d-express { 0%, 6% { opacity: 0; transform: translateY(26px) scale(0.7) rotate(-6deg); } 26% { opacity: 1; transform: translateY(-6px) scale(1.06) rotate(1deg); } 36%, 80% { opacity: 1; transform: none; } 92%, 100% { opacity: 0; transform: translateY(-10px) scale(0.92); } }
+@keyframes d-burst { 0%, 36% { opacity: 0; transform: scale(0.3); } 44% { opacity: 1; } 62%, 100% { opacity: 0; transform: scale(1.5); } }

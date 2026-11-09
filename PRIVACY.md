@@ -168,7 +168,7 @@ already started can finish. **Revoke** forgets one app with its groups and decli
 all apps** clears the activity list and kept assignment reads, and forgets every app with its groups and declines.
 Revoke leaves the activity list. Both leave the agent switch and profile id. Neither uninstalls the helper.
 
-Removing a site in **Settings → Privacy and data → Sites** clears that site's kept assignment reads, and Reset
+Removing a site in **Settings → Privacy and data → School** clears that site's kept assignment reads, and Reset
 everything clears them all. Site removal and Reset everything leave the agent switch, apps, grants and activity
 unchanged. Uninstalling the extension does not uninstall the helper or erase copies an app or its AI service kept.
 
@@ -1227,12 +1227,12 @@ Canvas on `*.instructure.com`, Blackboard Ultra on `*.blackboard.com` and Moodle
 
 - **Use Glaze on example.edu** in Glaze's toolbar popup. Opening the popup lets Glaze into that one tab (`activeTab`), where it checks the page's head for Canvas's own stylesheet, the keywords line Moodle writes into every page ("moodle, …", with the page id and layout it puts on the body tag) or Blackboard Ultra's `/ultra/` base address on an `/ultra` page. The check reads only those markers and keeps no page content. On Chrome and Edge, Glaze's toolbar icon gets a dot on pages that look like Canvas, Moodle or Blackboard Ultra: the browser matches the page itself and does not report those rule matches to Glaze.
 - The school address field on the tab Glaze opens once when it's installed.
-- The school address field in **Settings → Privacy and data → Sites**. Both address fields check for Blackboard, Canvas or Moodle after access is granted (see the site check under Network requests). If no LMS answers, Glaze offers up to two course sites nearby and returns access granted by that attempt; access held beforehand stays.
+- The school address field in **Settings → Privacy and data → School**. Both address fields check for Blackboard, Canvas or Moodle after access is granted (see the site check under Network requests). If no LMS answers, Glaze offers up to two course sites nearby and returns access granted by that attempt; access held beforehand stays.
 - The browser's own extension menu or settings. Glaze checks a site granted there the same way and turns on if it's a course site; anything else keeps the access you gave, unused.
 
 **All sites** on that first tab gives Glaze every https site at once. Glaze then checks the markers above on https pages outside its built-in hosts and, on a course site it doesn't know, shows a small bar on the page: **Use Glaze on example.edu?** Until you press **Yes**, Glaze does not register its theme, read the site's API or keep course data there; it never asks while Glaze is off. **Not now** stops the question on that site for a week (the time is kept in `askLater`, for the 50 sites most recently put off). Installs from before 3.4.0 keep the all-site access they had. Safari lets you choose Glaze's sites in its own settings and uses the same in-page question on sites Glaze has not already approved.
 
-A site you add is kept in a list in the extension's local storage (`canvas`, `moodle` or `ultra`) so Glaze styles it from the start next time; sites Glaze already ran on before it asked stay on the list. **Settings → Privacy and data → Sites** lists them, each with **Remove**, which stops Glaze there, returns any browser grant for that exact site and forgets the courses and due dates Glaze read from it (your notes and tasks stay). Broader grants such as All sites stay. **Reset everything** clears the list and the Not nows.
+A site you add is kept in a list in the extension's local storage (`canvas`, `moodle` or `ultra`) so Glaze styles it from the start next time; sites Glaze already ran on before it asked stay on the list. **Settings → Privacy and data → School** lists them, each with **Remove**, which stops Glaze there, returns any browser grant for that exact site and forgets the courses and due dates Glaze read from it (your notes and tasks stay). Broader grants such as All sites stay. **Reset everything** clears the list and the Not nows.
 
 ## Permissions
 
