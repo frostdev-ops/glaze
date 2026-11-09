@@ -2,7 +2,7 @@
 // box declarations into physical edges for each direction, with unequal start/end gutters.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { cssRules, split } = require('../helpers/css-cascade.cjs');
+const { cssRules, split, chain, winner, matches } = require('../helpers/css-cascade.cjs');
 
 const rules = cssRules('content/canvas.css');
 const body = (part) => {
@@ -60,4 +60,35 @@ test('a module item Canvas keeps marked as hovered after the pointer leaves stay
   const hit = rules.find(([s]) => /li\.context_module_item:is\([^)]*\.context_module_item_hover/.test(s));
   assert.ok(hit, 'the sticky hover class is covered');
   assert.match(hit[1], /background:\s*transparent\s*!important/);
+});
+
+// Assignments 2's student page wraps the chosen submission type in a div it styles inline,
+// `background-color: grey1111; border-top: 2px solid grey1214` (AttemptTab.jsx): #e8eaec on every Look, a white line over
+// the text entry box on a dark one. An inline declaration outranks any author rule that isn't !important.
+test('the line above the Assignments 2 submission box takes the Look\'s border colour over Canvas\'s inline one', () => {
+  const node = (tag, attrs, parent) => ({ tag, id: '', cls: [], attrs, parent });
+  const tab = node('div', { 'data-testid': 'attempt-tab' }, chain('div#application', 'div#content'));
+  const box = node('div', { style: 'background-color: rgb(242, 244, 244); border-top: 2px solid rgb(232, 234, 236);' }, tab);
+  const hit = winner(rules, box, 'border(?:-top)?-color');
+  assert.ok(hit, 'a rule paints the box\'s top border');
+  const [value, sel] = hit;
+  assert.equal(value, 'var(--gz-border-line, var(--gz-line))');
+  const decl = rules.find(([s]) => s === sel)[1].match(/(?:^|;)\s*border(?:-top)?-color\s*:\s*([^;]+)/)[1];
+  assert.match(decl, /!important\s*$/, `${sel} loses to the inline border-top without !important`);
+});
+
+test('the Assignments 2 divider rule leaves the editor inside it and the rest of the page alone', () => {
+  const node = (tag, attrs, parent) => ({ tag, id: '', cls: [], attrs, parent });
+  const tab = node('div', { 'data-testid': 'attempt-tab' }, chain('div#application', 'div#content'));
+  const box = node('div', { style: 'background-color: rgb(242, 244, 244); border-top: 2px solid rgb(232, 234, 236);' }, tab);
+  const hit = rules.find(([s, b]) => /attempt-tab/.test(s) && /border-top-color/.test(b));
+  assert.ok(hit, 'a rule scoped to the attempt tab paints the divider');
+  const sel = hit[0];
+  assert.ok(matches(box, sel), `${sel} reaches the box`);
+  for (const [name, el] of [
+    ['the text editor in it', node('div', { 'data-testid': 'text-editor', style: 'padding: 0.75rem 3rem;' }, box)],
+    ['the tab itself', tab],
+    ['the page panel', chain('div#application', 'div#content')],
+    ['a styled div elsewhere', node('div', { style: 'border-top: 1px solid red;' }, chain('div#application', 'div#content'))],
+  ]) assert.ok(!matches(el, sel), `${sel} must not reach ${name}`);
 });
