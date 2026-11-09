@@ -142,6 +142,15 @@ const CANVAS = `(() => {
       return pick ? fr.click(pick) : fr.evaluate(() => [...document.querySelectorAll('#menu [role="menuitem"], #menu [data-insert-head]')].map((b) => b.textContent));
     };
     const A = '/courses/34/assignments/238';
+    // Submit pressed as the page's own click: the frame above it can still change height as its later parts load, and a
+    // pointer click then lands on Writer (checks/writer/writer-canvas-live-check.js presses it with the pointer, live).
+    const submit = (p) => p.evaluate(() => document.querySelector('#submit_online_text_entry_form button[type="submit"]').click());
+    // Typing goes where the caret is: into Writer once its editor has the focus.
+    const typeIn = async (p, b, text) => {
+      await b.fr.click('.ProseMirror');
+      await until(() => b.fr.evaluate(() => document.hasFocus() && !!document.activeElement?.closest('.ProseMirror')), 'the caret in Writer');
+      await p.keyboard.type(text, { delay: 0 });
+    };
 
     // ---- Writer takes the Text Entry box ----
     let p = await open(A);
@@ -152,9 +161,12 @@ const CANVAS = `(() => {
     const items = await menu(a.fr);
     check(items[0] === 'Canvas editor' && JSON.stringify(items.slice(-6)) === JSON.stringify(['Insert from Canvas', 'Image', 'Media', 'Document', 'Equation', 'Course link']), `⋯: Canvas editor first, Insert from Canvas's five tools last (${items.join(', ')})`);
     await p.keyboard.press('Escape');
+    // The menu shut, and the frame back to its own height (a menu opened below grows it), before anything else is clicked.
+    let h0 = -1;
+    await until(async () => { const h = await a.el.evaluate((f) => f.offsetHeight); const settled = h === h0 && await a.fr.evaluate(() => document.getElementById('menu').hidden); h0 = h; return settled; }, 'the menu shut and the frame settled');
 
     // ---- Canvas's empty-text check: the focus comes back to Writer ----
-    await p.click('#submit_online_text_entry_form button[type="submit"]');
+    await submit(p);
     await until(() => p.evaluate(() => __submits.length === 1), 'the empty submit checked');
     check(await p.evaluate(() => __submits[0].empty && document.getElementById('body_errors').textContent === 'Text entry must not be empty'), 'an empty box: Canvas\'s own check refuses it, its error shown below Writer');
     await until(() => p.evaluate(() => document.activeElement?.matches('iframe.gz-writer')), 'focus back in Writer');
@@ -162,11 +174,10 @@ const CANVAS = `(() => {
     await p.evaluate(() => { __submits.length = 0; });
 
     // ---- typing, then Submit at once: exactly Writer's text goes ----
-    await a.fr.click('.ProseMirror');
-    await p.keyboard.type('Reading response: the river is the archive.', { delay: 1 });
+    await typeIn(p, a, 'Reading response: the river is the archive.');
     await p.keyboard.press('Enter');
     await p.keyboard.type('- first point **kept** and the last words', { delay: 0 });
-    await p.click('#submit_online_text_entry_form button[type="submit"]');
+    await submit(p);
     await until(() => p.evaluate(() => __submits.length >= 1), 'the submit recorded');
     await pause(300); // a second submit, if the hold let two through, would be recorded by now
     const subs = await p.evaluate(() => __submits.slice());
@@ -178,9 +189,8 @@ const CANVAS = `(() => {
 
     // ---- a press Canvas's editor won't take is held, and says so ----
     await p.evaluate(() => { window.__get = tinymce.get; tinymce.get = () => null; });
-    await a.fr.click('.ProseMirror');
-    await p.keyboard.type(' More.', { delay: 0 });
-    await p.click('#submit_online_text_entry_form button[type="submit"]');
+    await typeIn(p, a, ' More.');
+    await submit(p);
     const note = await until(() => a.fr.evaluate(() => { const n = document.getElementById('note'); return !n.hidden && n.textContent; }), 'the held note');
     check(note === 'Not sent: Canvas didn’t take your text. Try again.' && await p.evaluate(() => __submits.length === 0), `a write Canvas's editor refused holds the press, nothing submitted, and the bar says why ("${note}")`);
     await p.evaluate(() => { tinymce.get = window.__get; });
@@ -200,8 +210,7 @@ const CANVAS = `(() => {
     // ---- ⋯ → Insert from Canvas → Image: Canvas's tool, at the end of the box ----
     p = await open(A);
     a = await box(p, 'assignment');
-    await a.fr.click('.ProseMirror');
-    await p.keyboard.type('An image goes after this', { delay: 0 });
+    await typeIn(p, a, 'An image goes after this');
     await until(async () => (await writerText(a.fr)) === 'An image goes after this', 'typed in Writer');
     await menu(a.fr, '#menu [data-insert="image"]');
     await until(() => p.evaluate(() => __commands.length === 1), 'Canvas\'s image tool run');
@@ -224,11 +233,12 @@ const CANVAS = `(() => {
     const stored = () => worker.evaluate(async (k) => { const all = await chrome.storage.local.get(null); return Object.entries(all).filter(([x]) => x === k || x.startsWith(`draft:pending:${encodeURIComponent(k)}`)).map(([, v]) => v.put?.text ?? v.text).filter(Boolean); }, KEY);
     const offerOf = (fr) => fr.evaluate(() => { const o = document.querySelector('.gw-offer'); return o && !o.hidden && { text: o.querySelector('span').textContent, buttons: [...o.querySelectorAll('button')].map((b) => b.textContent) }; });
     const KEPT = 'A paragraph Writer keeps while Canvas reloads, long enough to keep.';
+    // What the pages above typed was kept too (and would be offered): this part starts with nothing kept.
+    await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('draft:'))); });
     p = await open(A);
     a = await box(p, 'assignment');
     check(!await offerOf(a.fr), 'nothing to offer on a first visit');
-    await a.fr.click('.ProseMirror');
-    await p.keyboard.type(KEPT, { delay: 0 });
+    await typeIn(p, a, KEPT);
     await until(async () => (await stored()).includes(KEPT), 'Writer\'s copy kept', 15000);
     check(true, 'what Writer holds is kept a second after typing stops, under the box\'s own key');
     await p.close();
@@ -249,8 +259,7 @@ const CANVAS = `(() => {
     p = await open(A);
     a = await box(p, 'assignment');
     check(!await offerOf(a.fr), 'a dismissed copy isn\'t offered again');
-    await a.fr.click('.ProseMirror');
-    await p.keyboard.type(KEPT, { delay: 0 });
+    await typeIn(p, a, KEPT);
     await until(async () => (await stored()).includes(KEPT), 'kept again', 15000);
     await p.close();
     submitted = { body: `<p>${KEPT}</p>`, workflow_state: 'submitted' };
@@ -263,8 +272,7 @@ const CANVAS = `(() => {
 
     // ---- Canvas redrawing its editor: Writer's unsynced words go into the new one ----
     await p.evaluate(() => { window.__get = tinymce.get; tinymce.get = () => null; });
-    await a.fr.click('.ProseMirror');
-    await p.keyboard.type('Words Canvas never took.', { delay: 0 });
+    await typeIn(p, a, 'Words Canvas never took.');
     await until(() => a.fr.evaluate(() => GZ_WRITER_FRAME.editor().text() === 'Words Canvas never took.'), 'typed');
     await p.evaluate(() => {
       tinymce.get = window.__get;
