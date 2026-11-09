@@ -199,7 +199,9 @@ test('watching: Canvas\'s own changes to the box, said by writer-main-canvas.js 
   const listeners = new Map(), observed = [];
   b.editor.ownerDocument = { addEventListener: (t, f) => listeners.set(t, f), removeEventListener: (t, f) => { if (listeners.get(t) === f) listeners.delete(t); } };
   let n = 0;
-  const w = C.watch({ ...b, id: 'gzw-3' }, () => n++, (el, fn) => { observed.push(el); return { disconnect: () => observed.pop() }; });
+  const asked = [];
+  const w = C.watch({ ...b, id: 'gzw-3' }, () => n++, (el, fn) => { observed.push(el); return { disconnect: () => observed.pop() }; }, (op, m) => { asked.push([op, m]); return []; });
+  assert.deepEqual(asked, [['canvas-watch', { id: 'gzw-3' }]], 'writer-main-canvas.js is asked to say when Canvas changes the box');
   assert.deepEqual(observed, [body.querySelector('#submission_body_ifr').contentDocument.body]);
   const fire = (d) => listeners.get('gz-writer:canvas-changed')?.({ detail: d });
   fire(JSON.stringify({ id: 'gzw-3' }));

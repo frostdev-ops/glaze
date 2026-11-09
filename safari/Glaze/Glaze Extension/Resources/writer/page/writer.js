@@ -8,12 +8,12 @@
 // the box back, to Ultra and to draft backup (writer/page/drafts.js skips boxes marked data-gz-writer). Whatever fails leaves
 // Ultra's editor, or keeps the draft in Writer until a native write succeeds. An assignment's paper is the exception, below.
 // What differs by site (which boxes, their send buttons, reading and writing the native editor) comes from the site's
-// adapter, loaded on demand: writer/writer-ultra.js here.
+// adapter, loaded on demand: writer/writer-ultra.js or writer/writer-canvas.js.
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const X = globalThis.GZ_CTX;
   if (!X) return null; // a frame-only injection can outlive its document
-  const ADAPTERS = { ultra: ['writer/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA] };
+  const ADAPTERS = { ultra: ['writer/writer-ultra.js', () => globalThis.GZ_WRITER_ULTRA], canvas: ['writer/writer-canvas.js', () => globalThis.GZ_WRITER_CANVAS] };
   const A = () => ADAPTERS[X.site]?.[1]();
   const html = document.documentElement;
   const boxes = new Map(); // Ultra's editor → its box
@@ -286,7 +286,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       box.posted = box.kind === 'post' && box.sending && !now;
       box.sending = false;
       box.port.postMessage({ type: 'html', html: native.html });
-    }, observe);
+    }, observe, main);
   };
   const hear = (box, m) => {
     if (m.type === 'ask:binding') {

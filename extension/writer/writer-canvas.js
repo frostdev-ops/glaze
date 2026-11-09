@@ -115,10 +115,11 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     if (!plain(box.editor)) return main('canvas-set', { id: box.id, html });
     return main('canvas-set', { id: box.id, text: linesOf(html) }).map((r) => (r?.ok && typeof r.text === 'string' ? { ...r, html: paragraphs(r.text) } : { ok: false }));
   };
-  // Canvas changing the box (a reset after Reply, its autosave restored, an undo): writer-main-canvas.js says so for the box's
-  // id, and an RCE's body is watched too; the Inbox's value changes only with an input event.
-  const watch = (box, fn, observe) => {
+  // Canvas changing the box (a reset after Reply, its autosave restored, an undo): writer-main-canvas.js, asked to watch the
+  // box, says so for its id, and an RCE's body is observed too; the Inbox's value changes only with an input event.
+  const watch = (box, fn, observe, main) => {
     const doc = box.editor.ownerDocument, b = !plain(box.editor) && bodyOf(box.editor), o = b ? observe(b, fn) : null;
+    if (b) main?.('canvas-watch', { id: box.id });
     const changed = (e) => { try { if (JSON.parse(e.detail)?.id === box.id) fn(); } catch { /* not ours */ } };
     doc?.addEventListener?.('gz-writer:canvas-changed', changed);
     if (plain(box.editor)) box.editor.addEventListener('input', fn);
