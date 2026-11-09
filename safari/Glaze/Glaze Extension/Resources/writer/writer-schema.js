@@ -1,6 +1,8 @@
-// Glaze Writer's documents: the compose and paper schemas, HTML in and out, Quill ops out, and the text that proofing and
-// AI anchor issues to. compose holds only what Ultra's Quill 1.x keeps, and serialize writes the HTML Quill renders back
-// unchanged (checked against quill@1.3.7). paper holds a whole paper. Lists are flat, as in Quill and Word: each item
+// Glaze Writer's documents: the compose, paper, canvas and plain schemas, HTML in and out, Quill ops out, and the text that
+// proofing and AI anchor issues to. compose holds only what Ultra's Quill 1.x keeps, and serialize writes the HTML Quill
+// renders back unchanged (checked against quill@1.3.7). canvas is compose with a real blockquote, in the dialect Canvas's
+// Rich Content Editor (TinyMCE 5) keeps: alignment and 40px indents as styles, nested lists, no Quill classes; it reads
+// what TinyMCE's frame body holds. plain is the Canvas Inbox's: paragraphs of text. paper holds a whole paper. Lists are flat, as in Quill and Word: each item
 // carries its indent level. parse never touches a live document: the HTML is rebuilt from an allowlist into a small
 // tree of its own, then read by ProseMirror's DOMParser through the same parseDOM rules the view uses.
 // Classic script after vendor/pm.js; module.exports for node.
@@ -111,6 +113,12 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     const left = inches(css(dom, 'margin-left'));
     return { ...a, dir: ['ltr', 'rtl'].includes(dom.getAttribute('dir')) ? dom.getAttribute('dir') : null, indent: a.indent || (left > 0 ? clamp(Math.round(left / 0.5), 0, MAX_INDENT) : 0), line: lineOf(dom), first: firstOf(dom), ...readGz(dom.getAttribute('data-gz')) };
   };
+  // Canvas: TinyMCE's alignment style and its padding-left indent (40px a step), or Writer's own Quill classes.
+  const readCanvas = (dom) => {
+    const align = alignOf(dom), px = /^(\d+(?:\.\d+)?)px$/.exec(css(dom, 'padding-left'));
+    return { align: align === 'left' ? null : align, indent: indentOf(dom) || (px ? clamp(Math.round(+px[1] / 40), 0, MAX_INDENT) : 0) };
+  };
+  const canvasDOM = (a) => ({ style: [a.align ? `text-align: ${a.align};` : '', a.indent ? `padding-left: ${a.indent * 40}px;` : ''].filter(Boolean).join(' ') || null });
   // Indent and alignment as Quill's classes (so Quill's list counters and indents apply); paper's spacing inline.
   const blockDOM = (a) => {
     const cls = [a.indent ? `ql-indent-${a.indent}` : '', a.align ? `ql-align-${a.align}` : ''].filter(Boolean).join(' ');
@@ -158,28 +166,33 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     table: { ...spec.table, attrs: { borders: { default: true } }, parseDOM: [{ tag: 'table', getAttrs: (dom) => ({ borders: dom.getAttribute('data-borders') !== 'none' }) }],
       toDOM: (n) => ['table', { 'data-borders': n.attrs.borders ? null : 'none' }, ['tbody', 0]] },
   });
-  const make = (paper) => {
-    const levels = paper ? [1, 2, 3, 4, 5, 6] : [3, 4]; // Ultra starts headings at h3
-    const attrs = blockAttrs(paper), read = readBlock(paper);
+  // variant: false (compose), true (paper), 'canvas' or 'plain'.
+  const make = (variant) => {
+    const paper = variant === true, canvas = variant === 'canvas';
+    if (variant === 'plain') return new Schema({ nodes: { doc: { content: 'paragraph+' }, paragraph: { content: 'text*', parseDOM: [{ tag: 'p' }], toDOM: () => ['p', 0] }, text: {} }, marks: {} });
+    const levels = paper ? [1, 2, 3, 4, 5, 6] : [3, 4]; // Ultra starts headings at h3, and Writer keeps Canvas's to h3 and h4
+    const attrs = blockAttrs(paper), read = canvas ? readCanvas : readBlock(paper), dom = canvas ? canvasDOM : blockDOM;
     const nodes = {
       doc: paper ? { content: 'block+', attrs: { setup: { default: null }, paste: { default: null } } } : { content: 'block+' },
-      paragraph: { group: 'block', content: 'inline*', attrs, parseDOM: [{ tag: 'p', getAttrs: read }], toDOM: (n) => ['p', blockDOM(n.attrs), 0] },
+      paragraph: { group: 'block', content: 'inline*', attrs, parseDOM: [{ tag: 'p', getAttrs: read }], toDOM: (n) => ['p', dom(n.attrs), 0] },
       heading: {
         group: 'block', content: 'inline*', defining: true, levels, attrs: { level: { default: levels[0] }, ...attrs, ...(paper ? { weight: { default: null }, slant: { default: null } } : {}) },
         parseDOM: [1, 2, 3, 4, 5, 6].map((n) => ({ tag: `h${n}`, getAttrs: (dom) => ({ level: clamp(n, levels[0], levels.at(-1)), ...read(dom), ...(paper ? { weight: ['normal', '400'].includes(css(dom, 'font-weight')) ? 'normal' : ['bold', '700'].includes(css(dom, 'font-weight')) ? 'bold' : null, slant: ['normal', 'italic'].includes(css(dom, 'font-style')) ? css(dom, 'font-style') : null } : {}) }) })),
-        toDOM: (n) => [`h${n.attrs.level}`, blockDOM(n.attrs), 0],
+        toDOM: (n) => [`h${n.attrs.level}`, dom(n.attrs), 0],
       },
       code_block: {
         group: 'block', content: 'text*', marks: '', code: true, defining: true,
-        parseDOM: [{ tag: 'pre', preserveWhitespace: 'full' }], toDOM: () => ['pre', { class: 'ql-syntax', spellcheck: 'false' }, 0],
+        parseDOM: [{ tag: 'pre', preserveWhitespace: 'full' }], toDOM: () => (canvas ? ['pre', 0] : ['pre', { class: 'ql-syntax', spellcheck: 'false' }, 0]),
       },
       bullet_list: paper ? listNode('ul', BULLETS, false) : { group: 'block', content: 'list_item+', parseDOM: [{ tag: 'ul' }], toDOM: () => ['ul', 0] },
       ordered_list: paper ? listNode('ol', NUMBERS, true) : { group: 'block', content: 'list_item+', parseDOM: [{ tag: 'ol' }], toDOM: () => ['ol', 0] },
       list_item: paper
         ? { content: 'inline*', defining: true, attrs: { ...attrs, start: { default: null } }, parseDOM: [{ tag: 'li', getAttrs: (dom) => ({ ...read(dom), start: startOf(dom.getAttribute('data-start')) }) }], toDOM: (n) => ['li', itemDOM(n.attrs), 0] }
-        : { content: 'inline*', defining: true, attrs, parseDOM: [{ tag: 'li', getAttrs: read }], toDOM: (n) => ['li', blockDOM(n.attrs), 0] },
+        : { content: 'inline*', defining: true, attrs, parseDOM: [{ tag: 'li', getAttrs: read }], toDOM: (n) => ['li', canvas ? canvasDOM({ align: n.attrs.align }) : blockDOM(n.attrs), 0] },
       text: { group: 'inline' },
     };
+    // A quote: paper's, and Canvas's (its RCE writes <blockquote> around paragraphs); compose indents one instead.
+    if (canvas) nodes.blockquote = { group: 'block', content: 'block+', defining: true, parseDOM: [{ tag: 'blockquote' }], toDOM: () => ['blockquote', 0] };
     if (paper) {
       Object.assign(nodes, {
         blockquote: { group: 'block', content: 'block+', defining: true, parseDOM: [{ tag: 'blockquote' }], toDOM: () => ['blockquote', 0] },
@@ -214,7 +227,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       link: {
         attrs: { href: {} }, inclusive: false,
         parseDOM: [{ tag: 'a[href]', getAttrs: (dom) => { const h = href(dom.getAttribute('href')); return h ? { href: h } : false; } }],
-        toDOM: (m) => ['a', { href: m.attrs.href, rel: 'noopener noreferrer', target: '_blank' }, 0],
+        toDOM: (m) => ['a', canvas ? { href: m.attrs.href } : { href: m.attrs.href, rel: 'noopener noreferrer', target: '_blank' }, 0],
       },
       sup: { excludes: 'sup sub', parseDOM: [{ tag: 'sup' }, { style: 'vertical-align=super' }], toDOM: () => ['sup', 0] },
       sub: { excludes: 'sup sub', parseDOM: [{ tag: 'sub' }, { style: 'vertical-align=sub' }], toDOM: () => ['sub', 0] },
@@ -2581,7 +2594,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     return Object.assign(e, { nodeType: 1, nodeName: name.toUpperCase(), tagName: name.toUpperCase(), attrs, childNodes: kids, style: ownStyle(map), ownerDocument: DOC });
   };
   const txt = (t) => Object.assign(Object.create(proto), { nodeType: 3, nodeName: '#text', nodeValue: t, ownerDocument: DOC });
-  const STYLES = new Set(['text-align', 'font-weight', 'font-style', 'text-decoration', 'vertical-align', 'font-family', 'font-size', 'line-height', 'margin-left', 'text-indent']);
+  const STYLES = new Set(['text-align', 'font-weight', 'font-style', 'text-decoration', 'vertical-align', 'font-family', 'font-size', 'line-height', 'margin-left', 'text-indent', 'padding-left']);
 
   const INLINE = new Set(['a', 'span', 'strong', 'b', 'em', 'i', 'u', 'ins', 's', 'strike', 'del', 'sup', 'sub', 'br', 'img']);
   const ALIAS = { font: 'span', mark: 'span', code: 'span', small: 'span', big: 'span', abbr: 'span', cite: 'span', q: 'span', dfn: 'span', kbd: 'span',
@@ -2605,7 +2618,8 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     const add = (n) => { top().childNodes.push(n); };
     const closeTo = (i) => { stack.length = i; };
     const find = (names, stop) => { for (let i = stack.length - 1; i > 0; i--) { if (names.includes(stack[i].src)) return i; if (stop?.includes(stack[i].e.nodeName)) return -1; } return -1; };
-    const text = (s) => { if (s && !skip) add(txt(decode(s))); };
+    // TinyMCE's caret marks (zero-width no-break spaces) are no text.
+    const text = (s) => { if (s && !skip) { const v = o.canvas ? decode(s).replace(/\ufeff/g, '') : decode(s); if (v) add(txt(v)); } };
     for (const t of tags(html)) {
       if (++tokens > MAX_TOKENS) limit();
       text(html.slice(at, t.start));
@@ -2614,6 +2628,12 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       if (skip) { if (name === skip) depth += t.closing ? -1 : VOID.has(name) ? 0 : 1; if (depth === 0) skip = null; continue; }
       if (!name) continue;
       const a = attrsOf(t.raw);
+      // TinyMCE's bookkeeping in its frame body: what it marks bogus "all" (resize handles) goes with its content, and its
+      // bogus <br> is the placeholder in an empty block.
+      if ((o.canvas || o.plain) && !t.closing && a['data-mce-bogus'] != null && (a['data-mce-bogus'] === 'all' || name === 'br')) {
+        if (!VOID.has(name) && !/\/\s*$/.test(t.raw)) { skip = name; depth = 1; }
+        continue;
+      }
       // Inspect source blots before dropping or unwrapping unknown tags, including empty embeds.
       const blot = `${name} ${a.class || ''}`;
       if (/attachment|formula|latex|lti|embedded-?app|gz-footnote/i.test(blot) || a['data-bbtype'] || a['data-bbfile']) o.lost.add('attachment');
@@ -2628,9 +2648,22 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
         || /^(checked|unchecked)$/.test(a['data-list'] || '')
         || String(a.style || '').split(';').some((rule) => {
           if (!rule.trim()) return false;
-          const key = rule.slice(0, rule.indexOf(':')).trim().toLowerCase();
+          const key = rule.slice(0, rule.indexOf(':')).trim().toLowerCase(), value = rule.slice(rule.indexOf(':') + 1).trim().toLowerCase();
+          // Canvas's indent (40px steps to Writer's eight) on a block, and the unmarked item TinyMCE nests a skipped level in.
+          if (o.canvas && key === 'padding-left') return !['p', 'h3', 'h4'].includes(name) || !/^(40|80|120|160|200|240|280|320)px$/.test(value);
+          if (o.canvas && key === 'list-style-type') return name !== 'li' || value !== 'none';
           return !['font-weight', 'font-style', 'text-decoration', 'vertical-align', 'text-align'].includes(key);
         }))) o.lost.add('format');
+      // Canvas's own content: mentions, its file links, its equation pictures, and any other class (pasted Word, a school's
+      // styles); headings outside h3 and h4, and rules.
+      if (o.canvas && !t.closing) {
+        const cls = String(a.class || '').split(/\s+/).filter(Boolean);
+        if (cls.some((c) => /mention/i.test(c)) || Object.keys(a).some((k) => k.startsWith('data-mention'))) o.lost.add('mention');
+        else if (cls.some((c) => /^instructure_(file_link|scribd_file)$/.test(c)) || a['data-api-endpoint'] != null) o.lost.add('attachment');
+        else if (cls.includes('equation_image')) o.lost.add('math');
+        else if (cls.length) o.lost.add('format');
+        if (['h1', 'h2', 'h5', 'h6', 'hr'].includes(name)) o.lost.add('format');
+      }
       if (name in DROP || (name === 'span' && /mso-list\s*:\s*ignore/i.test(a.style || ''))) {
         if (DROP[name]) o.lost.add(DROP[name]);
         if (!t.closing && !VOID.has(name) && !/\/\s*$/.test(t.raw)) { skip = name; depth = 1; }
@@ -2722,6 +2755,15 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   // o.pre (a Word file's text): every space, tab and line break as written, no placeholder to drop.
   const textblock = (e, o) => {
     let items = leaves(e).filter((it) => it.n.nodeType === 3 || ['BR', 'IMG', 'SUP'].includes(it.n.nodeName));
+    // TinyMCE's getContent() writes an empty block as one no-break space.
+    if (o.canvas && items.length === 1 && items[0].n.nodeType === 3 && items[0].n.nodeValue === '\u00a0') items = [];
+    // plain: text as typed, a line break a new paragraph (a trailing one is the empty block's placeholder).
+    if (o.plain) {
+      const segs = [[]];
+      for (const it of items) { if (it.n.nodeName === 'BR') segs.push([]); else if (it.n.nodeType === 3) segs.at(-1).push({ ...it, n: txt(it.n.nodeValue.replace(/\u00a0/g, ' ')) }); }
+      if (segs.length > 1 && !segs.at(-1).length) segs.pop();
+      return segs.map((seg) => rebuild(shallow(e), seg));
+    }
     if (o.pre) return [rebuild(shallow(e), items.map((it) => (it.n.nodeType === 3 ? { ...it, n: txt(it.n.nodeValue.replace(/\u00a0/g, ' ')) } : it)))];
     if (o.paper) {
       if (items.at(-1)?.n.nodeName === 'BR') items.pop();
@@ -2827,7 +2869,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       } else if (name === 'PRE') out.push(pre(n));
       else if (name === 'BLOCKQUOTE') {
         const inner = blocks(n, o);
-        if (o.paper) { if (inner.length) out.push(el('blockquote', {}, inner)); } else {
+        if (o.paper || o.canvas) { if (inner.length) out.push(el('blockquote', {}, inner)); } else {
           for (const b of inner) {
             if (b.nodeName === 'PRE') out.push(b);
             else if (b.nodeName === 'UL' || b.nodeName === 'OL') { b.childNodes.forEach((li) => blockClass(li, clamp(indentOf(li) + 1, 0, MAX_INDENT), alignOf(li))); out.push(b); }
@@ -2848,7 +2890,9 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   const prepare = (schema, html, opts = {}) => {
     html = String(html ?? '');
     if (html.length > (schema.nodes.page_break && opts.document === true ? MAX_DOCUMENT_INPUT : MAX_INPUT)) limit();
-    const o = { paper: !!schema.nodes.page_break, pre: !!schema.nodes.page_break && opts.pre === true, lost: new Set(), cells: 0, images: 0 };
+    // plain keeps a textarea's spaces and tabs as typed.
+    const plain = schema === plainSchema;
+    const o = { paper: !!schema.nodes.page_break, canvas: schema === canvasSchema, plain, pre: (!!schema.nodes.page_break && opts.pre === true) || plain, lost: new Set(), cells: 0, images: 0 };
     const root = link(el('body', {}, blocks(tree(html, o), o)));
     return { root, o };
   };
@@ -2863,6 +2907,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   const slice = (schema, html) => parser(schema).parseSlice(prepare(schema, html).root, { preserveWhitespace: true });
   // 'limit' refuses takeover too, before parsing an input that would exhaust the editor.
   const loses = (schema, html) => {
+    if (schema === plainSchema) return []; // text only: nothing in it is lost
     try { return [...prepare(schema, html).o.lost].sort(); }
     catch (e) { if (e.code === 'WRITER_INPUT_LIMIT') return ['limit']; throw e; }
   };
@@ -2914,6 +2959,8 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   // doc (or any block node) → HTML. Compose output is the HTML Quill 1.x renders back unchanged; an empty code block is
   // written as the empty line Quill makes of it.
   const serialize = (schema, node) => {
+    if (schema === plainSchema) return plainOut(node);
+    if (schema === canvasSchema && node.type === node.type.schema.topNodeType) return canvasOut(node);
     if (node.type !== node.type.schema.topNodeType) return block(node);
     let out = '', code = '', codeNode = null;
     const flush = () => { if (codeNode) out += spec(codeNode.type.spec.toDOM(codeNode), () => escText(code)); code = ''; codeNode = null; };
@@ -2924,6 +2971,48 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     flush();
     return out;
   };
+  // Canvas: lists nested as TinyMCE nests them (a deeper item inside the item before it; a level with no item of its own in
+  // an unmarked item), adjacent code lines as one <pre>, quotes around their blocks.
+  const nest = (items) => {
+    let i = 0;
+    const level = (lv) => {
+      let out = '';
+      while (i < items.length && items[i].level >= lv) {
+        const kind = items[i].kind;
+        out += `<${kind}>`;
+        while (i < items.length && items[i].level >= lv && (items[i].level > lv || items[i].kind === kind)) {
+          if (items[i].level > lv) { out += `<li style="list-style-type: none;">${level(lv + 1)}</li>`; continue; }
+          const it = items[i++];
+          let inner = inlineHTML(it.li) || '<br>';
+          if (i < items.length && items[i].level > lv) inner += level(lv + 1);
+          out += spec(it.li.type.spec.toDOM(it.li), () => inner);
+        }
+        out += `</${kind}>`;
+      }
+      return out;
+    };
+    return level(0);
+  };
+  const canvasOut = (parent) => {
+    const kids = [];
+    parent.forEach((c) => kids.push(c));
+    let out = '';
+    for (let i = 0; i < kids.length;) {
+      const c = kids[i], list = (n) => n?.type.name === 'bullet_list' || n?.type.name === 'ordered_list';
+      if (c.type.spec.code && c.textContent) {
+        const lines = [];
+        while (kids[i]?.type.spec.code && kids[i].textContent) lines.push(kids[i++].textContent);
+        out += `<pre>${escText(lines.join('\n'))}</pre>`;
+      } else if (list(c)) {
+        const items = [];
+        for (; list(kids[i]); i++) kids[i].forEach((li) => items.push({ kind: kids[i].type.name === 'bullet_list' ? 'ul' : 'ol', level: li.attrs.indent, li }));
+        out += nest(items);
+      } else { out += c.type.name === 'blockquote' ? `<blockquote>${canvasOut(c)}</blockquote>` : block(c); i++; }
+    }
+    return out;
+  };
+  // plain: a paragraph a line, its text as typed (what writer/writer-canvas.js reads the Inbox's textarea as).
+  const plainOut = (doc) => { let out = ''; doc.forEach((p) => { out += p.textContent ? `<p>${escText(p.textContent)}</p>` : '<p><br></p>'; }); return out; };
   // Sanitised note HTML (paragraphs, line breaks and marks), as a footnote keeps it: whole, within the input limit every reader of a note's HTML has.
   let inlineDepth = 0;
   const inline = (html) => {
@@ -3008,8 +3097,8 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     return { text: out, runs, posAt, offsetAt };
   };
 
-  const compose = make(false), paperSchema = make(true);
-  return { compose, paper: paperSchema, parse, slice, serialize, delta, text, loses, href, imageSrc, inline, MAX_INDENT, MAX_INPUT, MAX_DOCUMENT_INPUT, MAX_IMAGE_BYTES, MAX_TOKENS, MAX_DEPTH, FONTS, HIGHLIGHT, dataGz: writeGz, readGz, html: { tags, attrs: attrsOf, decode, fontOf, sizeOf, inches } };
+  const compose = make(false), paperSchema = make(true), canvasSchema = make('canvas'), plainSchema = make('plain');
+  return { compose, paper: paperSchema, canvas: canvasSchema, plain: plainSchema, parse, slice, serialize, delta, text, loses, href, imageSrc, inline, MAX_INDENT, MAX_INPUT, MAX_DOCUMENT_INPUT, MAX_IMAGE_BYTES, MAX_TOKENS, MAX_DEPTH, FONTS, HIGHLIGHT, dataGz: writeGz, readGz, html: { tags, attrs: attrsOf, decode, fontOf, sizeOf, inches } };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SCHEMA; else GZ_WRITER_SCHEMA;
