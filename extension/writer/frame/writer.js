@@ -63,9 +63,9 @@
     document.head.append(s);
     return loaded;
   };
-  let px = 0;
+  let px = 0, room = 0; // room: how tall the frame must be for ⋯'s menu, open below its button
   const height = () => {
-    const h = Math.ceil($('gw').getBoundingClientRect().height) + 6; // body's 3px each side holds the focus ring
+    const h = Math.max(Math.ceil($('gw').getBoundingClientRect().height) + 6, $('menu').hidden ? 0 : room); // body's 3px each side holds the focus ring
     if (h !== px) { px = h; say({ type: 'height', px }); }
   };
   new ResizeObserver(height).observe($('gw'));
@@ -119,11 +119,16 @@
   });
   href.addEventListener('input', () => href.removeAttribute('aria-invalid'));
   href.addEventListener('blur', () => { unlink(); hide(tb); });
-  const shut = (back) => { hide(menu); more.setAttribute('aria-expanded', 'false'); if (back) more.focus(); };
+  const shut = (back) => { hide(menu); more.setAttribute('aria-expanded', 'false'); if (room) { room = 0; height(); } if (back) more.focus(); };
+  // Above ⋯ where it fits; in a box too short for it (a few lines, a long menu), below, the frame growing to hold it.
   const placeMenu = () => {
-    const r = more.getBoundingClientRect();
+    const r = more.getBoundingClientRect(), h = menu.offsetHeight, above = r.top - 6 - h >= 3;
     menu.style.right = `${Math.max(3, Math.min(innerWidth - r.right, innerWidth - menu.offsetWidth - 3))}px`;
-    menu.style.bottom = `${innerHeight - r.top + 6}px`;
+    menu.style.bottom = above ? `${innerHeight - r.top + 6}px` : '';
+    menu.style.top = above ? '' : `${r.bottom + 6}px`;
+    menu.toggleAttribute('data-below', !above);
+    room = above ? 0 : Math.ceil(r.bottom + 6 + h + 3);
+    if (room) height();
   };
   addEventListener('resize', () => { if (selected) onSelection(selected); if (!menu.hidden) placeMenu(); });
   more.addEventListener('click', () => {
@@ -195,12 +200,12 @@
       let lost;
       try { lost = GZ_WRITER_SCHEMA.loses(root.dataset.mode === 'paper' ? GZ_WRITER_SCHEMA.paper : dialect ? GZ_WRITER_SCHEMA[dialect] : GZ_WRITER_SCHEMA.compose, html); } catch { lost = ['error']; }
       if (lost.length) { refused = true; say({ type: 'native', reason: lost.join(' ') }); return; }
-      if (dialect === 'canvas') inserts();
       ed = GZ_WRITER_EDITOR.create({ mount: $('body'), mode: root.dataset.mode, dialect, html, selection: m.selection, placeholder: typeof m.placeholder === 'string' ? m.placeholder : '', onChange, onSelection, plugins: plugins.splice(0),
         keys: { 'Mod-Enter': () => { say({ type: 'send' }); return true; } } });
       words = ed.words();
       lang(m.locale);
       emit('ready', ed, m);
+      if (dialect === 'canvas') inserts(); // last in ⋯, after what the frame's parts add on ready
       height(); // after the parts' ready: a paper's shows its compact box or its pages (writer-paper.js)
     },
     look: (m) => { look(m.look); emit('look', m.look); },
