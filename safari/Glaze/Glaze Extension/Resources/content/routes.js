@@ -27,6 +27,8 @@ var GZ_ROUTES = globalThis.GZ_ROUTES || (() => {
   // attempt, a journal, a discussion, in courses and organizations alike.
   add((l, site) => site === 'ultra' && /^\/ultra\/(?:courses|organizations)\/_\d+_\d+\/(?:outline\/)?(?:assessment\/_\d+_\d+\/attempt\/(?:create|_\d+_\d+)|journal\/_\d+_\d+|discussion\/_\d+_\d+)\/?$/.test(l.pathname),
     'writer/page/editor-menu.js', 'GZ_EDITOR_MENU');
+  // Canvas's rich content editor, its typing area in the palette: where a student writes (a submission, a reply, a quiz).
+  add((l, site) => site === 'canvas' && /^\/(?:(?:courses|groups)\/\d+\/|conversations\b|calendar\b)/.test(l.pathname), 'courses/page/rce-ink.js', 'GZ_RCE_INK');
   // A course's top bar and a test attempt's progress band, folded into pills once the page scrolls under them.
   add((l, site) => site === 'ultra' && /^\/ultra\/courses\/_\d+_\d+\//.test(l.pathname), 'navigation/page/sticky-fold.js', 'GZ_STICKY_FOLD');
   // A click answering within its frame: what it's on looks current from the press, and the page it opens shows a skeleton
