@@ -29,3 +29,10 @@ test('a disabled parent preserves a dependent preference for when it is enabled 
   s.enhance.palette = true; assert.equal(C.blocked(s, 'enhance.search'), false);
   assert.equal(C.blocked(s, 'enhance.notes'), false);
 });
+
+test('the settings shortcut still opens search from a switch, a choice or a button, but never from a field that takes text', () => {
+  const at = (tagName, type) => C.shortcut({ key: '/', target: { closest: () => ({ tagName, type }) } });
+  for (const type of ['checkbox', 'radio', 'range', 'color', 'button', 'submit', 'reset', 'file', 'image']) assert.equal(at('INPUT', type), true, type);
+  for (const type of ['text', 'password', 'search', 'url', 'email', 'number', 'tel', 'date']) assert.equal(at('INPUT', type), false, type);
+  for (const tag of ['TEXTAREA', 'SELECT', 'DIV']) assert.equal(at(tag), false, tag);
+});
