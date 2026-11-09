@@ -74,3 +74,9 @@ test('plain: every command answers without throwing, and none formats', () => {
   cmds.quote({ text: 'Said', author: 'Ann' })(next, (tr) => { next = next.apply(tr); });
   assert.equal(html(next), '<p>Hello</p><p>Said</p><p>— Ann</p><p><br></p>', 'a quote in plain text is its lines');
 });
+
+test('plain: the frame\'s object plugins (autolinks, rules, numbering) have nothing to do in the Inbox\'s text, and load without error', () => {
+  const O = require('../../extension/writer/writer-objects.js');
+  assert.deepEqual(O.plugins(S.plain), []);
+  assert.ok(O.plugins(S.canvas).length > 0, 'Canvas\'s dialect keeps them');
+});
