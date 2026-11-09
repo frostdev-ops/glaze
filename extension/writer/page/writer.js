@@ -452,6 +452,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       if (pending.size) return;
       for (const x of failed) x.port?.postMessage({ type: 'held' });
       if (failed.size || !b.isConnected || !A().enabled(b) || !group.every(still)) return;
+      // An earlier frame can edit again while another is answering. Its native copy must still hold the current text.
+      for (const x of group) if (!sync(x, x.latest, null)) { x.port?.postMessage({ type: 'held' }); return; }
       for (const x of group) { remember(x); globalThis.GZ_DRAFT_UI?.sent?.(x.editor); if (SENDS.has(x.kind)) x.sending = true; }
       try { passing = b; b.click(); } finally { passing = null; }
     };
