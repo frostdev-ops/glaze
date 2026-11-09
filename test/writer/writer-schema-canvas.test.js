@@ -100,6 +100,14 @@ test('Canvas list items refuse unsupported block content without dropping its te
   assert.deepEqual(S.loses(K, '<blockquote><p>q</p><ul><li>item</li></ul></blockquote>'), []);
 });
 
+test('Canvas refuses list nesting beyond the indent level it can preserve', () => {
+  const nested = (level) => '<ul><li>'.repeat(level) + 'deep' + '</li></ul>'.repeat(level);
+  const supported = nested(S.MAX_INDENT + 1), excessive = nested(S.MAX_INDENT + 2);
+  assert.deepEqual(S.loses(K, supported), []);
+  assert.equal(out(out(supported)), out(supported));
+  assert.deepEqual(S.loses(K, excessive), ['format']);
+});
+
 test('loses: what keeps a box Canvas\'s (h2, colours, sizes, tables, pictures, embeds, maths, mentions, file links, rules)', () => {
   const cases = [
     ['<h2>Big</h2>', ['format']], ['<h1>x</h1>', ['format']], ['<h5>x</h5>', ['format']],
