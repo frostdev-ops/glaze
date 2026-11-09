@@ -16,6 +16,8 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const { t, locale, capi, profile, canvasCourses, local } = ctx;
   const EDITOR = ctx.draftEditor; // Ultra's Quill editors, or Canvas's Inbox compose body
   const writer = (ed) => !!ed?.closest?.('[data-gz-writer]'); // Glaze Writer's (writer/page/writer.js) until it's given back
+  // A Canvas Rich Content Editor's textarea: Canvas keeps its own autosave there, and Glaze only what Writer holds of it.
+  const rce = (ed) => !ultra && !!ed?.matches?.('textarea[data-rich_text="true"]');
   let account = null; // who you are: { user }, and on Canvas your courses, which its Inbox key names
   let accountLoading = false, accountJob = null;
   let accountRetry = 0;
@@ -36,7 +38,8 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const inboxIdentity = (ed) => identityOf(ctx.draftAt(ed));
   // Ultra: the site, who you are, the page, the nearest Blackboard id above the editor (a reply's post, say), and the editor's
   // own id; null until the account is known. A snapshot's own values only, never its elements (Ultra may reuse them for another post).
-  const keyOf = (s) => (ultra ? GZ_DRAFTS.ultraKey({ origin: location.origin, user: account?.user, path: s.path, near: s.near, id: s.id }) : GZ_DRAFTS.canvasKey(identityOf(s)));
+  const keyOf = (s) => (ultra ? GZ_DRAFTS.ultraKey({ origin: location.origin, user: account?.user, path: s.path, near: s.near, id: s.id })
+    : rce(s.ed) ? GZ_DRAFTS.canvasRceKey({ origin: location.origin, user: account?.user, path: s.path, id: s.id }) : GZ_DRAFTS.canvasKey(identityOf(s)));
   const draftKey = (ed) => keyOf(ctx.draftAt(ed));
   const typed = new Map(); // key -> { ed, text, id, gone }: written here, watched until it posts
   const sending = new Map(); // key -> { text, n, at, away }: sent from here, with how often the page showed the text then
@@ -57,8 +60,8 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const done = new Set(); // copies restored, dismissed or posted here: not offered again
   const dropping = new Map(); // key -> copies restored here, which go with this page's next copy there
   const tag = (c) => `${c.id || c.text}:${c.at}`;
-  // A Canvas copy is for the one destination its key names.
-  const known = (key, copies) => held.set(key, copies.filter((c) => !(c.id && c.id === own.get(key)) && !done.has(tag(c)) && (ultra || GZ_DRAFTS.canvasKey(c.canvas) === key)));
+  // A Canvas Inbox copy is for the one destination its key names.
+  const known = (key, copies) => held.set(key, copies.filter((c) => !(c.id && c.id === own.get(key)) && !done.has(tag(c)) && (ultra || key.startsWith('draft:canvas-rce:') || GZ_DRAFTS.canvasKey(c.canvas) === key)));
   const area = (s) => ({
     get: (key) => new Promise((yes, no) => { try { s.get(key, (r) => chrome.runtime.lastError ? no(Error('read')) : yes(r)); } catch (e) { no(e); } }),
     ...(s.getKeys && { keys: () => s.getKeys() }),
@@ -190,8 +193,8 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   // as it was written, under the same rules.
   const keep = (s, replace = false) => {
     if (!ctx.settings().enhance.drafts || !ctx.on()) return;
-    if (!account) { accountWaiting.set(ultra ? s : s.ed, s); loadAccount(); return; }
-    if (ultra) {
+    if (!account) { accountWaiting.set(ultra || rce(s.ed) ? s : s.ed, s); loadAccount(); return; }
+    if (ultra || rce(s.ed)) {
       const key = keyOf(s);
       if (!key || (typed.get(key)?.at || 0) > s.at) return;
       if (!GZ_DRAFTS.worth(s.text)) { if (replace && typed.get(key)?.ed === s.ed) { typed.delete(key); store(key, s.ed); } return; }
@@ -208,7 +211,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   // the same post (Ultra may reuse an editor and its wrapper for another), else kept from what was read then.
   const take = (s) => {
     const now = s.ed.isConnected && ctx.draftAt(s.ed);
-    if (now && now.id === s.id && now.near === s.near && now.path === s.path) write({ type: 'input', target: s.ed }); else keep(s);
+    if (!rce(s.ed) && now && now.id === s.id && now.near === s.near && now.path === s.path) write({ type: 'input', target: s.ed }); else keep(s);
   };
   // keydown and input cover typing, undo and dictation; paste lands through Quill's own clipboard.
   const write = (e) => {
@@ -442,7 +445,8 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   // Existing recovery stays in the native editor, where its Restore and Dismiss controls remain available.
   const ready = async (ed) => {
     // A Canvas Rich Content Editor has Canvas's own autosave to restore from; nothing of Glaze's is waiting there.
-    if (!ctx.settings().enhance.drafts || (!ultra && !ed.matches?.(EDITOR))) return true;
+    if (!ctx.settings().enhance.drafts) return true;
+    if (rce(ed)) { loadAccount(); return true; } // Writer offers what is kept of it (offer)
     await loadAccount();
     const key = account && draftKey(ed);
     if (!key) return false;
@@ -454,7 +458,36 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
       });
     } finally { clearTimeout(timer); }
   };
-  return { write, watch, drop, take, keep, ready, sent: send };
+  // Writer opening an empty Canvas RCE box: the newest copy kept of it (another page's, a crash's), unless Canvas already has
+  // its text as what was submitted or posted, which then goes. Writer offers it (offerText); settle takes it away.
+  const rcePosted = async (d) => {
+    const a = location.pathname.match(/^\/courses\/(\d+)\/assignments\/(\d+)\/?$/), t = location.pathname.match(/^\/(courses|groups)\/(\d+)\/discussion_topics\/(\d+)\/?$/);
+    try {
+      if (a) return GZ_DRAFTS.postedIn(d.text, [(await capi(`/courses/${a[1]}/assignments/${a[2]}/submissions/self`))?.body]);
+      if (t) {
+        const mine = [], walk = (es) => { for (const e of Array.isArray(es) ? es : []) { if (String(e?.user_id) === account.user) mine.push(e.message); walk(e?.replies); } };
+        walk((await capi(`/${t[1]}/${t[2]}/discussion_topics/${t[3]}/view`))?.view);
+        return GZ_DRAFTS.postedIn(d.text, mine);
+      }
+    } catch { /* offline: offer it */ }
+    return false;
+  };
+  const offer = async (ed) => {
+    if (!ctx.settings().enhance.drafts || !ctx.on() || !rce(ed)) return null;
+    await loadAccount();
+    const key = account && draftKey(ed);
+    if (!key) return null;
+    let timer;
+    const got = await new Promise((yes) => { timer = setTimeout(() => yes(false), 1500); read(key, () => yes(true)); }).finally(() => clearTimeout(timer));
+    for (let d; got && (d = held.get(key)?.[0]);) {
+      if (!await rcePosted(d)) return { ...d, key };
+      resolve(key, d);
+    }
+    return null;
+  };
+  const offerText = (d) => t('Glaze kept a copy of what you wrote here ({when}).', { when: GZ_PAGE.describe(new Date(d.at), true, new Date(), locale()).rel });
+  const settle = (d) => { if (d?.key) resolve(d.key, d); };
+  return { write, watch, drop, take, keep, ready, sent: send, offer, offerText, settle };
 })();
 
 GZ_DRAFT_UI;
