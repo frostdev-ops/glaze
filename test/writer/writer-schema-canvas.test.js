@@ -108,6 +108,16 @@ test('Canvas refuses list nesting beyond the indent level it can preserve', () =
   assert.deepEqual(S.loses(K, excessive), ['format']);
 });
 
+test('Canvas unmarked list items are supported only as containers for skipped nesting levels', () => {
+  for (const item of ['text', '<br>', '<strong>text</strong><ul><li>child</li></ul>']) {
+    const html = `<ul><li style="list-style-type: none;">${item}</li></ul>`;
+    assert.deepEqual(S.loses(K, html), ['format'], html);
+  }
+  const scaffold = '<ul><li style="list-style-type: none;"><ul><li>child</li></ul></li></ul>';
+  assert.deepEqual(S.loses(K, scaffold), []);
+  assert.equal(out(scaffold), scaffold);
+});
+
 test('loses: what keeps a box Canvas\'s (h2, colours, sizes, tables, pictures, embeds, maths, mentions, file links, rules)', () => {
   const cases = [
     ['<h2>Big</h2>', ['format']], ['<h1>x</h1>', ['format']], ['<h5>x</h5>', ['format']],
