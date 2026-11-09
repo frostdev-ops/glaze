@@ -273,3 +273,10 @@ test('a classic assignment\'s errors line: where Canvas says an empty box won\'t
 test('Canvas focuses a reply box once it is up (DiscussionEdit, 1000 ms after init): Writer takes the caret there; the rest wait for a click', () => {
   assert.deepEqual(C.KINDS.map((k) => [k, C.focuses(k)]), [['assignment', false], ['reply', true], ['message', false], ['test', false], ['unknown', false]]);
 });
+
+test('Canvas\'s caret marker in a reply (DiscussionEdit\'s positionCursor, a second after the box opens) is no content Writer can\'t keep', () => {
+  assert.equal(C.editable('<p><br data-mce-bogus="1"><span class="post_mention"></span></p>'), true);
+  assert.equal(C.editable('<p>Hi <span class="post_mention"></span></p>'), true);
+  assert.equal(C.editable('<p><span class="post_mention">@Kim</span></p>'), false, 'a marker holding text is something else');
+  assert.equal(C.editable('<p><span class="mceNonEditable mention" data-mention="5">@Kim</span></p>'), false, 'a mention stays Canvas\'s');
+});
