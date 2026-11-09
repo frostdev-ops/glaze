@@ -2795,6 +2795,10 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       first = null;
       const kind = LIST_KIND[c.getAttribute('data-list')] ?? ordered, level = clamp(depth + indentOf(c), 0, MAX_INDENT), align = alignOf(c);
       if (o.canvas && depth + indentOf(c) > MAX_INDENT) o.lost.add('format');
+      if (o.canvas && /(?:^|;)\s*list-style-type:\s*none\s*(?:;|$)/i.test(c.getAttribute('style') || '')) {
+        const nested = (n) => n.nodeName === 'UL' || n.nodeName === 'OL';
+        if (!c.childNodes.some(nested) || c.childNodes.some((n) => !nested(n) && meaningful(n))) o.lost.add('format');
+      }
       const start = out.length;
       let run = [];
       const flush = () => { if (run.some(meaningful)) for (const seg of textblock(el('li', o.paper ? { ...c.attrs } : {}, run), o)) out.push({ ordered: kind, li: blockClass(seg, level, align) }); run = []; };
