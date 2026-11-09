@@ -288,6 +288,8 @@ html[data-gz-font-mono] :is(code, pre, kbd, samp, .keycode) { font-family: var(-
    time and points, an announcement's date, the inbox's preview line, a locked module's unlock date. */
 #application :is(.ic-item-row__meta-content, [class*="PlannerItem-styles__type"], [class*="PlannerItem-styles__due"], [class*="PlannerItem-styles__score"]) [class*="css-"][class*="-text"],
 #application :is([data-testid="last-message-content"], .unlock_details, .displayed_unlock_at) { color: var(--gz-ink-muted); }
+/* Any InstUI text Canvas marks secondary (the inbox's "No Conversations Selected"). */
+#application [class*="css-"][class*="-text"][color="secondary"] { color: var(--gz-ink-muted); }
 :is(code, pre, kbd) { background: color-mix(in srgb, var(--gz-ink) 7%, transparent); border-color: var(--gz-border-line, var(--gz-line)); }
 
 /* ---- global nav ----
@@ -493,7 +495,7 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
 }
 /* On a panel, what the sweep found painted white (a roster row, the inbox's header, the editor's wrapper) is the panel itself:
    white was Canvas's page. Controls keep their own fill. */
-#application :is(#content, [data-testid="discussion-topic-container"], [data-testid="discussion-root-entry-container"] > div) [data-gz-light]:is(table, tr, td, th, .rce-wrapper, div[class*="css-"]:not([class*="alert"], [class*="avatar"], [class*="baseButton"], [class*="tray"], [class*="popover"], [class*="menu"])) { background-color: transparent !important; }
+#application :is(#content, [data-testid="discussion-topic-container"], [data-testid="discussion-root-entry-container"] > div) [data-gz-light]:is(table, thead, tbody, tfoot, tr, td, th, .rce-wrapper, div[class*="css-"]:not([class*="alert"], [class*="avatar"], [class*="baseButton"], [class*="tray"], [class*="popover"], [class*="menu"])) { background-color: transparent !important; }
 /* Glaze's document tools stick at the top of what they read: on a panel only their buttons do, with no band. */
 #application #content #gz-doc-tools { width: fit-content; margin-inline-start: auto; background: none; }
 
