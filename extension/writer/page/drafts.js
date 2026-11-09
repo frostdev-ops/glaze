@@ -441,7 +441,8 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   // Writer journals its own text under the frozen destination, including after Ultra removes or reuses the node.
   // Existing recovery stays in the native editor, where its Restore and Dismiss controls remain available.
   const ready = async (ed) => {
-    if (!ctx.settings().enhance.drafts) return true;
+    // A Canvas Rich Content Editor has Canvas's own autosave to restore from; nothing of Glaze's is waiting there.
+    if (!ctx.settings().enhance.drafts || (!ultra && !ed.matches?.(EDITOR))) return true;
     await loadAccount();
     const key = account && draftKey(ed);
     if (!key) return false;

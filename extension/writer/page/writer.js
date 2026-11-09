@@ -8,7 +8,9 @@
 // the box back, to Ultra and to draft backup (writer/page/drafts.js skips boxes marked data-gz-writer). Whatever fails leaves
 // Ultra's editor, or keeps the draft in Writer until a native write succeeds. An assignment's paper is the exception, below.
 // What differs by site (which boxes, their send buttons, reading and writing the native editor) comes from the site's
-// adapter, loaded on demand: writer/writer-ultra.js or writer/writer-canvas.js.
+// adapter, loaded on demand: writer/writer-ultra.js or writer/writer-canvas.js. On Canvas (writer/writer-main-canvas.js in
+// the page's world) the frame writes Canvas's dialect or the Inbox's text, every send button waits for the frame's
+// document as it is now (holdSend), and ⋯ → Insert from Canvas gives the box back and runs Canvas's own tool.
 // Classic script, through GZ_CTX; a second injection keeps the first.
 var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const X = globalThis.GZ_CTX;
@@ -256,7 +258,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.ready = true;
     const selection = typing && box.mode === 'compose' && !box.recovered ? A().selection?.(box, main) : null;
     if (box.mode === 'paper') box.context = { ...box.context, recovery: location.origin + location.pathname };
-    box.port.postMessage({ type: 'init', mode: box.mode, kind: box.kind, askOwner: box.askOwner, html: box.latest, selection, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale() });
+    box.port.postMessage({ type: 'init', site: X.site, mode: box.mode, kind: box.kind, askOwner: box.askOwner, html: box.latest, selection, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale() });
     if (X.site === 'ultra' && ['post', 'reply', 'message', 'journal'].includes(box.kind)) X.need('writer/writer-context-discussion.js', () => globalThis.GZ_WRITER_CONTEXT_DISCUSSION).then(() => globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.watch(box, X), () => {});
     if (X.site === 'ultra' && box.kind === 'reply') X.need('writer/page/writer-quote.js', () => globalThis.GZ_WRITER_QUOTE).then(() => globalThis.GZ_WRITER_QUOTE?.arm(box), () => {});
     box.display ||= [box.root.style.getPropertyValue('display'), box.root.style.getPropertyPriority('display')];
@@ -324,7 +326,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     else if (m.type === 'height' && Number.isFinite(m.px)) { box.px = Math.max(40, Math.min(20000, Math.round(m.px))); if (!paged(box) && !box.focused) box.frame.style.height = `${box.px}px`; }
     else if (m.type === 'change' && typeof m.html === 'string' && typeof m.text === 'string') {
       // A compact paper is in Writer's storage already: Ultra's editor takes its text, the draft backup nothing.
-      if (box.mode === 'compose') {
+      if (box.mode !== 'paper') {
         box.snapshot = { ...box.destination, html: m.html, text: m.text, at: Date.now() };
         clearTimeout(box.backup);
         box.backup = setTimeout(() => remember(box), 1000);
@@ -332,6 +334,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       sync(box, m.html, Array.isArray(m.delta) ? m.delta : null);
     }
     else if (m.type === 'send') send(box);
+    else if (m.type === 'flushed') flushed(box, m);
+    else if (m.type === 'insert' && typeof m.tool === 'string') insert(box, m.tool);
     else if (m.type === 'native' && typeof m.reason === 'string' && m.reason) refuse(box);
     else if (m.type === 'native') giveBack(box, true);
   };
@@ -403,10 +407,55 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.flushing = null;
     box.port?.postMessage({ type: 'compact:resume', request: f.request, ...(reason && { reason }) });
   };
+  // Canvas: a box's send button (Submit, Reply, Send) waits for the frame's document as it is now, which goes into Canvas's
+  // editor and is checked there, then is pressed again. If the frame doesn't answer in a few seconds or Canvas's editor
+  // doesn't take the text, nothing is sent and the frame's bar says so.
+  const FLUSH_WAIT = 3000;
+  const holdSend = (box, b) => {
+    if (box.flushWait) return; // pressed again: the first press goes on
+    const go = (ok) => {
+      clearTimeout(box.flushWait?.timer);
+      box.flushWait = null;
+      if (!ok) { box.port?.postMessage({ type: 'held' }); return; }
+      if (boxes.get(box.editor) !== box || !sameBox(box) || !b.isConnected || !A().enabled(b)) return;
+      remember(box);
+      globalThis.GZ_DRAFT_UI?.sent?.(box.editor);
+      if (SENDS.has(box.kind)) box.sending = true;
+      try { passing = b; b.click(); } finally { passing = null; }
+    };
+    if (!box.ready || !box.port) { go(sync(box, box.latest, null)); return; }
+    const request = crypto.randomUUID();
+    box.flushWait = { request, go, timer: setTimeout(() => { if (box.flushWait?.request === request) go(false); }, FLUSH_WAIT) };
+    box.port.postMessage({ type: 'flush', request });
+  };
+  const flushed = (box, m) => {
+    const w = box.flushWait;
+    if (!w || m.request !== w.request) return;
+    w.go(typeof m.html === 'string' && sync(box, m.html, null));
+  };
+  // ⋯ → Insert from Canvas: the box goes back to Canvas with Writer's text, and Canvas's tool runs at its end.
+  const insert = (box, tool) => {
+    const command = A().TOOLS?.[tool];
+    if (!command || !sync(box, box.latest, null)) return;
+    const id = box.id;
+    drop(box);
+    declined.add(box.editor);
+    box.container.setAttribute('data-gz-writer-id', id);
+    try { main('canvas-exec', { id, command }); } finally { box.container.removeAttribute('data-gz-writer-id'); }
+    globalThis.GZ_DRAFT_UI?.write({ type: 'input', target: box.editor });
+  };
+  // Canvas moving focus into its hidden editor (its empty-text check focuses the RCE's frame): Writer takes it.
+  document.addEventListener('focusin', (e) => {
+    if (!A()?.HOLD || !(e.target instanceof Element)) return;
+    for (const box of boxes.values()) if (box.ready && box.frame?.isConnected && box.frame !== e.target && box.root.contains(e.target)) { box.frame.focus(); return; }
+  }, true);
   // A normal native Post/Reply/Send has the same flush and clear lifecycle as the shortcut.
   document.addEventListener('click', (e) => {
     const b = e.target?.closest?.('button');
     if (!b || b === passing || globalThis.GZ_WRITER_SUBMIT?.passing?.(b)) return;
+    if (boxes.size && A()?.HOLD) {
+      for (const box of boxes.values()) if (sameBox(box) && A().sendOf(box.editor, box.kind) === b && A().enabled(b)) { e.preventDefault(); e.stopImmediatePropagation(); holdSend(box, b); return; }
+    }
     // Ultra collapses an empty new-post editor on Cancel without removing its node. Release the empty frame too,
     // so its next click can activate the native composer again.
     if (b.getAttribute('ng-click') === 'messageControl.onCancelClick()') {
@@ -549,7 +598,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (!sync(box, box.latest)) return;
     drop(box);
     declined.add(box.editor);
-    if (focus) box.editor.focus();
+    if (focus) (A().focus || ((ed) => ed.focus()))(box.editor);
     globalThis.GZ_DRAFT_UI?.write({ type: 'input', target: box.editor }); // drafts keep what it holds from now
   };
   const dropAll = () => { for (const box of [...boxes.values()]) { if (box.unsynced && sameBox(box) && box.frame?.isConnected && !sync(box, box.latest)) { remember(box); continue; } drop(box); } };
@@ -615,6 +664,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const at = { path: location.pathname, attempt: attempt() };
     if (A().attemptAt(at.path) && !at.attempt) return;
     for (const b of A().boxes(document, at, (ed) => boxes.has(ed) || declined.has(ed) || Date.now() - (failed.get(ed) || 0) < 60000)) {
+      if (A().live?.(b) === false) continue;
       mount(b);
     }
   };
