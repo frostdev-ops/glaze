@@ -323,7 +323,7 @@ const CANVAS = `(() => {
     await typeIn(p, a, KEPT);
     await until(async () => (await stored()).includes(KEPT), 'kept again', 15000);
     await p.close();
-    submitted = { body: `<p>${KEPT}</p>`, workflow_state: 'submitted' };
+    submitted = { body: `<p>${KEPT}</p>`, workflow_state: 'submitted', submitted_at: new Date().toISOString() };
     p = await open(A);
     a = await box(p, 'assignment');
     check(!await offerOf(a.fr), 'a copy whose text Canvas already has as the submission isn\'t offered');
