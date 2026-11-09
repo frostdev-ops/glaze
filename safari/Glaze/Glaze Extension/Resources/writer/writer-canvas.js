@@ -128,6 +128,20 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
   };
   const NATIVE = 'Canvas editor';
   const attemptAt = () => null; // Canvas has no Ultra-style attempt pages: a quiz essay is a test by its route
+  // Where Writer opens today: a classic assignment's Text Entry, replies and the Inbox. Quiz essays and Assignments 2 stay
+  // Canvas's until their own steps (the plan's 9 and 10) bring what they need: a quiz's unheld auto-submit, A2's draft saves.
+  const live = (b) => b.kind !== 'test' && b.editor.id !== 'textentry_text';
+  // Every Canvas send waits for the frame's document as it is now (writer/page/writer.js hold), not only its last change.
+  const HOLD = true;
+  // ⋯ → Insert from Canvas: the frame's tool → Canvas's command (writer-main-canvas.js TOOLS), run once the box is Canvas's.
+  const TOOLS = Object.freeze({ image: 'mceInstructureImage', media: 'instructureRecord', document: 'mceInstructureDocuments', equation: 'instructureEquation', link: 'instructureTrayForCourseLinks' });
+  // Where the Text Entry form says an empty box won't submit. Canvas then focuses its editor, which is hidden under Writer.
+  const errorsOf = (ed) => (ed.id === 'submission_body' && ed.closest('form#submit_online_text_entry_form')?.querySelector('#body_errors')) || null;
+  // Back to Canvas's editor: the caret into its frame's body (TinyMCE follows its focus), or the Inbox's field.
+  const focus = (ed) => {
+    if (plain(ed)) { ed.focus(); return; }
+    try { frameOf(ed)?.contentWindow?.focus(); bodyOf(ed)?.focus(); } catch { /* the frame went */ }
+  };
 
   // Every Canvas box under `root` that Glaze's editor can stand in for, as
   // { editor, container, root, kind, mode, send, context, identity }. Skipped: an RCE not drawn yet (a quiz's essays past the
@@ -141,7 +155,7 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     return { editor, container: containerOf(editor), root: rootOf(editor), kind, mode: modeOf(kind), send: sendOf(editor, kind), context: contextOf(editor, kind), identity: identity(editor) };
   }).filter(Boolean);
 
-  return { EDITOR, INBOX, KINDS, NATIVE, boxes, kindOf, rootOf, containerOf, identity, sendOf, enabled, contextOf, canEdit, editable, read, write, watch, attemptAt, paragraphs, linesOf };
+  return { EDITOR, INBOX, KINDS, NATIVE, HOLD, TOOLS, live, focus, errorsOf, boxes, kindOf, rootOf, containerOf, identity, sendOf, enabled, contextOf, canEdit, editable, read, write, watch, attemptAt, paragraphs, linesOf };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_CANVAS;
 GZ_WRITER_CANVAS;

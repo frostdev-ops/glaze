@@ -1,4 +1,5 @@
-// Glaze Writer's editor: a ProseMirror view over GZ_WRITER_SCHEMA in compose or paper mode, with history, the keymap,
+// Glaze Writer's editor: a ProseMirror view over GZ_WRITER_SCHEMA in compose or paper mode (compose in Canvas's dialect or
+// plain text where the frame says so: opts.dialect 'canvas' or 'plain'), with history, the keymap,
 // Markdown and typography input rules, and the commands a toolbar runs by name. The frame draws the UI around it;
 // proofing and ghost text come in as plugins, ahead of these so their keys win. Commands, keys and input rules work on an
 // EditorState alone (node tests); only create() needs a page.
@@ -18,6 +19,8 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
   const SIZES = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
   const LISTS = { bullet_list: 'bullet', ordered_list: 'ordered' };
   const isPaper = (schema) => schema === S.paper;
+  // A paper is a paper; compose writes Ultra's Quill, Canvas's dialect, or the Inbox's plain text.
+  const schemaOf = (o) => (o.mode === 'paper' ? S.paper : o.dialect === 'canvas' ? S.canvas : o.dialect === 'plain' ? S.plain : S.compose);
   const pick = (type, attrs) => { const out = {}; for (const k of Object.keys(type.attrs)) if (attrs && k in attrs) out[k] = attrs[k]; return out; };
 
   // Words as Word and Ultra's status bar count them: runs between spaces with a letter or digit in them.
@@ -95,7 +98,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
 
   // Every command by the name run() takes: name → (arg) → (state, dispatch) → bool.
   const commands = (schema) => {
-    const n = schema.nodes, m = schema.marks, paper = isPaper(schema), levels = n.heading.spec.levels;
+    const n = schema.nodes, m = schema.marks, paper = isPaper(schema), levels = n.heading?.spec.levels || [];
     const listName = (l) => (LISTS[l.parent.type.name] ? l.parent.type.name : null);
     const toggleList = (name) => (state, dispatch) => {
       const all = lines(state).filter((l) => !l.node.type.spec.code).every((l) => listName(l) === name);
@@ -114,6 +117,8 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
       if (dispatch) { const tr = state.tr; for (const l of own) tr.setNodeMarkup(l.pos, null, { ...l.node.attrs, left: Math.max(0, Math.min(S.MAX_INDENT / 2, Math.round((l.node.attrs.left + d / 2) * 100) / 100)) }); dispatch(tr); }
       return true;
     };
+    // Plain text (the Inbox's) has no marks, lists, headings or block attributes: those commands answer false there.
+    const no = () => false, toggle = (t) => (t ? toggleMark(t) : no), attrs = !!n.paragraph.spec.attrs?.indent;
     const FORMAT = ['bold', 'italic', 'underline', 'strike', 'sup', 'sub', 'text_style', 'color', 'highlight', 'small_caps', 'all_caps'].map((k) => m[k]).filter(Boolean);
     const clear = (state, dispatch) => {
       const { empty, $from } = state.selection;
@@ -144,13 +149,15 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
       }
       return true;
     };
-    // Compose has no blockquote (Ultra's Quill keeps none): a quote is indented italic lines, then "— Name".
+    // Compose has no blockquote (Ultra's Quill keeps none): a quote is indented italic lines, then "— Name". A paper and
+    // Canvas's dialect have one; plain text, its lines.
     const quote = (o) => (state, dispatch) => {
       const said = String(o?.text ?? '').split(/\r?\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
       if (!said.length) return false;
       if (!dispatch) return true;
       const who = String(o?.author ?? '').replace(/\s+/g, ' ').trim();
-      const quoted = paper
+      const quoted = !m.italic ? [...said, ...(who ? [`— ${who}`] : [])].map((l) => n.paragraph.create(null, schema.text(l)))
+        : n.blockquote
         ? [n.blockquote.create(null, [...said.map((l) => n.paragraph.create(null, schema.text(l))), ...(who ? [n.paragraph.create(null, schema.text(`— ${who}`))] : [])])]
         : [...said.map((l) => n.paragraph.create({ indent: 1 }, schema.text(l, [m.italic.create()]))), ...(who ? [n.paragraph.create({ indent: 1 }, schema.text(`— ${who}`))] : [])];
       const { $from } = state.selection, top = $from.depth ? $from.node(1) : null;
@@ -240,11 +247,11 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
       return a;
     };
     const cmds = {
-      bold: () => toggleMark(m.bold), italic: () => toggleMark(m.italic), underline: () => toggleMark(m.underline), strike: () => toggleMark(m.strike),
-      sup: () => toggleMark(m.sup), sub: () => toggleMark(m.sub), link,
-      bulletList: () => toggleList('bullet_list'), orderedList: () => toggleList('ordered_list'),
-      indent: () => indent(1), outdent: () => indent(-1), heading: (level) => heading(+level || 0),
-      align: (dir) => (ALIGNS.includes(dir || 'left') ? setAttr('align', (_v, node) => dir === 'left' || !dir ? (paper && node.type === n.heading ? 'left' : null) : dir) : () => false),
+      bold: () => toggle(m.bold), italic: () => toggle(m.italic), underline: () => toggle(m.underline), strike: () => toggle(m.strike),
+      sup: () => toggle(m.sup), sub: () => toggle(m.sub), link: (url) => (m.link ? link(url) : no),
+      bulletList: () => (n.list_item ? toggleList('bullet_list') : no), orderedList: () => (n.list_item ? toggleList('ordered_list') : no),
+      indent: () => (attrs ? indent(1) : no), outdent: () => (attrs ? indent(-1) : no), heading: (level) => (n.heading ? heading(+level || 0) : no),
+      align: (dir) => (attrs && ALIGNS.includes(dir || 'left') ? setAttr('align', (_v, node) => dir === 'left' || !dir ? (paper && node.type === n.heading ? 'left' : null) : dir) : no),
       clear: () => clear, undo: () => undo, redo: () => redo, quote, insertText,
     };
     if (paper) {
@@ -319,14 +326,14 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
     const has = (t) => !!t && (empty ? !!t.isInSet(state.storedMarks || $from.marks()) : allHave(state, from, to, t));
     const block = $from.parent, parent = $from.depth ? $from.node($from.depth - 1) : null;
     let linked = null;
-    if (empty) { const r = linkRange(state); linked = r && m.link.isInSet(state.doc.nodeAt(r.from)?.marks || []); }
+    if (!m.link) { /* plain text: no links */ } else if (empty) { const r = linkRange(state); linked = r && m.link.isInSet(state.doc.nodeAt(r.from)?.marks || []); }
     else if (allHave(state, from, to, m.link)) state.doc.nodesBetween(from, to, (t) => { if (t.isText) linked ||= m.link.isInSet(t.marks); });
     const out = {
       bold: has(m.bold), italic: has(m.italic), underline: has(m.underline), strike: has(m.strike), sup: has(m.sup), sub: has(m.sub),
       link: linked ? linked.attrs.href : null,
       heading: block.type === schema.nodes.heading ? block.attrs.level : 0,
       list: (parent && LISTS[parent.type.name]) || null,
-      align: block.attrs.align || 'left', indent: block.attrs.indent || 0, code: !!block.type.spec.code,
+      align: block.attrs?.align || 'left', indent: block.attrs?.indent || 0, code: !!block.type.spec.code,
     };
     if (isPaper(schema)) {
       let quoted = false;
@@ -343,7 +350,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
   // Enter, Backspace, Tab as Quill and Word do them in lists and indented lines; elsewhere Tab writes a tab, as both do.
   // Escape, then Tab or Shift-Tab, leaves the editor (away.now, from leave()), as in code editors.
   const bindings = (schema, extra = {}, away = { now: false }) => {
-    const n = schema.nodes, m = schema.marks, run = commands(schema);
+    const n = schema.nodes, m = schema.marks, run = commands(schema), mark = (t) => (t ? toggleMark(t) : () => false);
     const toParagraph = (node) => setLines(() => ({ type: n.paragraph, attrs: pick(n.paragraph, node.attrs) }));
     const split = splitBlockAs((node, atEnd) => (node.type === n.heading && atEnd ? { type: n.paragraph, attrs: pick(n.paragraph, node.attrs) } : { type: node.type, attrs: node.attrs }));
     const emptyItem = (state, dispatch) => {
@@ -366,7 +373,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
     // Word's and Docs' shortcuts: strike, subscript and superscript (Word's ⌘= / ⌘⇧=, Docs' ⌘, / ⌘.), lists, clear
     // formatting; in a paper also alignment, indents, body and headings, and a page break.
     const word = {
-      'Shift-Mod-x': toggleMark(m.strike), 'Mod-=': toggleMark(m.sub), 'Shift-Mod-=': toggleMark(m.sup), 'Mod-,': toggleMark(m.sub), 'Mod-.': toggleMark(m.sup),
+      'Shift-Mod-x': mark(m.strike), 'Mod-=': mark(m.sub), 'Shift-Mod-=': mark(m.sup), 'Mod-,': mark(m.sub), 'Mod-.': mark(m.sup),
       'Shift-Mod-7': run.orderedList(), 'Shift-Mod-8': run.bulletList(), 'Mod-\\': run.clear(),
       ...(isPaper(schema) ? {
         'Shift-Mod-l': run.align('left'), 'Shift-Mod-e': run.align('center'), 'Shift-Mod-r': run.align('right'), 'Shift-Mod-j': run.align('justify'),
@@ -376,7 +383,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
     };
     const keys = {
       ...word,
-      'Mod-b': toggleMark(m.bold), 'Mod-i': toggleMark(m.italic), 'Mod-u': toggleMark(m.underline),
+      'Mod-b': mark(m.bold), 'Mod-i': mark(m.italic), 'Mod-u': mark(m.underline),
       'Mod-z': undo, 'Shift-Mod-z': redo, 'Mod-y': redo,
       Enter: chainCommands(newlineInCode, emptyItem, createParagraphNear, liftEmptyBlock, split),
       'Shift-Enter': n.hard_break ? chainCommands(newlineInCode, (state, dispatch) => { dispatch?.(state.tr.replaceSelectionWith(n.hard_break.create()).scrollIntoView()); return true; }) : chainCommands(newlineInCode, split),
@@ -395,7 +402,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
     return cls === 'smart' ? w?.autocorrect?.smart === false : !isPaper(schema) && w?.compose?.markdown === false;
   };
   const rules = (schema, off = (cls) => ruleOff(schema, cls)) => {
-    const n = schema.nodes, m = schema.marks, paper = isPaper(schema), levels = n.heading.spec.levels;
+    const n = schema.nodes, m = schema.marks, levels = n.heading?.spec.levels || [];
     const atStart = (state, start) => state.doc.resolve(start).parentOffset === 0;
     const block = (re, want) => new InputRule(re, (state, match, start, end) => {
       if (!atStart(state, start)) return null;
@@ -419,10 +426,11 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
       const tr = state.tr.delete(from + open + inner.length, end).delete(from, from + open);
       return tr.addMark(from, from + inner.length, type.create()).removeStoredMark(type);
     });
-    return [
+    // Plain text (the Inbox's) keeps only smart quotes and dashes.
+    const markdown = !m.link ? [] : [
       block(/^\s*([-*])\s$/, (node, _, up) => (up.type === n.bullet_list ? null : { list: 'bullet_list', attrs: pick(n.list_item, node.attrs) })),
       block(/^1[.)]\s$/, (node, _, up) => (up.type === n.ordered_list ? null : { list: 'ordered_list', attrs: pick(n.list_item, node.attrs) })),
-      block(/^>\s$/, (node) => (node.type !== n.paragraph ? null : paper ? { wrap: n.blockquote } : { indent: true })),
+      block(/^>\s$/, (node) => (node.type !== n.paragraph ? null : n.blockquote ? { wrap: n.blockquote } : { indent: true })),
       block(/^(#{1,6})\s$/, (node, match) => { const level = levels[match[1].length - 1]; return level ? { type: n.heading, attrs: { ...pick(n.heading, node.attrs), level } } : null; }),
       mark(/(?:^|[^*])(\*\*([^*\s](?:[^*]*[^*\s])?)\*\*)$/, m.bold),
       mark(/(?:^|[^*\p{L}\p{N}\p{M}_])(\*([^*\s](?:[^*]*[^*\s])?)\*)$/u, m.italic),
@@ -432,10 +440,10 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
         const size = match[1].length;
         return state.tr.delete(start + size + 1, end).delete(start, start + 1).addMark(start, start + size, m.link.create({ href })).removeStoredMark(m.link);
       }),
-      ...smartQuotes, emDash,
-    ].map((rule) => new InputRule(rule.match, (state, match, start, end) => {
+    ];
+    return [...markdown, ...smartQuotes, emDash].map((rule) => new InputRule(rule.match, (state, match, start, end) => {
       if (off(smartQuotes.includes(rule) || rule === emDash ? 'smart' : 'markdown')) return null;
-      if (m.link.isInSet(state.storedMarks || state.selection.$from.marks()) || state.doc.rangeHasMark(start, end, m.link)) return null;
+      if (m.link && (m.link.isInSet(state.storedMarks || state.selection.$from.marks()) || state.doc.rangeHasMark(start, end, m.link))) return null;
       return rule.handler(state, match, start, end);
     }, rule));
   };
@@ -492,7 +500,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
   ];
   // An EditorState for opts (create's, minus the page): what create() mounts, and what the node tests drive.
   const state = (o = {}) => {
-    const schema = o.mode === 'paper' ? S.paper : S.compose;
+    const schema = schemaOf(o);
     const doc = S.parse(schema, o.html || ''), s = o.selection;
     let selection;
     if (s && Number.isSafeInteger(s.index) && s.index >= 0 && Number.isSafeInteger(s.length) && s.length >= 0) {
@@ -503,7 +511,7 @@ var GZ_WRITER_EDITOR = globalThis.GZ_WRITER_EDITOR || (() => {
   };
 
   const create = (o = {}) => {
-    const schema = o.mode === 'paper' ? S.paper : S.compose, cmds = commands(schema);
+    const schema = schemaOf(o), cmds = commands(schema);
     let quiet = false, pasted = null;
     const report = (s) => {
       let html, text;
