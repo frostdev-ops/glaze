@@ -327,6 +327,7 @@ var GZ_WRITER_OBJECTS_LIB = globalThis.GZ_WRITER_OBJECTS_LIB || (() => {
   // o: { onLink(), onImage() } (the frame's popovers); each returns false to leave the key alone.
   const plugins = (schema, o = {}) => {
     const n = schema.nodes, m = schema.marks;
+    if (!m.link) return []; // plain text (Canvas's Inbox): nothing to link, rule or number
     const rules = [
       new InputRule(/\S+ $/, (state, match, start, end) => {
         const r = autolink(match[0].slice(0, -1));

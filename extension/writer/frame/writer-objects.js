@@ -543,6 +543,7 @@
   });
 
   F.on('ready', (editor) => {
+    if (!editor.view.state.schema.marks.link) return; // plain text (Canvas's Inbox): no links, pictures or objects to edit
     ed = editor; view = editor.view; paperMode = F.mode() === 'paper';
     cmds = L.commands(view.state.schema, { content });
     for (const p of [...L.plugins(view.state.schema, { onLink: openLinkEditor, onImage: pickImage }), ui(), ...(paperMode ? [webp()] : [])]) F.plugin(p);
