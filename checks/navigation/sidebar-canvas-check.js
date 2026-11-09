@@ -82,7 +82,7 @@ const layoutOk = async (name, width) => {
   fs.mkdirSync(out, { recursive: true });
   tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-sidebar-canvas-run-'))); ext = path.join(tmp, 'extension'); fs.mkdirSync(ext);
   try {
-    for (const e of fs.readdirSync(src, { withFileTypes: true })) if (/\.(js|css|html)$/.test(e.name) || ['background', 'content', 'core', 'looks', 'navigation', 'courses', 'planner', 'writer', 'documents', 'ai', 'agents', 'sharing', 'mods', 'pet', 'settings', 'vendor', 'i18n', '_locales', 'assets', 'fonts', 'icons'].includes(e.name)) fs.cpSync(path.join(src, e.name), path.join(ext, e.name), { recursive: true });
+    for (const e of fs.readdirSync(src, { withFileTypes: true })) if (/\.(js|css|html)$/.test(e.name) || ['background', 'content', 'core', 'looks', 'navigation', 'courses', 'planner', 'writer', 'documents', 'ai', 'agents', 'sharing', 'mods', 'pet', 'settings', 'vendor', 'i18n', '_locales', 'assets', 'fonts', 'icons', 'pearson'].includes(e.name)) fs.cpSync(path.join(src, e.name), path.join(ext, e.name), { recursive: true });
     const m = JSON.parse(fs.readFileSync(path.join(src, 'manifest.json')));
     m.host_permissions.push('http://localhost/*');
     m.content_scripts.find((s) => s.matches.includes('https://*.instructure.com/*')).matches.push('http://localhost/*');

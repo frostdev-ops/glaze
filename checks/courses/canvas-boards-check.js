@@ -55,7 +55,7 @@ const ok = (value, label) => { if (!value) throw new Error(label); console.log(`
   try {
     if (local) {
       const src = ext; ext = path.join(tmp, 'extension'); fs.mkdirSync(ext);
-      for (const e of fs.readdirSync(src, { withFileTypes: true })) if (/\.(js|css|html)$/.test(e.name) || ['background', 'content', 'core', 'looks', 'navigation', 'courses', 'planner', 'writer', 'documents', 'ai', 'agents', 'sharing', 'mods', 'pet', 'settings', 'vendor', 'i18n', '_locales', 'assets', 'fonts', 'icons'].includes(e.name)) fs.cpSync(path.join(src, e.name), path.join(ext, e.name), { recursive: true });
+      for (const e of fs.readdirSync(src, { withFileTypes: true })) if (/\.(js|css|html)$/.test(e.name) || ['background', 'content', 'core', 'looks', 'navigation', 'courses', 'planner', 'writer', 'documents', 'ai', 'agents', 'sharing', 'mods', 'pet', 'settings', 'vendor', 'i18n', '_locales', 'assets', 'fonts', 'icons', 'pearson'].includes(e.name)) fs.cpSync(path.join(src, e.name), path.join(ext, e.name), { recursive: true });
       const manifest = JSON.parse(fs.readFileSync(path.join(src, 'manifest.json')));
       manifest.host_permissions.push('http://localhost/*');
       manifest.content_scripts.find((s) => s.matches.includes('https://*.instructure.com/*')).matches.push('http://localhost/*');
