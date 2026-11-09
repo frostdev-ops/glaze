@@ -92,6 +92,14 @@ test('Canvas\'s dialect round trips: what it writes reads back the same, and wri
   }
 });
 
+test('Canvas list items refuse unsupported block content without dropping its text on paste', () => {
+  const quote = '<ul><li>before<blockquote><p>quoted</p><blockquote><p>inner</p></blockquote></blockquote>after</li></ul>';
+  assert.equal(S.text(S.parse(K, quote)).text, 'before\nquoted\ninner\nafter');
+  assert.deepEqual(S.loses(K, quote), ['format']);
+  assert.deepEqual(S.loses(K, '<ul><li><pre>code</pre></li></ul>'), ['format']);
+  assert.deepEqual(S.loses(K, '<blockquote><p>q</p><ul><li>item</li></ul></blockquote>'), []);
+});
+
 test('loses: what keeps a box Canvas\'s (h2, colours, sizes, tables, pictures, embeds, maths, mentions, file links, rules)', () => {
   const cases = [
     ['<h2>Big</h2>', ['format']], ['<h1>x</h1>', ['format']], ['<h5>x</h5>', ['format']],
