@@ -135,6 +135,8 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
   const HOLD = true;
   // ⋯ → Insert from Canvas: the frame's tool → Canvas's command (writer-main-canvas.js TOOLS), run once the box is Canvas's.
   const TOOLS = Object.freeze({ image: 'mceInstructureImage', media: 'instructureRecord', document: 'mceInstructureDocuments', equation: 'instructureEquation', link: 'instructureTrayForCourseLinks' });
+  // Where the Text Entry form says an empty box won't submit. Canvas then focuses its editor, which is hidden under Writer.
+  const errorsOf = (ed) => (ed.id === 'submission_body' && ed.closest('form#submit_online_text_entry_form')?.querySelector('#body_errors')) || null;
   // Back to Canvas's editor: the caret into its frame's body (TinyMCE follows its focus), or the Inbox's field.
   const focus = (ed) => {
     if (plain(ed)) { ed.focus(); return; }
@@ -153,7 +155,7 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     return { editor, container: containerOf(editor), root: rootOf(editor), kind, mode: modeOf(kind), send: sendOf(editor, kind), context: contextOf(editor, kind), identity: identity(editor) };
   }).filter(Boolean);
 
-  return { EDITOR, INBOX, KINDS, NATIVE, HOLD, TOOLS, live, focus, boxes, kindOf, rootOf, containerOf, identity, sendOf, enabled, contextOf, canEdit, editable, read, write, watch, attemptAt, paragraphs, linesOf };
+  return { EDITOR, INBOX, KINDS, NATIVE, HOLD, TOOLS, live, focus, errorsOf, boxes, kindOf, rootOf, containerOf, identity, sendOf, enabled, contextOf, canEdit, editable, read, write, watch, attemptAt, paragraphs, linesOf };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_CANVAS;
 GZ_WRITER_CANVAS;

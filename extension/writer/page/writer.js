@@ -199,6 +199,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.unhello?.();
     box.unhello = null;
     box.observer?.disconnect();
+    box.errors?.disconnect();
     box.port?.close();
     box.port = null;
     box.frame?.remove();
@@ -272,6 +273,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     // The site changing its own editor (a post sent and cleared, its saved draft put back): the frame shows it. Its text,
     // not its markup, says so: the native editor tidies markup after each sync.
     const observe = (el, fn) => { const o = new MutationObserver(fn); o.observe(el, { childList: true, subtree: true, characterData: true }); return o; };
+    // Canvas's errors line filling (an empty Text Entry): it meant to focus its editor, which is Writer's frame now.
+    const errors = A().errorsOf?.(ed);
+    if (errors) (box.errors = new MutationObserver(() => { if (errors.textContent.trim() && box.frame === f && boxes.get(ed) === box) { f.focus(); box.port?.postMessage({ type: 'focus' }); } })).observe(errors, { childList: true, subtree: true, characterData: true });
     box.observer = A().watch(box, () => {
       if (!sameBox(box)) return;
       const native = A().read(ed);
