@@ -58,14 +58,15 @@ const DISCUSSION = (() => {
 })();
 // DiscussionEdit around its RCE (ui/features/discussion_topics_post/react/components/DiscussionEdit): tinymce-react's state
 // on 'change keyup setcontent', Reply sending that state (createDiscussionEntry, recorded here), Cancel unmounting the box,
-// and the RCE focused 1000 ms after it is up.
+// and the RCE focused 1000 ms after it is up, its caret marked by an empty span.post_mention (PositionCursorHook.jsx).
 const REPLY = `(() => {
   window.__entries = []; window.__state = '';
   tinymce.init({ selector: '#message-body-root', base_url: '/tinymce', suffix: '.min', skin: false, content_css: false, menubar: false, statusbar: false, plugins: 'lists', height: 300,
     init_instance_callback: (ed) => {
       ed.getElement().dataset.rich_text = true;
       ed.on('change keyup setcontent', () => { __state = ed.getContent(); });
-      setTimeout(() => ed.focus(), 1000);
+      // DiscussionEdit's onInit: a second later, focus and positionCursor's caret marker in the first paragraph.
+      setTimeout(() => { ed.focus(); const p = ed.dom.select('p')[0]; p.innerHTML += '<span class="post_mention"></span>'; ed.selection.setCursorLocation(ed.dom.select('span.post_mention')[0], 0); }, 1000);
     } });
   const box = document.querySelector('[data-testid="DiscussionEdit-container"]');
   box.querySelector('[data-testid="DiscussionEdit-submit"]').addEventListener('click', () => __entries.push(__state));

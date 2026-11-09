@@ -2,7 +2,8 @@
 // copy of the extension that holds the local host. Mac only (CLAUDE.md: Canvas browser runs on the Mac, one at a time, under
 // lockf). Signs in, then aborts every request that isn't a GET or a GraphQL query: nothing typed here reaches Canvas. Each
 // send is pressed for real and its aborted request read back: the classic assignment's form POST (submission[body]) must
-// hold exactly Writer's text. WRITER_SHOTS names where the screenshots go (a light and a dark Look each surface).
+// hold exactly Writer's text, and so must each reply's createDiscussionEntry (a topic's, a thread's, an announcement's).
+// WRITER_SHOTS names where the screenshots go (a light and a dark Look each surface).
 //   NODE_PATH=… PLAYWRIGHT_BROWSERS_PATH=… nice -n 10 lockf -k /private/tmp/claude-501/glaze-heavy.lock node checks/writer/writer-canvas-live-check.js [evidence directory]
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
@@ -83,8 +84,10 @@ const textOf = (p, html) => p.evaluate((h) => new DOMParser().parseFromString(h,
       return f;
     };
     const typeIn = async (p, b, text) => {
-      await b.fr.click('.ProseMirror');
-      await until(() => b.fr.evaluate(() => !!document.activeElement?.closest('.ProseMirror')), 'the caret in Writer');
+      await until(async () => {
+        await b.el.evaluate((f) => f.focus());
+        return b.fr.evaluate(() => { const v = GZ_WRITER_FRAME.editor().view; v.focus(); v.dispatch(v.state.tr.setSelection(GZ_PM.state.Selection.atEnd(v.state.doc))); return !!document.activeElement?.closest('.ProseMirror'); });
+      }, 'the caret in Writer');
       await p.keyboard.type(text, { delay: 2 });
       await until(async () => (await b.fr.evaluate(() => GZ_WRITER_FRAME.editor().text())).endsWith(text.split('\n').at(-1)), 'typed in Writer');
     };
@@ -136,6 +139,38 @@ const textOf = (p, html) => p.evaluate((h) => new DOMParser().parseFromString(h,
         await a.fr.click('.gw-offer button:first-of-type');
         await until(async () => squash(await writerText(a)).length > 0, 'restored');
         check(true, `Restore puts it back (${squash(await writerText(a))})`);
+      }
+      await p.close();
+    }
+
+    // ---- replies: a topic's, a thread's, an announcement's; Reply sends exactly Writer's text (createDiscussionEntry) ----
+    const entry = (from) => until(() => blocked.slice(from).find((b) => b.path === '/api/graphql' && /createDiscussionEntry/i.test(b.body)), 'createDiscussionEntry, aborted');
+    for (const [label, url, opener, preset] of [
+      ['topic', '/courses/34/discussion_topics/80', '[data-testid="discussion-topic-reply"]', 'Paper'],
+      ['topic', '/courses/34/discussion_topics/80', '[data-testid="discussion-topic-reply"]', 'Midnight'],
+      ['thread', '/courses/34/discussion_topics/80', '[data-testid="threading-toolbar-reply"]', 'Paper'],
+      ['announcement', '/courses/34/discussion_topics/78', '[data-testid="discussion-topic-reply"]', 'Paper'],
+    ]) {
+      await wear(preset);
+      const p = await open(url);
+      await p.locator(opener).first().click();
+      const r = await box(p, 'reply');
+      await until(() => p.evaluate(() => document.activeElement?.matches('iframe.gz-writer[data-gz-writer-frame="reply"]')), `${label}: the caret in Writer as the box opens`);
+      await pause(1300); // Canvas focuses its RCE 1000 ms after it is up
+      check(await p.evaluate(() => document.activeElement?.matches('iframe.gz-writer[data-gz-writer-frame="reply"]')), `${label} reply (${preset}): Writer takes the box and keeps the caret past Canvas's own focus`);
+      if (label === 'announcement') check(await r.fr.evaluate(() => GZ_WRITER_FRAME.context().announcement === true), 'an announcement\'s reply says so in its context');
+      const words = preset === 'Midnight' ? 'A dark Look on a reply.' : `${label === 'announcement' ? 'An' : 'A'} ${label} reply, live: the clearing remembers what the town will not.`;
+      await typeIn(p, r, words);
+      if (label === 'topic' || label === 'thread') await shot(p, r.el, `reply-${label}-${preset.toLowerCase()}.png`);
+      if (preset === 'Midnight') { await p.close(); continue; }
+      const from = blocked.length;
+      await p.locator('[data-testid="DiscussionEdit-container"] [data-testid="DiscussionEdit-submit"]').first().click();
+      const sent = await entry(from), message = JSON.parse(sent.body).variables?.message || '';
+      check(squash(await textOf(p, message)) === squash(await writerText(r)) && message.includes(words), `${label}: the blocked createDiscussionEntry's message is Writer's text (${message})`);
+      if (label === 'topic') {
+        await p.locator('[data-testid="DiscussionEdit-cancel"]').first().click().catch(() => {});
+        await until(() => p.evaluate(() => !document.querySelector('iframe.gz-writer[data-gz-writer-frame="reply"]')), 'Writer gone with Cancel');
+        check(true, 'Cancel takes the box and Writer with it');
       }
       await p.close();
     }
