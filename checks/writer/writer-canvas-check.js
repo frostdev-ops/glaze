@@ -7,7 +7,9 @@
 // hidden, its errors line kept), ⋯ says Canvas editor and offers Insert from Canvas; typing and pressing Submit at once
 // submits exactly Writer's text (the flush hold); Canvas's empty-text check focuses Writer, not its hidden editor; a press
 // Canvas's editor won't take is held with the reason shown; Canvas editor gives the box back with the text and the focus;
-// Insert runs Canvas's tool at the end of the box; a box Writer can't keep stays Canvas's. Every non-GET is aborted.
+// Insert runs Canvas's tool at the end of the box; a box Writer can't keep stays Canvas's. Drafts: what Writer holds is kept
+// and offered back in Writer when the box opens empty again (Restore, Dismiss), not once it was submitted; Canvas redrawing
+// its editor within 10 s gets Writer's unsynced text; a dead frame leaves its text to copy. Every non-GET is aborted.
 // glaze-remote -o <evidence directory> -- node checks/writer/writer-canvas-check.js /out (CLAUDE.md)
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
@@ -25,6 +27,7 @@ const FILES = {
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 const out = process.argv[2], lock = env.lockPath();
 const checks = [], requests = [], errors = []; let passed = false;
+let submitted = null; // the assignment's submission as Canvas's API answers it, once "submitted" (drafts: a posted copy)
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 10000) => {
   const start = Date.now(); let last;
@@ -106,6 +109,7 @@ const CANVAS = `(() => {
       if (u.pathname === '/gz-check/canvas.js') return r.fulfill({ contentType: 'text/javascript', body: CANVAS });
       if (req.isNavigationRequest() && u.pathname === '/courses/34/assignments/238') return r.fulfill({ contentType: 'text/html', body: ASSIGNMENT });
       if (req.isNavigationRequest()) return r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Blank</title>' });
+      if (u.pathname === '/api/v1/courses/34/assignments/238/submissions/self') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(submitted || { body: null, workflow_state: 'unsubmitted' }) });
       if (u.pathname === '/api/v1/users/self/profile' || u.pathname === '/api/v1/users/self') return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ id: 3, name: 'Sam Taylor' }) });
       if (u.pathname.startsWith('/api/v1/')) return r.fulfill({ contentType: 'application/json', body: '[]' });
       return r.fulfill({ status: 404, body: '' });
@@ -213,6 +217,75 @@ const CANVAS = `(() => {
     check(await p.evaluate(() => getComputedStyle(document.querySelector('.rce-wrapper')).display !== 'none' && !document.querySelector('[data-gz-writer]')), 'a box holding blocks inside a list item stays Canvas\'s, shown, unmarked');
     const kept = await tiny(p), wrote = await p.evaluate(() => __log.slice());
     check(kept.html.replace(/\s+/g, '') === refused && wrote.length === 0, `and nothing was written into it (${kept.html.replace(/\s+/g, '')}; ${wrote.join(' | ')})`);
+    await p.close();
+
+    // ---- drafts: kept, offered back in Writer, restored, dismissed; not once submitted ----
+    const KEY = 'draft:canvas-rce:https://glaze-check.instructure.com/3/courses/34/assignments/238#submission_body';
+    const stored = () => worker.evaluate(async (k) => { const all = await chrome.storage.local.get(null); return Object.entries(all).filter(([x]) => x === k || x.startsWith(`draft:pending:${encodeURIComponent(k)}`)).map(([, v]) => v.put?.text ?? v.text).filter(Boolean); }, KEY);
+    const offerOf = (fr) => fr.evaluate(() => { const o = document.querySelector('.gw-offer'); return o && !o.hidden && { text: o.querySelector('span').textContent, buttons: [...o.querySelectorAll('button')].map((b) => b.textContent) }; });
+    const KEPT = 'A paragraph Writer keeps while Canvas reloads, long enough to keep.';
+    p = await open(A);
+    a = await box(p, 'assignment');
+    check(!await offerOf(a.fr), 'nothing to offer on a first visit');
+    await a.fr.click('.ProseMirror');
+    await p.keyboard.type(KEPT, { delay: 0 });
+    await until(async () => (await stored()).includes(KEPT), 'Writer\'s copy kept', 15000);
+    check(true, 'what Writer holds is kept a second after typing stops, under the box\'s own key');
+    await p.close();
+    p = await open(A);
+    a = await box(p, 'assignment');
+    const offer = await until(() => offerOf(a.fr), 'the offer in Writer');
+    check(/^Glaze kept a copy of what you wrote here \(.+\)\.$/.test(offer.text) && offer.buttons.join() === 'Restore,Dismiss', `an empty box offers the copy back in Writer ("${offer.text}" ${offer.buttons.join(' ')})`);
+    await a.fr.click('.gw-offer button:first-of-type');
+    await until(async () => squash(await writerText(a.fr)) === KEPT && squash((await tiny(p)).text) === KEPT, 'restored into Writer and Canvas');
+    check(!await offerOf(a.fr), 'Restore puts the copy in Writer and in Canvas\'s editor, and the offer goes');
+    await p.close();
+    p = await open(A);
+    a = await box(p, 'assignment');
+    await until(() => offerOf(a.fr), 'offered again on the next visit');
+    await a.fr.click('.gw-offer button:last-of-type');
+    check(!await offerOf(a.fr) && !squash(await writerText(a.fr)), 'Dismiss takes the offer away, the box left empty');
+    await p.close();
+    p = await open(A);
+    a = await box(p, 'assignment');
+    check(!await offerOf(a.fr), 'a dismissed copy isn\'t offered again');
+    await a.fr.click('.ProseMirror');
+    await p.keyboard.type(KEPT, { delay: 0 });
+    await until(async () => (await stored()).includes(KEPT), 'kept again', 15000);
+    await p.close();
+    submitted = { body: `<p>${KEPT}</p>`, workflow_state: 'submitted' };
+    p = await open(A);
+    a = await box(p, 'assignment');
+    check(!await offerOf(a.fr), 'a copy whose text Canvas already has as the submission isn\'t offered');
+    await until(async () => !(await stored()).length, 'the submitted copy gone');
+    check(true, 'and it goes');
+    submitted = null;
+
+    // ---- Canvas redrawing its editor: Writer's unsynced words go into the new one ----
+    await p.evaluate(() => { window.__get = tinymce.get; tinymce.get = () => null; });
+    await a.fr.click('.ProseMirror');
+    await p.keyboard.type('Words Canvas never took.', { delay: 0 });
+    await until(() => a.fr.evaluate(() => GZ_WRITER_FRAME.editor().text() === 'Words Canvas never took.'), 'typed');
+    await p.evaluate(() => {
+      tinymce.get = window.__get;
+      const ed = tinymce.get('submission_body'), wrap = ed.getElement().closest('.rce-wrapper').parentElement;
+      ed.remove();
+      wrap.innerHTML = '<div class="canvas-rce__skins--root rce-wrapper"><div style="display: block;"><textarea id="submission_body" name="submission[body]"></textarea></div></div>';
+      tinymce.init({ selector: '#submission_body', base_url: '/tinymce', suffix: '.min', skin: false, content_css: false, menubar: false, statusbar: false, plugins: 'lists', height: 400,
+        init_instance_callback: (e) => { e.getElement().dataset.rich_text = true; } });
+    });
+    a = await box(p, 'assignment');
+    await until(async () => squash((await tiny(p)).text) === 'Words Canvas never took.' && squash(await writerText(a.fr)) === 'Words Canvas never took.', 'carried into the new editor');
+    check(true, 'Canvas redrawing its editor within 10 s: Writer opens on it with its unsynced words and puts them in');
+
+    // ---- a frame that keeps dying: its text left to copy, Canvas's editor holding what was synced ----
+    for (let i = 0; i < 3; i++) {
+      const f = await until(async () => { const h = await p.$('iframe.gz-writer'); return h && await h.evaluate((x) => !x.style.opacity) && h; }, `frame ${i + 1} up`);
+      await f.evaluate((x) => { x.src = 'about:blank'; });
+      await until(async () => !await f.evaluate((x) => x.isConnected), `frame ${i + 1} gone`);
+    }
+    const field = await until(() => p.evaluate(() => document.querySelector('textarea[data-gz-writer-recovery]')?.value), 'the recovery field');
+    check(squash(field) === 'Words Canvas never took.' && squash((await tiny(p)).text) === 'Words Canvas never took.', `a dead frame: its text in a field to copy (${field}), Canvas's editor holding it too`);
     await p.close();
 
     const sent = requests.filter((r) => r.method !== 'GET');
