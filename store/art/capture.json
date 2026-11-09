@@ -1,0 +1,48 @@
+{
+  "version": "4.0.6",
+  "sourceCommit": "5defc7c8b2d00300ace7b7c945ddcd092178f214",
+  "results": [
+    {
+      "file": "screenshots/1-settings-look.jpg",
+      "width": 1280,
+      "height": 800,
+      "page": "options.html#look/palette"
+    },
+    {
+      "file": "screenshots/2-blackboard-course.jpg",
+      "width": 1280,
+      "height": 800,
+      "page": "preview.html"
+    },
+    {
+      "file": "screenshots/3-canvas-course.jpg",
+      "width": 1280,
+      "height": 800,
+      "page": "preview.html?site=canvas"
+    },
+    {
+      "file": "screenshots/4-writer-paper.jpg",
+      "width": 1280,
+      "height": 800,
+      "page": "options.html#writer/papers"
+    },
+    {
+      "file": "screenshots/5-backgrounds.jpg",
+      "width": 1280,
+      "height": 800,
+      "page": "options.html#look/background"
+    },
+    {
+      "file": "marquee.png",
+      "width": 1400,
+      "height": 560,
+      "copy": "Glaze\n\nCanvas · Blackboard · Moodle"
+    },
+    {
+      "file": "small-tile.png",
+      "width": 440,
+      "height": 280,
+      "copy": "Glaze\n\nCanvas · Blackboard · Moodle"
+    }
+  ]
+}
