@@ -53,6 +53,17 @@ test('pre keeps its lines, and a quote is a real blockquote around its blocks', 
   assert.equal(doc.firstChild.firstChild.attrs.indent, 0, 'not Ultra\'s indented stand-in');
 });
 
+test('Canvas code blocks keep their trailing and empty lines across repeated saves', () => {
+  for (const value of ['', '\n', 'a\n', 'a\n\n', 'a\n  b\n']) {
+    const html = `<pre>${value}</pre>`;
+    const doc = S.parse(K, html);
+    assert.equal(doc.firstChild.type.name, 'code_block');
+    assert.equal(doc.firstChild.textContent, value, JSON.stringify(value));
+    assert.equal(S.serialize(K, doc), html);
+    assert.equal(out(out(html)), html);
+  }
+});
+
 test('TinyMCE\'s frame body in: styled spans, padding indents, nested lists, its bogus nodes and caret marks', () => {
   const body = '<p style="padding-left: 80px; text-align: center;" data-mce-style="padding-left: 80px; text-align: center;">a <span style="text-decoration: underline;" data-mce-style="text-decoration: underline;">u</span> '
     + '<span style="text-decoration: line-through;">s</span><span id="_mce_caret" data-mce-bogus="1" data-mce-type="format-caret">﻿</span></p>'
