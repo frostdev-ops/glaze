@@ -466,10 +466,10 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const keep = (since = Date.now(), seen = false) => {
       if (!group.every(still)) { endKeep(); return; }
       for (const x of group) x.keeping = endKeep;
+      if (Date.now() - since >= SUBMIT_ON) { endKeep(); for (const x of group) x.port?.postMessage({ type: 'held' }); return; }
       if (!group.every(syncCurrent)) { endKeep(); for (const x of group) x.port?.postMessage({ type: 'held' }); return; }
       const now = b.isConnected && A().enabled(b) && group.every((x) => A().kept(x, main));
       if (now && seen) { endKeep(); press(); return; }
-      if (Date.now() - since >= SUBMIT_ON) { endKeep(); for (const x of group) x.port?.postMessage({ type: 'held' }); return; }
       keepTimer = setTimeout(() => keep(since, now), 100);
     };
     const settle = (box, ok) => {
