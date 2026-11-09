@@ -39,7 +39,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (![...boxes.values()].some((b) => b.frame === e.target)) { activeCurrent = null; pinnedCurrent = null; }
   }, true);
   const declined = new WeakSet(); // editors given back to Blackboard's editor: Ultra's from then on, on this page
-  const orphans = new Map(); // identity → what Writer held, unsynced, of a box whose editor the site took away (10 s)
+  const orphans = new Map(); // destination → what Writer held, unsynced, of a box whose editor the site took away (10 s)
+  const orphanKey = (b, s) => JSON.stringify([s.path, b.identity, ...(b.mode === 'plain' ? [s.name, s.subject, [...(s.to || [])].sort()] : [])]);
   const failed = new WeakMap(); // editor → when its frame last failed to open; tried again a minute later
   const SENDS = new Set(['post', 'reply', 'message', 'journal']);
   // A paper (an assignment's attempt) in its full view (Settings → Writer → Full writer) is a page of its own: as tall as the
@@ -137,8 +138,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (boxes.get(b.editor) !== box || !sameBox(box)) { drop(box); return; }
     // Canvas redrew this box's editor while Writer held words it hadn't taken (a React remount): Writer opens with them, and
     // writes them in. Else an empty Rich Content Editor box gets the copy Glaze kept of it offered back in the frame.
-    const orphan = orphans.get(b.identity);
-    orphans.delete(b.identity);
+    const key = orphanKey(b, box.destination), orphan = orphans.get(key);
+    orphans.delete(key);
     if (orphan && orphan.kind === b.kind && Date.now() - orphan.at < 10000 && !squash(native.text)) { box.latest = orphan.html; box.snapshot = orphan.snapshot; box.recovered = box.carried = true; }
     else if (A().HOLD && b.mode === 'compose' && !squash(native.text)) {
       box.offer = await Promise.resolve(globalThis.GZ_DRAFT_UI?.offer?.(b.editor)).catch(() => null);
@@ -679,7 +680,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const pass = () => {
     if (!on()) { dropAll(); return; }
     for (const box of [...boxes.values()]) {
-      if (!sameBox(box)) { if (A()?.HOLD && box.unsynced && box.mode !== 'paper' && box.path === location.pathname) orphans.set(box.identity, { kind: box.kind, html: box.latest, snapshot: box.snapshot, at: Date.now() }); drop(box); }
+      if (!sameBox(box)) { if (A()?.HOLD && box.unsynced && box.mode !== 'paper' && box.path === location.pathname) orphans.set(orphanKey(box, box.snapshot || box.destination), { kind: box.kind, html: box.latest, snapshot: box.snapshot, at: Date.now() }); drop(box); }
       else if (box.kind === 'post' && (!box.display || box.posted) && !box.text && box.editor.closest('form')?.querySelector('.panel-editor-controls.ng-hide, .panel-editor-controls[aria-hidden="true"]')) drop(box);
       else if (box.kind === 'journal' && !A().sendOf(box.editor, 'journal')) drop(box); // its Cancel, or the entry sent
       else if (box.frame && !box.frame.isConnected) { if (box.unsynced || box.mode === 'paper') reopen(box); else drop(box); }
