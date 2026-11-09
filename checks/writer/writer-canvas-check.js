@@ -9,7 +9,10 @@
 // Canvas's editor won't take is held with the reason shown; Canvas editor gives the box back with the text and the focus;
 // Insert runs Canvas's tool at the end of the box; a box Writer can't keep stays Canvas's. Drafts: what Writer holds is kept
 // and offered back in Writer when the box opens empty again (Restore, Dismiss), not once it was submitted; Canvas redrawing
-// its editor within 10 s gets Writer's unsynced text; a dead frame leaves its text to copy. Every non-GET is aborted.
+// its editor within 10 s gets Writer's unsynced text; a dead frame leaves its text to copy. A classic quiz's essays: each
+// RCE Canvas has drawn is Writer's as a test (no AI there), the one drawn later too; Canvas's answer backup (its change →
+// get_code of every essay) carries Writer's text, and Submit Quiz, pressed at once after typing, submits every essay's last
+// words. Every non-GET is aborted.
 // glaze-remote -o <evidence directory> -- node checks/writer/writer-canvas-check.js /out (CLAUDE.md)
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
@@ -96,6 +99,37 @@ const MESSAGE = `(() => {
   const tag = document.createElement('span'); tag.setAttribute('data-testid', 'address-book-tag'); tag.id = 'address-book-label-2-user'; tag.textContent = 'Jordan Lee';
   document.querySelector('input[data-testid="compose-modal-header-address-book-input"]').before(tag);
 })();`;
+// The quiz take page (practice quiz 56) with its essays' RCEs as Canvas mounts them, a textarea in a wrapper, and what
+// take_quiz does around them (ui/features/take_quiz/jquery/index.js): an essay's change backs up the whole form, each RCE's
+// text read with get_code (getFormData); Submit Quiz sets the form's action and submits it, its essays' editors saved
+// into their textareas, recorded instead of sent. Canvas draws only maxInitRenderedRCEs editors at first: the last essay
+// here waits for __drawLast(), as one past the fifth waits to scroll into view.
+const QUIZ = (() => {
+  const raw = fixture('canvas-writer-quiz.html');
+  assert.ok(raw.includes('id="submit_quiz_form"') && (raw.match(/class="form-control textarea-question-holder"/g) || []).length === 3, 'the quiz fixture has its form and three essays');
+  return raw.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
+    .replace('</body>', '<script src="/tinymce/tinymce.min.js"></script><script src="/gz-check/quiz.js"></script></body>');
+})();
+const TAKE = `(() => {
+  window.__backups = []; window.__submits = [];
+  const form = document.getElementById('submit_quiz_form');
+  [...form.querySelectorAll('.textarea-question-holder')].forEach((h, n) => {
+    h.innerHTML = '<div class="ic-RichContentEditor"><div class="canvas-rce__skins--root rce-wrapper" style="margin-bottom: 0.5rem;"><div style="display: block;"><textarea id="question_input_' + n + '" class="question_input" name="' + h.closest('.question').id + '" style="height: 300px; resize: none;"></textarea></div></div></div>';
+  });
+  const essays = [...form.querySelectorAll('textarea.question_input')];
+  const answers = () => Object.fromEntries(essays.map((ta) => [ta.name, ta.dataset.rich_text ? tinymce.get(ta.id).getContent() : ta.value]));
+  const init = (ta) => tinymce.init({ target: ta, base_url: '/tinymce', suffix: '.min', skin: false, content_css: false, menubar: false, statusbar: false, plugins: 'lists', height: 300,
+    init_instance_callback: (ed) => { ta.dataset.rich_text = true; ed.on('change', () => ta.dispatchEvent(new Event('change', { bubbles: true }))); } });
+  form.addEventListener('change', (e) => { if (e.target.matches('textarea.question_input')) __backups.push(answers()); });
+  essays.slice(0, -1).forEach(init);
+  window.__drawLast = () => init(essays.at(-1));
+  document.getElementById('submit_quiz_button').addEventListener('click', (e) => { form.action = e.currentTarget.dataset.action; });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    tinymce.triggerSave();
+    __submits.push({ action: form.getAttribute('action'), answers: Object.fromEntries(essays.map((ta) => [ta.name, ta.value])) });
+  });
+})();`;
 // What Canvas does around an RCE, in the page (packages/canvas-rce RCEWrapper onInit, wrapInitCb, tinymce-react; the Text
 // Entry form's submit, ui/features/submit_assignment/jquery/index.jsx). ?html= puts that in the box first.
 const CANVAS = `(() => {
@@ -159,6 +193,8 @@ const CANVAS = `(() => {
       if (u.pathname === '/gz-check/canvas.js') return r.fulfill({ contentType: 'text/javascript', body: CANVAS });
       if (u.pathname === '/gz-check/discussion.js') return r.fulfill({ contentType: 'text/javascript', body: REPLY });
       if (u.pathname === '/gz-check/inbox.js') return r.fulfill({ contentType: 'text/javascript', body: MESSAGE });
+      if (u.pathname === '/gz-check/quiz.js') return r.fulfill({ contentType: 'text/javascript', body: TAKE });
+      if (req.isNavigationRequest() && u.pathname === '/courses/36/quizzes/56/take') return r.fulfill({ contentType: 'text/html', body: QUIZ });
       if (req.isNavigationRequest() && u.pathname === '/conversations') return r.fulfill({ contentType: 'text/html', body: INBOX });
       if (u.pathname === '/api/v1/courses') return r.fulfill({ contentType: 'application/json', body: JSON.stringify([{ id: 34, name: 'ENG 1100', course_code: 'ENG 1100', enrollments: [{ type: 'student', user_id: 3 }] }]) });
       if (req.isNavigationRequest() && u.pathname === '/courses/34/discussion_topics/80') return r.fulfill({ contentType: 'text/html', body: DISCUSSION });
@@ -425,6 +461,45 @@ const CANVAS = `(() => {
     await p.keyboard.type(' Typed in Canvas\'s own field, kept by the draft backup.', { delay: 0 });
     const inboxKey = await until(() => worker.evaluate(async () => { const all = await chrome.storage.local.get(null); return Object.entries(all).find(([k, v]) => (k.startsWith('draft:canvas:') || k.startsWith('draft:pending:draft%3Acanvas%3A')) && /kept by the draft backup/.test(v.put?.text ?? v.text ?? ''))?.[0]; }), 'the Inbox draft kept', 15000);
     check(true, `after Canvas editor, the Inbox's own draft backup keeps the field (${inboxKey.slice(0, 60)}…)`);
+    await p.close();
+
+    // ---- a classic quiz's essays: Writer's as tests, AI off; Canvas's backup and Submit Quiz carry each essay's words ----
+    p = await open('/courses/36/quizzes/56/take');
+    const essay = async (n) => {
+      const el = await until(async () => {
+        const f = (await p.evaluateHandle((i) => document.getElementById(`question_input_${i}`)?.closest('.textarea-question-holder')?.querySelector('iframe.gz-writer[data-gz-writer-frame="test"]'), n)).asElement();
+        return f && await f.evaluate((x) => !x.style.opacity && x.offsetHeight > 60) && f;
+      }, `essay ${n + 1} in Writer`);
+      const fr = await until(() => el.contentFrame(), `essay ${n + 1} frame document`);
+      await until(() => fr.evaluate(() => !!document.querySelector('.ProseMirror')), `essay ${n + 1} editor`);
+      return { el, fr };
+    };
+    const essays = [await essay(0), await essay(1)];
+    check(await p.evaluate(() => [...document.querySelectorAll('#submit_quiz_form .rce-wrapper')].slice(0, 2).every((w) => getComputedStyle(w).display === 'none' && w.previousElementSibling?.matches('iframe.gz-writer[data-gz-writer-frame="test"]'))), 'each essay Canvas has drawn: Writer stands in for its RCE, as a test');
+    check(await p.evaluate(() => !document.getElementById('question_input_2').dataset.rich_text && !document.querySelectorAll('.textarea-question-holder')[2].querySelector('iframe.gz-writer')), 'an essay whose RCE Canvas hasn\'t drawn yet is left alone');
+    const aiItem = (fr) => fr.evaluate(() => [...document.querySelectorAll('#menu [role="menuitem"]')].some((b) => b.textContent.startsWith('Check with AI')));
+    check(items.some((t) => t.startsWith('Check with AI')) && !await aiItem(essays[0].fr) && await essays[0].fr.evaluate(() => GZ_WRITER_FRAME.kind() === 'test' && !GZ_WRITER_AI.allowed('writing') && !GZ_WRITER_AI.allowed('completion') && !GZ_WRITER_AI.outlineInfo().available),
+      'AI off on a quiz essay: the assignment\'s ⋯ has Check with AI, the essay\'s hasn\'t, and no AI feature is allowed there');
+    await typeIn(p, essays[0], 'First essay: the river keeps the town\'s accounts.');
+    const backedUp = await until(async () => { const t = await writerText(essays[0].fr), b = await p.evaluate(() => __backups.at(-1)?.question_442); return b && squash(await p.evaluate((h) => new DOMParser().parseFromString(h, 'text/html').body.textContent, b)) === squash(t) && t.endsWith('accounts.') && b; }, 'the backup holds essay 1');
+    check(/<p>First essay: the river keeps the town(’|'|&rsquo;)s accounts\.<\/p>/.test(backedUp), `Canvas's answer backup (its change, get_code) carries Writer's text (${backedUp})`);
+    await p.evaluate(() => __drawLast());
+    essays.push(await essay(2));
+    check(true, 'the essay Canvas draws later (past maxInitRenderedRCEs) is Writer\'s once drawn');
+    await typeIn(p, essays[1], 'Second essay, its last words typed and submitted at once');
+    await typeIn(p, essays[2], 'Third essay, last words too');
+    await p.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
+    await pause(300);
+    check(await p.evaluate(() => __submits.length === 0), 'Ctrl/Cmd+Enter never submits a quiz');
+    await typeIn(p, essays[2], '!');
+    await p.evaluate(() => document.getElementById('submit_quiz_button').click());
+    await until(() => p.evaluate(() => __submits.length >= 1), 'Submit Quiz recorded');
+    await pause(300);
+    const quizSubs = await p.evaluate(() => __submits.slice()), inWriter = await Promise.all(essays.map((e) => writerText(e.fr)));
+    const asText = (h) => p.evaluate((x) => new DOMParser().parseFromString(x, 'text/html').body.textContent, h);
+    const got = await Promise.all(['question_442', 'question_446', 'question_447'].map(async (k) => squash(await asText(quizSubs[0].answers[k]))));
+    check(quizSubs.length === 1 && quizSubs[0].action === '/courses/36/quizzes/56/submissions?user_id=3', `one press, one Submit Quiz (${quizSubs.length}, ${quizSubs[0].action})`);
+    check(JSON.stringify(got) === JSON.stringify(inWriter.map(squash)) && got[2].endsWith('last words too!'), `Submit Quiz submits every essay's text as Writer holds it, last words included (${JSON.stringify(got)})`);
     await p.close();
 
     const sent = requests.filter((r) => r.method !== 'GET');
