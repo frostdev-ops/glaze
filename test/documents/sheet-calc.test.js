@@ -770,3 +770,16 @@ test('editing refuses duplicate and dotted LET locals without changing the cell'
   assert.equal(e.edit(1, 0, 0, '=LET(x,1,LET(x,2,x)+x)').error, undefined);
   assert.equal(val(e, 'A1'), 3, 'a nested LET can shadow its outer local');
 });
+
+// Criteria wildcards match in time linear in text × pattern, never by backtracking: a criteria of many stars against a long
+// cell returns at once.
+test('criteria wildcards: Excel\'s matching, and many stars against a long text return at once', () => {
+  const w = (p, v) => C.lib.wildcard(p)(v);
+  assert.equal(w('a?c', 'ABC'), true); assert.equal(w('a*', 'a'), true); assert.equal(w('*', ''), true); assert.equal(w('?', ''), false);
+  assert.equal(w('~*b', '*b'), true); assert.equal(w('~*b', 'ab'), false); assert.equal(w('a~?', 'a?'), true); assert.equal(w('ab~', 'ab'), true);
+  assert.equal(w('*b*d', 'abcd'), true); assert.equal(w('*b*d', 'abcde'), false); assert.equal(w('a.c', 'abc'), false); assert.equal(w('a', 1), false);
+  assert.equal(w('Ä*', 'äpfel'), true);
+  const t0 = Date.now();
+  assert.equal(w('*a'.repeat(12) + '*b', 'a'.repeat(80)), false);
+  assert.ok(Date.now() - t0 < 200, `${Date.now() - t0} ms`);
+});

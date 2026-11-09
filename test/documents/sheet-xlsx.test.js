@@ -983,3 +983,15 @@ test('review kept XML: a chart edit is read from its current bytes before tracke
   const p = await parts(await X.write(wb, { recalc: false }));
   assert.match(p['xl/charts/chart1.xml'], /<c:f>One!\$A\$2<\/c:f>/);
 });
+
+// A sheet's <col> ranges cover at most the sheet's columns (Excel never overlaps them): thousands of full-width ones in a
+// small crafted file are read only as far as that, so opening it can't freeze the tab.
+test('a sheet of thousands of overlapping full-width columns opens at once, and a real last range to XFD keeps its style', async () => {
+  const evil = '<col min="1" max="16384" width="9"/>'.repeat(20000);
+  const t0 = Date.now();
+  const wb = await X.read(synthetic({ 'xl/worksheets/sheet1.xml': SHEET1.replace('</cols>', `${evil}</cols>`) }));
+  assert.ok(Date.now() - t0 < 3000, `read in ${Date.now() - t0} ms`);
+  assert.ok(M.getSheet(wb, 'One'));
+  const real = await X.read(synthetic({ 'xl/worksheets/sheet1.xml': SHEET1.replace('</cols>', '<col min="6" max="16384" style="3"/></cols>') }));
+  assert.deepEqual(M.getSheet(real, 'One').keep.colAttrs.get(16383), { style: '3' });
+});
