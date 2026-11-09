@@ -259,3 +259,13 @@ test('giving the box back focuses Canvas\'s editor: the RCE\'s frame body, or th
   C.focus(inbox.editor);
   assert.equal(focused, 1);
 });
+
+test('a classic assignment\'s errors line: where Canvas says an empty box won\'t submit, outside the RCE', () => {
+  const body = drawn(page('assignment'));
+  const [box] = C.boxes(body, { path: AT.assignment });
+  const errors = C.errorsOf(box.editor);
+  assert.equal(errors?.id, 'body_errors');
+  assert.ok(!box.root.contains(errors));
+  const [reply] = C.boxes(drawn(page('discussion')), { path: AT.discussion });
+  assert.equal(C.errorsOf(reply.editor), null);
+});
