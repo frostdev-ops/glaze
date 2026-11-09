@@ -72,6 +72,29 @@ const REPLY = `(() => {
   box.querySelector('[data-testid="DiscussionEdit-submit"]').addEventListener('click', () => __entries.push(__state));
   box.querySelector('[data-testid="DiscussionEdit-cancel"]').addEventListener('click', () => { tinymce.get('message-body-root').remove(); box.remove(); });
 })();`;
+// The Inbox's compose dialog as captured, with React's part played here (MessageBody, ui/features/inbox): the body's
+// value tracked as React's inputValueTracking does, its state following onChange, Send sending that state (recorded here),
+// the signature appended to the state once it has loaded (1.5 s) and the field disabled while translating (__translate).
+// A course, a recipient and a subject are filled in, so the Inbox's own draft backup has a destination.
+const INBOX = fixture('canvas-writer-inbox.html').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, '')
+  .replace('</body>', '<script src="/gz-check/inbox.js"></script></body>');
+const MESSAGE = `(() => {
+  window.__sends = []; window.__body = '';
+  const ta = document.querySelector('#compose-message-modal textarea[data-testid="message-body"]');
+  const desc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+  let tracked = '';
+  Object.defineProperty(ta, 'value', { configurable: true, get() { return desc.get.call(this); }, set(v) { tracked = String(v); desc.set.call(this, v); } });
+  ta.addEventListener('input', () => { const now = desc.get.call(ta); if (now !== tracked) { tracked = now; __body = now; } });
+  const render = (v) => { __body = v; ta.value = v; }; // setBody, then React writes the value
+  setTimeout(() => render(__body + '\\n\\n---\\nSam Taylor'), 1500);
+  window.__translate = (on) => { ta.disabled = on; };
+  document.querySelector('[data-testid="send-button"]').addEventListener('click', () => __sends.push(__body));
+  const set = (sel, v) => { const i = document.querySelector(sel); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, v); };
+  set('input[data-testid="course-select-modal"]', 'ENG 1100');
+  set('input[data-testid="subject-input"]', 'Lab question');
+  const tag = document.createElement('span'); tag.setAttribute('data-testid', 'address-book-tag'); tag.id = 'address-book-label-2-user'; tag.textContent = 'Jordan Lee';
+  document.querySelector('input[data-testid="compose-modal-header-address-book-input"]').before(tag);
+})();`;
 // What Canvas does around an RCE, in the page (packages/canvas-rce RCEWrapper onInit, wrapInitCb, tinymce-react; the Text
 // Entry form's submit, ui/features/submit_assignment/jquery/index.jsx). ?html= puts that in the box first.
 const CANVAS = `(() => {
@@ -134,6 +157,9 @@ const CANVAS = `(() => {
       if (u.pathname.startsWith('/tinymce/') && bytes[f]) return r.fulfill({ contentType: 'text/javascript', body: bytes[f] });
       if (u.pathname === '/gz-check/canvas.js') return r.fulfill({ contentType: 'text/javascript', body: CANVAS });
       if (u.pathname === '/gz-check/discussion.js') return r.fulfill({ contentType: 'text/javascript', body: REPLY });
+      if (u.pathname === '/gz-check/inbox.js') return r.fulfill({ contentType: 'text/javascript', body: MESSAGE });
+      if (req.isNavigationRequest() && u.pathname === '/conversations') return r.fulfill({ contentType: 'text/html', body: INBOX });
+      if (u.pathname === '/api/v1/courses') return r.fulfill({ contentType: 'application/json', body: JSON.stringify([{ id: 34, name: 'ENG 1100', course_code: 'ENG 1100', enrollments: [{ type: 'student', user_id: 3 }] }]) });
       if (req.isNavigationRequest() && u.pathname === '/courses/34/discussion_topics/80') return r.fulfill({ contentType: 'text/html', body: DISCUSSION });
       if (req.isNavigationRequest() && u.pathname === '/courses/34/assignments/238') return r.fulfill({ contentType: 'text/html', body: ASSIGNMENT });
       if (req.isNavigationRequest()) return r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Blank</title>' });
@@ -352,6 +378,49 @@ const CANVAS = `(() => {
     await p.evaluate(() => document.querySelector('[data-testid="DiscussionEdit-cancel"]').click());
     await until(() => p.evaluate(() => !document.querySelector('iframe.gz-writer') && !document.querySelector('[data-gz-writer]')), 'Writer gone with the box');
     check(true, 'Cancel: the box and Writer\'s frame go together, nothing left behind');
+    await p.close();
+
+    // ---- the Inbox: plain text in, Canvas's signature followed, Send and Ctrl/Cmd+Enter send Writer's lines ----
+    await worker.evaluate(async () => { const all = await chrome.storage.local.get(null); await chrome.storage.local.remove(Object.keys(all).filter((k) => k.startsWith('draft:'))); });
+    p = await open('/conversations');
+    let m = await box(p, 'message');
+    check(await p.evaluate(() => { const ta = document.querySelector('#compose-message-modal textarea[data-testid="message-body"]'), field = ta.parentElement;
+      return getComputedStyle(field).display === 'none' && getComputedStyle(field.closest('label[data-cid="TextArea"]')).display !== 'none'; }), 'Writer stands in for the Inbox\'s field, inside its label, which stays shown for Canvas\'s messages');
+    check(await m.fr.evaluate(() => document.documentElement.dataset.dialect === 'plain' && ![...document.querySelectorAll('#menu [data-insert]')].length), 'plain text: no Insert from Canvas');
+    await until(async () => (await writerText(m.fr)).includes('Sam Taylor'), 'the signature in Writer');
+    check(true, 'Canvas\'s signature, added once loaded, shows in Writer');
+    await until(async () => {
+      await m.el.evaluate((f) => f.focus());
+      return m.fr.evaluate(() => { const v = GZ_WRITER_FRAME.editor().view; v.focus(); v.dispatch(v.state.tr.setSelection(GZ_PM.state.Selection.atStart(v.state.doc))); return !!document.activeElement?.closest('.ProseMirror'); });
+    }, 'the caret at the start');
+    await p.keyboard.type('Hello Jordan,', { delay: 0 });
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('**not bold** and "curled"', { delay: 0 });
+    await p.evaluate(() => document.querySelector('[data-testid="send-button"]').click());
+    await until(() => p.evaluate(() => __sends.length >= 1), 'Send pressed');
+    const lines = await p.evaluate(() => __sends.slice());
+    check(JSON.stringify(lines) === JSON.stringify(['Hello Jordan,\n**not bold** and “curled”\n\n---\nSam Taylor']), `Send sends Writer's lines as plain text, the signature kept, through React's own state (${JSON.stringify(lines)})`);
+    await p.evaluate(() => { __sends.length = 0; });
+    await m.fr.evaluate(() => GZ_WRITER_FRAME.editor().focus());
+    await p.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
+    await until(() => p.evaluate(() => __sends.length >= 1), 'sent with the keys');
+    check((await p.evaluate(() => __sends.length)) === 1, 'Ctrl/Cmd+Enter sends once');
+    // Translating: Canvas disables the field; the box is Canvas's until it is enabled again.
+    await p.evaluate(() => __translate(true));
+    await until(() => p.evaluate(() => !document.querySelector('iframe.gz-writer[data-gz-writer-frame="message"]')), 'Writer away while translating');
+    check(await p.evaluate(() => document.querySelector('#compose-message-modal textarea[data-testid="message-body"]').value.startsWith('Hello Jordan,')), 'a disabled field (translating) is Canvas\'s, holding Writer\'s text');
+    await p.evaluate(() => __translate(false));
+    m = await box(p, 'message');
+    check((await writerText(m.fr)).startsWith('Hello Jordan,'), 'enabled again: Writer back with the text');
+    // ⋯ → Canvas editor: the field back; its own draft backup keeps what is typed there.
+    await menu(m.fr);
+    await m.fr.click('#menu [data-do="native"]');
+    await until(() => p.evaluate(() => !document.querySelector('iframe.gz-writer') && getComputedStyle(document.querySelector('#compose-message-modal textarea[data-testid="message-body"]').parentElement).display !== 'none'), 'the field back');
+    await p.focus('#compose-message-modal textarea[data-testid="message-body"]');
+    await p.keyboard.press('End');
+    await p.keyboard.type(' Typed in Canvas\'s own field, kept by the draft backup.', { delay: 0 });
+    const inboxKey = await until(() => worker.evaluate(async () => { const all = await chrome.storage.local.get(null); return Object.entries(all).find(([k, v]) => (k.startsWith('draft:canvas:') || k.startsWith('draft:pending:draft%3Acanvas%3A')) && /kept by the draft backup/.test(v.put?.text ?? v.text ?? ''))?.[0]; }), 'the Inbox draft kept', 15000);
+    check(true, `after Canvas editor, the Inbox's own draft backup keeps the field (${inboxKey.slice(0, 60)}…)`);
     await p.close();
 
     const sent = requests.filter((r) => r.method !== 'GET');
