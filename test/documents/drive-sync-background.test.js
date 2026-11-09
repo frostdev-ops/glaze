@@ -284,3 +284,26 @@ test('a restarted worker\'s push run checks a document saved before it stopped, 
   assert.deepEqual(JSON.parse(JSON.stringify(r)), { ok: true });
   assert.deepEqual((await local.get('driveSyncDirty')).driveSyncDirty, {}, 'the mark let go');
 });
+
+test('a fresh install\'s daily snapshot keeps Notes and the Pet habitat on, as Settings shows them, and a saved switch as saved', async () => {
+  for (const saved of [undefined, false]) {
+    const { context, records, local } = worker();
+    const B = require('../../extension/background/backup.js');
+    Object.assign(context, {
+      GZ_BACKUP: B, GZ_TODO: require('../../extension/planner/todo.js'), GZ_PET: require('../../extension/pet/pet.js'), GZ_SANITIZE: require('../../extension/content/defaults.js').GZ_SANITIZE,
+      GZ_HISTORY: require('../../extension/looks/history.js'), GZ_ZIP: require('../../extension/core/zip.js'), GZ_DOC_KINDS: require('../../extension/documents/doc-kinds.js'),
+      GZ_FOLDERS: require('../../extension/courses/folders.js'), Blob, URL,
+    });
+    context.chrome.runtime.getManifest = () => ({ version: '4.0.6' });
+    context.openDocFiles = () => ({ read: async () => { throw new Error('no files'); } });
+    const get = local.get;
+    local.get = async (k) => (k === null ? Object.fromEntries(await Promise.all((await local.getKeys()).map(async (x) => [x, (await get(x))[x]]))) : get(k));
+    await local.set({ freshDefaults: { fresh: true, pending: false } });
+    if (saved === false) await context.chrome.storage.sync.set({ enhance: { notes: false, pet: false } });
+    const made = await records.snapshot();
+    const r = await B.read(Object.assign(new Blob([made.bytes]), { name: made.name }));
+    const { enhance } = JSON.parse(await r.zip.text('glaze-backup.json')).settings;
+    const want = saved ?? true;
+    assert.deepEqual([enhance.notes, enhance.pet], [want, want], saved === false ? 'switches the student turned off' : 'never-touched switches on');
+  }
+});
