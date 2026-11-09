@@ -52,3 +52,12 @@ test('the submission panel joins the first tab at the start corner in either dir
   assert.match(panel, /border-radius:\s*var\(--gz-radius\)\s*;/);
   assert.match(panel, /border-start-start-radius:\s*0\s*;/);
 });
+
+// Canvas's modules script marks the last item the pointer or focus touched with context_module_item_hover and only takes it
+// off when another item is touched (ui/shared/context-modules/jquery/index.jsx), painting it #fff
+// (content_next.scss). The row the cursor left must stay on the palette, as a hovered one does.
+test('a module item Canvas keeps marked as hovered after the pointer leaves stays on the palette', () => {
+  const hit = rules.find(([s]) => /li\.context_module_item:is\([^)]*\.context_module_item_hover/.test(s));
+  assert.ok(hit, 'the sticky hover class is covered');
+  assert.match(hit[1], /background:\s*transparent\s*!important/);
+});
