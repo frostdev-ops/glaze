@@ -201,6 +201,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // A crashed or navigated frame gets a fresh one-use channel, initialized from Writer's buffered document.
   const retire = (box) => {
     endFlush(box);
+    clearTimeout(box.flushWait?.timer);
+    box.flushWait = null;
     box.askBinding = null;
     if (activeCurrent?.box === box) activeCurrent = null;
     if (pinnedCurrent?.box === box) pinnedCurrent = null;
@@ -450,12 +452,13 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     };
     if (!box.ready || !box.port) { go(sync(box, box.latest, null)); return; }
     const request = crypto.randomUUID();
-    box.flushWait = { request, go, timer: setTimeout(() => { if (box.flushWait?.request === request) go(false); }, FLUSH_WAIT) };
+    box.flushWait = { request, go, at: Date.now(), timer: setTimeout(() => { if (box.flushWait?.request === request) go(false); }, FLUSH_WAIT) };
     box.port.postMessage({ type: 'flush', request });
   };
   const flushed = (box, m) => {
     const w = box.flushWait;
     if (!w || m.request !== w.request) return;
+    if (Date.now() - w.at >= FLUSH_WAIT) { w.go(false); return; }
     w.go(typeof m.html === 'string' && sync(box, m.html, null));
   };
   // ⋯ → Insert from Canvas: the box goes back to Canvas with Writer's text, and Canvas's tool runs at its end.
