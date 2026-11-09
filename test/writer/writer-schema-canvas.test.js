@@ -165,3 +165,9 @@ test('plain mode refuses takeover when its input cannot be parsed within the sch
     assert.deepEqual(S.loses(PL, html), ['limit']);
   }
 });
+
+test('Canvas\'s empty reply caret marker (DiscussionEdit positionCursor\'s span.post_mention) is no mention: kept as nothing', () => {
+  assert.deepEqual(S.loses(K, '<p>Hi<br data-mce-bogus="1"><span class="post_mention"></span></p>'), []);
+  assert.equal(out('<p>Hi<span class="post_mention"></span></p>'), '<p>Hi</p>');
+  assert.deepEqual(S.loses(K, '<p><span class="post_mention">@Kim</span></p>'), ['mention'], 'one holding text is');
+});
