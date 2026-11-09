@@ -168,7 +168,7 @@ const frame = ({ claim = true, host = 'https://school.blackboard.com', readyStat
   doc.querySelector = (s) => doc.root.querySelector(s);
   doc.addEventListener = () => {};
   doc.createElement = (t) => new El(t, doc);
-  const listeners = [], loads = [], ticks = [], asked = [], made = [], announced = [], lost = [];
+  const listeners = [], loads = [], ticks = [], asked = [], made = [], announced = [], lost = [], blurs = [];
   const editor = (opts) => {
     let html = opts.html;
     const ed = { opts, set: [], focused: 0, view: { state: { doc: 'the doc' } }, html: () => html, words: () => (html.replace(/<[^>]*>/g, ' ').match(/\S+/g) || []).length, setHTML: (h) => { ed.set.push(h); html = h; opts.onChange({ html: h, text: h, words: 1, docChanged: true }); }, focus: () => { ed.focused++; }, run: () => true, active: () => ({}) };
@@ -181,7 +181,7 @@ const frame = ({ claim = true, host = 'https://school.blackboard.com', readyStat
     parent: { postMessage: (data, origin) => announced.push({ data, origin }) },
     setTimeout: (fn) => ticks.push(fn),
     ResizeObserver: class { observe() {} },
-    addEventListener: (type, f) => { if (type === 'message') listeners.push(f); else if (type === 'load') loads.push(f); },
+    addEventListener: (type, f) => { if (type === 'message') listeners.push(f); else if (type === 'load') loads.push(f); else if (type === 'blur') blurs.push(f); },
     chrome: { runtime: { sendMessage: async (m) => { asked.push(m); return { ok: claim }; } } },
     GZ_WRITER_EDITOR: { create: editor },
     // writer/writer-schema.js as the frame uses it: compose's ops for a doc, and what a box holds that compose can't keep.
@@ -195,7 +195,7 @@ const frame = ({ claim = true, host = 'https://school.blackboard.com', readyStat
   const to = (p, m) => p.onmessage({ data: m });
   const loaded = () => { for (const f of loads) f(); };
   const tick = () => { for (const f of ticks.splice(0)) f(); };
-  return { doc, hand, to, asked, made, ctx, announced, loaded, tick, lost };
+  return { doc, hand, to, asked, made, ctx, announced, loaded, tick, lost, blurs };
 };
 const INIT = { type: 'init', mode: 'compose', kind: 'reply', html: '<p>Hi there</p>', placeholder: 'Type a reply', context: { post: { id: '_201_1' } }, locale: 'en',
   look: { tokens: { '--gz-accent': '#17c8f4', '--gz-font': '"Glaze Inter", sans-serif', '--gz-bad': 'url(https://x.test/a)', '--other': 'red', '--gz-ink': 'red;}body{' }, dark: true, motion: 'off' } };
@@ -452,4 +452,12 @@ test('frame: a copy Glaze kept is offered at the top: Restore puts it in and tel
   const f = frame({ host: 'https://school.instructure.com' }), p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
   f.to(p, { ...CANVAS, offer: { html: 7, text: 'x' } });
   assert.equal(f.doc.getElementById('gw').querySelector('.gw-offer'), null, 'no offer without its document');
+});
+
+test('frame: losing the focus is said to the page, which takes it back from a hidden native editor', async () => {
+  const f = frame({ host: 'https://school.instructure.com' }), p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+  f.to(p, CANVAS);
+  p.sent.length = 0;
+  for (const fn of f.blurs) fn();
+  assert.deepEqual(p.sent, [{ type: 'blur' }]);
 });

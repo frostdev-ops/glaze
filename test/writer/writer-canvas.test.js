@@ -273,11 +273,3 @@ test('a classic assignment\'s errors line: where Canvas says an empty box won\'t
 test('Canvas focuses a reply box once it is up (DiscussionEdit, 1000 ms after init): Writer takes the caret there; the rest wait for a click', () => {
   assert.deepEqual(C.KINDS.map((k) => [k, C.focuses(k)]), [['assignment', false], ['reply', true], ['message', false], ['test', false], ['unknown', false]]);
 });
-
-test('the RCE\'s own document, where Canvas\'s focus lands though Writer hides it', () => {
-  const body = drawn(page('assignment'));
-  const [box] = C.boxes(body, { path: AT.assignment });
-  assert.equal(C.docOf(box.editor), body.querySelector('#submission_body_ifr').contentDocument);
-  const [inbox] = C.boxes(page('inbox'), { path: AT.inbox });
-  assert.equal(C.docOf(inbox.editor), null);
-});
