@@ -2809,6 +2809,10 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     return out;
   };
   const take = (b, ordered, level, out, o) => {
+    if (o.canvas && ['BLOCKQUOTE', 'PRE'].includes(b.nodeName)) {
+      o.lost.add('format'); // flat list items cannot keep a quote or code block
+      if (b.nodeName === 'BLOCKQUOTE') { for (const c of b.childNodes) take(c, ordered, level, out, o); return; }
+    }
     if (b.nodeName === 'UL' || b.nodeName === 'OL') {
       for (const li of b.childNodes) out.push({ ordered: b.nodeName === 'OL', li: blockClass(li, clamp(indentOf(li) + level + 1, 0, MAX_INDENT), alignOf(li)) });
     } else if (b.nodeName === 'PRE' || b.nodeName === 'HR' || b.nodeName === 'TABLE' || b.nodeName === 'BLOCKQUOTE') {
