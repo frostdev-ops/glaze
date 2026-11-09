@@ -232,14 +232,31 @@ test('its native editor is Canvas\'s, and it has no Ultra attempt pages', () => 
   assert.deepEqual(C.KINDS, ['assignment', 'reply', 'message', 'test', 'unknown']);
 });
 
-test('the surfaces Writer opens on now: classic assignments, replies and the Inbox; quiz essays and Assignments 2 wait for their steps', () => {
+test('the surfaces Writer opens on now: classic assignments, replies, the Inbox and quiz essays; Assignments 2 waits for its step', () => {
   const [assignment] = C.boxes(drawn(page('assignment')), { path: AT.assignment });
   const [reply] = C.boxes(drawn(page('discussion')), { path: AT.discussion });
   const [message] = C.boxes(page('inbox'), { path: AT.inbox });
   const [quiz] = C.boxes(drawn(page('quiz')), { path: AT.quiz });
   const [a2] = C.boxes(drawn(page('a2')), { path: AT.a2 });
   assert.deepEqual([assignment, reply, message, quiz, a2].map((b) => [b.kind, C.live(b)]),
-    [['assignment', true], ['reply', true], ['message', true], ['test', false], ['assignment', false]]);
+    [['assignment', true], ['reply', true], ['message', true], ['test', true], ['assignment', false]]);
+});
+
+// One question at a time, Canvas's Next and Previous record the answer (record_answer) as Submit Quiz does: each holds the
+// box's last words too. The Next button is copied from the local Canvas's quiz 57 (one question at a time, 2026-11-09).
+const NEXT = '<button type="submit" class="Button submit_button next-question btn-secondary" data-action="/courses/36/quizzes/57/submissions/133/record_answer?next_question_path=%2Fcourses%2F36%2Fquizzes%2F57%2Ftake%2Fquestions%2F449&amp;user_id=3" aria-label="Next Question">Next</button>';
+test('a quiz essay is sent by every button that records its answer: Submit Quiz, and Next or Previous one question at a time', () => {
+  const raw2 = raw('canvas-writer-quiz.html').replace('<button type="submit" class="btn submit_button quiz_submit btn-secondary" id="submit_quiz_button"', `${NEXT}$&`);
+  const doc = { activeElement: null }; doc.root = new El('html', doc); const body = drawn(parse(raw2, doc));
+  const boxes = C.boxes(body, { path: '/courses/36/quizzes/57/take/questions/448' });
+  assert.equal(boxes.length, 2);
+  for (const b of boxes) assert.deepEqual(C.sends(b.editor, b.kind).map((x) => x.id || x.getAttribute('aria-label')), ['Next Question', 'submit_quiz_button']);
+  const quiz = drawn(page('quiz')), [q] = C.boxes(quiz, { path: AT.quiz });
+  assert.deepEqual(C.sends(q.editor, q.kind).map((x) => x.id), ['submit_quiz_button'], 'all questions on one page: Submit Quiz only (the times-up dialog\'s button records nothing)');
+  const [assignment] = C.boxes(drawn(page('assignment')), { path: AT.assignment });
+  assert.deepEqual(C.sends(assignment.editor, assignment.kind), [assignment.send], 'every other box: its one send');
+  const [message] = C.boxes(page('inbox'), { path: AT.inbox });
+  assert.deepEqual(C.sends(message.editor, message.kind), [message.send]);
 });
 
 test('a send on Canvas waits for the frame\'s last words; Insert from Canvas runs Canvas\'s own tools', () => {

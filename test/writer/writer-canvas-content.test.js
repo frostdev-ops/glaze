@@ -39,7 +39,7 @@ const page = async ({ fixture = 'discussion', helper = 'ok' } = {}) => {
     if (tag === 'iframe') el.contentWindow = { postMessage() {} };
     return el;
   };
-  const location = { origin: 'https://canvas.school.test', host: 'canvas.school.test', pathname: fixture === 'inbox' ? '/conversations' : fixture === 'assignment' ? '/courses/34/assignments/238' : '/courses/34/discussion_topics/80' };
+  const location = { origin: 'https://canvas.school.test', host: 'canvas.school.test', pathname: fixture === 'inbox' ? '/conversations' : fixture === 'assignment' ? '/courses/34/assignments/238' : fixture === 'quiz' ? '/courses/36/quizzes/56/take' : '/courses/34/discussion_topics/80' };
   const destination = { subject: 'First subject', name: 'Course', to: ['address-book-label-2-user'] };
   class Clock extends Date { static now() { return now; } }
   const ctx = vm.createContext({
@@ -179,4 +179,63 @@ test('Canvas: disabling an Inbox field cannot discard Writer\'s only unsynced co
   c.box().editor.disabled = true; // Canvas disables this field while translating.
   c.tick(500);
   assert.equal(c.doc.querySelector('[data-gz-writer-recovery]')?.value, 'These words exist only in Writer.', 'failed synchronization must leave the text available even when draft backup is off');
+});
+
+// A classic quiz: an essay per RCE Canvas has drawn, all sent by one Submit Quiz (and, one question at a time, by Next and
+// Previous), which the timer may also press with no click. Every essay's last words go in before Canvas's button does.
+const quizFrames = (c) => c.ports.filter((p) => p.started && !p.closed);
+const flushAll = (c, html = (i) => `<p>Essay ${i + 1}, last words.</p>`) => quizFrames(c).forEach((p, i) => {
+  const request = p.sent.filter((m) => m.type === 'flush').at(-1)?.request;
+  assert.ok(request, `essay ${i + 1} asked for its document`);
+  c.emit({ type: 'flushed', request, html: html(i) }, p);
+});
+test('Canvas quiz: Writer opens on each drawn essay as a test, and Ctrl/Cmd+Enter never submits the quiz', async () => {
+  const c = await page({ fixture: 'quiz' });
+  const frames = c.doc.querySelectorAll('iframe.gz-writer');
+  assert.deepEqual(frames.map((f) => f.getAttribute('data-gz-writer-frame')), ['test', 'test']);
+  assert.deepEqual(quizFrames(c).map((p) => [p.sent.find((m) => m.type === 'init')?.kind, p.sent.find((m) => m.type === 'init')?.site]), [['test', 'canvas'], ['test', 'canvas']]);
+  c.emit({ type: 'change', html: '<p>An answer.</p>', text: 'An answer.' }, quizFrames(c)[0]);
+  assert.equal(c.ctx.GZ_WRITER_CANVAS.read(c.doc.querySelector('#question_input_0')).text, 'An answer.', 'each change goes into Canvas\'s editor at once');
+  c.emit({ type: 'send' }, quizFrames(c)[0]);
+  assert.equal(c.clicks.length, 0);
+  assert.ok(!quizFrames(c)[0].sent.some((m) => m.type === 'flush'), 'the keys ask nothing of the frame');
+});
+test('Canvas quiz: Submit Quiz waits for every essay\'s frame, then goes once with all their words', async () => {
+  const c = await page({ fixture: 'quiz' });
+  const submit = c.doc.querySelector('#submit_quiz_button');
+  c.press(submit);
+  assert.equal(c.clicks.length, 0, 'held');
+  const [first, second] = quizFrames(c);
+  c.emit({ type: 'flushed', request: first.sent.filter((m) => m.type === 'flush').at(-1).request, html: '<p>Essay 1, last words.</p>' }, first);
+  assert.equal(c.clicks.length, 0, 'one essay in: still waiting for the other');
+  c.emit({ type: 'flushed', request: second.sent.filter((m) => m.type === 'flush').at(-1).request, html: '<p>Essay 2, last words.</p>' }, second);
+  assert.deepEqual(c.clicks, [submit], 'both in: Submit Quiz goes once');
+  assert.deepEqual(['#question_input_0', '#question_input_4'].map((id) => c.ctx.GZ_WRITER_CANVAS.read(c.doc.querySelector(id)).text), ['Essay 1, last words.', 'Essay 2, last words.']);
+  c.press(submit); flushAll(c);
+  assert.equal(c.clicks.length, 2, 'a quiz stays on its page after a refused submit: a second press goes again');
+});
+test('Canvas quiz: an essay Canvas\'s editor won\'t take holds Submit Quiz, and that frame says so', async () => {
+  const c = await page({ fixture: 'quiz' });
+  c.press(c.doc.querySelector('#submit_quiz_button'));
+  c.helper('fail'); flushAll(c);
+  assert.equal(c.clicks.length, 0);
+  assert.ok(quizFrames(c).every((p) => p.sent.at(-1).type === 'held'));
+  c.helper('ok');
+  const [first] = quizFrames(c);
+  c.press(c.doc.querySelector('#submit_quiz_button'));
+  first.onmessage({ data: { type: 'flushed', request: first.sent.filter((m) => m.type === 'flush').at(-1).request, html: '<p>One.</p>' } });
+  c.tick(3000);
+  assert.equal(c.clicks.length, 0, 'a frame that never answers holds it too');
+});
+test('Canvas quiz, one question at a time: Next records the answer, so it waits for the essay\'s last words too', async () => {
+  const c = await page({ fixture: 'quiz' });
+  const submit = c.doc.querySelector('#submit_quiz_button'), next = c.doc.createElement('button');
+  next.setAttribute('type', 'submit'); next.className = 'Button submit_button next-question btn-secondary';
+  next.setAttribute('data-action', '/courses/36/quizzes/57/submissions/133/record_answer?next_question_path=%2Fcourses%2F36%2Fquizzes%2F57%2Ftake%2Fquestions%2F449&user_id=3');
+  next.setAttribute('aria-label', 'Next Question');
+  submit.before(next);
+  c.press(next);
+  assert.equal(c.clicks.length, 0);
+  flushAll(c);
+  assert.deepEqual(c.clicks, [next]);
 });

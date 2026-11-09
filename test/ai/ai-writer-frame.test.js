@@ -8,7 +8,7 @@ const flush = async () => { for (let i = 0; i < 8; i++) await new Promise(setImm
 const until = async (f, ms = 2000) => { const t = Date.now(); while (!f() && Date.now() - t < ms) await new Promise((r) => setTimeout(r, 5)); return f(); };
 const plain = (v) => JSON.parse(JSON.stringify(v));
 // pace: how many times faster than real time the frame's timers run.
-function frame({ answer = () => ({ allowed: true, ready: true }), settings: start, context: initialContext = { kind: 'reply' }, clock, mode = 'compose', format, look, pace = 1, hidden = false, safari = false } = {}) {
+function frame({ answer = () => ({ allowed: true, ready: true }), settings: start, context: initialContext = { kind: 'reply' }, kind = 'reply', clock, mode = 'compose', format, look, pace = 1, hidden = false, safari = false } = {}) {
   class Element {
     constructor() { this.style = {}; this.attrs = {}; this.children = []; this.hidden = false; this.listeners = {}; }
     get textContent() { return (this.text || '') + this.children.map((c) => (c && typeof c === 'object' ? c.textContent : String(c))).join(' '); }
@@ -20,7 +20,7 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
     addEventListener(type, f) { this.listeners[type] = f; } remove() {} contains() { return false; } focus() {}
     querySelector() { return null; }
   }
-  const hooks = {}, sent = [], receives = [], pendingStatus = [], pendingRun = [], said = [], ports = [];
+  const hooks = {}, sent = [], receives = [], pendingStatus = [], pendingRun = [], said = [], ports = [], items = [];
   let ctx = initialContext, settings = start || { on: true, use: 'main', features: { completion: true, writing: true } }, holdStatus = false;
   const opened = [], messages = [];
   const doc = { content: { size: 10 }, textBetween: () => 'draft words' };
@@ -32,8 +32,8 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
     GZ_WRITER_SCHEMA: { text: () => ({ text: 'draft words', posAt: (v) => v }) }, GZ_WRITER_PROOF: {},
     GZ_AI_WRITER: require('../../extension/ai/tasks/writer-context.js'), GZ_WRITER_SOURCES: require('../../extension/writer/writer-sources.js'),
     GZ_WRITER_PAPER: format ? { current: () => ({ format: () => format, ...(look && { look }) }) } : undefined,
-    GZ_WRITER_FRAME: { t: (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (v && k in v ? v[k] : m)), kind: () => 'reply', context: () => ctx, editor: () => ed, mode: () => mode,
-      on: (ev, f) => { hooks[ev] = f; }, handle: (type, f) => { hooks[`page:${type}`] = f; }, say: (m) => said.push(m), plugin(p) { hooks.plugin = p.spec; }, slot: () => new Element(), item: () => new Element() },
+    GZ_WRITER_FRAME: { t: (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (v && k in v ? v[k] : m)), kind: () => kind, context: () => ctx, editor: () => ed, mode: () => mode,
+      on: (ev, f) => { hooks[ev] = f; }, handle: (type, f) => { hooks[`page:${type}`] = f; }, say: (m) => said.push(m), plugin(p) { hooks.plugin = p.spec; }, slot: () => new Element(), item: (label) => { items.push(label); return new Element(); } },
     chrome: { storage: { local: { get: async () => ({ ai: structuredClone(settings) }), set: async ({ ai }) => { settings = structuredClone(ai); hooks.storage({ ai: { newValue: settings } }, 'local'); } }, onChanged: { addListener(f) { hooks.storage = f; } } }, runtime: { connect() {
       const p = { retired: false, disconnected: false, messages: [], receive: null,
         onMessage: { addListener: (f) => { receives.push(f); p.receive = f; } }, onDisconnect: { addListener(f) { p.disconnectedListener = f; } },
@@ -56,7 +56,7 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
   const ai = sandbox.GZ_WRITER_AI;
   const panel = (opts) => { const host = new Element(); return sandbox.GZ_WRITER_AI.feedbackView(host, opts); };
   const pane = (opts) => panel(opts).el;
-  return { ai, sent, said, pendingStatus, pendingRun, reply, hooks, opened, messages, pane, panel, interaction, ports, proof: sandbox.GZ_WRITER_PROOF,
+  return { ai, items, sent, said, pendingStatus, pendingRun, reply, hooks, opened, messages, pane, panel, interaction, ports, proof: sandbox.GZ_WRITER_PROOF,
     start: async () => { hooks.ready(); await flush(); },
     off: () => { settings.on = false; hooks.storage({ ai: { newValue: structuredClone(settings) } }, 'local'); },
     context: (c) => { ctx = c; hooks.context(c); }, hold: () => { holdStatus = true; },
@@ -778,4 +778,21 @@ test('the gray text waits Advanced\'s pause when the student set one, else its o
   assert.equal(W.wait({ mode: 'simple', tune: { completion: { pause: 350 } } }, 0.5), W.pause(0.5));
   assert.equal(W.wait({ mode: 'advanced', tune: { completion: { pause: 99999 } } }, 0.5), W.pause(0.5), 'only within ai/settings.js TUNE');
   assert.equal(W.wait(null, 0.5), W.pause(0.5));
+});
+
+// Owner decision D3 (2026-11-09): Writer on a Canvas quiz's essays with AI off, proofing on. The page opens each essay as
+// kind 'test' (writer/writer-canvas.js); the worker refuses any AI asked from a quiz-take page (test/ai/ai-worker.test.js).
+test('a Canvas quiz essay (kind test): no AI is asked, offered or run, even with every AI feature on', async () => {
+  const f = frame({ kind: 'test', context: {} }); await f.start();
+  assert.equal(f.ports.length, 0, 'no AI port opened');
+  assert.equal(f.sent.length, 0, 'no status, warm or run asked');
+  assert.deepEqual(f.items, [], 'no Check with AI in the menu');
+  assert.equal(f.hooks.plugin, undefined, 'no gray text');
+  for (const feature of ['completion', 'writing']) assert.equal(f.ai.allowed(feature), false, feature);
+  assert.equal(await f.ai.requirements('Write 250 words.'), null);
+  assert.equal(await f.ai.cite({ text: 'A title' }), null);
+  assert.equal(await f.ai.outline({ text: 'x' }), null);
+  assert.equal(f.ai.outlineInfo().available, false);
+  await f.ai.review(); await f.ai.feedback(); await flush();
+  assert.equal(f.sent.some((m) => m.op === 'run' || m.op === 'status'), false, 'Check with AI and Feedback, called anyway, ask nothing');
 });
