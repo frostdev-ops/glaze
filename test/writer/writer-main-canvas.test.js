@@ -99,6 +99,21 @@ test('set refuses anything outside Canvas\'s dialect, and every box it can\'t be
   }
 });
 
+test('set accepts schema links whose escaped attribute is longer than their valid URL', () => {
+  const S = require('../../extension/writer/writer-schema.js');
+  const p = pageWorld();
+  p.run();
+  const href = `https://e.com/?${'a&'.repeat(800)}`;
+  const doc = S.canvas.nodes.doc.create(null, S.canvas.nodes.paragraph.create(null,
+    S.canvas.text('link', [S.canvas.marks.link.create({ href })])));
+  const html = S.serialize(S.canvas, doc);
+  assert.ok(href.length < 2048 && html.length > 2048);
+  assert.equal(p.ask('canvas-set', { id: 'gzw-1', html })[0].ok, true);
+  assert.equal(p.calls[0][2], html);
+  const tooLong = `<p><a href="https://e.com/${'&amp;'.repeat(2048)}">link</a></p>`;
+  assert.equal(p.ask('canvas-set', { id: 'gzw-1', html: tooLong })[0].ok, false);
+});
+
 test('exec runs only Canvas\'s Insert tools, with the caret at the end of the box', () => {
   const p = pageWorld();
   p.run();
