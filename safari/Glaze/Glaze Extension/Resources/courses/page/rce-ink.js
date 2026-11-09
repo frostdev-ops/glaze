@@ -9,10 +9,10 @@ var GZ_RCE_INK = globalThis.GZ_RCE_INK || (() => {
   if (!ctx) return null;
   const ID = 'gz-rce-ink';
   const FRAMES = 'iframe.tox-edit-area__iframe';
-  const VARS = ['--gz-surface', '--gz-surface-paint', '--gz-ink', '--gz-ink-faint', '--gz-accent', '--gz-accent-soft'];
+  const VARS = ['--gz-surface', '--gz-surface-paint', '--gz-surface-color', '--gz-surface-tint-strength', '--gz-surface-course', '--gz-surface-course-weight', '--gz-ink', '--gz-ink-faint', '--gz-accent', '--gz-accent-soft'];
   const html = document.documentElement;
-  const known = new WeakSet();
-  let watch = null, frame = 0, key = '', css = '';
+  const known = new Set();
+  let active = false, watch = null, frame = 0, key = '', css = '';
   // The palette as content.js wrote it on <html>, and whether it is dark: the sheet is built again only when that changes,
   // not for the other variables <html> carries (a course tab's frame writes its viewport there as it scrolls).
   const keyNow = () => VARS.map((v) => html.style.getPropertyValue(v)).join('|') + html.hasAttribute('data-gz-dark-theme');
@@ -27,8 +27,11 @@ var GZ_RCE_INK = globalThis.GZ_RCE_INK || (() => {
     probe.remove();
     const dark = html.hasAttribute('data-gz-dark-theme');
     const body = 'body.mce-content-body';
+    // Canvas's color picker compares its hex text color to this native default. Paint the surface on html only:
+    // a body fill would look like an authored highlight when the picker reads a selection rooted at the body.
+    const defaultInk = html.style.getPropertyValue('--gz-ink').trim().toLowerCase();
     return `html{color-scheme:${dark ? 'dark' : 'light'};background:${surface}}`
-      + `${body}{background:${surface}!important;color:${ink}!important}${body} a{color:${accent}}`
+      + `${body}{--ic-brand-font-color-dark:${defaultInk};background:transparent!important;color:${ink}!important}${body} a{color:${accent}}`
       + `${body} ::selection{background:${soft};color:${ink}}${body}[data-mce-placeholder]:not(.mce-visualblocks)::before{color:${faint}}`
       + (dark ? `${body} [style*="color"]{-webkit-text-fill-color:oklch(from currentColor max(l, 0.78) c h)}${body} [style*="background-color"]{-webkit-text-fill-color:#14181f}` : '');
   };
@@ -36,18 +39,21 @@ var GZ_RCE_INK = globalThis.GZ_RCE_INK || (() => {
     let doc = null;
     try { doc = f.contentDocument; } catch { return; }
     if (!doc?.head) return;
-    let el = doc.getElementById(ID);
+    let el = doc.head.querySelector(`style#${ID}`);
     if (!text) { el?.remove(); return; }
     if (!el) { el = doc.createElement('style'); el.id = ID; }
     if (el.textContent !== text) el.textContent = text;
     // Last in the head, after the content CSS TinyMCE adds as it starts.
     if (doc.head.lastElementChild !== el) doc.head.append(el);
   };
-  const later = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; sync(); }); };
+  const release = (f) => { f.removeEventListener('load', later); ink(f, ''); known.delete(f); };
+  const later = () => { if (active && !frame) frame = requestAnimationFrame(() => { frame = 0; if (active) sync(); }); };
   const sync = () => {
     if (!ctx.on()) return off();
-    const frames = document.querySelectorAll(FRAMES);
-    if (!frames.length) return;
+    const frames = new Set(document.querySelectorAll(FRAMES));
+    for (const f of known) if (!frames.has(f)) release(f);
+    if (!frames.size) return off();
+    active = true;
     const now = keyNow();
     if (now !== key) { key = now; css = sheet(); }
     for (const f of frames) {
@@ -57,9 +63,10 @@ var GZ_RCE_INK = globalThis.GZ_RCE_INK || (() => {
     if (!watch) { watch = new MutationObserver(later); watch.observe(html, { attributes: true, attributeFilter: ['style', 'data-gz-dark-theme'] }); }
   };
   const off = () => {
+    active = false;
     watch?.disconnect(); watch = null;
     cancelAnimationFrame(frame); frame = 0; key = '';
-    for (const f of document.querySelectorAll(FRAMES)) ink(f, '');
+    for (const f of known) release(f);
   };
   return { sync, off };
 })();
