@@ -153,3 +153,22 @@ test('Canvas: a remount at the same destination keeps its unsynced words', async
   assert.equal(c.ports.at(-1).sent.find((m) => m.type === 'init').html, '<p>Private unsynced words.</p>');
   assert.equal(c.ctx.GZ_WRITER_CANVAS.read(c.box().editor).text, 'Private unsynced words.');
 });
+
+test('Canvas: changing Inbox recipients while a send is held requires a new press', async () => {
+  const c = await page({ fixture: 'inbox' });
+  c.emit({ type: 'change', html: '<p>Private message.</p>', text: 'Private message.' });
+  c.press(c.box().send);
+  c.destination.to = ['address-book-label-9-user'];
+  c.flush('<p>Private message.</p>');
+  assert.equal(c.clicks.length, 0, 'a press addressed to one recipient cannot send to another after the asynchronous flush');
+  c.press(c.box().send); c.flush('<p>Private message.</p>');
+  assert.equal(c.clicks.length, 1, 'the student can explicitly send to the new destination');
+});
+
+test('Canvas: a held send cannot replay a connected button that is no longer this box\'s send', async () => {
+  const c = await page({ fixture: 'inbox' }), button = c.box().send;
+  c.press(button);
+  button.removeAttribute('data-testid');
+  c.flush();
+  assert.equal(c.clicks.length, 0, 'being connected and enabled does not establish the button\'s current action');
+});
