@@ -9,6 +9,7 @@ All notable changes to Glaze are documented here. The format follows
 ### Fixed
 
 - Typing `/` with a switch or choice focused opens Settings search again.
+- Google Drive's daily backup keeps Notes and the Pet habitat on for a new install, so restoring it no longer turns them off.
 
 ## [4.0.6] — 2026-11-09
 

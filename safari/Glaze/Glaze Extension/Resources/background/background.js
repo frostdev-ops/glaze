@@ -4058,7 +4058,7 @@ const openDriveSync = () => {
       const all = await chrome.storage.local.get(null), raw = await chrome.storage.sync.get(null);
       const tasks = Object.fromEntries(Object.entries(all).filter(([k]) => GZ_TODO.STORE_KEY.test(k)));
       const pets = GZ_PET.backup(Object.fromEntries(Object.entries(all).filter(([k]) => GZ_PET.KEY.test(k)))) || {};
-      const s0 = GZ_SANITIZE(raw);
+      const s0 = GZ_SANITIZE(raw, all.freshDefaults?.fresh === true);
       const settings = { ...s0, nav: { ...s0.nav, i: '', li: '', ...(s0.nav?.li && { brand: 'glaze' }), ...(s0.nav?.i && { k: 'default', u: '' }) }, navbar: { ...s0.navbar, ...(s0.navbar?.brand === 'custom' && { brand: 'glaze' }) },
         ...Object.fromEntries(['cards', 'links', 'ucards', 'ulinks', 'navItems', 'navbarItems'].filter((k) => raw[k] !== undefined).map((k) => [k, raw[k]])),
         folders: GZ_FOLDERS.backup(all), favorites: GZ_HISTORY.favorites(all.lookFavorites) };

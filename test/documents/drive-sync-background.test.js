@@ -299,7 +299,9 @@ test('a fresh install\'s daily snapshot keeps Notes and the Pet habitat on, as S
     const get = local.get;
     local.get = async (k) => (k === null ? Object.fromEntries(await Promise.all((await local.getKeys()).map(async (x) => [x, (await get(x))[x]]))) : get(k));
     await local.set({ freshDefaults: { fresh: true, pending: false } });
-    if (saved === false) await context.chrome.storage.sync.set({ enhance: { notes: false, pet: false } });
+    const sync = context.chrome.storage.sync, sget = sync.get;
+    sync.get = async (k) => (k === null ? Object.fromEntries(await Promise.all((await sync.getKeys()).map(async (x) => [x, (await sget(x))[x]]))) : sget(k));
+    if (saved === false) await sync.set({ enhance: { notes: false, pet: false } });
     const made = await records.snapshot();
     const r = await B.read(Object.assign(new Blob([made.bytes]), { name: made.name }));
     const { enhance } = JSON.parse(await r.zip.text('glaze-backup.json')).settings;
