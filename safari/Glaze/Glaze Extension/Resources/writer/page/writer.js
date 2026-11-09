@@ -437,25 +437,36 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   };
   // Canvas: a box's send button (Submit, Reply, Send) waits for the frame's document as it is now, which goes into Canvas's
   // editor and is checked there, then is pressed again. If the frame doesn't answer in a few seconds or Canvas's editor
-  // doesn't take the text, nothing is sent and the frame's bar says so.
+  // doesn't take the text, nothing is sent and the frame's bar says so. A button several boxes share (a quiz's Submit Quiz
+  // sends every essay) waits for each of them and is pressed once.
   const FLUSH_WAIT = 3000;
-  const holdSend = (box, b) => {
-    if (box.flushWait || box.sending) return; // pressed again: the first press goes on
-    const destination = orphanKey(box, X.draftAt(box.editor));
-    const go = (ok) => {
-      clearTimeout(box.flushWait?.timer);
-      box.flushWait = null;
-      if (!ok) { box.port?.postMessage({ type: 'held' }); return; }
-      if (boxes.get(box.editor) !== box || !sameBox(box) || !b.isConnected || !A().enabled(b) || A().sendOf(box.editor, box.kind) !== b || orphanKey(box, X.draftAt(box.editor)) !== destination) return;
-      remember(box);
-      globalThis.GZ_DRAFT_UI?.sent?.(box.editor);
-      if (SENDS.has(box.kind)) box.sending = true;
+  const holds = (box, b) => (A().sends?.(box.editor, box.kind) || [A().sendOf(box.editor, box.kind)]).includes(b);
+  const holdSend = (group, b) => {
+    group = [].concat(group);
+    if (group.some((box) => box.flushWait || box.sending)) return; // pressed again: the first press goes on
+    const pending = new Set(group), failed = new Set(), destinations = new Map(group.map((box) => [box, orphanKey(box, X.draftAt(box.editor))]));
+    const still = (box) => boxes.get(box.editor) === box && sameBox(box) && holds(box, b) && orphanKey(box, X.draftAt(box.editor)) === destinations.get(box);
+    // Until the first frame is ready, Canvas's visible editor owns edits. A recovering frame still owns its buffered copy.
+    const syncCurrent = (box) => sync(box, !box.ready && !box.recovered && !box.snapshot ? A().read(box.editor).html : box.latest, null);
+    const settle = (box, ok) => {
+      if (!pending.delete(box)) return;
+      if (!ok) failed.add(box);
+      if (pending.size) return;
+      for (const x of failed) x.port?.postMessage({ type: 'held' });
+      if (failed.size || !b.isConnected || !A().enabled(b) || !group.every(still)) return;
+      // An earlier frame can edit again while another is answering. Its native copy must still hold the current text.
+      for (const x of group) if (!syncCurrent(x)) { x.port?.postMessage({ type: 'held' }); return; }
+      if (!b.isConnected || !A().enabled(b) || !group.every(still)) return;
+      for (const x of group) { remember(x); globalThis.GZ_DRAFT_UI?.sent?.(x.editor); if (SENDS.has(x.kind)) x.sending = true; }
       try { passing = b; b.click(); } finally { passing = null; }
     };
-    if (!box.ready || !box.port) { go(sync(box, box.latest, null)); return; }
-    const request = crypto.randomUUID();
-    box.flushWait = { request, go, at: Date.now(), timer: setTimeout(() => { if (box.flushWait?.request === request) go(false); }, FLUSH_WAIT) };
-    box.port.postMessage({ type: 'flush', request });
+    for (const box of group) {
+      const go = (ok) => { clearTimeout(box.flushWait?.timer); box.flushWait = null; settle(box, ok); };
+      if (!box.ready || !box.port) { go(syncCurrent(box)); continue; }
+      const request = crypto.randomUUID();
+      box.flushWait = { request, go, at: Date.now(), timer: setTimeout(() => { if (box.flushWait?.request === request) go(false); }, FLUSH_WAIT) };
+      box.port.postMessage({ type: 'flush', request });
+    }
   };
   const flushed = (box, m) => {
     const w = box.flushWait;
@@ -484,7 +495,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const b = e.target?.closest?.('button');
     if (!b || b === passing || globalThis.GZ_WRITER_SUBMIT?.passing?.(b)) return;
     if (boxes.size && A()?.HOLD) {
-      for (const box of boxes.values()) if (sameBox(box) && A().sendOf(box.editor, box.kind) === b && A().enabled(b)) { e.preventDefault(); e.stopImmediatePropagation(); holdSend(box, b); return; }
+      const group = [...boxes.values()].filter((box) => sameBox(box) && holds(box, b));
+      if (group.length && A().enabled(b)) { e.preventDefault(); e.stopImmediatePropagation(); holdSend(group, b); return; }
     }
     // Ultra collapses an empty new-post editor on Cancel without removing its node. Release the empty frame too,
     // so its next click can activate the native composer again.
