@@ -299,3 +299,16 @@ test('the Inbox: Canvas changing the field\'s value itself (its signature, added
   await new Promise((r) => setTimeout(r, 600));
   assert.equal(n, 1, 'not after it is let go');
 });
+
+test('the Inbox: Canvas disabling the field (translating) is noticed too, and the field is then no box Writer can edit', async () => {
+  const [box] = C.boxes(page('inbox'), { path: AT.inbox });
+  let n = 0;
+  box.editor.ownerDocument = { addEventListener() {}, removeEventListener() {} };
+  box.editor.addEventListener = () => {}; box.editor.removeEventListener = () => {};
+  const w = C.watch({ ...box, id: 'gzw-8' }, () => n++, () => ({ disconnect() {} }), () => []);
+  box.editor.disabled = true;
+  await new Promise((r) => setTimeout(r, 700));
+  w.disconnect();
+  assert.equal(n, 1);
+  assert.equal(C.canEdit(box.editor), false);
+});
