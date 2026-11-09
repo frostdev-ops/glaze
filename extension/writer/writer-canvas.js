@@ -93,7 +93,9 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     if (!rules.every((r) => STYLE[tag]?.test(r)) || (tag === 'SPAN' && !rules.length)) return false;
     return tag !== 'A' || /^(https?:|mailto:|tel:\+?\d)/i.test(attrs.href || '');
   };
-  const editable = (html) => [...String(html ?? '').matchAll(/<([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g)].every((m) => tagOk(m[1].toUpperCase(), m[2]));
+  // An empty <span class="post_mention"> is where Canvas puts a reply's caret a second after the box opens (DiscussionEdit's
+  // positionCursor): bookkeeping, as TinyMCE's own is.
+  const editable = (html) => [...String(html ?? '').replace(/<span class="post_mention"><\/span>/g, '').matchAll(/<([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g)].every((m) => tagOk(m[1].toUpperCase(), m[2]));
   const canEdit = (ed) => plain(ed) ? !ed.disabled && !ed.readOnly && !ed.hasAttribute('disabled') && !ed.hasAttribute('readonly')
     : !!bodyOf(ed) && bodyOf(ed).getAttribute('contenteditable') !== 'false' && editable(read(ed).html);
 

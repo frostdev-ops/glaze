@@ -352,6 +352,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     else if (m.type === 'send') send(box);
     else if (m.type === 'flushed') flushed(box, m);
     else if (m.type === 'insert' && typeof m.tool === 'string') insert(box, m.tool);
+    // The frame lost the focus: if it went into the site's editor hidden under Writer (Canvas focuses a reply's RCE a second
+    // after it opens), Writer takes it back.
+    else if (m.type === 'blur') setTimeout(() => { if (A().HOLD && box.ready && box.frame?.isConnected && box.root.contains(document.activeElement)) { box.frame.focus(); box.port?.postMessage({ type: 'focus' }); } });
     else if (m.type === 'offer') { if (box.offer) globalThis.GZ_DRAFT_UI?.settle?.(box.offer); box.offer = null; }
     else if (m.type === 'native' && typeof m.reason === 'string' && m.reason) refuse(box);
     else if (m.type === 'native') giveBack(box, true);
