@@ -461,3 +461,17 @@ test('frame: losing the focus is said to the page, which takes it back from a hi
   for (const fn of f.blurs) fn();
   assert.deepEqual(p.sent, [{ type: 'blur' }]);
 });
+
+test('frame: an offered copy cannot overwrite text Canvas restores after initialization', async () => {
+  const f = frame({ host: 'https://school.instructure.com' }), p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+  f.to(p, { ...CANVAS, html: '<p><br></p>', offer: { html: '<p>Older kept copy</p>', text: 'Kept copy' } });
+  const bar = f.doc.getElementById('gw').querySelector('.gw-offer'), restore = bar.querySelector('button'), ed = f.made[0];
+  ed.text = () => ed.html().replace(/<[^>]*>/g, '');
+  // The real editor's setHTML reports docChanged:false for a programmatic native update.
+  const onChange = ed.opts.onChange;
+  ed.opts.onChange = (c) => onChange({ ...c, docChanged: false });
+  f.to(p, { type: 'html', html: '<p>Newer Canvas draft</p>' });
+  restore.dispatchEvent({ type: 'click' });
+  assert.equal(ed.html(), '<p>Newer Canvas draft</p>', 'even a stale Restore control cannot replace nonempty work');
+  assert.equal(p.sent.some((m) => m.type === 'offer'), false, 'the un-restored copy is retained');
+});
