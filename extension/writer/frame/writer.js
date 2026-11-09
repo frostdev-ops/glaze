@@ -2,23 +2,26 @@
 // opens in the box's place. An extension page, so the editor has the workers and WebAssembly the LMS page's CSP keeps from
 // a content script (proofing needs both), its own fonts and styles. It opens only with a one-use pass from the worker
 // (background/background.js 'glaze:writer'). After a public boot signal, it talks to the page over that job's MessageChannel:
-//   page → frame: init { mode, kind, html, selection, placeholder, look { tokens, dark, glass, motion }, context, locale },
+//   page → frame: init { site, mode, kind, html, selection, placeholder, look { tokens, dark, glass, motion }, context, locale }
+//                 (site 'canvas': compose in Canvas's dialect, or mode 'plain' for the Inbox's text; ⋯ says Canvas editor and,
+//                 but in plain, offers Insert from Canvas),
 //                 look { look }, context { context }, focus, html { html } (Ultra changed its own editor: a post went, a
-//                 draft came back); and for the frame's later parts (handle): quote (writer-compose.js), ai and
+//                 draft came back), flush { request } (a send waits for the document as it is now), held (that send didn't go); and for the frame's later parts (handle): quote (writer-compose.js), ai and
 //                 attachments (writer-ai.js), focus-mode (writer-paper.js), import:file (writer-import.js), submit:*
 //                 (writer-submit.js); in view mode (a Blackboard preview, courses/page/bbpreview.js) init { mode: 'view', kind,
 //                 view { bytes, name, href }, look, locale } (writer-kinds.js);
 //   frame → page: ready, height { px }, change { html, text, words, delta } (compose's; a paper's compact box sends its
 //                 own: writer-paper.js; delta: its Quill ops, what the page writes into Ultra's editor), send (Mod-Enter),
 //                 native (back to Blackboard's editor; with a reason, the box holds what Writer can't keep and nothing was
-//                 written); and the later parts' attachments, focus-mode, view { full, px, from, to }, room { on } and
+//                 written), insert { tool } (Canvas's image, media, document, equation or link tool, after the box goes back),
+//                 flushed { request, html }; and the later parts' attachments, focus-mode, view { full, px, from, to }, room { on } and
 //                 submit:*; in view mode view:shown, view:failed and view:esc.
 // Besides that pass it asks the extension only for the student's Writer settings (writer/writer-settings.js); its later
 // parts keep the paper (writer/writer-papers.js) and ask for proofing and AI on their own channels.
 (() => {
   const root = document.documentElement;
   const $ = (id) => document.getElementById(id);
-  let port = null, ed = null, locale = 'en', quiet = false, words = 0, context = {}, refused = false;
+  let port = null, ed = null, locale = 'en', quiet = false, words = 0, context = {}, refused = false, site = 'ultra';
   const t = (k, v) => GZ_I18N.t(k, v, locale);
   const say = (m, transfer = []) => port?.postMessage(m, transfer);
 
@@ -33,6 +36,8 @@
     root.toggleAttribute('data-glass', !!l.glass);
     root.dataset.motion = ['off', 'subtle', 'expressive'].includes(l.motion) ? l.motion : 'subtle';
   };
+  // Canvas's own tools, each run in its editor once the box is Canvas's again (writer/page/writer.js insert).
+  const INSERT = { image: 'Image', media: 'Media', document: 'Document', equation: 'Equation', link: 'Course link' };
   const LABELS = { bold: 'Bold', italic: 'Italic', underline: 'Underline', link: 'Link', bulletList: 'List', quote: 'Quote' };
   const count = () => { if (hooks.count.length) { emit('count', words); return; } $('words').textContent = ed ? t('Word count: {n}', { n: words }) : ''; };
   const label = () => {
@@ -40,7 +45,10 @@
     $('tb').setAttribute('aria-label', t('Formatting'));
     $('more').title = t('More');
     $('more').setAttribute('aria-label', $('more').title);
-    $('menu').querySelector('[data-do="native"]').textContent = t('Blackboard editor');
+    $('menu').querySelector('[data-do="native"]').textContent = t(site === 'canvas' ? 'Canvas editor' : 'Blackboard editor');
+    const head = $('menu').querySelector('[data-insert-head]');
+    if (head) head.textContent = t('Insert from Canvas');
+    for (const b of $('menu').querySelectorAll('[data-insert]')) b.textContent = t(INSERT[b.dataset.insert]);
     count();
   };
   // The page's language: its catalogue loads beside the frame (i18n/<lang>.js); English until then.
@@ -72,6 +80,7 @@
   let selected = null;
   const onSelection = (s) => {
     selected = s;
+    if (root.dataset.dialect === 'plain') { hide(tb); return; } // the Inbox's text has nothing to format
     if (tb.classList.contains('linking')) return;
     let at = null;
     try { at = s.empty ? null : s.coords; } catch { /* not laid out */ }
@@ -132,13 +141,31 @@
   document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !menu.contains(e.target) && !more.contains(e.target)) shut(); }, true);
   document.addEventListener('focusin', (e) => { if (!tb.contains(e.target) && !e.target.closest?.('.ProseMirror')) hide(tb); if (!menu.hidden && !menu.contains(e.target) && e.target !== more) shut(); });
 
+  // ⋯ → Insert from Canvas: each of Canvas's tools gives the box back to Canvas, which then runs it (the page does both).
+  const inserts = () => {
+    const head = document.createElement('div');
+    head.className = 'menu-head';
+    head.setAttribute('data-insert-head', '');
+    head.setAttribute('role', 'presentation');
+    menu.append(head);
+    for (const tool of Object.keys(INSERT)) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.setAttribute('role', 'menuitem'); b.dataset.insert = tool;
+      b.addEventListener('click', () => { shut(); say({ type: 'insert', tool }); });
+      menu.append(b);
+    }
+    label();
+  };
+
   // ---- the page ----------------------------------------------------------------------------------------------------
+  const note = $('note');
   const onChange = (c) => {
     words = c.words;
     count();
+    if (note && !note.hidden && c.docChanged !== false) { note.hidden = true; note.textContent = ''; }
     if (quiet || c.docChanged === false) return;
     // A paper stays in Writer's storage (writer-paper.js): the page hears compose's changes only.
-    if (root.dataset.mode === 'compose') say({ type: 'change', html: c.html, text: c.text, words: c.words, delta: ed?.view ? GZ_WRITER_SCHEMA.delta(ed.view.state.doc) : null });
+    if (root.dataset.mode === 'compose') say({ type: 'change', html: c.html, text: c.text, words: c.words, delta: ed?.view && site !== 'canvas' ? GZ_WRITER_SCHEMA.delta(ed.view.state.doc) : null });
     emit('change', c);
   };
   // One object for this frame. A re-send supplies the full context, so omitted fields (especially a student's id) go.
@@ -154,16 +181,22 @@
       // A file the page hands over (courses/page/bbpreview.js: a Blackboard preview), no editor: its kind's viewer
       // (writer-kinds.js), once the page's words are in.
       if (m.mode === 'view') { root.dataset.mode = 'view'; root.dataset.kind = ''; lang(m.locale).then(() => emit('view', m)); return; }
+      site = m.site === 'canvas' ? 'canvas' : 'ultra';
+      root.dataset.site = site;
       root.dataset.mode = m.mode === 'paper' ? 'paper' : 'compose';
+      // Canvas's boxes: its Rich Content Editor's dialect, or the Inbox's plain text. No paper on Canvas.
+      const dialect = site !== 'canvas' || root.dataset.mode === 'paper' ? null : m.mode === 'plain' ? 'plain' : 'canvas';
+      if (dialect) root.dataset.dialect = dialect;
       root.dataset.kind = typeof m.kind === 'string' ? m.kind : '';
       setContext(m.context);
       const html = typeof m.html === 'string' ? m.html : '';
       // A box holding what Writer can't keep (an attachment, a table, maths, right-to-left text, a checklist, too much
-      // to load) stays Blackboard's: said before the editor exists, so nothing is ever written back.
+      // to load) stays the site's: said before the editor exists, so nothing is ever written back.
       let lost;
-      try { lost = GZ_WRITER_SCHEMA.loses(root.dataset.mode === 'paper' ? GZ_WRITER_SCHEMA.paper : GZ_WRITER_SCHEMA.compose, html); } catch { lost = ['error']; }
+      try { lost = GZ_WRITER_SCHEMA.loses(root.dataset.mode === 'paper' ? GZ_WRITER_SCHEMA.paper : dialect ? GZ_WRITER_SCHEMA[dialect] : GZ_WRITER_SCHEMA.compose, html); } catch { lost = ['error']; }
       if (lost.length) { refused = true; say({ type: 'native', reason: lost.join(' ') }); return; }
-      ed = GZ_WRITER_EDITOR.create({ mount: $('body'), mode: root.dataset.mode, html, selection: m.selection, placeholder: typeof m.placeholder === 'string' ? m.placeholder : '', onChange, onSelection, plugins: plugins.splice(0),
+      if (dialect === 'canvas') inserts();
+      ed = GZ_WRITER_EDITOR.create({ mount: $('body'), mode: root.dataset.mode, dialect, html, selection: m.selection, placeholder: typeof m.placeholder === 'string' ? m.placeholder : '', onChange, onSelection, plugins: plugins.splice(0),
         keys: { 'Mod-Enter': () => { say({ type: 'send' }); return true; } } });
       words = ed.words();
       lang(m.locale);
@@ -173,6 +206,10 @@
     look: (m) => { look(m.look); emit('look', m.look); },
     context: (m) => { setContext(m.context); emit('context', context); },
     focus: () => ed?.focus(),
+    // A send on the page waits for this: the document as it is now, whatever change is still on its way.
+    flush: (m) => { if (ed && typeof m.request === 'string') say({ type: 'flushed', request: m.request, html: ed.html() }); },
+    // That send was held: the site's editor didn't take the text, so nothing went.
+    held: () => { if (!note) return; note.textContent = t('Not sent: Canvas didn’t take your text. Try again.'); note.hidden = false; },
     html: (m) => {
       if (!ed || typeof m.html !== 'string') return;
       quiet = true;
@@ -188,7 +225,7 @@
   const hooks = { ready: [], change: [], context: [], look: [], count: [], view: [] }, plugins = [];
   const emit = (ev, ...a) => { for (const fn of hooks[ev]) try { fn(...a); } catch (e) { console.error(e); } };
   globalThis.GZ_WRITER_FRAME = {
-    editor: () => ed, context: () => context, say, t, mode: () => root.dataset.mode, kind: () => root.dataset.kind,
+    editor: () => ed, context: () => context, say, t, mode: () => root.dataset.mode, kind: () => root.dataset.kind, site: () => site,
     on: (ev, fn) => { if (hooks[ev] && typeof fn === 'function') hooks[ev].push(fn); },
     handle: (type, fn) => { if (typeof type === 'string' && !Object.hasOwn(ON, type) && typeof fn === 'function') ON[type] = fn; },
     plugin: (p) => { if (ed) ed.addPlugins([p]); else plugins.push(p); },
