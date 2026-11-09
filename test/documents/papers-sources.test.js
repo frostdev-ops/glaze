@@ -22,7 +22,7 @@ const frame = async (host = HOST) => {
   const origin = `https://${host}`;
   const later = (fn, ms, ...a) => { const t = setTimeout(fn, ms, ...a); t.unref(); return t; };
   const paperOf = vm.runInNewContext(`${slice('writer/page/writer.js', '  const paperOf = async', '  let seq = 0;')}; paperOf`,
-    { U: () => U, X: { account: async () => '_900_1' }, location: { host, origin, pathname: ATTEMPT }, setTimeout: later });
+    { A: () => U, X: { account: async () => '_900_1' }, location: { host, origin, pathname: ATTEMPT }, setTimeout: later });
   const paper = await paperOf();
   const init = { prompt: 'Essay 2 Write 1,200 words on memory in Beloved.', ...(paper && { paper }), recovery: origin + ATTEMPT };
   const column = (u) => { throw new Error(`unexpected ${u}`); };
