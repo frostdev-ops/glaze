@@ -12,7 +12,7 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Fixed
 
-- Hovering rows, tabs and the editor's buttons on Canvas no longer flashes white.
+- Hovering rows, tabs and the editor's buttons on Canvas no longer flashes white, and the last module item you pointed at no longer stays white.
 
 - Typing `/` with a switch or choice focused opens Settings search again.
 - Google Drive's daily backup keeps Notes and the Pet habitat on for a new install, so restoring it no longer turns them off.
