@@ -172,3 +172,11 @@ test('Canvas: a held send cannot replay a connected button that is no longer thi
   c.flush();
   assert.equal(c.clicks.length, 0, 'being connected and enabled does not establish the button\'s current action');
 });
+
+test('Canvas: disabling an Inbox field cannot discard Writer\'s only unsynced copy', async () => {
+  const c = await page({ fixture: 'inbox', helper: 'fail' });
+  c.emit({ type: 'change', html: '<p>These words exist only in Writer.</p>', text: 'These words exist only in Writer.' });
+  c.box().editor.disabled = true; // Canvas disables this field while translating.
+  c.tick(500);
+  assert.equal(c.doc.querySelector('[data-gz-writer-recovery]')?.value, 'These words exist only in Writer.', 'failed synchronization must leave the text available even when draft backup is off');
+});
