@@ -100,6 +100,14 @@ test('Canvas list items refuse unsupported block content without dropping its te
   assert.deepEqual(S.loses(K, '<blockquote><p>q</p><ul><li>item</li></ul></blockquote>'), []);
 });
 
+test('Canvas list items refuse headings and multiple paragraphs that would change their structure', () => {
+  for (const body of ['<h3>Heading</h3>', '<h4>Subheading</h4>', '<p>one</p><p>two</p>',
+    '<p style="padding-left: 40px;">indented</p>']) {
+    assert.deepEqual(S.loses(K, `<ul><li>${body}</li></ul>`), ['format'], body);
+  }
+  assert.deepEqual(S.loses(K, '<h3>Heading</h3><ul><li>one<ul><li>two</li></ul></li></ul>'), []);
+});
+
 test('Canvas refuses list nesting beyond the indent level it can preserve', () => {
   const nested = (level) => '<ul><li>'.repeat(level) + 'deep' + '</li></ul>'.repeat(level);
   const supported = nested(S.MAX_INDENT + 1), excessive = nested(S.MAX_INDENT + 2);
