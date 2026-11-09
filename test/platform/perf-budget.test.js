@@ -240,9 +240,10 @@ const SYLLABUS_DOCS = 48 + 61;
 const WRITER = 24 + 409 + 134 + 728 + 61 + 279 + 31 + 27 + 70 + 61;
 // Glaze Writer on Canvas (one switch for both sites, the owner's decision of 2026-11-09; a named raise under the owner's
 // 2026-10-19 approval): content.js's Writer hook loads writer/page/writer.js on Canvas too, on a drawn Rich Content Editor
-// (textarea[data-rich_text]) beside the Inbox's field, and says so in its comment. 91 bytes on every site, where the shared
-// content.js runs; the adapter, its page-world helper and the frame load on demand. Measured against c30b10b9c.
-const WRITER_CANVAS = 91;
+// (textarea[data-rich_text], which only Canvas marks) beside the Inbox's field, and says so in its comment. 80 bytes on every
+// site, where the shared content.js runs; the adapter, its page-world helper and the frame load on demand. Measured against
+// c30b10b9c.
+const WRITER_CANVAS = 80;
 // Settings → Writer (the brief's ask that every Writer part read one synced `writer` key from defaults.js; a named raise under
 // the owner's 2026-10-19 approval): defaults.js's writer group and its group rule, 1089 bytes on every site, where content.js
 // reads every GZ_DEFAULTS key (writer/page/writer-quote.js reads writer.compose.quote); core/i18n.js's English plural for its
