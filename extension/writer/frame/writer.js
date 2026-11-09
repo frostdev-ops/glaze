@@ -151,6 +151,7 @@
   // A copy Glaze kept of this box (writer/page/drafts.js), offered back above the editor while it is empty: Restore puts it
   // in, as an edit the page writes into the site's editor; either button tells the page, which settles the copy.
   const offered = (o) => {
+    if (ed?.text?.().trim()) return;
     const bar = document.createElement('div'), msg = document.createElement('span');
     bar.className = 'gw-offer';
     bar.setAttribute('role', 'status');
@@ -161,6 +162,7 @@
       b.type = 'button'; b.textContent = t(label);
       b.addEventListener('click', () => {
         bar.remove();
+        if (restore && ed?.text?.().trim()) return; // Canvas may have restored newer text since this offer opened.
         if (restore && ed) {
           ed.setHTML(o.html);
           words = ed.words();
@@ -249,6 +251,7 @@
       if (!ed || typeof m.html !== 'string') return;
       quiet = true;
       try { ed.setHTML(m.html); } finally { quiet = false; }
+      if (ed.text?.().trim()) document.querySelector('.gw-offer')?.remove();
       words = ed.words();
       count();
     },
