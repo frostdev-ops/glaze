@@ -3,7 +3,9 @@
 // lockf). Signs in, then aborts every request that isn't a GET or a GraphQL query: nothing typed here reaches Canvas. Each
 // send is pressed for real and its aborted request read back: the classic assignment's form POST (submission[body]) must
 // hold exactly Writer's text, and so must each reply's createDiscussionEntry (a topic's, a thread's, an announcement's) and
-// a new Inbox message's createConversation.
+// a new Inbox message's createConversation. On a classic quiz (practice quiz 56, six essays, all on one page; quiz 57, one
+// question at a time), every essay Canvas draws is Writer's: Canvas's own answer backup (…/submissions/backup) and Submit Quiz's
+// POST must hold exactly Writer's text for each essay, and one question at a time, so must Next's record_answer.
 // WRITER_SHOTS names where the screenshots go (a light and a dark Look each surface).
 //   NODE_PATH=… PLAYWRIGHT_BROWSERS_PATH=… nice -n 10 lockf -k <the heavy-job lock, CLAUDE.md> node checks/writer/writer-canvas-live-check.js [evidence directory]
 const { chromium } = require('playwright');
@@ -81,7 +83,7 @@ const textOf = (p, html) => p.evaluate((h) => new DOMParser().parseFromString(h,
       fs.mkdirSync(shots, { recursive: true });
       await el.scrollIntoViewIfNeeded();
       await p.mouse.move(1, 1); // no hover tooltip over the frame
-      const r = await el.evaluate((e) => { const b = (e.closest('form, [data-testid="DiscussionEdit-container"], #compose-message-modal [role="dialog"], #compose-message-modal') || e).getBoundingClientRect(); return { x: Math.max(0, b.left - 16), y: Math.max(0, b.top - 16), width: Math.min(innerWidth, b.width + 32), height: Math.min(innerHeight, b.height + 32) }; });
+      const r = await el.evaluate((e) => { const b = (e.closest('.question, form, [data-testid="DiscussionEdit-container"], #compose-message-modal [role="dialog"], #compose-message-modal') || e).getBoundingClientRect(); return { x: Math.max(0, b.left - 16), y: Math.max(0, b.top - 16), width: Math.min(innerWidth, b.width + 32), height: Math.min(innerHeight, b.height + 32) }; });
       const f = path.join(shots, name);
       await p.screenshot({ path: f, clip: r });
       return f;
@@ -202,6 +204,83 @@ const textOf = (p, html) => p.evaluate((h) => new DOMParser().parseFromString(h,
         check(body === typed && body === 'Hello Avery,\nCould we go over the lab write-up on Thursday?', `the blocked createConversation's body is Writer's lines (${JSON.stringify(body)})`);
       }
       await p.close();
+    }
+
+    // ---- a classic quiz: each essay Canvas draws is Writer's; its backup and Submit Quiz carry exactly Writer's text ----
+    const essay = async (p, n) => {
+      const el = await until(async () => {
+        const f = (await p.evaluateHandle((i) => document.getElementById(`question_input_${i}`)?.closest('.ic-RichContentEditor')?.querySelector('iframe.gz-writer[data-gz-writer-frame="test"]'), n)).asElement();
+        return f && await f.evaluate((x) => !x.style.opacity && x.offsetHeight > 60) && f;
+      }, `essay ${n + 1} in Writer`, 30000);
+      const fr = await until(() => el.contentFrame(), `essay ${n + 1} frame document`);
+      await until(() => fr.evaluate(() => !!document.querySelector('.ProseMirror')), `essay ${n + 1} editor`);
+      return { el, fr, name: await p.evaluate((i) => document.getElementById(`question_input_${i}`).name, n) };
+    };
+    // Each essay's field in a blocked request equals that essay's text in Writer, read before the press (a submit Canvas
+    // can't send leaves the page on the browser's error page).
+    const texts = (list) => Promise.all(list.map(async (e) => [e.name, squash(await writerText(e))]));
+    const holds = async (sent, wrote) => {
+      const form = new URLSearchParams(sent.body), got = [];
+      for (const [name, text] of wrote) got.push([name, squash(await textOf(reader, form.get(name) ?? '')), text]);
+      return { ok: got.every(([, a, b]) => a && a === b), got };
+    };
+    const reader = await context.newPage();
+    const quizPage = async (url) => { const p = await open(url); p.on('dialog', (d) => d.accept().catch(() => {})); return p; };
+    const Q = '/courses/36/quizzes/56/take';
+    for (const [preset, dark] of [['Paper', false], ['Midnight', true]]) {
+      await wear(preset);
+      const p = await quizPage(Q);
+      const drawn = [];
+      for (let n = 0; n < 5; n++) drawn.push(await essay(p, n));
+      check(await p.evaluate(() => [...document.querySelectorAll('textarea.question_input')].slice(0, 5).every((t) => getComputedStyle(t.closest('.rce-wrapper')).display === 'none')), `quiz (${preset}): Writer stands in for each of the five essays Canvas draws first`);
+      check(await drawn[0].fr.evaluate(() => GZ_WRITER_FRAME.kind() === 'test' && !GZ_WRITER_AI.allowed('writing') && !GZ_WRITER_AI.allowed('completion') && ![...document.querySelectorAll('#menu [role="menuitem"]')].some((b) => b.textContent.startsWith('Check with AI'))), `quiz (${preset}): an essay is a test, with no AI in it`);
+      if (dark) { await typeIn(p, drawn[0], 'A dark Look on a quiz essay.'); await shot(p, drawn[0].el, 'quiz-midnight.png'); await p.close(); continue; }
+      // The sixth, past maxInitRenderedRCEs: Canvas draws it once it scrolls into view, and Writer takes it then.
+      await p.evaluate(() => document.querySelectorAll('.textarea-question-holder')[5].scrollIntoView());
+      const sixth = await essay(p, 5);
+      check(true, 'the sixth essay, drawn by Canvas once scrolled into view, is Writer\'s too');
+      const all = [...drawn, sixth];
+      for (const [n, e] of all.entries()) await typeIn(p, e, `Essay ${n + 1}, live: the river keeps the town ledger${n % 2 ? ', in two clauses' : ''}.`);
+      await shot(p, drawn[0].el, 'quiz-paper.png');
+      // Canvas backs answers up on an essay's change, at most once a second: the next keystroke after a pause carries them all.
+      await pause(1200);
+      const from = blocked.length;
+      await typeIn(p, sixth, '!');
+      const backup = await until(() => blocked.slice(from).find((b) => /\/quizzes\/56\/submissions\/backup$/.test(b.path)), 'Canvas\'s answer backup, aborted');
+      const b = await holds(backup, await texts(all));
+      check(b.ok, `Canvas's answer backup holds each essay's text as Writer has it (${JSON.stringify(b.got.map(([k, a]) => [k, a]))})`);
+      const subFrom = blocked.length;
+      await typeIn(p, drawn[2], ' Last words.');
+      const wrote = await texts(all);
+      await p.click('#submit_quiz_button');
+      const sub = await until(() => blocked.slice(subFrom).find((x) => x.method === 'POST' && /\/quizzes\/56\/submissions$/.test(x.path)), 'Submit Quiz\'s POST, aborted');
+      const s2 = await holds(sub, wrote);
+      check(s2.ok && s2.got[2][1].endsWith('Last words.'), `Submit Quiz's POST holds each essay's text, the last words typed just before it included (${JSON.stringify(s2.got.map(([k, a]) => [k, a]))})`);
+      await p.close();
+    }
+    // One question at a time (quiz 57): Next records the answer (record_answer); the last question's Submit Quiz sends it.
+    {
+      await wear('Paper');
+      let p = await quizPage('/courses/36/quizzes/57/take');
+      let e = await essay(p, 0);
+      await typeIn(p, e, 'One at a time, first essay: the bridge was the only argument in town.');
+      const from = blocked.length, first = await texts([e]);
+      await p.click('button.next-question');
+      const next = await until(() => blocked.slice(from).find((x) => x.method === 'POST' && /\/quizzes\/57\/submissions\/\d+\/record_answer$/.test(x.path)), 'Next\'s record_answer, aborted');
+      const n1 = await holds(next, first);
+      check(n1.ok, `one question at a time: Next's record_answer holds the essay's text as Writer has it (${JSON.stringify(n1.got)})`);
+      await p.close();
+      p = await quizPage('/courses/36/quizzes/57/take/questions/449');
+      e = await essay(p, 0);
+      check(e.name === 'question_449', 'the second question, by its own address, is Writer\'s too');
+      await typeIn(p, e, 'Second essay, sent from the last page.');
+      const subFrom = blocked.length, last = await texts([e]);
+      await p.click('#submit_quiz_button');
+      const sub = await until(() => blocked.slice(subFrom).find((x) => x.method === 'POST' && /\/quizzes\/57\/(submissions(\/\d+\/record_answer)?)$/.test(x.path)), 'the last page\'s Submit Quiz, aborted');
+      const n2 = await holds(sub, last);
+      check(n2.ok, `one question at a time: Submit Quiz on the last question holds its essay's text (${sub.path}: ${JSON.stringify(n2.got)})`);
+      await p.close();
+      await reader.close();
     }
 
     // Canvas's autosave copies of what was typed here go (its RCE keeps them in this origin's localStorage for a day).
