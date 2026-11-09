@@ -144,6 +144,17 @@ test('Assignments 2: textentry_text is an assignment, sent by Submit Assignment'
   assert.equal(boxes[0].send.getAttribute('data-testid'), 'submit-button');
 });
 
+test('read-only Canvas editors stay native, including Assignments 2 observer views and the Inbox', () => {
+  const body = drawn(page('a2'), '<p>Student draft</p>');
+  const ta = body.querySelector('#textentry_text');
+  body.querySelector('#textentry_text_ifr').contentDocument.body.setAttribute('contenteditable', 'false');
+  assert.equal(C.canEdit(ta), false);
+  assert.deepEqual(C.boxes(body, { path: AT.a2 }), []);
+  const inbox = page('inbox'), field = inbox.querySelector('textarea[data-testid="message-body"]');
+  field.setAttribute('readonly', '');
+  assert.deepEqual(C.boxes(inbox, { path: AT.inbox }), []);
+});
+
 test('the quick look: what Writer writes in Canvas\'s dialect passes, with TinyMCE\'s bookkeeping', () => {
   const ok = [
     '<p><br data-mce-bogus="1"></p>',

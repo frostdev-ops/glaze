@@ -21,7 +21,7 @@ const pageWorld = ({ major = '5' } = {}) => {
   // events (on/fire, case as TinyMCE fires them), undo, selection and commands.
   const editor = (ta) => {
     const handlers = [];
-    const body = { innerHTML: '<p><br data-mce-bogus="1"></p>', get textContent() { return this.innerHTML.replace(/<[^>]*>/g, ''); } };
+    const body = { innerHTML: '<p><br data-mce-bogus="1"></p>', contentEditable: 'true', getAttribute(k) { return k === 'contenteditable' ? this.contentEditable : null; }, get textContent() { return this.innerHTML.replace(/<[^>]*>/g, ''); } };
     const ed = {
       id: ta.id, initialized: true, removed: false, hidden: false, body,
       getElement: () => ta, getBody: () => body, isHidden() { return this.hidden; },
@@ -124,6 +124,17 @@ test('exec runs only Canvas\'s Insert tools, with the caret at the end of the bo
   }
   p.calls.length = 0;
   for (const command of ['mceInsertContent', 'Delete', 'mceCodeEditor', 'instructure_html_view', '', 7]) assert.deepEqual(p.ask('canvas-exec', { id: 'gzw-1', command }), [{ id: 'gzw-1', ok: false }], String(command));
+  assert.deepEqual(p.calls, []);
+});
+
+test('the helper cannot write or run tools in read-only Canvas editors', () => {
+  const p = pageWorld();
+  p.run();
+  p.editors.submission_body.body.contentEditable = 'false';
+  assert.equal(p.ask('canvas-set', { id: 'gzw-1', html: '<p>changed</p>' })[0].ok, false);
+  assert.equal(p.ask('canvas-exec', { id: 'gzw-1', command: 'instructureEquation' })[0].ok, false);
+  p.areas['gzw-3'].readOnly = true;
+  assert.equal(p.ask('canvas-set', { id: 'gzw-3', text: 'changed' })[0].ok, false);
   assert.deepEqual(p.calls, []);
 });
 
