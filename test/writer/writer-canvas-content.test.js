@@ -111,3 +111,24 @@ test('Canvas: a shortcut can retry after the frame flush times out', async () =>
   c.emit({ type: 'send' }); c.flush();
   assert.equal(c.clicks.length, 1, 'a held shortcut has not sent the document');
 });
+
+test('Canvas: an overdue flush reply cannot send before the timeout callback runs', async () => {
+  const c = await page();
+  c.press(c.box().send);
+  c.clock(103000); // The page was suspended; its timeout task has not run yet.
+  c.flush();
+  assert.equal(c.clicks.length, 0, 'the request deadline applies even when timer tasks are delayed');
+  assert.equal(c.ports.at(-1).sent.at(-1).type, 'held');
+});
+
+test('Canvas: replacing the frame retires its outstanding send request', async () => {
+  const c = await page();
+  c.press(c.box().send);
+  const old = c.ports.at(-1), request = old.sent.find((m) => m.type === 'flush').request;
+  c.doc.querySelector('iframe.gz-writer').dispatchEvent({ type: 'load' });
+  await c.boot();
+  c.emit({ type: 'flushed', request, html: '<p>Stale reply</p>' }, old);
+  assert.equal(c.clicks.length, 0);
+  c.press(c.box().send); c.flush();
+  assert.equal(c.clicks.length, 1, 'a new press asks the replacement frame, without waiting on the retired frame');
+});
