@@ -62,12 +62,13 @@ const page = async ({ fixture = 'discussion', helper = 'ok' } = {}) => {
   run('writer/writer-canvas.js');
   doc.addEventListener('gz-writer:canvas-set', (e) => {
     const m = JSON.parse(e.detail), ed = doc.querySelector(`textarea[data-gz-writer-id="${m.id}"]`);
-    if (mode === 'ok') {
+    const result = typeof mode === 'function' ? mode(ed) : mode;
+    if (result === 'ok') {
       if ('text' in m) ed.value = m.text;
       else ctx.GZ_WRITER_CANVAS.rootOf(ed).querySelector(`#${ed.id}_ifr`).contentDocument.body.innerHTML = m.html;
     }
     const native = ctx.GZ_WRITER_CANVAS.read(ed);
-    doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: mode !== 'fail', ...native }) }));
+    doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: result !== 'fail', ...native }) }));
   });
   run('writer/page/writer.js');
   const settle = async () => { await new Promise(setImmediate); };
@@ -213,6 +214,35 @@ test('Canvas quiz: Submit Quiz waits for every essay\'s frame, then goes once wi
   assert.deepEqual(['#question_input_0', '#question_input_4'].map((id) => c.ctx.GZ_WRITER_CANVAS.read(c.doc.querySelector(id)).text), ['Essay 1, last words.', 'Essay 2, last words.']);
   c.press(submit); flushAll(c);
   assert.equal(c.clicks.length, 2, 'a quiz stays on its page after a refused submit: a second press goes again');
+});
+test('Canvas quiz: an earlier essay must still be synced when the last frame answers', async () => {
+  const c = await page({ fixture: 'quiz' });
+  const submit = c.doc.querySelector('#submit_quiz_button'), [first, second] = quizFrames(c);
+  c.press(submit);
+  c.emit({ type: 'flushed', request: first.sent.find((m) => m.type === 'flush').request, html: '<p>First answer.</p>' }, first);
+  // The first frame can keep editing while the other frame is busy. A failed native write must not make the original
+  // successful flush authoritative for that essay's newer document.
+  c.helper('fail');
+  c.emit({ type: 'change', html: '<p>First answer, revised.</p>', text: 'First answer, revised.' }, first);
+  assert.equal(c.ctx.GZ_WRITER_CANVAS.read(c.doc.querySelector('#question_input_0')).text, 'First answer.');
+  c.helper('ok');
+  c.emit({ type: 'flushed', request: second.sent.find((m) => m.type === 'flush').request, html: '<p>Second answer.</p>' }, second);
+  assert.deepEqual(c.clicks, [submit]);
+  assert.equal(c.ctx.GZ_WRITER_CANVAS.read(c.doc.querySelector('#question_input_0')).text, 'First answer, revised.', 'the final replay must carry every current answer');
+});
+test('Canvas quiz: a newer unsynced edit in an already-flushed essay holds the whole send', async () => {
+  const c = await page({ fixture: 'quiz' });
+  const submit = c.doc.querySelector('#submit_quiz_button'), [first, second] = quizFrames(c);
+  c.press(submit);
+  c.emit({ type: 'flushed', request: first.sent.find((m) => m.type === 'flush').request, html: '<p>First answer.</p>' }, first);
+  c.helper((ed) => ed.id === 'question_input_0' ? 'fail' : 'ok');
+  c.emit({ type: 'change', html: '<p>First answer, revised.</p>', text: 'First answer, revised.' }, first);
+  c.emit({ type: 'flushed', request: second.sent.find((m) => m.type === 'flush').request, html: '<p>Second answer.</p>' }, second);
+  assert.equal(c.clicks.length, 0, 'the first essay still has words Canvas has not taken');
+  assert.equal(first.sent.at(-1).type, 'held');
+  c.helper('ok');
+  c.press(submit); flushAll(c);
+  assert.deepEqual(c.clicks, [submit], 'a fresh press can retry');
 });
 test('Canvas quiz: an essay Canvas\'s editor won\'t take holds Submit Quiz, and that frame says so', async () => {
   const c = await page({ fixture: 'quiz' });
