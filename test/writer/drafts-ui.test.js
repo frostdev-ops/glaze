@@ -1102,3 +1102,48 @@ test('Ultra: intentionally clearing Writer removes only its own saved draft', as
   const next = await page({ store: p.store }); await next.open();
   assert.equal(next.shown().length, 0, 'a cleared Writer draft must not return after reload');
 });
+
+const rcePage = async ({ id = 'submission_body', pathname = '/courses/34/assignments/238', ...opts } = {}) => {
+  const p = await page({ site: 'canvas', pathname, ...opts });
+  vm.runInContext(read('writer/drafts.js'), p.ctx);
+  vm.runInContext(read('writer/page/drafts.js'), p.ctx);
+  const ed = p.ctx.document.createElement('textarea');
+  ed.id = id; ed.setAttribute('data-rich_text', 'true'); p.doc.root.append(ed);
+  await p.ctx.GZ_DRAFT_UI.ready(ed); await p.advance(0);
+  return { ...p, rce: ed };
+};
+
+test('Canvas: an old matching assignment submission cannot delete a newer unsent RCE copy', async () => {
+  const first = await rcePage();
+  first.ctx.GZ_DRAFT_UI.keep({ ...first.ctx.api.draftAt(first.rce), html: `<p>${FIRST}</p>`, text: FIRST });
+  await first.advance(0);
+  const next = await rcePage({ store: first.store });
+  next.ctx.GZ_CTX.capi = async () => ({ body: `<p>${FIRST}</p>`, submitted_at: new Date(T0 - 864e5).toISOString() });
+  // The adapter captures capi on load, so replace it before loading this fresh draft UI instance.
+  next.ctx.GZ_DRAFT_UI = null; vm.runInContext(read('writer/page/drafts.js'), next.ctx);
+  const offer = await next.ctx.GZ_DRAFT_UI.offer(next.rce);
+  assert.equal(offer?.text, FIRST, 'matching text submitted before this copy was written proves nothing');
+});
+
+test('Canvas: a matching reply to another thread cannot delete this thread\'s RCE copy', async () => {
+  const opts = { id: 'message-body-102', pathname: '/courses/34/discussion_topics/80' };
+  const first = await rcePage(opts);
+  first.ctx.GZ_DRAFT_UI.keep({ ...first.ctx.api.draftAt(first.rce), html: `<p>${FIRST}</p>`, text: FIRST });
+  await first.advance(0);
+  const next = await rcePage({ ...opts, store: first.store });
+  next.ctx.GZ_CTX.capi = async () => ({ view: [{ id: 101, user_id: 8, replies: [{ id: 201, user_id: 7, message: `<p>${FIRST}</p>`, created_at: new Date(T0 + 1000).toISOString() }] }] });
+  next.ctx.GZ_DRAFT_UI = null; vm.runInContext(read('writer/page/drafts.js'), next.ctx);
+  const offer = await next.ctx.GZ_DRAFT_UI.offer(next.rce);
+  assert.equal(offer?.text, FIRST, 'each thread has its own draft destination');
+});
+
+test('Canvas: a newer matching reply at this thread\'s destination still settles its RCE copy', async () => {
+  const opts = { id: 'message-body-102', pathname: '/courses/34/discussion_topics/80' };
+  const first = await rcePage(opts);
+  first.ctx.GZ_DRAFT_UI.keep({ ...first.ctx.api.draftAt(first.rce), html: `<p>${FIRST}</p>`, text: FIRST });
+  await first.advance(0);
+  const next = await rcePage({ ...opts, store: first.store });
+  next.ctx.GZ_CTX.capi = async () => ({ view: [{ id: 102, user_id: 8, replies: [{ id: 201, user_id: 7, message: `<p>${FIRST}</p>`, created_at: new Date(T0 + 1000).toISOString() }] }] });
+  next.ctx.GZ_DRAFT_UI = null; vm.runInContext(read('writer/page/drafts.js'), next.ctx);
+  assert.equal(await next.ctx.GZ_DRAFT_UI.offer(next.rce), null);
+});
