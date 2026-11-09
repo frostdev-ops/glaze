@@ -475,3 +475,14 @@ test('frame: an offered copy cannot overwrite text Canvas restores after initial
   assert.equal(ed.html(), '<p>Newer Canvas draft</p>', 'even a stale Restore control cannot replace nonempty work');
   assert.equal(p.sent.some((m) => m.type === 'offer'), false, 'the un-restored copy is retained');
 });
+
+test('frame: recovery buttons and a held-send message follow the asynchronously loaded locale', async () => {
+  const f = frame({ host: 'https://school.instructure.com' }), p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+  f.to(p, { ...CANVAS, locale: 'es', html: '<p><br></p>', offer: { html: '<p>Kept copy</p>', text: 'Saved' } });
+  f.to(p, { type: 'held' });
+  vm.runInContext(read('i18n/es.js'), f.ctx);
+  f.doc.head.querySelector('script').onload();
+  const t = (key) => vm.runInContext(`GZ_I18N.t(${JSON.stringify(key)}, undefined, 'es')`, f.ctx);
+  assert.deepEqual(f.doc.getElementById('gw').querySelector('.gw-offer').querySelectorAll('button').map((b) => b.textContent), [t('Restore'), t('Dismiss')]);
+  assert.equal(f.doc.getElementById('note').textContent, t('Not sent: Canvas didn’t take your text. Try again.'));
+});
