@@ -122,3 +122,56 @@ test('the Assignments 2 footer rule leaves the rest of the page alone', () => {
     ['the footer without Canvas\'s inline colour', Object.assign(a2Footer(), { attrs: {} })],
   ]) assert.ok(!matches(el, sel), `${sel} must not reach ${name}`);
 });
+
+// A file upload's states paint two more edges inline, grey1214 (#e8eaec) on every Look: the left edge of a submitted file's
+// preview, a bare box or an iframe (FilePreview.jsx), and the line under the Canvas Files picker's column headings
+// (CanvasFiles/TableHeader.jsx, in a modal outside #application).
+const elem = (tag, attrs, parent, id = '') => ({ tag, id, cls: [], attrs, parent });
+const edge = (el, side) => {
+  const hit = winner(rules, el, `border(?:-${side})?-color`);
+  assert.ok(hit, `a rule paints the ${side} border`);
+  const [value, sel] = hit;
+  const decl = rules.find(([s]) => s === sel)[1].match(new RegExp(`(?:^|;)\\s*border(?:-${side})?-color\\s*:\\s*([^;]+)`))[1];
+  return { value, sel, important: /!important\s*$/.test(decl) };
+};
+const filePreview = () => elem('span', { 'data-testid': 'file-preview' }, elem('div', { 'data-testid': 'attempt-tab' }, chain('div#application', 'div#content')));
+const rawBox = () => elem('div', { style: 'text-align: center; padding: 1.5rem 0px; border-left: 1px solid rgb(232, 234, 236);' }, elem('span', {}, filePreview()));
+const rawFrame = () => elem('iframe', { style: 'border: none; width: 100%; height: 100%; position: absolute; border-left: 1px solid rgb(232, 234, 236);' },
+  elem('div', { 'data-testid': 'assignments_2_submission_preview' }, elem('span', {}, filePreview())));
+const pickerHeading = () => elem('div', { style: 'border-bottom: 1px solid rgb(232, 234, 236);' },
+  elem('span', {}, elem('span', { 'data-testid': 'more-options-file-select' }, elem('form', { role: 'dialog', 'data-testid': 'upload-file-modal' }, chain('body', 'span')))));
+
+test('a submitted file preview\'s left edge takes the Look\'s border colour over Canvas\'s inline one', () => {
+  for (const [name, el] of [['the unavailable-preview box', rawBox()], ['the preview iframe', rawFrame()]]) {
+    const { value, sel, important } = edge(el, 'left');
+    assert.equal(value, 'var(--gz-border-line, var(--gz-line))', name);
+    assert.ok(important, `${sel} loses to the inline border-left on ${name} without !important`);
+  }
+});
+
+test('the Canvas Files picker\'s heading line takes the Look\'s border colour over Canvas\'s inline one', () => {
+  const { value, sel, important } = edge(pickerHeading(), 'bottom');
+  assert.equal(value, 'var(--gz-border-line, var(--gz-line))');
+  assert.ok(important, `${sel} loses to the inline border-bottom without !important`);
+});
+
+test('the file upload edge rules leave the rest of the page and the modal alone', () => {
+  const left = rules.find(([s, b]) => /file-preview/.test(s) && /border-left-color/.test(b));
+  assert.ok(left, 'a rule scoped to the file preview paints its left edge');
+  for (const el of [rawBox(), rawFrame()]) assert.ok(matches(el, left[0]), `${left[0]} reaches the preview`);
+  const stray = elem('div', { style: 'border-left: 1px solid red;' }, elem('div', { 'data-testid': 'attempt-tab' }, chain('div#application', 'div#content')));
+  for (const [name, el] of [
+    ['a styled div beside the preview', stray],
+    ['the preview itself', filePreview()],
+    ['the preview box without Canvas\'s inline edge', Object.assign(rawBox(), { attrs: { style: 'text-align: center;' } })],
+    ['the page panel', chain('div#application', 'div#content')],
+  ]) assert.ok(!matches(el, left[0]), `${left[0]} must not reach ${name}`);
+  const bottom = rules.find(([s, b]) => /more-options-file-select/.test(s) && /border-bottom-color/.test(b));
+  assert.ok(bottom, 'a rule scoped to the picker paints its heading line');
+  assert.ok(matches(pickerHeading(), bottom[0]), `${bottom[0]} reaches the heading`);
+  for (const [name, el] of [
+    ['the dialog', pickerHeading().parent.parent.parent],
+    ['a heading without Canvas\'s inline line', Object.assign(pickerHeading(), { attrs: { style: 'padding: 0;' } })],
+    ['a styled div in the page', elem('div', { style: 'border-bottom: 1px solid red;' }, chain('div#application', 'div#content'))],
+  ]) assert.ok(!matches(el, bottom[0]), `${bottom[0]} must not reach ${name}`);
+});
