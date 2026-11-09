@@ -255,6 +255,52 @@ test('Assignments 2: draft says whether the draft Canvas saved, which its Submit
   assert.equal(p.window.fetch, wrapped, 'watched once per document');
 });
 
+// SubmissionManager's updateSubmissionDraftCache applies every successful response, without a request-order fence.
+const draftPage = () => {
+  const p = pageWorld(), fetches = [];
+  p.window.fetch = () => {
+    let answer;
+    const response = new Promise((resolve) => { answer = resolve; });
+    fetches.push((body) => answer({ ok: true, clone: () => ({ json: async () => ({ data: { createSubmissionDraft: body === null ? { submissionDraft: null, errors: [{ message: 'refused' }] } : { submissionDraft: { body }, errors: null } } }) }) }));
+    return response;
+  };
+  p.run();
+  p.ask('canvas-watch', { id: 'gzw-5' });
+  // Capture the response resolver at request time, since another save can start before this one finishes.
+  const begin = (body) => {
+    p.window.fetch('/api/graphql', { method: 'POST', body: JSON.stringify({ operationName: 'CreateSubmissionDraft', variables: { id: 'U3VibWlzc2lvbi0x', activeSubmissionType: 'online_text_entry', attempt: 1, body } }) });
+    const answer = fetches.at(-1);
+    return async (saved = body) => { answer(saved); await new Promise(setImmediate); };
+  };
+  return { p, begin, kept: () => p.ask('canvas-draft', { id: 'gzw-5' })[0].kept };
+};
+
+for (const olderPending of [false, true]) test(`Assignments 2: an older save ${olderPending ? 'still in flight' : 'finishing last'} cannot certify the current draft`, async () => {
+  const { p, begin, kept } = draftPage();
+  p.ask('canvas-set', { id: 'gzw-5', html: '<p>Older words</p>' });
+  const older = begin('<p>Older words</p>');
+  p.ask('canvas-set', { id: 'gzw-5', html: '<p>Current words</p>' });
+  const current = begin('<p>Current words</p>');
+  await current();
+  if (!olderPending) await older();
+  assert.equal(kept(), false, olderPending ? 'an older response can still replace Canvas\'s cached draft' : 'Canvas now sends the older response body');
+  if (olderPending) await older();
+  const retry = begin('<p>Current words</p>');
+  await retry();
+  assert.equal(kept(), true, 'a later successful save can certify the current words');
+});
+
+test('Assignments 2: an older rejected save cannot hide a newer successfully saved draft', async () => {
+  const { p, begin, kept } = draftPage();
+  p.ask('canvas-set', { id: 'gzw-5', html: '<p>Older words</p>' });
+  const older = begin('<p>Older words</p>');
+  p.ask('canvas-set', { id: 'gzw-5', html: '<p>Current words</p>' });
+  const current = begin('<p>Current words</p>');
+  await current();
+  await older(null);
+  assert.equal(kept(), true, 'a refused mutation never replaces Canvas\'s cached draft');
+});
+
 test('it runs once per document', () => {
   const p = pageWorld();
   p.run();
