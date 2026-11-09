@@ -387,7 +387,7 @@ html[data-gz-nav-size="large"] { --gz-nav-wide: 100px; --gz-nav-narrow: 64px; --
    bar as Ultra's routed header is; with the strip, the inset panel is drawn below (#gz-ctabs). */
 @media (min-width: 768px) {
   #application .ic-app-nav-toggle-and-crumbs:not(:has(> #gz-ctabs)) {
-    margin: var(--gz-float-gap, 12px) var(--gz-float-end, 12px) 0 var(--gz-float-start, 12px) !important;
+    margin-block: var(--gz-float-gap, 12px) 0 !important; margin-inline: var(--gz-float-start, 12px) var(--gz-float-end, 12px) !important;
     border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
   }
 }
@@ -485,12 +485,12 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
    dashboard, modules, the assignment, quiz and discussion lists, the calendar) keeps its cards, and a discussion is a panel
    per post (below). */
 #application #content:not(:has(> #dashboard, > .item-group-container, > #context_modules_sortable_container, > #calendar-app, .context_module, [class*="discussions-v2__wrapper"], #discussion-redesign-layout)) {
-  box-sizing: border-box; margin: var(--gz-float-gap, 12px) var(--gz-float-end, 12px) var(--gz-float-gap, 12px) var(--gz-float-start, 12px); padding: clamp(1rem, 2vw, 1.5rem);
+  box-sizing: border-box; margin-block: var(--gz-float-gap, 12px); margin-inline: var(--gz-float-start, 12px) var(--gz-float-end, 12px); padding: clamp(1rem, 2vw, 1.5rem);
   background: var(--gz-surface-grain, none), var(--gz-panel) !important; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
 }
 /* The course menu beside a page (a user's settings and files; a course's, without Glaze's bar holding it). */
 #application #left-side #section-tabs {
-  margin-block: var(--gz-float-gap, 12px); padding: 0.5rem 0.5rem 0.5rem 1rem;
+  margin-block: var(--gz-float-gap, 12px); padding-block: 0.5rem; padding-inline: 1rem 0.5rem;
   background: var(--gz-surface-grain, none), var(--gz-panel); border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); box-shadow: var(--gz-rest-shadow);
 }
 /* On a panel, what the sweep found painted white (a roster row, the inbox's header, the editor's wrapper) is the panel itself:
@@ -1157,7 +1157,7 @@ html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) 
 #application #questions .answer_arrow.info { color: var(--gz-ok); }
 #application #questions .quiz_comment { background: var(--gz-band); border-color: var(--gz-border-line, var(--gz-line)); }
 /* The submission form under an assignment: the open tab's box with the panels' corners, and a comments field a few lines tall. */
-#application #submit_assignment .ui-tabs-panel { border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: 0 var(--gz-radius) var(--gz-radius) var(--gz-radius); }
+#application #submit_assignment .ui-tabs-panel { border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); border-start-start-radius: 0; }
 #application #submit_assignment textarea.submission_comment_textarea { box-sizing: border-box; width: min(100%, 40rem); min-height: 4.5rem; resize: vertical; }
 /* "Submitted … late" on a submission's details, and in an assignment's sidebar, is Canvas's literal red. */
 #application :is(.submission-details-header__time.late, #sidebar_content .late) { color: var(--gz-err); }
