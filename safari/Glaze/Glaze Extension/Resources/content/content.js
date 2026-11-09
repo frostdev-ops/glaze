@@ -946,7 +946,7 @@
   // same cue or a drawn Canvas RCE.
   const writerIn = () => {
     if (globalThis.GZ_WRITER) GZ_WRITER.pass();
-    else if (!moodle && settings.enhance.writer && observer && document.querySelector(ultra ? DRAFT_ED : `textarea[data-rich_text],${DRAFT_ED}`)) need('writer/page/writer.js', () => globalThis.GZ_WRITER).then(() => GZ_WRITER.pass(), () => {});
+    else if (settings.enhance.writer && observer && document.querySelector(ultra ? DRAFT_ED : `textarea[data-rich_text],${DRAFT_ED}`)) need('writer/page/writer.js', () => globalThis.GZ_WRITER).then(() => GZ_WRITER.pass(), () => {});
   };
   // Canvas owns RCE recovery and assignment/quiz drafts. Only its plain-text new Inbox compose lacks it.
   const watchDrafts = () => {
