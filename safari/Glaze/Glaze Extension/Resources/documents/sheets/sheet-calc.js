@@ -182,18 +182,29 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
 
   // Text with * and ? as wildcards, any case, as a test of a value: ~ takes the next character as itself and a ~ at the
   // end is dropped. Only text passes.
+  // Matched by a star's last place, never a backtracking RegExp: time stays text × pattern, however many stars.
+  const STAR = Symbol('*'), ONE = Symbol('?');
   const wildcard = (t) => {
-    let re = '';
-    const escape = (ch) => ch.replace(/[\\^$.*+?()[\]{}|/-]/g, '\\$&');
+    const p = [];
     for (let i = 0; i < t.length; i++) {
       const ch = t[i];
-      if (ch === '~') { if (i + 1 < t.length) re += escape(t[++i]); }
-      else if (ch === '*') re += '[\\s\\S]*';
-      else if (ch === '?') re += '[\\s\\S]';
-      else re += escape(ch);
+      if (ch === '~') { if (i + 1 < t.length) p.push(t[++i].toLowerCase()); }
+      else if (ch === '*') { if (p.at(-1) !== STAR) p.push(STAR); }
+      else if (ch === '?') p.push(ONE);
+      else p.push(ch.toLowerCase());
     }
-    const rx = new RegExp(`^${re}$`, 'i');
-    return (v) => typeof v === 'string' && rx.test(v);
+    return (v) => {
+      if (typeof v !== 'string') return false;
+      let si = 0, pi = 0, star = -1, mark = 0;
+      while (si < v.length) {
+        if (pi < p.length && p[pi] !== STAR && (p[pi] === ONE || p[pi] === v[si].toLowerCase())) { si++; pi++; }
+        else if (pi < p.length && p[pi] === STAR) { star = pi++; mark = si; }
+        else if (star >= 0) { pi = star + 1; si = ++mark; }
+        else return false;
+      }
+      while (p[pi] === STAR) pi++;
+      return pi === p.length;
+    };
   };
   const test = (op, c) => (op === '<' ? c < 0 : op === '<=' ? c <= 0 : op === '>' ? c > 0 : c >= 0);
   // A criteria argument (SUMIF, COUNTIFS…) as a test of one cell's value. Text criteria may start with = <> < > <= >=;

@@ -495,6 +495,8 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
   };
 
   // A worksheet's other elements: the ones the model has, and the rest kept in order.
+  // How many columns each sheet's <col> ranges may still cover (readSection 'cols').
+  const colsLeft = new WeakMap();
   const readSection = (name, xml, sh, ctx) => {
     const n = local(name), keep = sh.keep;
     const node = tree(xml).kids[0];
@@ -525,8 +527,11 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
       }
       case 'cols':
         for (const col of kids(node, 'col')) {
-          const a = col.a, min = Number(a.min) - 1, max = Math.min(Number(a.max) - 1, MAX_COLS - 1);
+          // Excel's ranges never overlap, so a sheet's together cover at most its columns: read no further than that.
+          const left = colsLeft.get(sh) ?? MAX_COLS;
+          const a = col.a, min = Number(a.min) - 1, max = Math.min(Number(a.max) - 1, MAX_COLS - 1, Number(a.min) - 2 + left);
           if (!Number.isInteger(min) || !Number.isInteger(max) || min < 0 || max < min) continue;
+          colsLeft.set(sh, left - (max - min + 1));
           const extra = {};
           for (const k of ['style', 'outlineLevel', 'collapsed', 'bestFit', 'phonetic']) if (a[k] !== undefined && a[k] !== '0' && a[k] !== 'false') extra[k] = a[k];
           for (let i = min; i <= max; i++) {
