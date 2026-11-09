@@ -2908,8 +2908,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
   const slice = (schema, html) => parser(schema).parseSlice(prepare(schema, html).root, { preserveWhitespace: true });
   // 'limit' refuses takeover too, before parsing an input that would exhaust the editor.
   const loses = (schema, html) => {
-    if (schema === plainSchema) return []; // text only: nothing in it is lost
-    try { return [...prepare(schema, html).o.lost].sort(); }
+    try { const prepared = prepare(schema, html); return schema === plainSchema ? [] : [...prepared.o.lost].sort(); }
     catch (e) { if (e.code === 'WRITER_INPUT_LIMIT') return ['limit']; throw e; }
   };
 
