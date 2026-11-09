@@ -36,7 +36,7 @@ var GZ_RCE_INK = globalThis.GZ_RCE_INK || (() => {
     let doc = null;
     try { doc = f.contentDocument; } catch { return; }
     if (!doc?.head) return;
-    let el = doc.getElementById(ID);
+    let el = doc.head.querySelector(`style#${ID}`);
     if (!text) { el?.remove(); return; }
     if (!el) { el = doc.createElement('style'); el.id = ID; }
     if (el.textContent !== text) el.textContent = text;

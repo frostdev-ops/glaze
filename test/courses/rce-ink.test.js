@@ -13,9 +13,11 @@ const PALETTE = { '--gz-surface-paint, var(--gz-surface)': 'rgb(13, 27, 46)', '-
 
 // A frame's document: a head whose children are kept in order, and what getElementById finds there.
 const frameDoc = () => {
-  const head = { kids: [], append(e) { this.kids = this.kids.filter((k) => k !== e); this.kids.push(e); e.parent = this; }, get lastElementChild() { return this.kids.at(-1) || null; } };
-  return { head, createElement: (tag) => ({ tag, id: '', textContent: '', remove() { if (this.parent) { this.parent.kids = this.parent.kids.filter((k) => k !== this); this.parent = null; } } }),
-    getElementById: (id) => head.kids.find((k) => k.id === id) || null };
+  const head = { kids: [], append(e) { if (e.parent && e.parent !== this) e.remove(); this.kids = this.kids.filter((k) => k !== e); this.kids.push(e); e.parent = this; }, get lastElementChild() { return this.kids.at(-1) || null; } };
+  const body = { kids: [] };
+  head.querySelector = (s) => head.kids.find((k) => `${k.tag}#${k.id}` === s) || null;
+  return { head, body, createElement: (tag) => ({ tag, id: '', textContent: '', remove() { if (this.parent) { this.parent.kids = this.parent.kids.filter((k) => k !== this); this.parent = null; } } }),
+    getElementById: (id) => [...head.kids, ...body.kids].find((k) => k.id === id) || null };
 };
 const iframe = () => {
   const f = { doc: frameDoc(), listeners: {}, addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); },
@@ -79,6 +81,22 @@ test('a light palette is the light scheme, with an author\'s colours as written'
   const css = ink(c.frames[0]).textContent;
   assert.match(css, /color-scheme:light/);
   assert.doesNotMatch(css, /text-fill-color/);
+});
+
+test('an authored body element sharing the style id is never rewritten, moved or removed', () => {
+  const { ui, c } = load();
+  const doc = c.frames[0].doc;
+  const paragraph = doc.createElement('p');
+  paragraph.id = 'gz-rce-ink'; paragraph.textContent = 'This is part of my submission.';
+  paragraph.parent = doc.body; doc.body.kids.push(paragraph);
+  const saved = () => doc.body.kids.map((e) => `<${e.tag} id="${e.id}">${e.textContent}</${e.tag}>`).join('');
+  const before = saved();
+  ui.sync();
+  assert.equal(saved(), before, 'the content TinyMCE saves is unchanged after styling');
+  assert.equal(paragraph.parent, doc.body, 'the authored paragraph stays in the body');
+  assert.equal(doc.head.querySelector('style#gz-rce-ink')?.tag, 'style');
+  ui.off();
+  assert.equal(saved(), before, 'the content TinyMCE saves is unchanged after teardown');
 });
 
 test('passes keep one style and read the palette again only when it changes', () => {
