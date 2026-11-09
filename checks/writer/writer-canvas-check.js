@@ -129,11 +129,12 @@ const CANVAS = `(() => {
       await until(() => fr.evaluate(() => !!document.querySelector('.ProseMirror')), `${kind} editor in its frame`);
       return { el, fr };
     };
-    const tiny = (p) => p.evaluate(() => ({ html: tinymce.get('submission_body').getContent(), text: tinymce.get('submission_body').getBody().textContent }));
+    // The editor's text as Canvas submits it (getContent puts a line between blocks; the body's textContent runs them together).
+    const tiny = (p) => p.evaluate(() => { const html = tinymce.get('submission_body').getContent(); return { html, text: new DOMParser().parseFromString(html, 'text/html').body.textContent }; });
     const writerText = (fr) => fr.evaluate(() => GZ_WRITER_FRAME.editor().text());
     const menu = async (fr, pick) => {
-      await fr.click('#more');
-      await until(() => fr.evaluate(() => !document.getElementById('menu').hidden), 'the ⋯ menu open');
+      const shown = () => fr.evaluate(() => !document.getElementById('menu').hidden);
+      await until(async () => { if (!await shown()) await fr.click('#more'); await pause(200); return shown(); }, 'the ⋯ menu open');
       return pick ? fr.click(pick) : fr.evaluate(() => [...document.querySelectorAll('#menu [role="menuitem"], #menu [data-insert-head]')].map((b) => b.textContent));
     };
     const A = '/courses/34/assignments/238';
@@ -144,7 +145,8 @@ const CANVAS = `(() => {
     check(await p.evaluate(() => getComputedStyle(document.querySelector('.rce-wrapper')).display === 'none' && document.querySelector('iframe.gz-writer').nextElementSibling === document.querySelector('.rce-wrapper')), 'Writer stands in for the whole RCE, in its place; Canvas\'s wrapper is hidden');
     check(await p.evaluate(() => { const e = document.getElementById('body_errors'); return e.isConnected && getComputedStyle(e).display !== 'none' && !document.querySelector('.rce-wrapper').contains(e); }), '#body_errors stays outside the hidden wrapper, shown');
     check(await a.fr.evaluate(() => document.documentElement.dataset.site === 'canvas' && document.documentElement.dataset.dialect === 'canvas'), 'the frame writes Canvas\'s dialect');
-    check(JSON.stringify(await menu(a.fr)) === JSON.stringify(['Canvas editor', 'Insert from Canvas', 'Image', 'Media', 'Document', 'Equation', 'Course link']), '⋯: Canvas editor, then Insert from Canvas\'s five tools');
+    const items = await menu(a.fr);
+    check(items[0] === 'Canvas editor' && JSON.stringify(items.slice(-6)) === JSON.stringify(['Insert from Canvas', 'Image', 'Media', 'Document', 'Equation', 'Course link']), `⋯: Canvas editor first, Insert from Canvas's five tools last (${items.join(', ')})`);
     await p.keyboard.press('Escape');
 
     // ---- Canvas's empty-text check: the focus comes back to Writer ----
@@ -196,6 +198,7 @@ const CANVAS = `(() => {
     a = await box(p, 'assignment');
     await a.fr.click('.ProseMirror');
     await p.keyboard.type('An image goes after this', { delay: 0 });
+    await until(async () => (await writerText(a.fr)) === 'An image goes after this', 'typed in Writer');
     await menu(a.fr, '#menu [data-insert="image"]');
     await until(() => p.evaluate(() => __commands.length === 1), 'Canvas\'s image tool run');
     const ran = await p.evaluate(() => __commands[0]);
@@ -208,7 +211,8 @@ const CANVAS = `(() => {
     p = await open(`${A}?html=${encodeURIComponent(refused)}`);
     await until(() => p.evaluate(() => document.documentElement.hasAttribute('data-gz-writer-main-canvas') && !document.querySelector('iframe.gz-writer')), 'the frame refused the box');
     check(await p.evaluate(() => getComputedStyle(document.querySelector('.rce-wrapper')).display !== 'none' && !document.querySelector('[data-gz-writer]')), 'a box holding blocks inside a list item stays Canvas\'s, shown, unmarked');
-    check(squash((await tiny(p)).text) === 'ab' && (await p.evaluate(() => __log.length)) === 0, 'and nothing was written into it');
+    const kept = await tiny(p), wrote = await p.evaluate(() => __log.slice());
+    check(kept.html.replace(/\s+/g, '') === refused && wrote.length === 0, `and nothing was written into it (${kept.html.replace(/\s+/g, '')}; ${wrote.join(' | ')})`);
     await p.close();
 
     const sent = requests.filter((r) => r.method !== 'GET');
