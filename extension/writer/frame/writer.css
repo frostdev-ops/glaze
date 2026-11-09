@@ -109,5 +109,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .menu button:hover, .menu button:focus { background: var(--gz-accent-soft); outline: none; }
 /* ⋯ → Insert from Canvas: Canvas's tools under one line, after Canvas editor. */
 .menu .menu-head { margin: 6px 10px 2px; padding-top: 8px; border-top: 1px solid var(--edge); font-size: 12px; color: var(--gz-ink-muted); }
+/* A copy Glaze kept of this box, offered back above the editor. */
+.gw-offer { display: flex; align-items: center; gap: 12px; padding: 8px 12px 8px 16px; border-bottom: 1px solid var(--edge); color: var(--gz-ink-muted); font-size: 13px; }
+.gw-offer span { flex: 1; }
+.gw-offer button { padding: 4px 10px; border-radius: 7px; color: var(--gz-ink); }
+.gw-offer button:first-of-type { color: var(--gz-accent-ink, #fff); background: var(--gz-accent); }
 /* A send held because the site's editor didn't take the text. */
 .gw-note { color: var(--gz-err, #d14343); }
