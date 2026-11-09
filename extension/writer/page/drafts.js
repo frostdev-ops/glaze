@@ -449,7 +449,8 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     if (rce(ed)) { loadAccount(); return true; } // Writer offers what is kept of it (offer)
     await loadAccount();
     const key = account && draftKey(ed);
-    if (!key) return false;
+    // A new Inbox message with no course, recipients or subject yet has no copy to offer: Writer takes it.
+    if (!key) return !ultra && !!account;
     let timer;
     try {
       return await new Promise((yes) => {

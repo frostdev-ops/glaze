@@ -10,8 +10,9 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
   const INBOX = '#compose-message-modal textarea[data-testid="message-body"]';
   const RESTORE = '[data-testid="RCE_RestoreAutoSaveModal"]';
   const plain = (ed) => ed?.tagName === 'TEXTAREA' && ed.getAttribute('data-testid') === 'message-body' && !!ed.closest('#compose-message-modal');
-  // The whole editor (menus, toolbar, text, status bar), or the Inbox's field: what Glaze's editor takes the place of.
-  const rootOf = (ed) => (plain(ed) ? ed.closest('label[data-cid="TextArea"]') || ed.parentElement : ed.closest('.rce-wrapper'));
+  // The whole editor (menus, toolbar, text, status bar), or the Inbox's field itself (its InstUI label, and Canvas's messages
+  // under it, stay shown): what Glaze's editor takes the place of.
+  const rootOf = (ed) => (plain(ed) ? ed.parentElement : ed.closest('.rce-wrapper'));
   // The textarea carries data-gz-writer-id: writer/writer-main-canvas.js finds its editor as tinymce.get(textarea.id).
   const containerOf = (ed) => ed;
 
@@ -119,14 +120,19 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     return main('canvas-set', { id: box.id, text: linesOf(html) }).map((r) => (r?.ok && typeof r.text === 'string' ? { ...r, html: paragraphs(r.text) } : { ok: false }));
   };
   // Canvas changing the box (a reset after Reply, its autosave restored, an undo): writer-main-canvas.js, asked to watch the
-  // box, says so for its id, and an RCE's body is observed too; the Inbox's value changes only with an input event.
+  // box, says so for its id, and an RCE's body is observed too. The Inbox's value: an input event, or React setting it (the
+  // signature Canvas adds once it has loaded it) or disabling the field (translating), which fire nothing, so it is looked at
+  // twice a second.
   const watch = (box, fn, observe, main) => {
-    const doc = box.editor.ownerDocument, b = !plain(box.editor) && bodyOf(box.editor), o = b ? observe(b, fn) : null;
+    const ed = box.editor, doc = ed.ownerDocument, b = !plain(ed) && bodyOf(ed), o = b ? observe(b, fn) : null;
     if (b) main?.('canvas-watch', { id: box.id });
     const changed = (e) => { try { if (JSON.parse(e.detail)?.id === box.id) fn(); } catch { /* not ours */ } };
     doc?.addEventListener?.('gz-writer:canvas-changed', changed);
-    if (plain(box.editor)) box.editor.addEventListener('input', fn);
-    return { disconnect: () => { o?.disconnect(); doc?.removeEventListener?.('gz-writer:canvas-changed', changed); box.editor.removeEventListener('input', fn); } };
+    let last = plain(ed) ? ed.value : null, off = plain(ed) && ed.disabled;
+    const look = plain(ed) && setInterval(() => { if (ed.value !== last || ed.disabled !== off) { last = ed.value; off = ed.disabled; fn(); } }, 500);
+    const input = () => { last = ed.value; fn(); };
+    if (plain(ed)) ed.addEventListener('input', input);
+    return { disconnect: () => { o?.disconnect(); clearInterval(look); doc?.removeEventListener?.('gz-writer:canvas-changed', changed); ed.removeEventListener('input', input); } };
   };
   const NATIVE = 'Canvas editor';
   const attemptAt = () => null; // Canvas has no Ultra-style attempt pages: a quiz essay is a test by its route
