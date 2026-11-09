@@ -6,7 +6,13 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Canvas pages float on your Look's panels, as Blackboard's do: assignments, discussions, grades, pages, the syllabus, files, people, the inbox and settings. Header bars are rounded, and Canvas's editor and submission form wear your Look.
+
 ### Fixed
+
+- Hovering rows, tabs and the editor's buttons on Canvas no longer flashes white.
 
 - Typing `/` with a switch or choice focused opens Settings search again.
 - Google Drive's daily backup keeps Notes and the Pet habitat on for a new install, so restoring it no longer turns them off.
