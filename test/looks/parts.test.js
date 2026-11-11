@@ -47,6 +47,59 @@ test('rules: hide, show, move, style and label, each only where its part allows'
   assert.equal(P.clean({ p: 'ultra.course-card', do: 'label', t: 'x' }), null, 'a card holds many texts: not relabelled');
 });
 
+// The school's own links live in these three, so a rule may restyle them but never take them away: `hide` is refused (above), and
+// so is every other way of making them invisible. A Look from someone else is refused whole when any rule is changed by this.
+const NAV = ['ultra.nav', 'canvas.global-nav', 'moodle.navbar'];
+const style = (p, st) => P.clean({ p, do: 'style', st });
+
+test('the main navigation cannot be faded out: opacity never goes below 50', () => {
+  for (const p of NAV) {
+    for (const o of [0, 1, 10, 49]) assert.deepEqual(style(p, { o }), { p, do: 'style', st: { o: 50 } }, `${p} o ${o}`);
+    for (const o of [50, 80, 100]) assert.deepEqual(style(p, { o }), { p, do: 'style', st: { o } }, `${p} o ${o} stays`);
+    assert.deepEqual(style(p, { o: 0, bg: '#112233', r: 8 }).st, { o: 50, bg: '#112233', r: 8 }, `${p}: the rest of the rule stands`);
+    assert.deepEqual(P.rules([{ p, do: 'style', st: { o: 0 } }]), [{ p, do: 'style', st: { o: 50 } }], `${p} through the list cleaner`);
+    assert.deepEqual(P.plan([{ p, do: 'style', st: { o: 0 } }], p.split('.')[0]).get(p).vars, { '--gz-r-o': '0.5' }, `${p} as the page wears it`);
+  }
+  // Every other part may fade, as before; so may a cluster's own pieces.
+  for (const p of ['canvas.footer', 'canvas.global-nav.dashboard', 'ultra.nav.footer', 'moodle.navbar.brand']) assert.equal(style(p, { o: 0 }).st.o, 0, p);
+});
+
+test('the main navigation takes no visibility, display or size, however it is asked', () => {
+  for (const p of NAV) {
+    for (const st of [{ visibility: 'hidden' }, { display: 'none' }, { width: 0 }, { height: 0 }, { size: 0 }, { fontSize: 0 }, { 'font-size': 0 }, { o: 0, visibility: 'hidden' }, { bg: '#112233', height: 0 }]) {
+      assert.equal(style(p, st), null, `${p} ${JSON.stringify(st)}`);
+    }
+    assert.equal(P.clean({ p, do: 'hide' }), null, `${p} hide`);
+    assert.deepEqual(style(p, { p: 0, g: 0 }).st, { p: 0, g: 0 }, `${p}: the keys it does take, at their smallest, hide nothing`);
+  }
+});
+
+test('the main navigation cannot be given text in its own background colour', () => {
+  for (const p of NAV) {
+    for (const st of [{ fg: '#ffffff', bg: '#ffffff' }, { fg: '#FFFFFF', bg: '#ffffff' }, { fg: 'surface-2', bg: 'surface-2' }]) assert.equal(style(p, st), null, `${p} ${JSON.stringify(st)}`);
+    assert.deepEqual(style(p, { fg: 'ink', bg: 'ink', r: 8 }), { p, do: 'style', st: { r: 8 } }, `${p}: both colours go, the rest of the rule stays`);
+    assert.deepEqual(style(p, { fg: '#ffffff', bg: '#112233' }).st, { fg: '#ffffff', bg: '#112233' }, `${p}: readable colours stay`);
+    assert.deepEqual(style(p, { fg: '#ffffff' }).st, { fg: '#ffffff' });
+    assert.deepEqual(style(p, { bg: 'surface-2', fg: 'ink' }).st, { bg: 'surface-2', fg: 'ink' });
+  }
+  // Ordinary parts are the Look's to colour.
+  for (const p of ['canvas.footer', 'ultra.nav.footer', 'moodle.navbar.brand']) assert.deepEqual(style(p, { fg: '#ffffff', bg: '#ffffff' }).st, { fg: '#ffffff', bg: '#ffffff' }, p);
+});
+
+test('two rules that together set the navigation\'s text and background to one colour give both up', () => {
+  for (const p of NAV) {
+    const site = p.split('.')[0];
+    for (const [a, b] of [[{ fg: '#ffffff' }, { bg: '#ffffff' }], [{ bg: 'surface-2' }, { fg: 'surface-2' }], [{ fg: '#ABCDEF' }, { bg: '#abcdef' }]]) {
+      const got = P.plan([{ p, do: 'style', st: a }, { p, do: 'style', st: b }], site).get(p);
+      assert.deepEqual([got.st, got.vars], [{}, {}], `${p} ${JSON.stringify([a, b])}`);
+    }
+    // A later rule that moves them apart stands, and the other keys are untouched.
+    const apart = P.plan([{ p, do: 'style', st: { fg: '#ffffff', r: 8 } }, { p, do: 'style', st: { bg: '#ffffff' } }, { p, do: 'style', st: { bg: '#112233' } }], site).get(p);
+    assert.deepEqual(apart.st, { fg: '#ffffff', r: 8, bg: '#112233' }, p);
+  }
+  assert.deepEqual(P.plan([{ p: 'canvas.footer', do: 'style', st: { fg: '#ffffff' } }, { p: 'canvas.footer', do: 'style', st: { bg: '#ffffff' } }], 'canvas').get('canvas.footer').st, { fg: '#ffffff', bg: '#ffffff' }, 'an ordinary part is the Look\'s to colour');
+});
+
 test('styles: the allowlist only, colours as tokens or hex, numbers clamped, catalogue fonts', () => {
   const st = (p, s) => P.clean({ p, do: 'style', st: s })?.st ?? null;
   assert.deepEqual(st('canvas.dashboard-card', { bg: 'accent-soft', fg: '#AABBCC', bc: 'line', bw: 9, r: 40.4, p: 3, g: -2, sh: 2, o: 150, f: 'lexend' }),
@@ -384,6 +437,29 @@ test('a colour rule that would hide Glaze settings in its own background is igno
   assert.deepEqual(colours(), ['fg bg', '#ffffff', '#112233']);
   wear([{ p: 'ultra.nav', do: 'style', st: { bg: '#000000' } }]);
   assert.deepEqual(colours(), ['bg', '', '#000000']);
+});
+
+test('the main navigation\'s own colours give way on the page when its text could not be read on its background', () => {
+  const tokens = { '--gz-surface-2': '#102030', '--gz-ink': '#eef2f8' };
+  const getComputedStyle = (e) => ({ getPropertyValue: (k) => (e === e.doc.root ? tokens[k] || '' : ''), color: '', backgroundColor: 'rgba(0, 0, 0, 0)', backgroundImage: 'none' });
+  for (const [site, part] of [['ultra', 'ultra.nav'], ['canvas', 'canvas.global-nav'], ['moodle', 'moodle.navbar']]) {
+    const { body, wear } = page(site, (el, s) => el([], [el(s(part), [el([], ['Account'], { href: '/profile' })]), el(s('canvas.footer'), ['Footer'])]), '/', { getComputedStyle });
+    const [nav] = body.children;
+    const got = () => [nav.getAttribute('data-gz-r-st'), nav.style.getPropertyValue('--gz-r-fg'), nav.style.getPropertyValue('--gz-r-bg')];
+    // Both sides named and nearly one colour, as a hex pair or a token against a hex: other styling stays.
+    for (const st of [{ fg: '#102030', bg: '#112233', r: 8 }, { fg: 'surface-2', bg: '#102231', r: 8 }, { fg: '#eef2f8', bg: 'ink', r: 8 }]) {
+      wear([{ p: part, do: 'style', st }]);
+      assert.deepEqual(got(), ['r', '', ''], `${part} ${JSON.stringify(st)}`);
+      assert.equal(nav.style.getPropertyValue('--gz-r-r'), '8px');
+    }
+    // Readable colours, and one side alone (the page's own other side is not known for a native bar), stay.
+    wear([{ p: part, do: 'style', st: { fg: '#ffffff', bg: '#112233' } }]);
+    assert.deepEqual(got(), ['fg bg', '#ffffff', '#112233'], part);
+    wear([{ p: part, do: 'style', st: { bg: '#112233' } }]);
+    assert.deepEqual(got(), ['bg', '', '#112233'], part);
+    wear([{ p: part, do: 'style', st: { o: 80 } }]);
+    assert.equal(nav.style.getPropertyValue('--gz-r-o'), '0.8', `${part}: a mild fade stays`);
+  }
 });
 
 test('Glaze classes are protected even after native classes', () => {

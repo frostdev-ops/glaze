@@ -233,6 +233,22 @@ test('with the real registry, a rule must name a part that can take it, in a cod
   } finally { if (was === undefined) delete globalThis.GZ_PARTS; else globalThis.GZ_PARTS = was; }
 });
 
+test('a code that would make the main navigation invisible is refused whole, as one that hides it is', async () => {
+  const was = globalThis.GZ_PARTS;
+  try {
+    globalThis.GZ_PARTS = require('../../extension/looks/parts.js');
+    for (const p of ['ultra.nav', 'canvas.global-nav', 'moodle.navbar']) {
+      for (const [why, rule] of Object.entries({
+        hide: { p, do: 'hide' }, 'opacity 0': { p, do: 'style', st: { o: 0 } }, 'opacity 10': { p, do: 'style', st: { o: 10, bg: '#112233' } },
+        'text as its background': { p, do: 'style', st: { fg: '#ffffff', bg: '#ffffff' } }, 'text as its background, in tokens': { p, do: 'style', st: { fg: 'surface-2', bg: 'surface-2', r: 8 } },
+        visibility: { p, do: 'style', st: { visibility: 'hidden' } }, 'zero height': { p, do: 'style', st: { height: 0 } },
+      })) await assert.rejects(S.decode(await make('glaze2:', { c: C, x: { rules: [rule] } })), (e) => e.vars.setting === 'x.rules', `${p}: ${why}`);
+      const ok = { p, do: 'style', st: { o: 70, fg: '#ffffff', bg: '#112233' } };
+      assert.deepEqual((await S.decode(await make('glaze2:', { c: C, x: { rules: [ok] } }))).parts.x.rules, [ok], `${p}: a readable, mildly faded bar is fine`);
+    }
+  } finally { if (was === undefined) delete globalThis.GZ_PARTS; else globalThis.GZ_PARTS = was; }
+});
+
 test('every part at its largest still fits a code: under 48 KiB of JSON', () => {
   const stop = { at: 0, x: 200, y: 200, sc: 1.5, r: 180, kx: 30, ky: 30, o: 1, bl: 20, br: 2, sa: 2, hu: 180 };
   const ids = Array.from({ length: 192 }, (_, i) => `a${i}`);

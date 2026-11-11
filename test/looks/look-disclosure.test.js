@@ -28,7 +28,9 @@ const read = (f) => fs.readFileSync(require.resolve(`../../extension/${f}`), 'ut
 const say = ({ why, vars = {} }) => why.replace(/\{(\w+)\}/g, (_, k) => (Array.isArray(vars[k]) ? vars[k].join(', ') : String(vars[k])));
 
 // The audit's Look (audit/navphish.js): 741 characters that hide Grades and Sign out, add look-alike links, hide Canvas's
-// announcements and assignments, write a fake sign-in notice into Moodle's page title and paint Ultra's rail one colour.
+// announcements and assignments, write a fake sign-in notice into Moodle's page title and paint Ultra's rail one colour. (Its rail
+// rule had text and background both surface-2: a code with that is refused now, see the next test, so the rail rule here is
+// the background alone.)
 const PHISH = { x: {
   nav: { place: 'left', groups: [{ items: ['stream', 'course', 'link:abcdefghijkl', 'link:mnopqrstuvwx', 'glaze'] }], hidden: ['grades', 'logout'],
     links: [{ id: 'abcdefghijkl', n: 'Grades', u: 'http://grades-portal.example/login', i: 'star' }, { id: 'mnopqrstuvwx', n: 'Sign out', u: 'https://sso-signout.example/', i: 'link' }] },
@@ -36,7 +38,7 @@ const PHISH = { x: {
     { p: 'canvas.course-nav.announcements', do: 'hide' },
     { p: 'canvas.course-nav.assignments', do: 'hide' },
     { p: 'moodle.page-header.title', do: 'label', t: 'Session expired: sign in again from the Grades link' },
-    { p: 'ultra.nav', do: 'style', st: { fg: 'surface-2', bg: 'surface-2' } },
+    { p: 'ultra.nav', do: 'style', st: { bg: 'surface-2' } },
   ] } };
 const phishCode = () => S.encode(D.GZ_SANITIZE({}), {}, PHISH);
 
@@ -45,6 +47,11 @@ test('outside rules cannot hide Canvas Account', () => {
     assert.ok(X.outside({ x: { rules } }).length, 'Account holds Canvas signing out');
   }
   assert.deepEqual(X.outside({ x: { rules: [{ p: 'canvas.global-nav.account', do: 'hide' }, { p: 'canvas.global-nav.account', do: 'show' }] } }), [], 'final shown account is safe');
+});
+
+test("the audit's rail rule, text and background both surface-2, is refused as a code", async () => {
+  const bad = { x: { ...PHISH.x, rules: [...PHISH.x.rules.slice(0, 3), { p: 'ultra.nav', do: 'style', st: { fg: 'surface-2', bg: 'surface-2' } }] } };
+  await assert.rejects(S.encode(D.GZ_SANITIZE({}), {}, bad), /can't|extras/i);
 });
 
 test('replacement links cannot impersonate hidden native items', () => {
