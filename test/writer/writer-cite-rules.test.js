@@ -114,3 +114,22 @@ test('APA: same author, same year: a and b by title order in the entry and the c
   assert.deepEqual(issues.map((i) => i.message), []);
   assert.deepEqual(C.cites('One (Smith, 2020a).', all, 'apa7').map((c) => c.ids), [['s-alpha']]);
 });
+
+// Each work is its own entry (APA 9.43, MLA 5.124, CMOS 14.63): two pages at different addresses, or two chapters of one
+// title in different books, stay two sources; the same work found twice stays one.
+test('distinct works with different addresses or books stay apart; the same work stays one (APA 9.43, CMOS 14.63)', () => {
+  const who = [{ literal: 'World Health Organization' }], y = d(2023);
+  assert.equal(SRC.dedupe([{ type: 'webpage', title: 'Malaria', author: who, issued: y, URL: 'https://www.who.int/news-room/fact-sheets/detail/malaria' },
+    { type: 'webpage', title: 'Malaria', author: who, issued: y, URL: 'https://www.who.int/health-topics/malaria' }]).length, 2);
+  const ch = (book) => ({ type: 'chapter', title: 'Introduction', author: [{ family: 'Lee', given: 'A.' }], 'container-title': book, issued: d(2019) });
+  assert.equal(SRC.dedupe([ch('Book One'), ch('Book Two')]).length, 2);
+  assert.equal(SRC.dedupe([ch('Book One'), ch('Book one')]).length, 1);
+  const beloved = { type: 'book', title: 'Beloved', author: [{ family: 'Morrison', given: 'Toni' }], issued: d(1987) };
+  assert.equal(SRC.dedupe([beloved, { ...beloved, URL: 'https://example.com/b' }]).length, 1, 'one with an address, one without');
+  assert.equal(SRC.dedupe([{ ...beloved, URL: 'https://www.example.com/b/' }, { ...beloved, URL: 'http://example.com/b' }]).length, 1, 'one address written two ways');
+});
+test('a Chicago journal entry dated in parentheses does not swallow the entry after it (CMOS 14.171)', () => {
+  const B = require('../../extension/writer/writer-bibliography.js');
+  const doc = 'Body.\nBibliography\nLee, Ann. "Sleep and Memory." Journal of Sleep 4, no. 2 (2018): 1–9.\nUnited Nations. Report on Sleep and Health. New York: UN, 2020.';
+  assert.deepEqual(B.entries(doc).map((e) => e.text), ['Lee, Ann. "Sleep and Memory." Journal of Sleep 4, no. 2 (2018): 1–9.', 'United Nations. Report on Sleep and Health. New York: UN, 2020.']);
+});
