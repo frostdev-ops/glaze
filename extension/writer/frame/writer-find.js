@@ -17,7 +17,7 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
   const pattern = (query, { cs = false, word = false } = {}) => {
     const q = String(query || '').slice(0, MAX);
     if (!q) return null;
-    const body = [...q].map((c) => QUOTES[c] || c.replace(/[\\^$.*+?()[\]{}|/-]/g, '\\$&')).join('');
+    const body = [...q].map((c) => QUOTES[c] || c.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&')).join('');
     return new RegExp(word ? `(?<![\\p{L}\\p{N}\\p{M}_])(?:${body})(?![\\p{L}\\p{N}\\p{M}_])` : body, cs ? 'gu' : 'giu');
   };
   // A note's plain text, by its content (inline HTML).
