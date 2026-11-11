@@ -780,8 +780,10 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     try { sessionStorage.setItem(keySlot, recoveryKey); } catch { /* the durable copy is still in Papers */ }
     const setState = (k) => { state.textContent = k ? t(k) : ''; };
     // capped: the last save was refused by the cap on documents (writer/writer-papers.js), which asking again won't change.
+    // capping(e): whether a failed save's error is that refusal (a save that failed before an import says so only by this); with none, whether the last save was.
     let capped = false;
-    const notSaved = (e) => (capped || e?.message === 'too many documents' ? t('Documents is full ({n}). Delete or export some to save a new one.', { n: PA.CAP.rows }) : t('Not saved. Try again in a moment.'));
+    const capping = (e) => (e ? e.message === 'too many documents' || (capped && e.message === 'paper could not be saved before import') : capped);
+    const notSaved = (e) => (capping(e) ? t('Documents is full ({n}). Delete or export some to save a new one.', { n: PA.CAP.rows }) : t('Not saved. Try again in a moment.'));
     // named: the paper has a title the student gave it (typed here or on the Documents home), typed; else a standalone
     // document is called by its first line (F.name) and an assignment's paper by the assignment.
     let named = false, typed = '', nameEdits = 0, nameSaved = 0;
@@ -1497,7 +1499,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       } catch (e) {
         console.error(e);
         const message = e instanceof RangeError && ['Choose a Word file smaller than 15 MB.', 'The pictures in this file are larger than 10 MB.', 'The document is too large.', 'A table is too wide.'].includes(e.message) ? e.message : 'That file could not be read as a Word document.';
-        toast(e?.message === 'too many documents' || (capped && e?.message === 'paper could not be saved before import') ? notSaved(e) : t(message));
+        toast(capping(e) ? notSaved(e) : t(message));
       }
       finally { replacing = null; release?.(); importing = false; root.inert = inert; view.setProps({ editable }); if (root.isConnected && current === api) view.focus(); }
       return before;

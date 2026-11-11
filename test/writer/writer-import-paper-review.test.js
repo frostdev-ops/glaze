@@ -18,8 +18,8 @@ const paper = () => {
     setDoc: (json) => { applied.push(json); view.state.doc = json; },
   });
   const own = text.slice(text.indexOf('    const ownFormatting = ')).split('\n')[0];
-  // The saving block's notSaved, over the page's `capped` ('' in a source without it).
-  const said = text.indexOf('    const notSaved = '), notSaved = said < 0 ? '' : text.slice(said, text.indexOf('\n', said));
+  // The saving block's capping and notSaved, over the page's `capped` ('' in a source without it).
+  const said = text.indexOf('    const notSaved = '), notSaved = said < 0 ? '' : text.slice(text.indexOf('    const capping = '), text.indexOf('\n', said));
   const importFile = vm.runInContext(`${notSaved}\n${own}\n${text.slice(from, to)} importFile`, ctx);
   const file = (name = 'original.docx') => ({ name, size: 3, type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', arrayBuffer: async () => new ArrayBuffer(3) });
   const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(setImmediate); };

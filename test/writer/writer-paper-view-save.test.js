@@ -5,8 +5,8 @@ const PA = require('../../extension/writer/writer-papers.js');
 const source = fs.readFileSync(process.env.WRITER_PAPER_SOURCE || require.resolve('../../extension/writer/frame/writer-paper.js'), 'utf8');
 const start = source.indexOf('    const setView = async '), end = source.indexOf('    // Settings → Writer → Full writer changed', start);
 const code = source.slice(start, end);
-// Said when the last save was refused by the cap on documents (the saving block's notSaved, over the page's `capped`); '' in a source without it.
-const NOT_SAVED = source.includes('    const notSaved = ') ? source.slice(source.indexOf('    const notSaved = '), source.indexOf('\n', source.indexOf('    const notSaved = '))) : '';
+// Said when the last save was refused by the cap on documents (the saving block's capping and notSaved, over the page's `capped`); '' in a source without it.
+const NOT_SAVED = source.includes('    const notSaved = ') ? source.slice(source.indexOf('    const capping = '), source.indexOf('\n', source.indexOf('    const notSaved = '))) : '';
 
 test('full → compact refuses to project when the paper or its view version cannot be saved', async () => {
   for (const fail of [1, 2]) {

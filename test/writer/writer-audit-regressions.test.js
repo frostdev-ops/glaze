@@ -11,7 +11,7 @@ const refusedImport = async (error, lang) => {
   const source = read('writer/frame/writer-paper.js'), start = source.indexOf('    // The paper becomes the Word file'), end = source.indexOf("    file.addEventListener('change'", start);
   const toasts = [];
   const importFile = vm.runInNewContext(`${source.slice(start, end)} importFile`, {
-    capped: false, RangeError, ArrayBuffer, Uint8Array, console: { error() {} }, current: null, api: null, key: 'paper', root: { isConnected: true }, view: { state: { doc: {} }, props: {}, setProps() {}, focus() {} }, need: async () => {}, DOCX: [], format: 'mla9',
+    capped: false, capping: () => false, RangeError, ArrayBuffer, Uint8Array, console: { error() {} }, current: null, api: null, key: 'paper', root: { isConnected: true }, view: { state: { doc: {} }, props: {}, setProps() {}, focus() {} }, need: async () => {}, DOCX: [], format: 'mla9',
     GZ_WRITER_DOCX: { importDocx: async () => { throw error; } },
     t: (key) => I.t(key, {}, lang), toast: (text) => toasts.push(text),
   });
