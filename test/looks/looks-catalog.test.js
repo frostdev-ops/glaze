@@ -219,6 +219,27 @@ test('Settings wakes the worker to build the catalogue where the storage change 
   assert.equal(w.local.lookCatalog?.looks?.length, 4);
 });
 
+test('a catalogue from before picture-host checks rechecks unchanged and renamed favorites before courses wear them', async () => {
+  const privateLook = G.GZ_SANITIZE({ bg: { kind: 'image', image: 'https://192.168.1.1/picture.png' } });
+  const privateNav = G.GZ_SANITIZE({ nav: { k: 'image', u: 'https://127.0.0.1/picture.png' } });
+  const publicLook = G.GZ_SANITIZE({ bg: { kind: 'image', image: 'https://pictures.example.com/picture.png' } });
+  const settings = [privateLook, privateNav, publicLook];
+  const favorites = await Promise.all(settings.map(async (s, i) => C.make(await code(s), `Kept ${i}`, '', 'saved')));
+  for (const f of favorites.slice(0, 2)) await assert.rejects(S.decode(f.code));
+  // The old decoder admitted these URLs, and the catalogue cached its answer without the code's navigation group.
+  const legacy = await C.build(favorites, (c) => settings[favorites.findIndex((f) => f.code === c)]);
+  const sync = G.GZ_SANITIZE({ courseLooks: { _1_1: favorites[0].id } });
+  assert.equal(G.GZ_COURSE_LOOK(sync, '_1_1', legacy.looks).bg.image, privateLook.bg.image, 'the stale cache really wears the private picture');
+  for (const rename of [false, true]) {
+    const kept = favorites.map((f, i) => rename && i === 0 ? { ...f, name: 'Renamed' } : f);
+    const w = worker({ lookFavorites: kept, lookCatalog: structuredClone(legacy) }, structuredClone(sync));
+    assert.deepEqual(await w.send({ type: 'glaze:looks', op: 'build' }, w.popup), { ok: true });
+    assert.deepEqual(w.local.lookCatalog.looks.map((e) => e.id), [favorites[2].id], `only the public Look survives (${rename ? 'renamed' : 'unchanged'})`);
+    assert.equal(G.GZ_COURSE_LOOK(sync, '_1_1', w.local.lookCatalog.looks), sync, 'the course returns to the student\'s own theme');
+    assert.equal(w.local.lookFavorites.length, 3, 'the saved codes stay available for recovery');
+  }
+});
+
 test('a kept Look put on by id from the popup wears its code as "Use this theme" does; a page elsewhere cannot', async () => {
   const { favorites, settings } = await fixtures();
   const w = worker({ lookFavorites: favorites }, structuredClone(G.GZ_SANITIZE({ look: { tooltips: false }, navbar: { on: false } })));
