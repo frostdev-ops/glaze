@@ -47,3 +47,20 @@ test('a chart anchor missing its col or row drops only that chart, with a part p
   assert.deepEqual(wb.keep.problems.map((p) => p.code), ['part']);
   assert.match(wb.keep.problems[0].message, /2 charts/);
 });
+
+test('a chart anchor missing a required marker is skipped without changing later ids or spans', async () => {
+  const body = [
+    anchor('twoCellAnchor', marker('to', 4, 8)),
+    anchor('twoCellAnchor', marker('from', 1, 1)),
+    anchor('oneCellAnchor', ext(100, 50)),
+    anchor('absoluteAnchor', '<xdr:pos x="0" y="0"/>' + ext(100, 50)),
+    anchor('twoCellAnchor', marker('from', 6, 1) + marker('to', 9, 9)),
+  ].join('');
+  const wb = await book(body), xml = drawing(body);
+  const list = CX.charts(wb, wb.sheets[0]);
+  assert.deepEqual(list.map((c) => c.id), ['xl/drawings/drawing1.xml#3', 'xl/drawings/drawing1.xml#4']);
+  assert.equal(CX.spans(xml).length, 5, 'broken anchors retain their positions in the source');
+  const moved = CX.setAnchor(xml, 4, { col: 10, row: 2, colOff: 0, rowOff: 0 }, { col: 13, row: 10, colOff: 0, rowOff: 0 });
+  assert.equal(CX.anchors(moved)[4].from.col, 10);
+  assert.match(wb.keep.problems.find((p) => p.code === 'part')?.message ?? '', /3 charts/);
+});
