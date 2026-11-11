@@ -683,7 +683,7 @@ test('editor: an open gallery offer touches its pending file every ten minutes, 
   const [h1, h2] = ['A'.repeat(43), 'B'.repeat(43)];
   assert.equal(beats.size, 0);
   ctx.startOffer({ media: { h: h1, pending: true } });
-  assert.deepEqual([...beats.values()].map((b) => b.ms), [10 * 60e3], 'one beat, every ten minutes');
+  assert.deepEqual([...beats.values()].map((b) => b.ms), [10 * 60 * 1000], 'one beat, every ten minutes');
   sent.length = 0;
   [...beats.values()][0].f();
   assert.deepEqual(sent, [{ type: 'glaze:media', op: 'touch', h: h1 }]);

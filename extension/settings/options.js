@@ -1290,7 +1290,7 @@ GZ_UI.load().then((s) => {
   const hold = (h) => {
     offerFile = h;
     clearInterval(offerBeat);
-    offerBeat = setInterval(() => chrome.runtime.sendMessage({ type: 'glaze:media', op: 'touch', h }, () => void chrome.runtime.lastError), 10 * 60e3);
+    offerBeat = setInterval(() => chrome.runtime.sendMessage({ type: 'glaze:media', op: 'touch', h }, () => void chrome.runtime.lastError), 10 * 60 * 1000);
   };
   const letGo = (used = false) => {
     if (offerFile) chrome.runtime.sendMessage({ type: 'glaze:media', op: used ? 'keep' : 'drop', h: offerFile, ...(!used && { pending: true }) }, () => void chrome.runtime.lastError);
