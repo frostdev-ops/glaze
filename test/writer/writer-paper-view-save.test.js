@@ -1,8 +1,12 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
+const I = require('../../extension/core/i18n.js');
+const PA = require('../../extension/writer/writer-papers.js');
 const source = fs.readFileSync(process.env.WRITER_PAPER_SOURCE || require.resolve('../../extension/writer/frame/writer-paper.js'), 'utf8');
 const start = source.indexOf('    const setView = async '), end = source.indexOf('    // Settings → Writer → Full writer changed', start);
 const code = source.slice(start, end);
+// Said when the last save was refused by the cap on documents (the saving block's notSaved, over the page's `capped`); '' in a source without it.
+const NOT_SAVED = source.includes('    const notSaved = ') ? source.slice(source.indexOf('    const notSaved = '), source.indexOf('\n', source.indexOf('    const notSaved = '))) : '';
 
 test('full → compact refuses to project when the paper or its view version cannot be saved', async () => {
   for (const fail of [1, 2]) {
@@ -22,14 +26,14 @@ test('full → compact refuses to project when the paper or its view version can
 });
 
 // The compact bar's line and the hold, as writer-paper.js has them (from the line's element to setView), over stand-ins.
-const flushCtx = ({ save, project }) => {
+const flushCtx = ({ save, project, capped = false }) => {
   const messages = [], doc = {}, view = { props: { editable: () => true }, state: { doc }, setProps(o) { Object.assign(this.props, o); } };
   const el = (cls = '') => ({ inert: false, textContent: '', title: '', dataset: {}, children: [], classList: { contains: (c) => cls.split(' ').includes(c) }, toggleAttribute(n, on) { this[n] = on; }, focus() { this.focused = (this.focused || 0) + 1; }, getClientRects: () => [1] });
   const bar = el('gw-bar'), body = el(), full = el('gp-full');
   const ctx = vm.createContext({ view, parked: null, compact: true, loaded: true, holding: false, switching: null, flushing: null, projecting: false,
     root: { inert: false }, boxEl: { children: [body, bar] }, host: { say: (m) => messages.push(m) }, save, project, setView() {}, queueMicrotask,
-    h: () => el(), t: (k) => k, switches: [full] });
-  vm.runInContext(`${source.slice(source.indexOf('    const said = boxEl ?'), start)}\nglobalThis.begin = flush; globalThis.end = resume; globalThis.line = () => said; globalThis.soon = projectSoon;`, ctx);
+    h: () => el(), t: (k, v) => I.t(k, v, 'en'), switches: [full], PA, capped });
+  vm.runInContext(`${NOT_SAVED}\n${source.slice(source.indexOf('    const said = boxEl ?'), start)}\nglobalThis.begin = flush; globalThis.end = resume; globalThis.line = () => said; globalThis.soon = projectSoon;`, ctx);
   bar.children = [ctx.line(), full];
   return { ctx, messages, view, body, bar, full, line: ctx.line() };
 };
@@ -149,5 +153,19 @@ test('compact: an expired or rejected save releases editing with a visible failu
     assert.equal(rejected.view.props.editable(), true);
     assert.equal(rejected.messages[0].ok, false);
     assert.notEqual(rejected.line.textContent, 'Saving…');
+  }
+});
+
+test('compact: Save and Close, refused because Documents is full, says so; every other failed save keeps its line', async () => {
+  const FULL = 'Documents is full (2,000). Delete or export some to save a new one.';
+  for (const [capped, action, line] of [[true, 'save', FULL], [false, 'save', 'Not saved. Try again in a moment.'],
+    [true, 'submit', 'The paper could not be saved. Nothing was submitted.'], [false, 'submit', 'The paper could not be saved. Nothing was submitted.']]) {
+    const f = flushCtx({ save: async () => null, project: () => PROJECTED, capped });
+    await f.ctx.begin('a', action);
+    assert.equal(f.line.textContent, line, `flush: ${action}, capped ${capped}`);
+    const g = flushCtx({ save: () => new Promise(() => {}), project: () => PROJECTED, capped });
+    g.ctx.begin('b', action);
+    g.ctx.end('b', 'save');
+    assert.equal(g.line.textContent, line, `a save that never answered: ${action}, capped ${capped}`);
   }
 });
