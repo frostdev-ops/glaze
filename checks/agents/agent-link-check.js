@@ -9,8 +9,8 @@
 //     window, todo_list, both against caches the production writers made (test/helpers/mcp-caches.cjs).
 //   4 IDLE (70 s; SLOW=1: 6 min) in a browser started without a DevTools client (Playwright's keeps any worker alive), an
 //     agent connected: the same worker and host before and after. A control profile without agent access loses its worker.
-//   5 The host killed: the link shows exited, then connects to a new host.
-//   6 Agent access off: the host goes and the run folder is emptied.
+//   5 The host killed: the link shows exited, then connects to a new host, and the agent on the old one follows it.
+//   6 Agent access off: the host goes and the run folder is emptied; the connected agent waits for Glaze.
 //   7 The shipped manifest (nativeMessaging optional), headed under Xvfb, the prompt answered with XTEST keys, the manifest
 //     and launcher written by hand: restart with no host, then, DevTools detached, a natural idle stop and Settings' one ask
 //     after its wait on Starting… (settings/editor-agents.js WAIT), which starts the worker that connects.
@@ -544,8 +544,10 @@ async function killAndOff() {
   ok('5', 'the host killed: the link shows exited, in Chromium\'s words', exited?.error === 'Native host has exited.' && exited.at >= killed, heard);
   ok('5', 'then connects to a new host on its own, which takes over the run file', back?.state === 'connected' && !!second && second.rec.pid !== first?.rec.pid && second.rec.token !== first?.rec.token
     && hosts(P1.home).length === 1 && runFolder(P1.home)?.length === 2, { back, ...ph.hosts, retryMs: back && exited ? back.at - exited.at : null });
-  const lost = ph.lost = await a.gone();
-  ok('5', 'the agent on the killed host exits 1, saying Glaze closed it', lost?.code === 1 && a.err.includes('Glaze closed the connection'), { lost, err: a.err });
+  const rejoined = ph.rejoined = await until(() => a.exit || a.err.includes(`connected to Glaze in chromium (instance ${second?.rec.instance}) again`), 15000);
+  const again = await a.modern('server/discover');
+  ok('5', 'the agent on the killed host stays, saying Glaze closed it, and answers through the new host', rejoined === true && !a.exit
+    && a.err.includes('Glaze closed the connection') && !!again.result, { exit: a.exit, err: a.err, again });
   const b = agent('after-kill', P1.home), todo = await call(b, 'todo_list');
   ok('5', 'a new agent reaches the new host', await answers(todo, 'todo_list'), sc(todo));
 
@@ -554,9 +556,12 @@ async function killAndOff() {
   ph.offMs = went ? went - at : null;
   ok('6', 'off: the worker lets go of the port and the host exits', off?.ok === true && off.link?.state === 'off' && !!went, { off, ms: ph.offMs });
   ok('6', 'the run folder is emptied', same(runFolder(P1.home), []), runFolder(P1.home));
-  const dropped = ph.dropped = await b.gone();
   const state = ph.state = await config(opt, { op: 'state' }), mirror = await linkOf(opt);
-  ok('6', 'the connected agent is let go, and Settings reads off', dropped?.code === 1 && state?.on === false && state.link?.state === 'off' && mirror?.state === 'off', { dropped, state, mirror });
+  const ping = await b.ask('ping', {}, 3000), at2 = Date.now(), away = ph.away = await call(b, 'todo_list', 'modern', 15000);
+  ph.awayMs = Date.now() - at2;
+  ok('6', 'the connected agent stays: ping is answered without Glaze, a call -31003 after its 10 s wait; Settings reads off', !b.exit && same(ping.result, {})
+    && away?.error?.code === -31003 && ph.awayMs >= 9000 && state?.on === false && state.link?.state === 'off' && mirror?.state === 'off', { exit: b.exit, ping, away, ms: ph.awayMs, state, mirror });
+  ok('6', 'and leaves with exit 0 when its app does', (await b.end())?.code === 0, b.exit);
   const c = agent('after-off', P1.home);
   await sleep(2000);
   ok('6', 'a new agent finds no host and waits', !c.exit && /waiting for Glaze/.test(c.err) && !c.err.includes('connected to Glaze'), c.err);
