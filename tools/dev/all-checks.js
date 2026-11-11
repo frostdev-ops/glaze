@@ -13,6 +13,9 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 
 const ROOT = path.resolve(__dirname, '../..');
 const ALLOWED = { runner: ['runner', 'linux', 'network', 'headed'], mac: ['runner', 'mac', 'network'] };
+// glaze-remote names a job by the second it starts: two started from one checkout in the same second collide ("is already
+// running", exit 255), so runner dispatches are spaced this far apart.
+const STAGGER = 1500;
 const SLOTS = 8, DEFAULT_LIMIT = 300, GRACE = 600, KILL_AFTER = 10000, EXIT_WAIT = 3000, TAIL = 25;
 const nameOf = (key) => path.basename(key).replace(/\.[^.]+$/, '');
 
@@ -162,16 +165,19 @@ function runCheck(check, where, opts) {
   });
 }
 
-// Results in the order given. The runner takes `jobs` at once and nothing new once it has failed; the Mac one at a time.
+// Results in the order given. The runner takes `jobs` at once, `staggerMs` apart, and nothing new once it has failed; the Mac
+// one at a time.
 async function runAll(checks, where, opts) {
-  const { jobs = SLOTS, signal, lock, evidence, onResult } = opts;
+  const { jobs = SLOTS, signal, lock, evidence, onResult, staggerMs = 0, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = opts;
   fs.mkdirSync(evidence, { recursive: true });
   if (where === 'mac' && lock) fs.mkdirSync(path.dirname(lock), { recursive: true });
   const results = new Array(checks.length);
-  let next = 0, runnerFailed = false;
+  let next = 0, runnerFailed = false, gate = Promise.resolve();
+  const turn = () => { const mine = gate; gate = gate.then(() => sleep(staggerMs)); return mine; };
   const worker = async () => {
     for (let i = next++; i < checks.length; i = next++) {
       const c = checks[i];
+      if (where === 'runner' && staggerMs > 0 && !runnerFailed && !signal?.aborted) await turn();
       if (signal?.aborted) results[i] = skippedResult(c, 'interrupted');
       else if (runnerFailed) results[i] = result(c, 'runner-failed', { detail: 'not dispatched: the runner failed' });
       else {
@@ -290,7 +296,7 @@ async function main(argv = process.argv.slice(2), deps = {}) {
   const started = new Date();
   let ran;
   try {
-    ran = await runAll(chosen.run, a.where, { ...ctx, jobs: a.jobs, spawn, timers, kill, killAfterMs, exitWaitMs, graceMs: a.grace === undefined ? undefined : a.grace * 1000, signal: ac.signal,
+    ran = await runAll(chosen.run, a.where, { ...ctx, jobs: a.jobs, staggerMs: deps.staggerMs ?? (a.where === 'runner' ? STAGGER : 0), sleep: deps.sleep, spawn, timers, kill, killAfterMs, exitWaitMs, graceMs: a.grace === undefined ? undefined : a.grace * 1000, signal: ac.signal,
       onResult: (r) => log(`${label(r, known).padEnd(14)} ${r.key}${r.ms == null ? '' : `  ${duration(r.ms)}`}`) });
   } finally { for (const s of ['SIGINT', 'SIGTERM']) process.off(s, onSignal); }
   const results = [...ran, ...chosen.skipped.map((s) => skippedResult(s.check, s.reason))].sort((x, y) => (x.key < y.key ? -1 : 1));
