@@ -202,7 +202,11 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
   // APA 7 9.44–9.48, MLA 9 5.124–5.126, CMOS 17 14.66 and 16.58: letter by letter by an entry's first element (the
   // surname, a group's name, a title without A, An or The), so nothing precedes something (Brown before Browning). Only
   // that element is compared: what orders one author's works differs by style, so it is never flagged.
-  const head = (text) => fold(String(text || '').replace(/^[^\p{L}\p{N}]+/u, '').replace(/^(?:a|an|the)\s+/i, '').split(',')[0]).replace(/\s+/g, '');
+  const head = (text) => {
+    const s = String(text || '').trim(), title = /^(?:“([^”]+)”|"([^"]+)"|‘([^’]+)’|'([^']+)')/u.exec(s)?.slice(1).find(Boolean);
+    const first = title || s.replace(/^[^\p{L}\p{N}]+/u, '').split(',')[0];
+    return fold(first.replace(/^(?:a|an|the)\s+/i, '')).replace(/\s+/g, '');
+  };
   // "———." and "---." stand for the entry before's author.
   const repeated = (text) => /^\s*[-—–_]{2,}/.test(String(text || ''));
   // texts → the index of the first entry out of order, or -1.
