@@ -21,9 +21,9 @@ const VOCAB = (() => {
 const TOK = (() => { const t = K.load(VOCAB); for (const n of K.GLAZE_TOKENS) t.add(n); return t; })();
 
 // fault: what the next engine's decode throws from now on ('lost' stays, as engine.js's flag does), or null.
-const setup = ({ reserve = false, reuse = false } = {}) => {
+const setup = ({ reserve = false, reuse = false, vision = false } = {}) => {
   const log = { loads: 0, released: 0 };
-  const state = { fault: null, onFault: null, aheadFault: null };
+  const state = { fault: null, onFault: null, aheadFault: null, visionFault: null };
   const E = {
     load: async () => {
       log.loads++;
@@ -51,6 +51,12 @@ const setup = ({ reserve = false, reuse = false } = {}) => {
   const store = { list: async () => [{ id: 'm', tier: 1, state: 'ready' }], status: async () => ({ state: 'ready' }), open: async () => ({ size: 1, read: async () => new Uint8Array(0) }) };
   const posted = [], waiters = new Map();
   const host = H.create({ store, gguf: { open: async () => ({ kv: {} }) }, tokenizer: { ...K, fromGGUF: () => K.load(VOCAB) }, engine: () => E, grammar: () => null, ladder: () => null,
+    ...(vision && { decode: async () => ({ width: 1, height: 1, data: new Uint8Array(4) }), vision: () => ({ load: async () => ({
+      prepare: () => ({ tokens: 1 }), encode: async () => {
+        if (state.visionFault) { state.onFault?.(); throw Object.assign(new Error('picture encoding failed'), { reason: state.visionFault }); }
+        return { tokens: 1, buffer: {}, drop() {} };
+      }, release() {},
+    }) }) }),
     gpu: () => ({}), setTimeout: (f, ms) => { const t = setTimeout(f, ms); t.unref?.(); return t; },
     post: (m) => { posted.push(m); if (m.type === 'done' || m.type === 'error') waiters.get(m.id)?.(m); } });
   let seq = 0;
@@ -113,6 +119,21 @@ for (const reason of ['lost', 'memory']) {
     assert.equal(t.log.released, 1);
     assert.equal(t.host.loaded, null);
     assert.equal((await t.run()).type, 'done');
+    assert.equal(t.log.loads, 2);
+  });
+
+  test(`a cancellation during a picture encoder '${reason}' failure still releases its engine`, async () => {
+    const t = setup({ vision: true });
+    const request = { projector: 'p', images: [{}], parts: [{ image: 0 }] };
+    assert.equal((await t.run('run', request)).type, 'done');
+    t.state.visionFault = reason;
+    t.state.onFault = () => t.host.handle({ id: 2, op: 'cancel' });
+    assert.deepEqual((await t.run('run', request)).error, { category: 'cancelled' });
+    assert.equal(t.log.released, 1);
+    assert.equal(t.host.loaded, null);
+    t.state.visionFault = null;
+    t.state.onFault = null;
+    assert.equal((await t.run('run', request)).type, 'done');
     assert.equal(t.log.loads, 2);
   });
 }
