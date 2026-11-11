@@ -838,7 +838,9 @@ html[data-gz-dark-theme]:not([data-gz-raw-courses]) #application .ic-DashboardCa
 /* Only title lightness changes; the course hue and its hero colour stay Canvas's own. */
 @supports (color: oklch(from red l c h)) {
   #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: oklch(from var(--gz-course) min(l, 0.48) c h) !important; }
+  @media screen {
   html[data-gz-dark-theme] #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: oklch(from var(--gz-course) max(l, 0.72) c h) !important; }
+  }
 }
 /* List view (the planner): the group's banner and edge, and the icon (the avatar, for a personal to-do) of each item. */
 #application .planner-grouping[style*="--gz-course-raw"] > ol { border-color: var(--gz-course) !important; }
@@ -847,13 +849,17 @@ html[data-gz-dark-theme]:not([data-gz-raw-courses]) #application .ic-DashboardCa
 /* The group's title is Canvas's brand blue whatever the course (3.8:1 on a dark band): the course's hue, at a lightness that reads, as on a card. */
 @supports (color: oklch(from red l c h)) {
   #application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__title"] { color: oklch(from var(--gz-course) min(l, 0.48) c h); }
+  @media screen {
   html[data-gz-dark-theme] #application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__title"] { color: oklch(from var(--gz-course) max(l, 0.72) c h); }
+  }
 }
 /* Its long titles fade out under a white gradient, a bright line along the band on a dark palette. */
 html[data-gz-dark-theme] #application [class*="Grouping-styles__title"]::after { display: none; }
 /* InstUI's pills (Missing, Late, Excused) print their state in its mid tone, 3.8:1 on a dark panel. The pill carries the colour
    too, so its text, which inherits it as currentColor, takes the same hue lifted to a lightness that reads. */
-html[data-gz-dark-theme] [class*="css-"][class*="-pill__text"] { color: oklch(from currentColor max(l, 0.72) c h); }
+@media screen {
+  html[data-gz-dark-theme] [class*="css-"][class*="-pill__text"] { color: oklch(from currentColor max(l, 0.72) c h); }
+}
 
 /* ---- course cards: Glaze's sizes and effects (settings.card), and each card's own style ----
    courses/page/cards.js marks a card (or a list view group) with data-gz-card="solid|gradient|image" and its variables
