@@ -3,8 +3,9 @@
 // moves focus in the grid or the list, and a row's public summary. No DOM, no storage.
 // Classic script; module.exports for node.
 var GZ_DOC_HOME = globalThis.GZ_DOC_HOME || (() => {
-  // Text as a search compares it: lower case, accents off, runs of space as one.
-  const fold = (s) => String(s ?? '').normalize('NFKD').replace(/\p{M}+/gu, '').toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+  // Text as a search compares it: lower case, accents off, runs of space as one. Lower case in no locale's way: a Turkish browser's
+  // would turn I into a dotless ı and miss "istanbul" in "İstanbul" and "Istanbul".
+  const fold = (s) => String(s ?? '').normalize('NFKD').replace(/\p{M}+/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
   const terms = (q) => fold(q).split(' ').filter(Boolean);
 
   // A row's title: the student's (named), else the stored one (an assignment's, or a document's first line), else what the

@@ -51,6 +51,29 @@ test('search folds case, accents and spaces, and every term must match', () => {
   assert.equal(DH.matches({}, 'Réveil', DH.terms('reveil'), null), true, 'accents fold both ways');
 });
 
+// A browser whose language is Turkish or Azeri lower-cases with a dotless i by default (node has no way to be set to one, so its
+// toLocaleLowerCase gets the locale a browser would give it when the call names none).
+const asBrowserIn = (locale, fn) => {
+  const was = String.prototype.toLocaleLowerCase;
+  String.prototype.toLocaleLowerCase = function (l) { return was.call(this, l ?? locale); };
+  try { return fn(); } finally { String.prototype.toLocaleLowerCase = was; }
+};
+
+test('search finds İstanbul, Istanbul and ISPARTA with a plain i in a Turkish or Azeri browser', () => {
+  for (const locale of ['tr', 'az', 'en']) {
+    asBrowserIn(locale, () => {
+      assert.equal('I'.toLocaleLowerCase(), locale === 'en' ? 'i' : '\u0131', `the stand-in browser speaks ${locale}`);
+      const finds = (title, q) => DH.matches({}, title, DH.terms(q), '');
+      for (const title of ['İstanbul', 'Istanbul', 'istanbul', 'ISTANBUL']) assert.equal(finds(title, 'istanbul'), true, `${locale}: ${title}`);
+      for (const q of ['İstanbul', 'Istanbul', 'ISTANBUL']) assert.equal(finds('İstanbul trip', q), true, `${locale}: query ${q}`);
+      assert.equal(finds('ISPARTA', 'isparta'), true, `${locale}: ISPARTA`);
+      assert.equal(finds('Isparta', 'isp'), true, `${locale}: a prefix`);
+      assert.equal(finds('Izmir', 'ankara'), false, `${locale}: still a search`);
+      assert.deepEqual(DH.terms('İstanbul ISPARTA'), ['istanbul', 'isparta'], locale);
+    });
+  }
+});
+
 test('sort: last edited newest first; title A to Z, numbers by value, ties newest first', () => {
   const rows = [{ key: 'a', updated: 1 }, { key: 'b', updated: 3 }, { key: 'c', updated: 2 }, { key: 'd', updated: 4 }];
   const titles = new Map([['a', 'Draft 10'], ['b', 'draft 2'], ['c', 'Ésai'], ['d', 'Draft 2']]);

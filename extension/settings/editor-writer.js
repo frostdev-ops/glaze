@@ -1,5 +1,5 @@
 // Settings → Writer: the choices its selects offer (a new paper's format, zoom, versions kept, the dialect), the papers saved
-// on this device by course with Clear… for a course and Clear all papers and documents (every one, in Trash too) behind one
+// on this device by course with Clear… for a course and Clear all papers and documents (every one of every kind, in Trash too) behind one
 // question (writer/writer-papers.js: the list from storage.local, each removal through the worker, which keeps every paper
 // write in one queue), and the personal dictionary (storage.local writerWords, the frames' and Harper's) with a remove for
 // each word and Clear. The switches and selects themselves save through options.js's data-key binding (storage.sync
@@ -33,9 +33,10 @@ var GZ_WRITEREDIT = globalThis.GZ_WRITEREDIT || (() => {
   };
   // The list and its counts leave out what is in the Documents page's Trash (writer/writer-papers.js trashed).
   const byCourse = (rows) => groups((Array.isArray(rows) ? rows : []).filter((r) => !Number.isFinite(r?.trashed)));
-  // Every paper's key, a course's or not, and those in Trash (Clear all leaves nothing behind): a paper whose key never
-  // came is kept under a stand-in (writer-paper.js).
-  const allKeys = (rows) => groups(rows).flatMap((c) => c.keys);
+  // Every document's key, whatever its kind (paper, spreadsheet, PDF, deck), a course's or not, and those in Trash (Clear all
+  // leaves nothing behind); the list by course above stays the assignment papers'. A paper whose key never came is kept under a
+  // stand-in (writer-paper.js).
+  const allKeys = (rows) => [...new Set((Array.isArray(rows) ? rows : []).map((r) => r?.key).filter((k) => typeof k === 'string' && k))];
   // The dictionary as kept: strings only, the newest last.
   const words = (v) => (Array.isArray(v) ? v.filter((w) => typeof w === 'string' && w.trim()) : []);
 

@@ -5,6 +5,31 @@
 // 2.1.x, never before; `node --test` lists a todo while the newest notes are ahead of the manifest.
 const GZ_NEWS = (() => {
   const NOTES = {
+    '4.0.7': [
+      "Writer on Canvas: assignment boxes, discussion replies, the Inbox and quiz essays open in Writer.",
+      "A switch under Writer in Settings turns it off.",
+    ],
+    '4.0.6': [
+      "Settings shows setup's theme pictures and motion choices, and a Speed section under Course pages.",
+    ],
+    '4.0.5': [
+      "A setup guide walks you through a theme, motion, navigation, features, AI and your school.",
+      "Ask Rime's study help answers from your school's records, such as your next test and its due date.",
+    ],
+    '4.0.3': [
+      "Rime, Glaze's AI model, runs on your computer in Chrome and Firefox. Get it under AI in Settings.",
+      "Ask Rime helps with coursework and remembers only what you tell it to. Off until you turn it on.",
+      "Pearson MyLab: your Look on Pearson homework, Pearson inside Blackboard and editable equations.",
+    ],
+    '4.0.1': [
+      "Google Drive can sync your documents and backups across devices. It stays off until you connect.",
+      "PDFs get Highlight, Pen, Text, Image, Shapes and signatures, and a pages panel.",
+    ],
+    '4.0.0': [
+      "Glaze Writer in Blackboard's text boxes, with MLA 9, APA 7 and Chicago 17, versions and .docx.",
+      "Documents holds your papers, spreadsheets, PDFs and slide decks, with Trash and backup.",
+      "Agents, off by default: AI apps on your computer read your courses once you allow them.",
+    ],
     '3.0.2': [
       "Faster Blackboard Ultra: clicks, hovers and page changes no longer restyle the whole page.",
       "Course tabs keep up to four pages live on every computer again, and no longer close when idle.",

@@ -212,6 +212,7 @@ function prelude(host) {
   const brokerFiles = new Set();
   g.brokerIn = (name) => { if (name !== 'backup') return; for (const f of host.backupFiles) if (!brokerFiles.has(f)) { importScripts(f); brokerFiles.add(f); } };
   g.fromEditor = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && s.url.split(/[?#]/)[0] === chrome.runtime.getURL('options.html');
+  g.driveEditor = (s) => g.fromEditor(s) && s.frameId === 0; // background.js's: Settings' own tab (these senders carry no origin)
   g.googlePage = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && ['options.html', 'papers.html', 'writer.html'].some((p) => s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p));
   g.openDocFiles = () => { if (!g.docFiles) { if (!g.GZ_DOC_FILES) importScripts('../documents/doc-files.js'); g.docFiles = GZ_DOC_FILES.store(fileDb); } return g.docFiles; };
   g.openPapers = () => {
