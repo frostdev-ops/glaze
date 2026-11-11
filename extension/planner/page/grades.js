@@ -435,7 +435,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       need.textContent = !r.left ? t('Nothing left to change: {pct}.', { pct: show(C.calc(course, st.what, opts).final) })
         : r.reachable === false ? t('Out of reach: full marks on the {n} items left would make {pct}.', { n: r.left, pct: show(r.best) })
           : r.share === 0 ? t("You'd stay at {pct} or above even with zeros on what's left.", { pct: show(goal) })
-            : t("You'd need about {pct} on each of the {n} items left.", { n: r.left, pct: rqd ? C.letter(r.share * 100, st.scheme) : GZ_I18N.pct(Math.ceil(r.share * 1000) / 10, locale()) });
+            : t("You'd need about {pct} on each of the {n} items left.", { n: r.left, pct: rqd ? C.letter(r.share * 100, st.scheme) : GZ_I18N.pct(r.pct, locale()) });
     });
     target.addEventListener('input', () => { st.target = target.value; update(); });
     const [before, after] = t('Aim for {target}% overall').split('{target}');

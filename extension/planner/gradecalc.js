@@ -224,7 +224,8 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
       && !(i.id in scores) && i.possible > 0 && (!opts.period || i.period === opts.period));
   };
   // The even share f of every remaining item's points that brings the final grade to `target` (%), found by
-  // bisection (drops and weights make it no simple formula). { left, best (full marks on the rest), share? or
+  // bisection (drops and weights make it no simple formula). { left, best (full marks on the rest), share? and pct
+  // (the percent to show: the smallest tenth that calc still takes to the target, so a whole target reads as itself) or
   // reachable: false }.
   const need = (base, what = {}, target, opts = {}) => {
     const left = remaining(base, what, opts);
@@ -236,7 +237,11 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     let lo = 0;
     let hi = 1;
     for (let n = 0; n < 40; n++) { const mid = (lo + hi) / 2; if (at(mid) >= target) hi = mid; else lo = mid; }
-    return { left: left.length, best, share: hi };
+    // `hi` sits up to 1e-12 above the true share, so rounding it up would show a whole target a tenth high: take the
+    // first tenth, from the one under it, that calc says reaches the target (as `reaches` does, to a billionth).
+    let k = Math.floor(hi * 1000);
+    while (k < Math.ceil(hi * 1000) && at(k / 1000) < target - 1e-9) k++;
+    return { left: left.length, best, share: hi, pct: k / 10 };
   };
 
   // ---- what-if scores kept on this device ---------------------------------------------------------------------
