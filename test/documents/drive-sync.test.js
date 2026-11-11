@@ -2062,3 +2062,16 @@ test('a document upload refused with a 403 Drive gives no known reason for stays
   assert.ok((await a.sync.run()).ok);
   assert.match(dec(drive.files.get(sidecarOf(drive, key).meta.id).bytes), /Second/);
 });
+
+test('a first document upload denied during a full pass is marked for an ordinary retry', async () => {
+  const drive = standin(), a = device(drive), key = 'doc:00000000-0000-4000-8000-000000000a02';
+  await a.papers.save(key, { doc: doc('First upload'), title: 'Essay', named: true });
+  const denied = { error: { code: 403, message: 'Forbidden', errors: [{ reason: 'forbidden' }] } };
+  drive.fail(403, denied, (x) => x.path.startsWith('/upload/'), 20);
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok(((await a.store.get(S.DIRTY))[S.DIRTY] || {})[key], 'the full pass retains an unsent document without a prior dirty mark');
+  drive.clearFaults();
+  a.clock.t += S.WAIT.lag + 1;
+  assert.ok((await a.sync.run({ push: true })).ok);
+  assert.equal(textOf(sidecarJson(drive, key).record.doc), 'First upload');
+});

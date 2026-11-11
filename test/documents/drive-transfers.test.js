@@ -123,6 +123,20 @@ test('a staged document upload denied by Drive stays dirty and retries on the ne
   assert.deepEqual(await moves(dk), {});
 });
 
+test('a first staged document upload denied during a full pass gets a retry mark', async () => {
+  const drive = standin(), dk = disk(), a = worker(drive, dk), key = 'doc:00000000-0000-4000-8000-00000000d002';
+  const text = 'First '.repeat(1000000);
+  await a.papers.save(key, { doc: doc(text), title: 'Essay', named: true });
+  const denied = { error: { code: 403, message: 'Forbidden', errors: [{ reason: 'forbidden' }] } };
+  drive.fail(403, denied, (x) => x.path.startsWith('/upload/'), 20);
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok(((await dk.store.get(a.S.DIRTY))[a.S.DIRTY] || {})[key], 'a refused first transfer is marked even though no prior upload linked it');
+  drive.clearFaults();
+  dk.clock.t += a.S.WAIT.lag + 1;
+  assert.ok((await worker(drive, dk).sync.run({ push: true })).ok);
+  assert.equal(sha(textOf(JSON.parse(fileOf(drive, key, 'doc').bytes).record.doc) || ''), sha(text));
+});
+
 test('an upload queued before its document was trashed or deleted is discarded before sending more bytes', async () => {
   for (const deleted of [false, true]) {
     const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a010', a = worker(drive, dk);
