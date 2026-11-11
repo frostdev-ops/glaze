@@ -434,17 +434,6 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const sylHere = () => solo && I.settings.enhance.syllabus && onPath(/^\/ultra\/courses\/_\d+_\d+\/outline/);
   const syncSyl = () => loadIf(sylHere(), 'syllabus', 'GZ_SYL_UI', (s) => s.sync(I.observer && sylHere()));
   const syncInsights = () => loadIf(I.settings.enhance.insights && onPath(/^\/ultra\/course$/), 'insights', 'GZ_INSIGHTS_UI', (s) => s.sync());
-  // Ultra changes page in place by pushState, which fires no popstate, and a browser without window.navigation (Firefox before
-  // 147) says nothing else: content.js's pass is the notice. The Look's animations (looks/page/motionx.js) and the stickers and
-  // pointer (looks/page/lookx.js) stay off a quiz or a tool's page, so they hear it when the page crosses that line.
-  let quietWas = null;
-  const syncQuiet = () => {
-    const parts = [globalThis.GZ_MOTIONX, globalThis.GZ_LOOKX].filter(Boolean);
-    if (!parts.length) return;
-    const was = quietWas;
-    quietWas = !!globalThis.GZ_LX?.quiet(location.pathname, document);
-    if (was !== null && was !== quietWas) for (const m of parts) Promise.resolve(m.sync()).catch(() => {});
-  };
 
   // ---- code on demand ------------------------------------------------------------------------------
   // Notes, widgets and the pet: the Courses page's board, the tiles floating over every page, and the Dashboard (the
@@ -807,7 +796,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   return {
     fetch: (u, o) => (/\/users\/me$/.test(u) ? fetch(u, o) : need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => GZ_LMSQ.fetch(u, o), () => fetch(u, o))),
     paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, stop: () => { GZ_NAV.drop(); syncDashboard(); globalThis.GZ_STREAM_UI?.sync(false); globalThis.GZ_NAVBAR_UI?.sync(); globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
-    renderProgress, renderNew, renderCalc, syncSyl, syncInsights: () => (syncInsights(), syncTabs(), syncQuiet()), openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
+    renderProgress, renderNew, renderCalc, syncSyl, syncInsights: () => (syncInsights(), syncTabs(), globalThis.GZ_MOTIONX?.route(), globalThis.GZ_LOOKX?.route()), openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); },
     syncTodo, syncCardTasks, syncRemind: () => (syncRemind(), syncAhead()), syncWidgets,
     ctx: { canvasPeek: () => ({ me: meId, courses: memberships, books }), me, myCourses, courseItems, bookFor, courseColor, profile: page('profile'), canvasCourses: page('courses') },
