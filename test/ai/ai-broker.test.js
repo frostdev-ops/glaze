@@ -778,6 +778,29 @@ test('a catalog that fails or times out is asked for again after a minute, not r
   assert.deepEqual(calls.map((c) => c.url.split('/').pop()), ['models', 'completions', 'completions', 'models', 'completions', 'completions'], 'asked again after a minute, then kept');
 });
 
+test('a failed catalog served from the last saved list is retried after a minute', async () => {
+  let t = 1e9, attempts = 0;
+  const calls = [], echo = echoFetch(calls);
+  const e = writer({ now: () => t, fetch: async (url, init) => {
+    if (url.endsWith('/models') && ++attempts === 1) throw new TypeError('Failed to fetch');
+    return echo(url, init);
+  } });
+  e.vaultData.set(`models:${CONN.generation}`, { at: 1, models: [{ id: 'gpt-x', name: 'gpt-x' }] });
+  const p = open(e);
+  try {
+    p.say(run()); await flush();
+    assert.equal(p.posted.at(-1).type, 'end', 'the saved list serves this run');
+    p.say(run(undefined, { id: 2 })); await flush();
+    assert.equal(attempts, 1);
+    t += 61e3;
+    p.say(run(undefined, { id: 3 })); await flush();
+    assert.equal(attempts, 2, 'a saved fallback is not a successful live catalog');
+    t += 61e3;
+    p.say(run(undefined, { id: 4 })); await flush();
+    assert.equal(attempts, 2, 'the recovered live catalog stays cached');
+  } finally { p.close(); }
+});
+
 test('the sender check may refuse one message with a code and keep the port; it is told the feature, a confirm\'s too', async () => {
   const asked = [];
   const e = writer({ allowed: (what) => { asked.push(what); return what.feature === 'completion' ? 'attempt' : true; } });
