@@ -295,3 +295,29 @@ test("Ultra's own additions reach the Courses page panel's held() in the mutatio
   p.mutate([{ type: 'childList', target: p.body, addedNodes: [added], removedNodes: [] }]);
   assert.ok(held > 0, 'held at once, not at the next pass');
 });
+
+// Audit 2026-11-11 A2: Ultra changes page by pushState (no popstate), and a browser without window.navigation (Firefox
+// before 147) has no other notice: the Look's parts that stay off a quiz hear it from content.js's pass on a new path.
+test('entering or leaving a quiz in place re-syncs the Look animations and stickers without the Navigation API', async () => {
+  const p = await boot({ pathname: '/ultra/courses/_1_1/outline' });
+  assert.equal(p.c.navigation, undefined, 'a browser without the Navigation API');
+  vm.runInContext(read('looks/lookx.js'), p.c);
+  const heard = [];
+  p.c.GZ_MOTIONX = { sync: () => heard.push('motionx') };
+  p.c.GZ_LOOKX = { sync: () => heard.push('lookx') };
+  const pass = async (pathname) => {
+    p.c.location.pathname = pathname;
+    const added = p.tree(1);
+    p.body.append(added);
+    p.mutate([{ type: 'childList', target: p.body, addedNodes: [added], removedNodes: [] }]);
+    await p.wait(500);
+  };
+  await pass('/ultra/courses/_1_1/outline');
+  heard.length = 0;
+  await pass('/ultra/courses/_1_1/assessment/_2_1/attempt/_3_1');
+  assert.deepEqual(heard.sort(), ['lookx', 'motionx'], 'on a quiz, both put what they draw away');
+  await pass('/ultra/courses/_1_1/assessment/_2_1/attempt/_3_1');
+  assert.equal(heard.length, 2, 'a pass on the same kind of page tells them nothing more');
+  await pass('/ultra/courses/_1_1/outline');
+  assert.deepEqual(heard.sort(), ['lookx', 'lookx', 'motionx', 'motionx'], 'and back off the quiz, both draw again');
+});
