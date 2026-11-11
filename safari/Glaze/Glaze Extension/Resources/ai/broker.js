@@ -154,7 +154,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     if (!fresh && was && now - was.at < (was.failed ? LIMIT.unlisted : LIMIT.listed)) return was.list;
     const t = F().deadline(LIMIT.catalog), s = F().anySignal([signal, t.signal]);
     let list, failed = false;
-    try { list = await F().wait(() => use.p.catalog(use.cfg, { fetch: pinned(env, use), cache: cache(env), signal: s.signal }), s.signal); } catch { list = null; failed = true; } finally { t.done(); s.done(); }
+    try { list = await F().wait(() => use.p.catalog(use.cfg, { fetch: pinned(env, use), cache: cache(env), signal: s.signal }), s.signal); failed = list?.source === 'cache'; } catch { list = null; failed = true; } finally { t.done(); s.done(); }
     // No selected local text model yet: a download or a recovered store read must be discovered on the next run.
     if (!signal?.aborted && (use.p.id !== 'local' || list?.models.some((m) => typeof m.weights === 'string'))) {
       kept.set(k, { at: now, list, ...(failed && { failed }) }); if (kept.size > 16) kept.delete(kept.keys().next().value);
