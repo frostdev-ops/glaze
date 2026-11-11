@@ -244,8 +244,18 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (subs.length > 50 || sessions.length > 20) throw new Fail('bad');
         return { ...o, ...(subs.length && { subs }), ...(sessions.length && { sessions }) };
       };
-      const tasks = byId(B.tasks, H.tasks, X.tasks, (v) => v.id, merged), ids = new Set(tasks.map((v) => `task:${v.id}`));
-      const items = Object.fromEntries(byId(Object.entries(B.items), Object.entries(H.items), Object.entries(X.items), ([k]) => k, (x, [k, y], [, z]) => [k, item(x?.[1], y, z)])
+      // Removing a task removes its details too. Weigh the whole task for a delete/edit conflict, and keep the surviving
+      // task's details when that automatic cleanup came from the side that deleted its parent.
+      const bundle = (v) => v.tasks.map((task) => ({ task, item: v.items[`task:${task.id}`] }));
+      const tasks = byId(bundle(B), bundle(H), bundle(X), (v) => v.task.id, (x, y, z) => ({ task: merged(x?.task, y.task, z.task) })).map((v) => v.task);
+      const ids = new Set(tasks.map((v) => `task:${v.id}`)), hi = { ...H.items }, xi = { ...X.items };
+      const hs = new Set(H.tasks.map((v) => v.id)), xs = new Set(X.tasks.map((v) => v.id));
+      for (const task of tasks) {
+        const k = `task:${task.id}`;
+        if (!hs.has(task.id) && xi[k]) hi[k] = xi[k];
+        if (!xs.has(task.id) && hi[k]) xi[k] = hi[k];
+      }
+      const items = Object.fromEntries(byId(Object.entries(B.items), Object.entries(hi), Object.entries(xi), ([k]) => k, (x, [k, y], [, z]) => [k, item(x?.[1], y, z)])
         .filter(([k]) => !k.startsWith('task:') || ids.has(k)));
       if (tasks.length > 500 || Object.keys(items).length > 2000) throw new Fail('bad');
       return L.todo().clean({ tasks, items });
