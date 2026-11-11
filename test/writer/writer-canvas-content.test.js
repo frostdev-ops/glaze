@@ -11,6 +11,22 @@ test('Canvas: repeated Send clicks cannot replay the same document while its sen
   assert.equal(c.clicks.length, 1, 'Canvas may leave Reply enabled until its network request finishes');
 });
 
+// Canvas refuses a send and leaves the box as it was: the Inbox with no recipient ("Please select a recipient"), a reply whose
+// request failed (Reply on again). A send in flight shows on Canvas's side within a render (Reply disabled while it submits,
+// DiscussionEdit.tsx; the Inbox's "Sending Message" spinner over the dialog, ComposeModalContainer.tsx).
+for (const fixture of ['discussion', 'inbox']) test(`Canvas: ${fixture}: after Canvas refuses a send, the next press with the same text sends`, async () => {
+  const c = await page({ fixture });
+  c.emit({ type: 'change', html: '<p>Send this reply once.</p>', text: 'Send this reply once.' });
+  c.press(c.box().send); c.flush();
+  assert.equal(c.clicks.length, 1);
+  c.clock(105000);
+  c.press(c.box().send); c.flush();
+  assert.equal(c.clicks.length, 2, 'Send/Reply goes again');
+  c.clock(110000);
+  c.emit({ type: 'send' }); c.flush();
+  assert.equal(c.clicks.length, 3, 'and Ctrl/Cmd+Enter');
+});
+
 test('Canvas: a shortcut can retry after the frame flush times out', async () => {
   const c = await page();
   c.emit({ type: 'change', html: '<p>Send this reply once.</p>', text: 'Send this reply once.' });
