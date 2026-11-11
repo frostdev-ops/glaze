@@ -17,16 +17,27 @@ const real = (p) => { try { return fs.realpathSync(p); } catch { return path.res
 const inClaude = (p) => CLAUDE.test(p) || CLAUDE.test(real(p));
 const claude = ({ execPath = process.execPath, versions = process.versions } = {}) => !!versions.electron || inClaude(execPath);
 
+// fnm's per-shell alias folder (…/fnm_multishells/<pid>_<time>/bin) and, on Linux, a session's runtime folder
+// ($XDG_RUNTIME_DIR, /run/user/<uid>) are gone at logout: a launcher that names a path in one finds no node later.
+const session = (p, platform, env) => {
+  if (/[\\/]fnm_multishells[\\/]/.test(p)) return true;
+  if (platform !== 'linux') return false;
+  const runtime = typeof env.XDG_RUNTIME_DIR === 'string' && path.isAbsolute(env.XDG_RUNTIME_DIR) ? path.resolve(env.XDG_RUNTIME_DIR) : '';
+  return [real(p), path.resolve(p)].some((x) => /^\/run\/user\/\d+(?:\/|$)/.test(x) || (runtime && (x === runtime || x.startsWith(`${runtime}/`))));
+};
+
 // This node, named by the first PATH entry that leads to the same file: Homebrew's own path (…/Cellar/node/<version>)
-// goes away at the next upgrade, its /opt/homebrew/bin/node doesn't.
+// goes away at the next upgrade, its /opt/homebrew/bin/node doesn't. A PATH entry that lasts only to logout is passed over,
+// and a node given by such a path is named by the real one behind it.
 const stable = (exe, platform, env) => {
   const want = real(exe), t = trust(platform);
   for (const dir of String(env.PATH || env.Path || '').split(platform === 'win32' ? ';' : ':')) {
-    if (!dir || !path.isAbsolute(dir)) continue;
+    if (!dir || !path.isAbsolute(dir) || session(dir, platform, env)) continue;
     const c = path.join(dir, platform === 'win32' ? 'node.exe' : 'node');
     if (fs.existsSync(c) && real(c) === want && !t.path(c)) return c;
   }
-  return t.path(exe) ? null : exe;
+  const named = session(exe, platform, env) ? want : exe;
+  return t.path(named) ? null : named;
 };
 
 // nvm's versions under dir, newest first.
