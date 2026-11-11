@@ -521,7 +521,8 @@ const D = require('../../extension/content/defaults.js');
 const T = require('../../extension/planner/todo.js');
 const X = require('../../extension/planner/calexport.js');
 const consentOf = (w, who = SITE_SRC) => { const z = D.GZ_SANITIZE(w.store.sync); return X.consent(z, z.todo, w.store.local.gradescope, who); };
-const EDITOR = { id: 'glaze', url: 'chrome-extension://x/options.html#gcal' };
+// Settings in a tab of its own: the top frame, which Drive's connect and disconnect now require (background.js driveEditor).
+const EDITOR = { id: 'glaze', frameId: 0, url: 'chrome-extension://x/options.html#gcal' };
 const PAGE = { id: 'glaze', tab: { id: 4 }, frameId: 0, url: 'https://school.instructure.com/courses/7' };
 const SITE_SRC = 'https://school.instructure.com/3';
 const settle = (ms = 30) => new Promise((res) => setTimeout(res, ms));
