@@ -1358,6 +1358,8 @@ html[data-gz-dark-theme] #site-wrap .bb-editor-container.is-read-only img:not([d
    source; highlights and what sits in them keep the dark ink the highlight rule below gives. Before Chrome 119 the ink again. */
 @media screen {
 @supports (color: oklch(from red l c h)) {
+  /* A resolved fill inherits independently of color; ordinary links keep their own ink. */
+  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root, .MuiPopper-root) :is(.bb-editor-container.is-read-only, .bbml-content) a:not([style^="color"], [style*=";color"], [style*=" color"]) { -webkit-text-fill-color: currentColor; }
   html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root, .MuiPopper-root) :is(.bb-editor-container.is-read-only, .bbml-content) [style^="color"]:not(:is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])), :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) *),
   html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root, .MuiPopper-root) :is(.bb-editor-container.is-read-only, .bbml-content) [style*=";color"]:not(:is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])), :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) *),
   html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root, .MuiPopper-root) :is(.bb-editor-container.is-read-only, .bbml-content) [style*=" color"]:not(:is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])), :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) *),
