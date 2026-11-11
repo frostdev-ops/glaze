@@ -1,5 +1,5 @@
 // Glaze Writer's paper or post as plain text and as Markdown (⋯ → Export .txt and Export .md, writer-print.js). Text: a
-// block a blank line from the next, lists bulleted and numbered as the paper numbers them (1., a., i.), block quotes
+// block a blank line from the next, lists bulleted and numbered as the paper numbers them (1., a., i., its own styles), block quotes
 // indented, table cells a tab apart, note marks as [1] with the notes after the text, a link's address after its words,
 // pictures as [Image: alt]. Markdown (CommonMark with GitHub's tables, strikethrough and footnotes): headings, emphasis,
 // links, lists, block quotes, tables, notes as [^1], pictures as references listed at the end; underline, superscript and
@@ -77,9 +77,10 @@ var GZ_WRITER_EXPORT = globalThis.GZ_WRITER_EXPORT || (() => {
   };
 
   // ---- blocks
-  const ALPHA = (n) => { let s = ''; for (n++; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(97 + ((n - 1) % 26)) + s; return s; };
-  const ROMAN = (n) => { let s = ''; n++; for (const [v, r] of [[1000, 'm'], [900, 'cm'], [500, 'd'], [400, 'cd'], [100, 'c'], [90, 'xc'], [50, 'l'], [40, 'xl'], [10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']]) while (n >= v) { s += r; n -= v; } return s; };
-  const number = (i, level) => [String(i + 1), ALPHA(i), ROMAN(i)][level % 3];
+  // The paper's list markers (writer/writer-objects.js), and its counters: each level counts on from the item before, an
+  // item's start sets its level, a deeper level starts again under each item, and a list that continues the numbered one
+  // before it counts on from it.
+  const objects = () => globalThis.GZ_WRITER_OBJECTS_LIB || require('./writer-objects.js');
   const prefix = (text, first, rest = first) => text.split('\n').map((l, i) => ((i ? rest : first) + l).replace(/\s+$/, '')).join('\n');
 
   const blocks = (parent, ctx) => {
@@ -91,27 +92,33 @@ var GZ_WRITER_EXPORT = globalThis.GZ_WRITER_EXPORT || (() => {
       else if (name === 'code_block') { if (n.textContent) out.push(ctx.md ? `\`\`\`\n${n.textContent.replace(/\n$/, '')}\n\`\`\`` : n.textContent.replace(/\n$/, '')); }
       else if (name === 'blockquote') { const inner = blocks(n, ctx).join('\n\n'); if (inner) out.push(prefix(inner, ctx.md ? '> ' : '    ')); }
       else if (name === 'bullet_list' || name === 'ordered_list') {
-        const counts = [], lines = [];
+        const ordered = name === 'ordered_list', counts = ordered && n.attrs.continue ? ctx.counts : [], lines = [];
+        const styles = ordered && objects().levelStyles(n);
         n.forEach((li) => {
           const level = Math.max(0, li.attrs.indent || 0);
           counts.length = level + 1;
-          counts[level] = (counts[level] ?? -1) + 1;
-          const mark = name === 'bullet_list' ? (ctx.md ? '-' : '•') : `${ctx.md ? counts[level] + 1 : number(counts[level], level)}.`;
+          counts[level] = ordered && li.attrs.start != null ? li.attrs.start : (counts[level] || 0) + 1;
+          const mark = !ordered ? (ctx.md ? '-' : '•') : `${ctx.md ? counts[level] : objects().marker(styles[level], counts[level])}.`;
           const pad = '    '.repeat(level);
           lines.push(prefix(inline(li, ctx), `${pad}${mark} `, `${pad}    `));
         });
+        if (ordered) ctx.counts = counts;
         out.push(lines.join('\n'));
       } else if (name === 'table') {
-        const rows = [];
+        // spans[column]: the rows below that a cell above still covers there.
+        const rows = [], spans = [];
         n.forEach((row) => {
           const cells = [];
+          const covered = () => { while (spans[cells.length] > 0) { spans[cells.length]--; cells.push(''); } };
           row.forEach((cell) => {
+            covered();
             const parts = [];
             cell.descendants((b) => { if (b.isTextblock) { parts.push(inline(b, ctx)); return false; } return true; });
             const s = parts.filter((p) => p.trim()).join(ctx.md ? '<br>' : ' ');
             cells.push(ctx.md ? s.replace(/\n/g, ' ').replace(/\|/g, '\\|') : s.replace(/[\t\n]/g, ' '));
-            for (let i = 1; i < (cell.attrs.colspan || 1); i++) cells.push('');
+            for (let i = 0; i < (cell.attrs.colspan || 1); i++) { if (i) cells.push(''); spans[cells.length - 1] = (cell.attrs.rowspan || 1) - 1; }
           });
+          while (spans.slice(cells.length).some((v) => v > 0)) { if (spans[cells.length] > 0) spans[cells.length]--; cells.push(''); }
           rows.push(cells);
         });
         if (!rows.length) return;
@@ -125,7 +132,7 @@ var GZ_WRITER_EXPORT = globalThis.GZ_WRITER_EXPORT || (() => {
   };
 
   const run = (doc, md) => {
-    const ctx = { md, notes: [], images: [] }, out = blocks(doc, ctx);
+    const ctx = { md, notes: [], images: [], counts: [] }, out = blocks(doc, ctx);
     if (ctx.notes.length) {
       if (!md) out.push('Notes', ctx.notes.map((s, i) => `[${i + 1}] ${s}`).join('\n'));
       else out.push(ctx.notes.map((s, i) => `[^${i + 1}]: ${s}`).join('\n'));
