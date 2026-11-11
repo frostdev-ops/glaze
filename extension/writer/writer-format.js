@@ -217,12 +217,13 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     const lines = o.lines || ((from, to) => estimate(doc.textBetween(from, to, ' ')));
     for (const t of tops) {
       if (t.node.type.name !== 'paragraph' || (list && t.index >= list.title) || (open && t.index < open.end)) continue;
-      const s = t.node.textContent, base = t.pos + 1;
+      // One character per position: a footnote mark or picture is U+FFFC, a line break \n (textContent skips them).
+      const s = t.node.textBetween(0, t.node.content.size, '', leaf), base = t.pos + 1;
       for (const m of quotes(s)) {
         const from = base + m.index, to = from + m.length, inner = m.inner;
         const byWords = f.quote.words && words(inner) >= f.quote.words;
         const long = (f.quote.lines && lines(from, to) >= f.quote.lines + (cite === 'mla' ? 1 : 0)) || byWords;
-        if (long) add('citations', 'block-quote', from, to, cite === 'chicago' && !byWords ? 'Quotes of five lines or more go in a block quote' : f.quote.words && cite !== 'mla' ? 'Quotes of {n} words or more go in a block quote' : 'Quotes over four lines go in a block quote', { vars: { n: f.quote.words }, fix: { op: 'block-quote', from, to } });
+        if (long) add('citations', 'block-quote', from, to, cite === 'chicago' && !byWords ? 'Quotes of five lines or more go in a block quote' : f.quote.words && cite !== 'mla' ? 'Quotes of {n} words or more go in a block quote' : 'Quotes over four lines go in a block quote', { vars: { n: f.quote.words }, text: s.slice(m.index, m.index + m.length), fix: { op: 'block-quote', from, to } });
       }
       // A label ("(Figure 3)", "(Table 2)"), a date, or a name the sentence runs on through ("The mission (Apollo 11)
       // landed") is no citation.
@@ -231,19 +232,19 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
         for (const m of s.matchAll(/\(([A-Z][\p{L}\p{M}'’.-]+(?:\s+(?:and|&)\s+[A-Z][\p{L}\p{M}'’.-]+|\s+et al\.)?),\s*(?:p{1,2}\.\s*)?(\d+(?:\s*[-–]\s*\d+)?)\)/gu)) {
           if (!cited(m)) continue;
           const from = base + m.index;
-          add('citations', 'cite-shape', from, from + m[0].length, 'MLA citation', { suggestions: [`(${m[1]} ${m[2].replace(/\s+/g, '')})`] });
+          add('citations', 'cite-shape', from, from + m[0].length, 'MLA citation', { text: m[0], suggestions: [`(${m[1]} ${m[2].replace(/\s+/g, '')})`] });
         }
       } else if (cite === 'apa') {
         for (const m of s.matchAll(/\(([A-Z][\p{L}\p{M}'’.-]+(?:\s+(?:and|&)\s+[A-Z][\p{L}\p{M}'’.-]+|\s+et al\.)?)\s+((?:19|20)\d{2}[a-z]?)\)/gu)) {
           if (!cited(m)) continue;
           const from = base + m.index;
-          add('citations', 'cite-shape', from, from + m[0].length, 'APA citation', { suggestions: [`(${m[1]}, ${m[2]})`] });
+          add('citations', 'cite-shape', from, from + m[0].length, 'APA citation', { text: m[0], suggestions: [`(${m[1]}, ${m[2]})`] });
         }
       } else if (cite === 'chicago') {
         for (const m of s.matchAll(/\(([A-Z][\p{L}\p{M}'’.-]+(?:\s+et al\.)?),?\s+(\d+(?:\s*[-–]\s*\d+)?)\)/gu)) {
           if (!cited(m)) continue;
           const from = base + m.index;
-          add('citations', 'cite-note', from, from + m[0].length, 'Chicago cites in footnotes', { fix: { op: 'to-note', from, to: from + m[0].length, note: `${m[1]}, ${m[2]}.` } });
+          add('citations', 'cite-note', from, from + m[0].length, 'Chicago cites in footnotes', { text: m[0], fix: { op: 'to-note', from, to: from + m[0].length, note: `${m[1]}, ${m[2]}.` } });
         }
       }
     }
@@ -293,6 +294,23 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     if (o.keep) for (let k = issues.length - 1; k >= 0; k--) if (KEPT.has(issues[k].rule) && issues[k].fix?.op !== 'format') issues.splice(k, 1);
     const rows = ROWS[cite].map(([id, label]) => ({ id, label, count: issues.filter((x) => x.row === id).length }));
     return { issues, rows };
+  };
+
+  const leaf = (n) => (n.type.name === 'hard_break' ? '\n' : '\ufffc');
+  // Whether a card that rewrites text still matches the paper (a card carries the text it was found on as `text`).
+  const current = (doc, i) => i.text == null || (i.from >= 0 && i.to <= doc.content.size && doc.textBetween(i.from, i.to, '', leaf) === i.text);
+  // The block-quote Fix: the paragraph around a quotation [from, to) (its marks included) split into the text before, a
+  // block quote of what is inside the quotation marks, and the text after, each keeping its marks, links and notes.
+  // → { from, to, nodes } to replace, or null when the range isn't one quotation in one paragraph.
+  const quoteBlock = (doc, from, to) => {
+    const $f = doc.resolve(from), n = doc.type.schema.nodes;
+    if (!$f.parent.isTextblock || doc.resolve(to).parent !== $f.parent || to - from < 2) return null;
+    const start = $f.start(), end = $f.end(), has = (a, b) => doc.textBetween(a, b, '', leaf).trim() !== '';
+    const out = [];
+    if (has(start, from)) out.push(n.paragraph.create($f.parent.attrs, doc.slice(start, from).content));
+    out.push(n.blockquote.create(null, n.paragraph.create(null, doc.slice(from + 1, to - 1).content)));
+    if (has(to, end)) out.push(n.paragraph.create({ ...$f.parent.attrs, first: 0 }, doc.slice(to, end).content));
+    return { from: $f.before(), to: $f.after(), nodes: out };
   };
 
   // The Outline: authored headings take precedence. With paragraphs:true an unheaded essay gets an inferred reverse
@@ -386,7 +404,7 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     return { ...json, attrs: { ...json.attrs, setup: null } };
   };
 
-  return { template, opening, closing, read, surname, restyle, check, name, outline, outlineSource, apply, KEPT, DATE };
+  return { template, opening, closing, read, surname, restyle, check, current, quoteBlock, name, outline, outlineSource, apply, KEPT, DATE };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_FORMAT; else GZ_WRITER_FORMAT;

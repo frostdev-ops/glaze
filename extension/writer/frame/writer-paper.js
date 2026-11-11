@@ -640,6 +640,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const fixGroup = (g) => {
       if (g.issues.length === 1 || !g.issues.every((i) => (i.fix ? SIMPLE.has(i.fix.op) : i.suggestions.length))) { fixIssue(g.issues[0]); return; }
       const s = view.state, tr = s.tr;
+      if (!g.issues.every((i) => F.current(s.doc, i))) { runChecks(); return; }
       for (const i of [...g.issues].sort((a, b) => b.from - a.from)) {
         const x = i.fix;
         if (!x) tr.insertText(i.suggestions[0], i.from, i.to);
@@ -653,6 +654,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     // The format fixes: each one transaction, undoable at once.
     const fixIssue = (i) => {
+      // A card found on text that has changed since: checked again, nothing applied.
+      if (i.source === 'format' && !F.current(view.state.doc, i)) { runChecks(); return; }
       if (i.source !== 'format' || (!i.fix && i.suggestions.length)) {
         if (ISSUES() && i.source !== 'format') { ISSUES().apply(i, 0); return; }
         view.dispatch(view.state.tr.insertText(i.suggestions[0], i.from, i.to));
@@ -685,13 +688,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         const before = s.doc.textBetween(x.from - 1, x.from) === ' ' ? x.from - 1 : x.from;
         tr.replaceWith(before, x.to, n.footnote_ref.create({ content: S.inline(x.note.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])) }));
       } else if (x.op === 'block-quote') {
-        const $f = s.doc.resolve(x.from), start = $f.start(), end = $f.end(), text = s.doc.textBetween(x.from + 1, x.to - 1, ' ');
-        const parts = [s.doc.slice(start, x.from).content, s.doc.slice(x.to, end).content];
-        const out = [];
-        if (parts[0].size && s.doc.textBetween(start, x.from).trim()) out.push(n.paragraph.create($f.parent.attrs, parts[0]));
-        out.push(n.blockquote.create(null, n.paragraph.create(null, s.schema.text(text))));
-        if (parts[1].size && s.doc.textBetween(x.to, end).trim()) out.push(n.paragraph.create({ ...$f.parent.attrs, first: 0 }, parts[1]));
-        tr.replaceWith($f.before(), $f.after(), out);
+        const q = F.quoteBlock(s.doc, x.from, x.to);
+        if (q) tr.replaceWith(q.from, q.to, q.nodes);
       }
       if (tr.docChanged) view.dispatch(tr.scrollIntoView());
       view.focus();
