@@ -73,3 +73,24 @@ test('the generated list files Æ, Ø and Ł under A, O and L (APA 9.44, MLA 5.1
   const ids = (st) => C.list([s('Zimmer', 'zzzz'), s('Łoś', 'llll'), s('Ødegaard', 'oooo'), s('Ærø', 'aaaa'), s('Nilsen', 'nnnn')], st).entries.map((e) => e.id);
   for (const st of ['apa7', 'mla9', 'chicago17']) assert.deepEqual(ids(st), ['aaaa', 'llll', 'nnnn', 'oooo', 'zzzz'], st);
 });
+
+// Names as a student types them. APA 7 §9.8 (King, M. L., Jr.), MLA 9 §5.21 (King, Martin Luther, Jr.), CMOS 17 6.43 and
+// 14.72 (a note's "Martin Luther King Jr.", the bibliography's "King, Martin Luther, Jr."); initials, with periods or
+// without, are given names (APA 9.8: "Rowling, J. K."); a group's name stays whole.
+test('suffixes and undotted initials parse as a person\'s parts (APA 9.8, MLA 5.21, CMOS 6.43 and 14.72)', () => {
+  const at = (n, st) => { const f = C.format({ type: 'book', title: 'Why we can’t wait', author: [n], publisher: 'Harper', issued: d(1964) }, st); return [f.entry.replace(/ (?:<i>)?Why.*$/, ''), f.inText(12)]; };
+  for (const n of ['Martin Luther King Jr.', 'King, Martin Luther, Jr.', 'Martin Luther King, Jr.']) {
+    assert.deepEqual(SRC.name(n), { family: 'King', given: 'Martin Luther', suffix: 'Jr.' }, n);
+    assert.deepEqual(at(n, 'apa7'), ['King, M. L., Jr. (1964).', '(King, 1964, p. 12)'], n);
+    assert.deepEqual(at(n, 'mla9'), ['King, Martin Luther, Jr.', '(King 12)'], n);
+    assert.equal(at(n, 'chicago17')[0], 'King, Martin Luther, Jr.', n);
+    assert.match(at(n, 'chicago17')[1], /^Martin Luther King Jr., <i>/, n);
+  }
+  assert.deepEqual(SRC.name('Henry Ford III'), { family: 'Ford', given: 'Henry', suffix: 'III' });
+  for (const [n, family, given, apa] of [['JK Rowling', 'Rowling', 'JK', 'Rowling, J. K.'], ['CS Lewis', 'Lewis', 'CS', 'Lewis, C. S.'], ['JRR Tolkien', 'Tolkien', 'JRR', 'Tolkien, J. R. R.'],
+    ['J.K. Rowling', 'Rowling', 'J.K.', 'Rowling, J. K.'], ['W. E. B. Du Bois', 'Du Bois', 'W. E. B.', 'Du Bois, W. E. B.']]) {
+    assert.deepEqual(SRC.name(n), { family, given }, n);
+    assert.equal(at(n, 'apa7')[0], `${apa} (1964).`, n);
+  }
+  for (const n of ['UN Women', 'IBM Research', 'World Health Organization', 'BBC News', 'NASA']) assert.ok(!SRC.name(n).given, `${n} is not a person`);
+});
