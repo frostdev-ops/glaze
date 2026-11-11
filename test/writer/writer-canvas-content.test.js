@@ -11,6 +11,150 @@ test('Canvas: repeated Send clicks cannot replay the same document while its sen
   assert.equal(c.clicks.length, 1, 'Canvas may leave Reply enabled until its network request finishes');
 });
 
+test('Canvas Inbox: the sending modal prevents another send after a slow request, including after an edit', async () => {
+  const c = await page({ fixture: 'inbox' });
+  c.emit({ type: 'change', html: '<p>Send this reply once.</p>', text: 'Send this reply once.' });
+  const button = c.box().send, modal = button.closest('#compose-message-modal');
+  c.press(button); c.flush();
+  // Canvas leaves Send enabled beneath its modal spinner. Its modal stack hides the underlying compose dialog.
+  modal.setAttribute('aria-hidden', 'true');
+  c.clock(105000);
+  c.emit({ type: 'send' }); c.flush();
+  assert.equal(c.clicks.length, 1, 'a slow request is still in flight after one second');
+  c.emit({ type: 'change', html: '<p>Revised while sending.</p>', text: 'Revised while sending.' });
+  c.clock(110000);
+  c.press(button); c.flush('<p>Revised while sending.</p>');
+  assert.equal(c.clicks.length, 1, 'editing cannot bypass Canvas\'s pending send');
+  modal.removeAttribute('aria-hidden'); // Canvas refused it and removed the spinner.
+  c.press(button); c.flush('<p>Revised while sending.</p>');
+  assert.equal(c.clicks.length, 2, 'the same text can be sent after Canvas gives the dialog back');
+});
+
+// Canvas refuses a send and leaves the box as it was: the Inbox with no recipient ("Please select a recipient"), a reply whose
+// request failed (Reply on again). A send in flight shows on Canvas's side within a render (Reply disabled while it submits,
+// DiscussionEdit.tsx; the Inbox's "Sending Message" spinner over the dialog, ComposeModalContainer.tsx).
+for (const fixture of ['discussion', 'inbox']) test(`Canvas: ${fixture}: after Canvas refuses a send, the next press with the same text sends`, async () => {
+  const c = await page({ fixture });
+  c.emit({ type: 'change', html: '<p>Send this reply once.</p>', text: 'Send this reply once.' });
+  c.press(c.box().send); c.flush();
+  assert.equal(c.clicks.length, 1);
+  c.clock(105000);
+  c.press(c.box().send); c.flush();
+  assert.equal(c.clicks.length, 2, 'Send/Reply goes again');
+  c.clock(110000);
+  c.emit({ type: 'send' }); c.flush();
+  assert.equal(c.clicks.length, 3, 'and Ctrl/Cmd+Enter');
+});
+
+// Until Writer's frame is up, Canvas's editor is the one on screen and holds the student's words, in TinyMCE's own markup
+// (its bogus <br>, data-mce-href), which the page-world script refuses to write as Writer's: there is nothing to write.
+test('Canvas: Reply pressed before Writer\'s frame is ready sends what Canvas\'s editor holds, TinyMCE markup and all', async () => {
+  const c = await page({ ready: () => false, strict: true });
+  const native = c.doc.querySelector('#message-body-root_ifr').contentDocument.body;
+  const typed = '<p>Typed in Canvas, see <a href="https://e.test/" data-mce-href="https://e.test/">this</a>.<br data-mce-bogus="1"></p>';
+  native.innerHTML = typed;
+  const reply = c.box().send;
+  c.press(reply);
+  assert.ok(c.clicks.length === 1 && c.clicks[0] === reply, 'the press goes on to Canvas');
+  assert.equal(native.innerHTML, typed);
+});
+test('Canvas quiz: an essay whose frame keeps failing neither holds Submit Quiz nor empties what Canvas holds', async () => {
+  const c = await page({ fixture: 'quiz', ready: () => false, strict: true });
+  c.tick(15000); // each frame didn't answer: opened again, still not up
+  const native = c.doc.querySelector('#question_input_0_ifr').contentDocument.body;
+  native.innerHTML = '<p>My answer, typed in Canvas.</p>';
+  const submit = c.doc.querySelector('#submit_quiz_button');
+  c.press(submit);
+  assert.equal(native.textContent, 'My answer, typed in Canvas.');
+  assert.ok(c.clicks.length === 1 && c.clicks[0] === submit, 'Submit Quiz goes on');
+});
+
+test('Canvas: a first frame that eventually opens after a timeout starts with the text still being edited in Canvas', async () => {
+  const c = await page({ fixture: 'assignment', ready: () => false, strict: true });
+  c.tick(15000); // Retry a frame that never stood in for the native editor.
+  const native = c.doc.querySelector('#submission_body_ifr').contentDocument.body;
+  native.innerHTML = '<p>My work, typed while Writer was loading.</p>';
+  await c.boot();
+  const init = c.ports.at(-1).sent.find((m) => m.type === 'init');
+  assert.equal(init.html, native.innerHTML, 'the visible native editor still owns these words');
+  c.emit({ type: 'change', html: '<p>My work, typed while Writer was loading. More.</p>', text: 'My work, typed while Writer was loading. More.' });
+  assert.equal(native.textContent, 'My work, typed while Writer was loading. More.');
+});
+
+// Canvas's autosave asks first (RestoreAutoSaveModal): whatever the student answers there is the box's text.
+test('Canvas: its restore dialog appearing after Writer opened hands the box back, so what Canvas restores stays', async () => {
+  const c = await page({ fixture: 'assignment' });
+  const frame = c.ports.at(-1), native = c.doc.querySelector('#submission_body_ifr').contentDocument.body;
+  c.emit({ type: 'change', html: '<p>Typed in Writer.</p>', text: 'Typed in Writer.' });
+  const dialog = c.doc.createElement('div');
+  dialog.setAttribute('data-testid', 'RCE_RestoreAutoSaveModal');
+  c.doc.body.append(dialog);
+  c.ctx.GZ_WRITER.pass();
+  assert.ok(!c.doc.querySelector('iframe.gz-writer'), 'Canvas\'s editor is back, with its dialog');
+  native.innerHTML = '<p>Restored by Canvas.</p>';
+  for (const o of c.observers) if (o.target) o.fn();
+  c.emit({ type: 'change', html: '<p>Typed in Writer, and more.</p>', text: 'Typed in Writer, and more.' }, frame);
+  c.ctx.GZ_WRITER.pass();
+  assert.equal(native.textContent, 'Restored by Canvas.');
+});
+
+test('Canvas: a restored autosave arriving before the dialog observer runs is handed back without a stale write', async () => {
+  for (const observed of [false, true]) {
+  const c = await page({ fixture: 'assignment', strict: true });
+  c.emit({ type: 'change', html: '<p>Typed in Writer.</p>', text: 'Typed in Writer.' });
+  const native = c.doc.querySelector('#submission_body_ifr').contentDocument.body;
+  const restored = '<p>Restored by Canvas, with more of my work.</p>';
+  const dialog = c.doc.createElement('div');
+  dialog.setAttribute('data-testid', 'RCE_RestoreAutoSaveModal');
+  c.doc.body.append(dialog);
+  native.innerHTML = restored;
+  if (observed) for (const o of c.observers) if (o.target === native) o.fn();
+  c.ctx.GZ_WRITER.pass();
+  assert.equal(native.innerHTML, restored, 'giving the editor back cannot overwrite the autosave Canvas restored');
+  assert.ok(!c.doc.querySelector('iframe.gz-writer'));
+  }
+});
+
+test('Canvas: a late restore preserves both Canvas\'s autosave and Writer\'s only unsynced copy', async () => {
+  const c = await page({ fixture: 'assignment', strict: true, helper: 'fail' });
+  c.emit({ type: 'change', html: '<p>Words only Writer has.</p>', text: 'Words only Writer has.' });
+  const native = c.doc.querySelector('#submission_body_ifr').contentDocument.body;
+  const restored = '<p>Restored by Canvas, with different work.</p>';
+  native.innerHTML = restored;
+  const dialog = c.doc.createElement('div');
+  dialog.setAttribute('data-testid', 'RCE_RestoreAutoSaveModal');
+  c.doc.body.append(dialog);
+  c.helper('ok'); // TinyMCE is available again, but overwriting its restored document is unsafe.
+  c.ctx.GZ_WRITER.pass();
+  assert.equal(native.innerHTML, restored, 'the restored version stays Canvas\'s');
+  const recovery = c.doc.querySelector('[data-gz-writer-recovery]');
+  assert.equal(recovery?.value, 'Words only Writer has.', 'the unsynced version stays available even with draft backup off');
+  assert.equal(recovery.readOnly, true, 'the saved copy cannot edit Canvas\'s different document');
+  assert.notEqual(c.doc.querySelector('#submission_body').closest('.rce-wrapper').style.display, 'none');
+  c.ctx.GZ_WRITER.pass();
+  assert.equal(c.doc.querySelectorAll('[data-gz-writer-recovery]').length, 1);
+  dialog.remove();
+  c.press(c.doc.querySelector('#submit_online_text_entry_form button[type="submit"]'));
+  assert.equal(c.clicks.length, 1, 'Canvas\'s visible editor owns Submit');
+  assert.equal(native.innerHTML, restored);
+});
+
+// The field a dead frame leaves (recover): TinyMCE's parser collapses runs of spaces, so a run goes in as no-break spaces.
+test('Canvas: the recovery field\'s lines with double spaces go into Canvas\'s editor as typed, and Submit isn\'t held', async () => {
+  const c = await page({ fixture: 'assignment', strict: true });
+  c.emit({ type: 'change', html: '<p>First words.</p>', text: 'First words.' });
+  c.ctx.chrome.runtime.getURL = () => { throw new Error('Extension context invalidated.'); };
+  c.doc.querySelector('iframe.gz-writer').dispatchEvent({ type: 'load' }); // the frame went, and no other can open
+  const field = c.doc.querySelector('[data-gz-writer-recovery]');
+  field.value = 'Two  spaces,  twice.\n  Indented line.';
+  field.dispatchEvent({ type: 'input' });
+  const native = c.doc.querySelector('#submission_body_ifr').contentDocument.body;
+  assert.equal(native.textContent.replace(/ /g, ' '), 'Two  spaces,  twice.  Indented line.');
+  const submit = c.doc.querySelector('#submit_online_text_entry_form button[type="submit"]');
+  c.press(submit);
+  assert.ok(c.clicks.length === 1 && c.clicks[0] === submit, 'Submit goes on');
+});
+
 test('Canvas: a shortcut can retry after the frame flush times out', async () => {
   const c = await page();
   c.emit({ type: 'change', html: '<p>Send this reply once.</p>', text: 'Send this reply once.' });

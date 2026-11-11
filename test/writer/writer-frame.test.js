@@ -319,6 +319,18 @@ test('frame: Ultra changing its own editor shows in the frame without echoing ba
   f.to(p, { type: 'constructor' });
 });
 
+test('frame: Canvas putting what Writer can\'t keep into its box gets the same check as init: the box goes back, nothing flattened', async () => {
+  const f = frame({ host: 'https://canvas.school.test' });
+  const p = await f.hand({ type: 'glaze:writer', pass: 'p'.repeat(36) });
+  f.to(p, { ...INIT, site: 'canvas', kind: 'assignment' });
+  p.sent.length = 0; f.lost.length = 0;
+  f.to(p, { type: 'html', html: '<p>Restored</p><p class="attachment">file</p>' });
+  assert.deepEqual(f.made[0].set, [], 'the frame keeps nothing of it');
+  assert.deepEqual(f.lost, ['canvas']);
+  assert.deepEqual(p.sent, [{ type: 'native', reason: 'attachment' }]);
+  f.to(p, { type: 'html', html: '<p>Later</p>' });
+  assert.deepEqual(f.made[0].set, [], 'and stays out of it');
+});
 
 test('page world: a stale Quill pointer never writes into another editor', () => {
   const p = pageWorld(); p.run();
