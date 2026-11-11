@@ -493,8 +493,8 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   };
 
   // ---- Settings' connections (background/background.js 'glaze:ai-config', from options.html's top frame only) ------------------
-  //   { op: 'get' } → { ok, connections: { [id]: { provider, name?, …settings without the key, key: masked or '', origin } },
-  //     providers }
+  //   { op: 'get' } → { ok, connections: { [id]: { provider, name?, …settings without the key, key: masked or '', origin,
+  //     reach?: false (the browser doesn't hold its host) } }, providers }
   //   { op: 'set', id, cfg: { provider, name?, …settings } } → { ok, origin } | { ok: false, error: 'setup', note }. A
   //     preset's id (ai/settings.js PRESETS) is always at its preset's address; any other an endpoint the student named.
   //     A cfg with no key keeps the kept one, but only for the same address: a key never follows a changed address. A new
@@ -558,7 +558,8 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
         const use = usable(id, rec);
         if (!use) continue;
         const { key, generation: _, ...settings } = use.cfg;
-        out[id] = { provider: use.p.id, ...(typeof rec.name === 'string' && { name: rec.name }), ...settings, key: key ? E().mask(key) : '', ...(use.p.origin && { origin: use.p.origin(use.cfg) }) };
+        const held = !use.p.origin || await reaches(env, use).catch(() => false);
+        out[id] = { provider: use.p.id, ...(typeof rec.name === 'string' && { name: rec.name }), ...settings, key: key ? E().mask(key) : '', ...(use.p.origin && { origin: use.p.origin(use.cfg) }), ...(!held && { reach: false }) };
       }
       return { ok: true, connections: out, providers: A().PROVIDERS.filter((id) => P().get(id)) };
     }
