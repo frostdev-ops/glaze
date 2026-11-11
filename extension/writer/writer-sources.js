@@ -174,6 +174,10 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
   const remove = (list, id) => list.filter((x) => x.id !== id);
   const dedupe = (list) => (Array.isArray(list) ? list : []).reduce((acc, s) => add(acc, s).sources, []);
 
+  // Parentheses that point inside a text or give a date, not a source: "(Figure 2)", "(Act 3)", "(May 1945)". One list: the
+  // citation check (writer-cite.js, which writer-compose.js's count reads it from) and the format checks use it.
+  const INSIDE = /^(?:fig(?:ure)?s?|tables?|chapters?|ch|parts?|pages?|weeks?|sections?|appendix|appendices|steps?|units?|modules?|questions?|exhibits?|lessons?|days?|vol(?:ume)?s?|acts?|scenes?|lines?|notes?|book|verse|slides?|problems?|exercises?|items?|level|grade|room|period|session|episode|season|january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec|spring|summer|autumn|fall|winter)\.?$/i;
+
   // ---- a reference list's order ------------------------------------------------------------------------------------
   // APA 7 9.44–9.48, MLA 9 5.124–5.126, CMOS 17 14.66 and 16.58: letter by letter by an entry's first element (the
   // surname, a group's name, a title without A, An or The), so nothing precedes something (Brown before Browning). Only
@@ -218,7 +222,7 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
     return Promise.resolve(sources.length || removed.length ? a.set({ [k]: { sources, ...(removed.length && { removed }), at: Date.now() } }) : a.remove(k)).then(() => true, () => false);
   };
 
-  return { TYPES, MAX, normalize, add, replace, remove, dedupe, same, name: parseName, names, showName, date, showDate, today, doi, isbn, url, key, keyOf, load, loadState, save, PREFIX, fold, rich, disorder, order };
+  return { TYPES, MAX, normalize, add, replace, remove, dedupe, same, name: parseName, names, showName, date, showDate, today, doi, isbn, url, key, keyOf, load, loadState, save, PREFIX, fold, rich, disorder, order, INSIDE };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SOURCES;

@@ -331,9 +331,8 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     if (!n) return [];
     return sources.filter((s) => keysOf(s).some((k) => n === k)).map((s) => s.id);
   };
-  // Parentheses that point inside a text or give a date, not a source: "(Figure 2)", "(Act 3)", "(May 1945)". One list,
-  // writer-compose.js's count reads it too.
-  const INSIDE = /^(?:fig(?:ure)?s?|tables?|chapters?|ch|parts?|pages?|weeks?|sections?|appendix|appendices|steps?|units?|modules?|questions?|exhibits?|lessons?|days?|vol(?:ume)?s?|acts?|scenes?|lines?|notes?|book|verse|slides?|problems?|exercises?|items?|level|grade|room|period|session|episode|season|january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec|spring|summer|autumn|fall|winter)\.?$/i;
+  // Parentheses that point inside a text or give a date, not a source (writer-sources.js INSIDE).
+  const INSIDE = S().INSIDE;
   const looksNamed = (t) => new RegExp(String.raw`^[“"‘]?(?:${PARTICLE}\s+)*(?:(?:al|el)-)?\p{Lu}`, 'u').test(t) && !/[\p{Sc}\p{Sm}@#%*\\/]/u.test(t) && !/^(see|e\.g|i\.e|cf|qtd|figure|fig|table|chapter|ch|vol|para|line|lines|version|in|on|during|since|before|after|born)\b/i.test(t);
   // → [{ from, to, text, name, sep, page, year, ids, kind: 'paren'|'narrative'|'note', fix? }] over a string's offsets.
   const findIn = (text, sources, k) => {

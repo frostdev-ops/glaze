@@ -224,18 +224,24 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
         const long = (f.quote.lines && lines(from, to) >= f.quote.lines + (cite === 'mla' ? 1 : 0)) || byWords;
         if (long) add('citations', 'block-quote', from, to, cite === 'chicago' && !byWords ? 'Quotes of five lines or more go in a block quote' : f.quote.words && cite !== 'mla' ? 'Quotes of {n} words or more go in a block quote' : 'Quotes over four lines go in a block quote', { vars: { n: f.quote.words }, fix: { op: 'block-quote', from, to } });
       }
+      // A label ("(Figure 3)", "(Table 2)"), a date, or a name the sentence runs on through ("The mission (Apollo 11)
+      // landed") is no citation.
+      const cited = (m) => !SRC().INSIDE.test(m[1]) && (cite === 'mla' || !/^\s*[\p{L}\d]/u.test(s.slice(m.index + m[0].length)));
       if (cite === 'mla') {
         for (const m of s.matchAll(/\(([A-Z][\p{L}\p{M}'’.-]+(?:\s+(?:and|&)\s+[A-Z][\p{L}\p{M}'’.-]+|\s+et al\.)?),\s*(?:p{1,2}\.\s*)?(\d+(?:\s*[-–]\s*\d+)?)\)/gu)) {
+          if (!cited(m)) continue;
           const from = base + m.index;
           add('citations', 'cite-shape', from, from + m[0].length, 'MLA citation', { suggestions: [`(${m[1]} ${m[2].replace(/\s+/g, '')})`] });
         }
       } else if (cite === 'apa') {
         for (const m of s.matchAll(/\(([A-Z][\p{L}\p{M}'’.-]+(?:\s+(?:and|&)\s+[A-Z][\p{L}\p{M}'’.-]+|\s+et al\.)?)\s+((?:19|20)\d{2}[a-z]?)\)/gu)) {
+          if (!cited(m)) continue;
           const from = base + m.index;
           add('citations', 'cite-shape', from, from + m[0].length, 'APA citation', { suggestions: [`(${m[1]}, ${m[2]})`] });
         }
       } else if (cite === 'chicago') {
         for (const m of s.matchAll(/\(([A-Z][\p{L}\p{M}'’.-]+(?:\s+et al\.)?),?\s+(\d+(?:\s*[-–]\s*\d+)?)\)/gu)) {
+          if (!cited(m)) continue;
           const from = base + m.index;
           add('citations', 'cite-note', from, from + m[0].length, 'Chicago cites in footnotes', { fix: { op: 'to-note', from, to: from + m[0].length, note: `${m[1]}, ${m[2]}.` } });
         }
