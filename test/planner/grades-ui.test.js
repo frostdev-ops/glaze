@@ -359,6 +359,15 @@ test('GPA: a course answer without a grading scheme says the what-if needs a sca
   assert.equal(asked.length, 1, 'and not again');
 });
 
+test('GPA: a figure exactly on a half cent shows rounded up, as the percents do (3 A and a B+ at equal credits is 3.825)', async () => {
+  const course = (id, grade) => ({ id, name: `Course ${id}`, enrollments: [{ type: 'student', user_id: '3', computed_current_score: 95, computed_current_grade: grade }], term: { id: '1', name: 'Fall 2026', start_at: '2026-08-01T00:00:00Z' } });
+  const p = gpaPage({ list: [course('21', 'A'), course('22', 'A'), course('23', 'A'), course('24', 'B+')], capi: () => Promise.resolve(null) });
+  p.UI.render();
+  await settle(10);
+  assert.match(p.box().textContent, /3\.83Fall 2026/);
+  assert.doesNotMatch(p.box().textContent, /3\.82/);
+});
+
 // ACA-1 and ACA-2 at the Scale field: a syllabus's own wording counts the course, text that is no scale says so and changes nothing.
 test('GPA: a scale pasted as ranges counts the course, and text that is no scale shows the error', async () => {
   const p = gpaPage({
