@@ -393,7 +393,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const revoke = () => { for (const u of cur?.urls?.values() || []) URL.revokeObjectURL(u); };
   // Leaving a note: what's typed goes now (kept with the note, in case a save of it is still on its way).
   const flush = () => { if (cur && !cur.ro && cur.saved != null && el.body?.isConnected) { cur.pending = serialize(); save(cur); } };
-  const clean = () => !el.body?.isConnected || serialize() === cur.saved;
+  const clean = () => !cur?.titleDirty && (!el.body?.isConnected || serialize() === cur.saved);
   const snapshot = (c) => (c === cur && el.body?.isConnected && c.saved != null ? serialize() : c.pending);
   // The editor's HTML as it is stored: sanitized, pictures by their id only. CUT instead when the sanitizer would have to
   // leave part of it out (planner/notes.js parse): never a shortened copy to save, compare with what is stored, duplicate or export.
