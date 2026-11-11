@@ -166,8 +166,11 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
       else r.app.push(fail(f.id, CUT, CUT_SAYS));
     }
     flight.clear();
-    held = [...again, ...held];
-    size = held.reduce((n, h) => n + h.n, 0);
+    const waiting = held;
+    held = [];
+    size = 0;
+    for (const h of again) hold(r, h);
+    for (const h of waiting) hold(r, h);
     return r;
   };
 
