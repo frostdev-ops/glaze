@@ -3956,9 +3956,12 @@ const openGoogle = () => {
 // Safari's Picker comes back here (documents/picked.html, web-accessible to the picker pages only: tools/build/safari-manifest.sh).
 const PICKED_PAGE = 'documents/picked.html';
 const googlePage = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && ['options.html', 'papers.html', 'writer.html'].some((p) => s.url.split(/[?#]/)[0] === chrome.runtime.getURL(p));
+// What changes Drive's connection or starts a sync is Settings' own tab's alone, as mcp-config's is: Settings framed in a school's
+// page (a click the page around it can borrow) may read the account, not connect, disconnect or switch Sync.
+const driveEditor = (s) => fromEditor(s) && s.frameId === 0 && extensionOrigin(s);
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:google' || !['status', 'connect', 'finish', 'disconnect', 'pick', 'picked'].includes(m.op)) return;
-  if (!(m.op === 'pick' || m.op === 'picked' ? googlePage(s) : fromEditor(s))) { reply({ ok: false, why: 'sender' }); return; }
+  if (!(m.op === 'pick' || m.op === 'picked' ? googlePage(s) : m.op === 'status' ? fromEditor(s) : driveEditor(s))) { reply({ ok: false, why: 'sender' }); return; }
   googleLib();
   if (!GZ_GOOGLE.ON) { reply({ ok: false, why: 'off' }); return; } // the build-time switch (background/google.js)
   const run = () => m.op === 'picked' ? openGoogle().picked(m.state) : openGoogle()[m.op]();
@@ -4203,7 +4206,7 @@ const driveSyncOn = async () => (await chrome.storage.local.get('driveSync')).dr
 const driveSyncPoke = () => { driveSyncOn().then((on) => on && openDriveSync().poke()).catch((e) => console.warn('Sync to Google Drive:', e)); };
 chrome.runtime.onMessage.addListener((m, s, reply) => {
   if (m?.type !== 'glaze:driveSync' || m.op !== 'set' || typeof m.on !== 'boolean') return;
-  if (!fromEditor(s)) { reply({ ok: false, why: 'sender' }); return; }
+  if (!driveEditor(s)) { reply({ ok: false, why: 'sender' }); return; }
   if (!googleLib().ON) { reply({ ok: false, why: 'off' }); return; }
   openDriveSync().set(m.on).then(reply, () => reply({ ok: false, why: 'network' }));
   return true;
