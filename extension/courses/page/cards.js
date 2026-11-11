@@ -452,10 +452,15 @@ var GZ_CARD_UI = globalThis.GZ_CARD_UI || (() => {
     const list = make('ol', { className: 'gz-ce-links' });
     const add = make('button', { type: 'button', textContent: t('Add a bookmark') });
     const iconsOn = make('input', { type: 'checkbox', checked: d.card.icons });
+    let icons = d.card.icons, iconsWrite = Promise.resolve(), iconsTurn = 0;
     // Settings that couldn't be read aren't written over with the defaults; a switch that wasn't saved goes back.
-    iconsOn.addEventListener('change', async () => {
-      const on = iconsOn.checked, r = await tried('sync', 'card');
-      if (!r || !await set('sync', { card: K.settings({ ...K.settings(r.card), icons: on }) })) iconsOn.checked = !on;
+    iconsOn.addEventListener('change', () => {
+      const on = iconsOn.checked, turn = ++iconsTurn;
+      return iconsWrite = iconsWrite.then(async () => {
+        const r = await tried('sync', 'card');
+        if (r && await set('sync', { card: K.settings({ ...K.settings(r.card), icons: on }) })) icons = on;
+        if (turn === iconsTurn) iconsOn.checked = icons;
+      });
     });
     const linksTab = make('div', { className: 'gz-ce-panel', id: 'gz-ce-links', hidden: true }, list, add,
       make('label', { className: 'gz-ce-check' }, iconsOn, t('Show bookmark icons on cards')),
