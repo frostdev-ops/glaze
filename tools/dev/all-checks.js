@@ -1,8 +1,8 @@
 // The sweep: every browser check in checks/checks.json that can run where it is told to, once each, with a summary.md.
-//   node tools/dev/all-checks.js --where runner|mac [--only area,name,...] [--needs canvas,moodle,...] [--jobs 8]
+//   node tools/dev/all-checks.js --where runner|mac [--only area,name,...] [--needs canvas,moodle,...] [--jobs 1]
 //                                [--known known.txt] [--evidence dir] [--grace secs] [--dry-run]
 // runner: each check through `glaze-remote -o <evidence>/<name> -e TZ=UTC -t <limit> -- node checks/<script> /out`, at most
-// --jobs at once (the runner's slots). mac: one at a time under `nice -n 10 lockf -k <heavy lock>` with NODE_PATH and TZ=UTC;
+// --jobs at once (one unless told: the runner is the owner's own PC, and seven at once took it down on 2026-11-11). mac: one at a time under `nice -n 10 lockf -k <heavy lock>` with NODE_PATH and TZ=UTC;
 // --lock (or GLAZE_HEAVY_LOCK) names the lock file every agent's heavy job takes, --node-path (or NODE_PATH) the Playwright
 // install, and the Mac refuses to start without them.
 // A check whose needs aren't allowed here is skipped and says what it needs (runner: runner, linux, network, headed; mac:
@@ -16,7 +16,7 @@ const ALLOWED = { runner: ['runner', 'linux', 'network', 'headed'], mac: ['runne
 // glaze-remote names a job by the second it starts: two started from one checkout in the same second collide ("is already
 // running", exit 255), so runner dispatches are spaced this far apart.
 const STAGGER = 1500;
-const SLOTS = 8, DEFAULT_LIMIT = 300, GRACE = 600, KILL_AFTER = 10000, EXIT_WAIT = 3000, TAIL = 25;
+const SLOTS = 1, DEFAULT_LIMIT = 300, GRACE = 600, KILL_AFTER = 10000, EXIT_WAIT = 3000, TAIL = 25;
 const nameOf = (key) => path.basename(key).replace(/\.[^.]+$/, '');
 
 // ---- checks/checks.json ------------------------------------------------------------------------------------------------------

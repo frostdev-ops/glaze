@@ -391,12 +391,12 @@ test('table cells and fences survive pipes and backticks in output', () => {
 
 // ---- arguments and a dry run --------------------------------------------------------------------------------------------------
 
-test('arguments: --where is required, lists split on commas, --jobs defaults to the runner\'s 8', () => {
+test('arguments: --where is required, lists split on commas, --jobs defaults to one at a time', () => {
   assert.throws(() => A.parseArgs([]), /--where runner\|mac/);
   assert.throws(() => A.parseArgs(['--where', 'runner', '--bogus']), /unknown option --bogus/);
   assert.throws(() => A.parseArgs(['--where', 'runner', '--jobs', '0']), /--jobs/);
   const a = A.parseArgs(['--where', 'runner', '--only', 'writer,ai/ask-check.js', '--needs', 'canvas,moodle', '--known', 'k.txt', '--evidence', '/e', '--dry-run']);
-  assert.deepEqual([a.where, a.only, a.needs, a.known, a.evidence, a.dryRun, a.jobs], ['runner', ['writer', 'ai/ask-check.js'], ['canvas', 'moodle'], 'k.txt', '/e', true, 8]);
+  assert.deepEqual([a.where, a.only, a.needs, a.known, a.evidence, a.dryRun, a.jobs], ['runner', ['writer', 'ai/ask-check.js'], ['canvas', 'moodle'], 'k.txt', '/e', true, 1]);
   const mac = ['--where', 'mac', '--lock', '/l.lock', '--node-path', '/nm'];
   assert.equal(A.parseArgs([...mac, '--jobs', '4'], {}).jobs, 1, 'the Mac runs one at a time whatever --jobs says');
   assert.throws(() => A.parseArgs(['--where', 'mac'], {}), /--where mac needs --lock .* --node-path/);
