@@ -3,7 +3,9 @@
 // more than the frame limit (agent-frames.js) and refuses a longer incoming length before reading its body.
 'use strict';
 const F = require('./agent-frames.js');
-const { isUtf8 } = require('node:buffer');
+// buffer.isUtf8 came in Node 18.14; before it, a fatal decoder says the same.
+const strict = new (require('node:util').TextDecoder)('utf-8', { fatal: true });
+const isUtf8 = require('node:buffer').isUtf8 || ((b) => { try { strict.decode(b); return true; } catch { return false; } });
 
 const MAX_IN = 64 * 1024 * 1024, MAX_OUT = F.FRAME;
 const fail = (code, message) => Object.assign(new Error(`native message: ${message}`), { code });
