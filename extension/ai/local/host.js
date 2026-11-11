@@ -371,7 +371,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     const DEAD = ['lost', 'memory'];
     const guarded = (f) => async (m, signal) => {
       try { return await f(m, signal); } catch (e) {
-        const dead = !signal?.aborted && (DEAD.includes(e?.reason) && (!e.category || e.category === 'provider-unavailable'));
+        const dead = DEAD.includes(e?.reason) && (!e.category || e.category === 'provider-unavailable');
         if (!dead) throw e;
         await unload();
         throw e.category ? e : fail('provider-unavailable', e.reason);
@@ -543,10 +543,10 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       const control = new AbortController();
       ahead?.abort(new DOMException('Replaced', 'AbortError'));
       ahead = control;
-      queued(async () => {
+      queued(() => guarded(async () => {
         if (loaded !== job) return;
         await job.model.extend(ids, { at: [ids.length], signal: control.signal, ...paced() });
-      }, control.signal).catch(() => {}).finally(() => { if (ahead === control) ahead = null; });
+      })(null, control.signal), control.signal).catch(() => {}).finally(() => { if (ahead === control) ahead = null; });
     };
     // The system turn (parts, or its first `stable`), kept; with stable the rest is read on after it in the live sequence.
     const warm = async (m, signal) => {
