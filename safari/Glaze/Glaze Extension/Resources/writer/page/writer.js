@@ -232,7 +232,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (box.reopens <= FRAME_RETRIES && sameBox(box) && on()) { open(box); return; }
     recover(box);
   };
-  const recover = (box) => {
+  const recover = (box, preserveNative = false) => {
     if (boxes.get(box.editor) !== box) return;
     failed.set(box.editor, Date.now());
     remember(box);
@@ -244,12 +244,14 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     field.setAttribute('data-gz-writer-recovery', '');
     field.setAttribute('aria-label', X.t('Glaze Writer'));
     field.value = box.snapshot?.text || A().read(box.editor).text;
+    if (preserveNative) field.readOnly = true;
     field.style.cssText = 'display:block;width:100%;min-height:190px;font:inherit;color:inherit;background:transparent';
     back.type = 'button';
     back.textContent = X.t(A().NATIVE);
-    back.addEventListener('click', () => giveBack(box, true));
+    back.addEventListener('click', () => { if (preserveNative) { wrap.remove(); A().focus?.(box.editor); } else giveBack(box, true); });
     field.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); } });
     field.addEventListener('input', () => {
+      if (preserveNative) return;
       const lines = field.value.replace(/\r\n?/g, '\n').split('\n'), wrap = document.createElement('div');
       // Canvas's rich editor collapses runs of spaces (TinyMCE's parser): those go in as no-break spaces, as the frame's do.
       const kept = (l) => (X.site !== 'canvas' || box.mode === 'plain' ? l : l.replace(/^ | $| (?= )|(?<= ) /g, '\u00a0'));
@@ -258,9 +260,11 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       sync(box, box.snapshot.html, [{ insert: `${lines.join('\n')}\n` }]); remember(box);
     });
     wrap.append(field, back);
-    box.frame = wrap;
+    // Canvas restored another document while Writer held an unsynced copy: keep that copy available to copy, beside
+    // Canvas's visible editor. Neither this field nor a later Submit may replace the restored document.
+    if (preserveNative) { drop(box); declined.add(box.editor); } else box.frame = wrap;
     if (box.root.isConnected) box.root.before(wrap); else document.body.append(wrap);
-    field.focus();
+    if (!preserveNative) field.focus();
   };
   // The frame is up: it takes the box's text and place, and the box hides (still in the page, still synced).
   const swap = (box) => {
@@ -740,8 +744,11 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       if (!sameBox(box)) { if (A()?.HOLD && box.unsynced && box.mode !== 'paper' && box.path === location.pathname) orphans.set(orphanKey(box, box.snapshot || box.destination), { kind: box.kind, html: box.latest, snapshot: box.snapshot, at: Date.now() }); drop(box); }
       // Canvas asks whether to restore its autosave: the box is Canvas's, holding what Writer gave it (never shown, nothing).
       else if (A()?.restoring?.(box.editor)) {
-        if (!box.unsynced) adopt(box); // Canvas may already have restored it before this observer pass.
-        if (box.owns || box.snapshot) giveBack(box, false); else { drop(box); declined.add(box.editor); }
+        if (box.unsynced) recover(box, true);
+        else {
+          adopt(box); // Canvas may already have restored it before this observer pass.
+          if (box.owns || box.snapshot) giveBack(box, false); else { drop(box); declined.add(box.editor); }
+        }
       }
       else if (box.kind === 'post' && (!box.display || box.posted) && !box.text && box.editor.closest('form')?.querySelector('.panel-editor-controls.ng-hide, .panel-editor-controls[aria-hidden="true"]')) drop(box);
       else if (box.kind === 'journal' && !A().sendOf(box.editor, 'journal')) drop(box); // its Cancel, or the entry sent
