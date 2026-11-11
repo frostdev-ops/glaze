@@ -45,6 +45,15 @@ test('possessives, apostrophe names and name particles match their source and ar
   for (const n of ['Hans van der Berg, <em>On van der Berg</em> (Leiden: Brill, 2016), 4.', 'van der Berg, <em>On van der Berg</em>, 4.', 'Sean O’Malley, <em>On O’Malley</em> (Boston: Beacon, 2017), 9.'])
     assert.deepEqual(C.check(note(n), [who('van der Berg', 2016), who('O’Malley', 2017)].filter((s) => n.includes(s.author[0].family)), 'chicago17').map((i) => i.message), [], n);
 });
+test('Chicago notes recognize full author names with given names Van and Al or a suffix (CMOS 14.29)', () => {
+  const W = require('../../extension/writer/writer-schema.js');
+  for (const [given, family, suffix] of [['Van', 'Morrison'], ['Al', 'Green'], ['Hans', 'van der Berg'], ['Martin Luther', 'King', 'Jr.']]) {
+    const source = book({ id: 's-noted', author: [{ family, given, suffix }] });
+    const html = C.format(source, 'chicago17').note(4);
+    const doc = W.parse(W.paper, `<p>Held.<sup class="gz-footnote" data-footnote="${html}"></sup></p>`);
+    assert.deepEqual(C.check(doc, [source], 'chicago17').map((i) => i.message), [], html);
+  }
+});
 
 // APA 7 §9.44–9.48, MLA 9 §5.124–5.126, CMOS 17 14.66 and 16.58: entries go letter by letter by their first element (the
 // surname, a group's name, or a title without A, An or The); "nothing precedes something" (Brown before Browning);
