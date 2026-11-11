@@ -140,6 +140,13 @@ var GZ_XPARTS = globalThis.GZ_XPARTS || (() => {
     try { u = new URL(v); } catch { return null; }
     return u.protocol === 'https:' && !u.username && !u.password && !u.port && publicHost(u.hostname) ? u.href : null;
   };
+  // A theme's own pictures (bg.image, nav.u) are loaded by the school's page itself, so one in a code from someone else may not name
+  // an address on the student's network (the host would see a request from inside their school's page). sharing/share.js decode
+  // holds a code to this. A student's own editor keeps whatever they type: their home server's picture is theirs to show.
+  const publicImage = (v) => {
+    if (typeof v !== 'string') return false;
+    try { const u = new URL(v); return u.protocol === 'https:' && publicHost(u.hostname); } catch { return false; }
+  };
   const MOD_FILE = /^(?:\.\/|mod:[a-z2-7]{16}\/)((?:[\w-][\w.-]*\/){0,7}[\w-][\w.-]*\.(?:webm|mp4|webp|avif|json))$/;
   const modFile = (v) => (typeof v === 'string' && v.length <= 240 && MOD_FILE.test(v) ? v : null);
   const MEDIA = { types: ['video', 'image', 'lottie'], fits: ['cover', 'contain', 'fill'], url: mediaUrl, mod: (v) => modFile(v)?.match(MOD_FILE)[1] ?? null,
@@ -422,7 +429,7 @@ var GZ_XPARTS = globalThis.GZ_XPARTS || (() => {
   // How a background kind reads in the offer ("…, and a custom shader background").
   const KIND_WORD = { shader: 'a custom shader background', layers: 'a layered animated background', media: 'a video or animation background' };
 
-  return { BLENDS, MEDIA, MAX_JSON, SHADER_MAX, DEFAULTS, GROUPS: Object.keys(GROUPS), RULE_DO: Object.keys(DO), clean, mods, bundle, over, same, strip, compact, pipe, b64, unb64, deflate, inflate, pack, parse, unpack, hash, areas, stored, fromStored, read, write, describe, outside, KIND_WORD };
+  return { BLENDS, MEDIA, MAX_JSON, SHADER_MAX, DEFAULTS, GROUPS: Object.keys(GROUPS), RULE_DO: Object.keys(DO), publicImage, clean, mods, bundle, over, same, strip, compact, pipe, b64, unb64, deflate, inflate, pack, parse, unpack, hash, areas, stored, fromStored, read, write, describe, outside, KIND_WORD };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_XPARTS; else GZ_XPARTS;

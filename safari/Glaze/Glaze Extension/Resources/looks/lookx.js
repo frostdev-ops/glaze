@@ -126,19 +126,32 @@ var GZ_LX = globalThis.GZ_LX || (() => {
   };
   // Did the stored state change because the Look turned (not because the clock started or the mode changed)?
   const turned = (was, now) => now?.turned === true && Number.isInteger(now.i) && now.i >= 0 && (!was || typeof was === 'object') && (!was || now.at !== was.at || now.i !== was.i || now.mode !== was.mode);
-  // One rotation turn, given the stored state (storage.local rotateState), the time, the settings and the list.
+  // The last turn any device made, as storage.sync keeps it (`rotateAt`, written in the same write as the Look the turn wore, from
+  // shared()): rotateState is per device, and the Look it changes is the account's, so each device alone would turn it again.
+  const SHARED = 'rotateAt';
+  const shared = (state) => (state?.turned === true && typeof state.mode === 'string' && Number.isFinite(state.at) && Number.isInteger(state.i) ? { mode: state.mode, at: state.at, i: state.i } : null);
+  // A device's state after it reads the shared turn: that turn's when it is newer than its own and was made under this schedule
+  // and not in this device's future; otherwise the device's own.
+  const adopt = (state, mode, now, last) => {
+    const ok = !!last && typeof last === 'object' && !Array.isArray(last) && last.mode === mode && Number.isFinite(last.at) && last.at <= now && Number.isInteger(last.i) && last.i >= 0;
+    return ok && !(state?.mode === mode && Number.isFinite(state.at) && state.at >= last.at) ? { mode, at: last.at, i: last.i } : state;
+  };
+  // One rotation turn, given the stored state (storage.local rotateState), the time, the settings and the list, and the shared
+  // turn (storage.sync rotateAt) when there is one: a turn another device made counts as this device's own, so the account turns
+  // once per period and goes on from that device's place in the list.
   // → { state, wear } where wear is the index to wear now, or -1 for none. A new mode or time starts the clock over;
   // `now` true ("Next Look now") turns at once.
-  const turn = (state, now, x, list, force = false) => {
+  const turn = (state, now, x, list, force = false, last = null) => {
     const mode = `${x.rotate} ${x.at}`;
     if (x.rotate === 'off' || !list.length) return { state, wear: -1 };
+    state = adopt(state, mode, now, last);
     if (!force && (!state || state.mode !== mode || !Number.isFinite(state.at) || state.at > now)) return { state: { mode, at: now, i: Number.isInteger(state?.i) ? state.i : -1 }, wear: -1 };
     if (!force && now < nextTurn(x.rotate, x.at, state.at)) return { state, wear: -1 };
     const i = ((Number.isInteger(state?.i) ? state.i : -1) + 1) % list.length;
     return { state: { mode, at: now, i, turned: true }, wear: i };
   };
 
-  return { PACKS, PACK_NAMES, BUNDLED, slug, file, CURSORS, cursorCss, pointerOf, MAX_ON_PAGE, ID, MOD, placement, clean, apply, quiet, pageKey, PAGE_KEY, DATA, IMG_MAX, IMGS_MAX, fit, imgIds, roomFor, RESET, EVERY, nextTurn, rotation, wearCode, turn, turned };
+  return { PACKS, PACK_NAMES, BUNDLED, slug, file, CURSORS, cursorCss, pointerOf, MAX_ON_PAGE, ID, MOD, placement, clean, apply, quiet, pageKey, PAGE_KEY, DATA, IMG_MAX, IMGS_MAX, fit, imgIds, roomFor, RESET, EVERY, nextTurn, rotation, wearCode, SHARED, shared, turn, turned };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_LX; else GZ_LX;
