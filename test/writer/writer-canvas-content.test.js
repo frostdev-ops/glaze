@@ -11,6 +11,25 @@ test('Canvas: repeated Send clicks cannot replay the same document while its sen
   assert.equal(c.clicks.length, 1, 'Canvas may leave Reply enabled until its network request finishes');
 });
 
+test('Canvas Inbox: the sending modal prevents another send after a slow request, including after an edit', async () => {
+  const c = await page({ fixture: 'inbox' });
+  c.emit({ type: 'change', html: '<p>Send this reply once.</p>', text: 'Send this reply once.' });
+  const button = c.box().send, modal = button.closest('#compose-message-modal');
+  c.press(button); c.flush();
+  // Canvas leaves Send enabled beneath its modal spinner. Its modal stack hides the underlying compose dialog.
+  modal.setAttribute('aria-hidden', 'true');
+  c.clock(105000);
+  c.emit({ type: 'send' }); c.flush();
+  assert.equal(c.clicks.length, 1, 'a slow request is still in flight after one second');
+  c.emit({ type: 'change', html: '<p>Revised while sending.</p>', text: 'Revised while sending.' });
+  c.clock(110000);
+  c.press(button); c.flush('<p>Revised while sending.</p>');
+  assert.equal(c.clicks.length, 1, 'editing cannot bypass Canvas\'s pending send');
+  modal.removeAttribute('aria-hidden'); // Canvas refused it and removed the spinner.
+  c.press(button); c.flush('<p>Revised while sending.</p>');
+  assert.equal(c.clicks.length, 2, 'the same text can be sent after Canvas gives the dialog back');
+});
+
 // Canvas refuses a send and leaves the box as it was: the Inbox with no recipient ("Please select a recipient"), a reply whose
 // request failed (Reply on again). A send in flight shows on Canvas's side within a render (Reply disabled while it submits,
 // DiscussionEdit.tsx; the Inbox's "Sending Message" spinner over the dialog, ComposeModalContainer.tsx).
