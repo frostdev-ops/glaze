@@ -58,7 +58,10 @@ test('inside a quotation or a block quote, what is typed stays as typed', () => 
 
 test('single-quoted words stay as typed with Smart quotes on or off', () => {
   assert.equal(typed("She wrote 'I saw teh "), 'She wrote ‘I saw teh ');
-  assert.equal(typed("She wrote 'I saw teh ", { allow: (c) => c !== 'smart' }), "She wrote 'I saw teh ");
+  // With Smart quotes off the quote stays straight (the editor's input rules read Settings, not allow, so ask directly).
+  assert.equal(P.quoting("She wrote 'I saw "), true);
+  assert.equal(P.quoting("She wrote 'I saw it' and "), false);
+  assert.equal(P.quoting("We don't need "), false);
   assert.equal(typed("She wrote 'I saw it' and teh "), 'She wrote ‘I saw it’ and the ');
   assert.equal(typed('We don’t need teh '), 'We don’t need the ', 'an apostrophe does not open a quotation');
 });
