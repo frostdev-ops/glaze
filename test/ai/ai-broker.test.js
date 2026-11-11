@@ -760,6 +760,24 @@ test('a connection\'s catalog is asked for once per generation, not every run; a
   assert.equal(p.posted.at(-1).type, 'end');
 });
 
+test('a catalog that fails or times out is asked for again after a minute, not remembered as none for an hour', async () => {
+  let t = 1e9, fails = 1;
+  const calls = [], echo = echoFetch(calls);
+  const e = writer({ now: () => t, fetch: async (url, init) => {
+    if (url.endsWith('/models') && fails-- > 0) { calls.push({ url }); throw new TypeError('Failed to fetch'); }
+    return echo(url, init);
+  } });
+  const p = open(e);
+  p.say(run()); await flush();
+  p.say(run(undefined, { id: 2 })); await flush();
+  assert.deepEqual(calls.map((c) => c.url.split('/').pop()), ['models', 'completions', 'completions'], 'not asked again at once');
+  t += 61e3;
+  p.say(run(undefined, { id: 3 })); await flush();
+  t += 61e3;
+  p.say(run(undefined, { id: 4 })); await flush();
+  assert.deepEqual(calls.map((c) => c.url.split('/').pop()), ['models', 'completions', 'completions', 'models', 'completions', 'completions'], 'asked again after a minute, then kept');
+});
+
 test('the sender check may refuse one message with a code and keep the port; it is told the feature, a confirm\'s too', async () => {
   const asked = [];
   const e = writer({ allowed: (what) => { asked.push(what); return what.feature === 'completion' ? 'attempt' : true; } });
