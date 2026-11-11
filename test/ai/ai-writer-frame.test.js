@@ -8,7 +8,7 @@ const flush = async () => { for (let i = 0; i < 8; i++) await new Promise(setImm
 const until = async (f, ms = 2000) => { const t = Date.now(); while (!f() && Date.now() - t < ms) await new Promise((r) => setTimeout(r, 5)); return f(); };
 const plain = (v) => JSON.parse(JSON.stringify(v));
 // pace: how many times faster than real time the frame's timers run.
-function frame({ answer = () => ({ allowed: true, ready: true }), settings: start, context: initialContext = { kind: 'reply' }, kind = 'reply', clock, mode = 'compose', format, look, pace = 1, hidden = false, safari = false } = {}) {
+function frame({ answer = () => ({ allowed: true, ready: true }), settings: start, context: initialContext = { kind: 'reply' }, kind = 'reply', clock, mode = 'compose', format, look, pace = 1, hidden = false, safari = false, schema, doc: paperDoc } = {}) {
   class Element {
     constructor() { this.style = {}; this.attrs = {}; this.children = []; this.hidden = false; this.listeners = {}; }
     get textContent() { return (this.text || '') + this.children.map((c) => (c && typeof c === 'object' ? c.textContent : String(c))).join(' '); }
@@ -23,13 +23,13 @@ function frame({ answer = () => ({ allowed: true, ready: true }), settings: star
   const hooks = {}, sent = [], receives = [], pendingStatus = [], pendingRun = [], said = [], ports = [], items = [];
   let ctx = initialContext, settings = start || { on: true, use: 'main', features: { completion: true, writing: true } }, holdStatus = false;
   const opened = [], messages = [];
-  const doc = { content: { size: 10 }, textBetween: () => 'draft words' };
+  const doc = paperDoc || { content: { size: 10 }, textBetween: () => 'draft words' };
   const interaction = { dispatch: 0, focus: 0 };
   const ed = { view: { state: { doc }, dispatch() { interaction.dispatch++; }, focus() { interaction.focus++; } } };
   const sandbox = { GZ_AI_FAILURE: require('../../extension/ai/failure.js'), navigator: { platform: 'MacIntel' }, document: { hidden, createElement: () => new Element(), body: new Element(), addEventListener(type, f) { hooks[`document:${type}`] = f; } },
     addEventListener(type, f) { hooks[`window:${type}`] = f; }, requestAnimationFrame: (f) => f(), setTimeout: (f, ms, ...a) => setTimeout(f, ms / pace, ...a).unref(), clearTimeout, setInterval, clearInterval,
     GZ_PM: { state: { Plugin: class { constructor(spec) { this.spec = spec; } }, PluginKey: class { getState() { return null; } } }, view: {}, transform: { Mapping: class { appendMapping() {} map(v) { return v; } } } },
-    GZ_WRITER_SCHEMA: { text: () => ({ text: 'draft words', posAt: (v) => v }) }, GZ_WRITER_PROOF: {},
+    GZ_WRITER_SCHEMA: schema || { text: () => ({ text: 'draft words', posAt: (v) => v }) }, GZ_WRITER_PROOF: {},
     GZ_AI_WRITER: require('../../extension/ai/tasks/writer-context.js'), GZ_WRITER_SOURCES: require('../../extension/writer/writer-sources.js'),
     GZ_WRITER_PAPER: format ? { current: () => ({ format: () => format, ...(look && { look }) }) } : undefined,
     GZ_WRITER_FRAME: { t: (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (v && k in v ? v[k] : m)), kind: () => kind, context: () => ctx, editor: () => ed, mode: () => mode,
@@ -795,4 +795,23 @@ test('a Canvas quiz essay (kind test): no AI is asked, offered or run, even with
   assert.equal(f.ai.outlineInfo().available, false);
   await f.ai.review(); await f.ai.feedback(); await flush();
   assert.equal(f.sent.some((m) => m.op === 'run' || m.op === 'status'), false, 'Check with AI and Feedback, called anyway, ask nothing');
+});
+
+test('Check with AI, Feedback and the gray text read the footnotes after the draft', async () => {
+  const S = require('../../extension/writer/writer-schema.js'), P = S.paper;
+  const d = P.nodes.doc.create(null, [P.nodes.paragraph.create(null, [P.text('The war ended.'), P.nodes.footnote_ref.create({ content: 'Keegan, <em>The First World War</em>, 12.' }), P.text(' Then peace came')])]);
+  const want = 'The war ended. Then peace came\n\nFootnotes:\n1. Keegan, The First World War, 12.';
+  const f = frame({ schema: S, doc: d }); await f.start();
+  f.context({ kind: 'assignment', assignment: { description: 'Cite three sources.' } }); await flush();
+  f.ai.review(); await flush();
+  assert.equal(f.pendingRun.at(-1).task, 'writer.review');
+  assert.equal(f.pendingRun.at(-1).input.text, want);
+  f.ai.feedback(); await flush();
+  assert.equal(f.pendingRun.at(-1).task, 'writer.feedback');
+  assert.equal(f.pendingRun.at(-1).input.text, want);
+  const A = require('../../extension/writer/frame/writer-ai.js');
+  const at = A.around(d, d.content.size - 1);
+  assert.equal(at.before, 'The war ended. Then peace came');
+  assert.equal(at.after, '\n\nFootnotes:\n1. Keegan, The First World War, 12.');
+  assert.equal(A.fits(at.before, at.after), true, 'the notes after the draft do not stop the gray text');
 });

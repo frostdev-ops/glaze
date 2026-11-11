@@ -42,3 +42,17 @@ test('a range across a footnote mark or picture is refused; one across a hard br
   assert.equal(t.range(-1, 3), null);
   assert.equal(t.range(3, t.text.length + 1), null);
 });
+test('AI\'s form of the text adds the notes, in order, after the draft; the draft\'s offsets and ranges are those of text()', () => {
+  const d = doc(para('Alpha', note('Smith, <em>Swing Time</em>, 320.'), ' beta.'), para('Gamma', note('Second<br>note.'), '.'));
+  const plain = S.text(d), ai = S.text(d, { notes: true });
+  assert.equal(plain.text, 'Alpha beta.\nGamma.', 'plain text() is unchanged (word counts read it)');
+  assert.equal(ai.text, 'Alpha beta.\nGamma.\n\nFootnotes:\n1. Smith, Swing Time, 320.\n2. Second note.');
+  assert.equal(ai.main, plain.text.length);
+  for (let i = 0; i <= plain.text.length; i++) { assert.equal(ai.posAt(i), plain.posAt(i)); assert.equal(ai.posAt(i, -1), plain.posAt(i, -1)); }
+  const n = ai.text.indexOf('Smith');
+  assert.equal(ai.range(n, n + 5), null, 'note text maps to no place in the paper');
+  assert.deepEqual(S.notes(d), ['Smith, Swing Time, 320.', 'Second note.']);
+  assert.deepEqual(S.notes(d.child(1)), ['Second note.']);
+  const none = doc(para('No notes here.'));
+  assert.equal(S.text(none, { notes: true }).text, 'No notes here.');
+});
