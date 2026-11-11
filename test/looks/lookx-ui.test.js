@@ -195,6 +195,34 @@ test('rotation: a favorite brings its parts with it, a built-in Look its own, an
   assert.ok(require('../../extension/content/defaults.js').GZ_LOOKS.some((L) => X.same(worn, require('../../extension/looks/lookset.js')(L))), JSON.stringify(worn)?.slice(0, 200));
 });
 
+test('rotation: two signed-in devices with one period and a shared sync turn the account\'s Look once per period, not once each', { timeout: 20000 }, async () => {
+  const G = require('../../extension/content/defaults.js');
+  const H = 36e5, t0 = 1e12, mode = '6h 08:00';
+  const settings = structuredClone(G.GZ_SANITIZE({ extras: { rotate: '6h' } }));
+  // One account (one sync area), two devices (each its own storage.local and rotation clock), and a clock the test sets.
+  const a = worker({}, settings);
+  const b = worker({}, settings);
+  const clock = (w) => { vm.runInContext('Date = class extends Date { static now() { return globalThis.now; } }', w.context); };
+  clock(a); clock(b);
+  const worn = [];
+  const seen = () => JSON.stringify([settings.colors, settings.look, settings.bg]);
+  let last = seen();
+  const ask = async (w, at) => {
+    a.context.now = b.context.now = at;
+    assert.ok((await w.send({ type: 'glaze:rotate' })).ok);
+    if (seen() !== last) { last = seen(); worn.push(at - t0); }
+  };
+  // A's clock starts at t0 and B's three hours later, at another place in the list; each asks every hour.
+  b.local.rotateState = { mode, at: t0 + 3 * H, i: 4 };
+  for (let h = 0; h <= 16; h++) {
+    await ask(a, t0 + h * H);
+    if (h >= 3) await ask(b, t0 + h * H);
+  }
+  assert.deepEqual(worn, [6 * H, 12 * H], 'the Look changes at each period\'s end, once');
+  assert.deepEqual(settings.rotateAt, { mode, at: t0 + 12 * H, i: 1 }, 'the last turn is kept where every device reads it');
+  assert.deepEqual([a.local.rotateState.i, b.local.rotateState.i], [1, 1], 'both devices are at the account\'s place');
+});
+
 // ---- the page -------------------------------------------------------------------------------------------------------
 test('rotation refuses legacy outside favorites that hide critical controls without restricting own Look storage', async () => {
   const G = require('../../extension/content/defaults.js'), X = require('../../extension/looks/lookparts.js'), S = require('../../extension/sharing/share.js');
