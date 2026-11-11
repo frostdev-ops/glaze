@@ -24,6 +24,10 @@ var GZ_SEEN = globalThis.GZ_SEEN || (() => {
     if (!s || JSON.stringify(m.set).length > 1e6) return null;
     const set = Object.entries(m.set);
     if (set.some(([k, v]) => v == null || (m.key === 'courseSlots' ? typeof v !== 'string' : typeof v !== 'object') || !s.own(k, v))) return null;
+    // Ultra's bare ids are shared by these maps. A page cannot claim an id already naming another site, even by
+    // putting its own site in the new value. The broker supplies the course map read inside this same queue turn.
+    const courses = m.key === 'seenCourses' ? stored : site.courses;
+    if (site.kind === 'ultra' && set.some(([k]) => courses?.[k]?.site && courses[k].site !== site.origin)) return null;
     const kept = Object.entries(plain(stored) ? stored : {}).filter(([k, v]) => !(m.drop === true && set.length && s.old(k, v)));
     return { [m.key]: { ...Object.fromEntries(kept), ...m.set }, ...(m.stamp === true && s.at && { [s.at]: now }) };
   };

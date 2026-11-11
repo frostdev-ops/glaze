@@ -407,7 +407,10 @@ const BROKER = {
   seen: {
     allow: async (m, s) => GZ_SEEN.KEYS.includes(m.key) && !!await seenSite(s),
     run: async (m, { local }, s) => {
-      const site = await seenSite(s), patch = site && GZ_SEEN.merge((await local.get(m.key))[m.key], m, site);
+      const site = await seenSite(s);
+      if (!site) return { ok: false };
+      const r = await local.get(m.key === 'seenCourses' ? m.key : [m.key, 'seenCourses']);
+      const patch = GZ_SEEN.merge(r[m.key], m, { ...site, courses: r.seenCourses });
       return { ok: !!patch && await local.set(patch) };
     },
   },
