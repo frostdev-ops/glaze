@@ -72,9 +72,23 @@ var GZ_GLSL = globalThis.GZ_GLSL || (() => {
     const author = code.replace(/^[ \t]*#.*$/gm, ' ').replace(/[A-Za-z_]\w*/g, (w) => (macros.has(w) ? macros.get(w) : w));
     const consts = new Map();
     const num = (k) => (/^\d+$/.test(k) ? +k : consts.get(k));
-    for (const m of author.matchAll(/\bconst\s+int\s+([A-Za-z_]\w*)\s*=\s*(\d+|[A-Za-z_]\w*)\s*;/g)) {
-      if (consts.has(m[1])) errors.push({ line: author.slice(0, m.index).split('\n').length, message: 'Use a unique name for const int {name} so loop bounds are unambiguous.', vars: { name: m[1] } });
-      const v = num(m[2]); if (v !== undefined) consts.set(m[1], v);
+    const names = new Set();
+    for (const m of author.matchAll(/\bconst\s+(?:(?:lowp|mediump|highp)\s+)?int\s+([^;{}]+);/g)) {
+      const [ks] = tokens(m[1]);
+      let from = 0, depth = 0;
+      for (let j = 0; j <= ks.length; j++) {
+        if (ks[j] === '(' || ks[j] === '[') depth++;
+        else if (ks[j] === ')' || ks[j] === ']') depth--;
+        if (j !== ks.length && (ks[j] !== ',' || depth)) continue;
+        const decl = ks.slice(from, j), name = decl[0];
+        from = j + 1;
+        if (!isId(name)) continue;
+        // Every declarator reserves its name, even when its value cannot be read. Otherwise a shadow could borrow an outer bound.
+        if (names.has(name)) errors.push({ line: author.slice(0, m.index).split('\n').length, message: 'Use a unique name for const int {name} so loop bounds are unambiguous.', vars: { name } });
+        names.add(name);
+        const v = decl.length === 3 && decl[1] === '=' ? num(decl[2]) : undefined;
+        if (v !== undefined) consts.set(name, v);
+      }
     }
     const [P, PL] = tokens(PRELUDE);
     const [A, AL] = tokens(author);
