@@ -134,7 +134,9 @@ var GZ_LX = globalThis.GZ_LX || (() => {
   // and not in this device's future; otherwise the device's own.
   const adopt = (state, mode, now, last) => {
     const ok = !!last && typeof last === 'object' && !Array.isArray(last) && last.mode === mode && Number.isFinite(last.at) && last.at <= now && Number.isInteger(last.i) && last.i >= 0;
-    return ok && !(state?.mode === mode && Number.isFinite(state.at) && state.at >= last.at) ? { mode, at: last.at, i: last.i } : state;
+    // Starting this clock did not turn the account's Look: a delayed sync answer still owns its deadline and place.
+    const own = state?.mode === mode && !state.started && Number.isFinite(state.at) && state.at <= now && Number.isInteger(state.i) && state.i >= 0;
+    return ok && !(own && state.at >= last.at) ? { mode, at: last.at, i: last.i } : state;
   };
   // One rotation turn, given the stored state (storage.local rotateState), the time, the settings and the list, and the shared
   // turn (storage.sync rotateAt) when there is one: a turn another device made counts as this device's own, so the account turns
@@ -145,7 +147,7 @@ var GZ_LX = globalThis.GZ_LX || (() => {
     const mode = `${x.rotate} ${x.at}`;
     if (x.rotate === 'off' || !list.length) return { state, wear: -1 };
     state = adopt(state, mode, now, last);
-    if (!force && (!state || state.mode !== mode || !Number.isFinite(state.at) || state.at > now)) return { state: { mode, at: now, i: Number.isInteger(state?.i) ? state.i : -1 }, wear: -1 };
+    if (!force && (!state || state.mode !== mode || !Number.isFinite(state.at) || state.at > now)) return { state: { mode, at: now, i: Number.isInteger(state?.i) ? state.i : -1, started: true }, wear: -1 };
     if (!force && now < nextTurn(x.rotate, x.at, state.at)) return { state, wear: -1 };
     const i = ((Number.isInteger(state?.i) ? state.i : -1) + 1) % list.length;
     return { state: { mode, at: now, i, turned: true }, wear: i };
