@@ -20,7 +20,7 @@ USER node
 ENV HOST=127.0.0.1 PORT=8787 DB=/data/share.db BLOBS=/data/blobs IP_HEADER=x-real-ip NODE_OPTIONS=--disable-warning=ExperimentalWarning
 EXPOSE 8787
 VOLUME /data
-# The relay's own /health, on the loopback address whatever HOST it is bound to; a relay that lost its lease answers 503.
+# The relay's own /health on HOST (loopback for a wildcard bind); a relay that lost its lease answers 503.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+  CMD node -e "const h=process.env.HOST||'127.0.0.1'; const host=h==='0.0.0.0'?'127.0.0.1':h==='::'?'[::1]':h.includes(':')?'['+h+']':h; fetch('http://'+host+':'+process.env.PORT+'/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
 CMD ["node", "relay.js"]
