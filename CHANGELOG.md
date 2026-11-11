@@ -66,6 +66,10 @@ All notable changes to Glaze are documented here. The format follows
 - Settings search no longer fails on "constructor" or on names with İ, and no longer freezes on "h:". Documents search finds İstanbul by "istanbul" in a Turkish or Azeri browser.
 - Writer's AI no longer stalls on assignment text full of unclosed `<`, on long dialogue-heavy drafts, or on very long replies with no spaces.
 - To Do chips on light Looks show their status colour again, and the spreadsheet's formula bar and Find fields have a visible edge there.
+- Settings shown inside a school's page opens its own tab for Google Drive's Connect, Disconnect and Sync.
+- A full Documents list says so instead of "Not saved".
+- Course card search finds İstanbul by "istanbul" in a Turkish or Azeri browser.
+- An AI suggestion is dropped where a footnote or picture was added to its text after the check, and decks sharing one huge master or layout open faster.
 
 ## [4.0.6] — 2026-11-09
 
