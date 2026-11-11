@@ -113,7 +113,7 @@ async function main(out) {
       if (cancelled) break;
       const limit = Math.min(check.limit || LIMIT, deadline - Date.now());
       if (limit <= 0) { console.error('FAIL browser gate exceeded its total time budget'); break; }
-      console.log(`\n== ${check.name} (scripts/${check.script})`);
+      console.log(`\n== ${check.name} (${check.script})`);
       results.push({ name: check.name, limit, ...await run(check, out, path.join(scratch, `lock-${i}`), limit) });
     }
     console.log('');
