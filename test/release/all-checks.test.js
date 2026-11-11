@@ -289,11 +289,21 @@ test('the runner takes at most --jobs at once, the Mac one', async (t) => {
   }
 });
 
-test('a spawn error (no glaze-remote on the PATH) is a failure with the reason, not a crash', async (t) => {
-  const spawn = () => { const c = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), kill() {} }); setImmediate(() => c.emit('error', Object.assign(new Error('spawn glaze-remote ENOENT'), { code: 'ENOENT' }))); return c; };
-  const r = await A.runAll([check('a/x-check.js')], 'runner', opts(t, { spawn }));
-  assert.equal(r[0].status, 'fail');
+test('no glaze-remote on the PATH is the runner failing: the first check says so and the rest are not dispatched', async (t) => {
+  let spawned = 0;
+  const spawn = () => { spawned++; const c = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), kill() {} }); setImmediate(() => c.emit('error', Object.assign(new Error('spawn glaze-remote ENOENT'), { code: 'ENOENT' }))); return c; };
+  const r = await A.runAll([check('a/x-check.js'), check('a/y-check.js')], 'runner', opts(t, { spawn, jobs: 1 }));
+  assert.deepEqual(r.map((x) => x.status), ['runner-failed', 'runner-failed']);
   assert.match(r[0].detail, /ENOENT/);
+  assert.match(r[1].detail, /not dispatched/);
+  assert.equal(spawned, 1);
+});
+
+test('a spawn error on the Mac is that check\'s failure, with the reason', async (t) => {
+  const spawn = () => { const c = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), kill() {} }); setImmediate(() => c.emit('error', Object.assign(new Error('spawn nice EACCES'), { code: 'EACCES' }))); return c; };
+  const r = await A.runAll([check('a/x-check.js')], 'mac', opts(t, { spawn }));
+  assert.equal(r[0].status, 'fail');
+  assert.match(r[0].detail, /EACCES/);
 });
 
 test('an abort stops what runs and marks the rest not run', async (t) => {
@@ -406,6 +416,12 @@ test('main sweeps, writes summary.md and returns the exit code (known list honou
   assert.match(md, /\| settings\/popup-check\.js \| pass \|/);
   assert.match(md, /FAIL narrow-320/);
   assert.ok(f.calls.length >= 10 && f.calls.every((c) => c.command === 'glaze-remote'));
+});
+
+test('main refuses a --needs that is no tag, and a --only that matches nothing', async (t) => {
+  const never = { spawn: () => assert.fail('nothing spawns'), log() {} };
+  await assert.rejects(A.main(['--where', 'runner', '--needs', 'cavnas', '--evidence', scratch(t), '--dry-run'], never), /unknown --needs "cavnas"/);
+  await assert.rejects(A.main(['--where', 'runner', '--only', 'nope', '--evidence', scratch(t), '--dry-run'], never), /no check matches "nope"/);
 });
 
 test('main refuses a sweep when a check file has no entry', async (t) => {
