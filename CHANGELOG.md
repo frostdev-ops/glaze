@@ -18,6 +18,14 @@ All notable changes to Glaze are documented here. The format follows
 ### Changed
 
 - Canvas pages float on your Look's panels, as Blackboard's do: assignments, discussions, grades, pages, the syllabus, files, people, the inbox and settings. Header bars are rounded, and Canvas's editor and submission form wear your Look.
+- Sync to Google Drive merges To Do lists, class schedules, GPA terms, dashboard notes, Looks history and favorites, the dictionary and saved sources item by item when two devices changed them, where it used to keep only the later device's copy. Two devices saving the same thing at once both keep their change, a device that joins just after another's upload gets its records, and a document Drive refuses for an unknown reason is tried again.
+- Agents: a connected app reconnects by itself after the browser restarts or agent access goes off and on, and an app started before the browser gets its first answer instead of timing out. `glaze-mcp setup` picks a safe Node.js when the one running it can't be used and says which; with none it says it isn't set up. The helper works on Node 18.0 to 18.13 and no longer names fnm's per-shell Node, which vanished at logout.
+- Ask Rime saves a memory only from your own words, so text in a course can't plant one, and its answers link only to your school's site or to addresses Glaze read for that answer.
+- A spreadsheet cell that uses a function Glaze can't calculate keeps the file's own value through open, import, export, Drive and Submit until one of its inputs changes, and the status line says so.
+- A shared Look is refused when its shader uses `while` or `do` loops or oversized arrays, or when its picture points at an address on your own network. A Look can't fade the school's main navigation below half or paint its text in its own background colour.
+- Look rotation changes the Look once each period across your signed-in devices.
+- A dark Look prints as dark ink on white, and Moodle prints without the bar's gutter. Instructors' text colours show in Blackboard. Settings, the popup and the hub are readable in Windows High Contrast.
+- AI no longer changes grammar or word choice while you type in Writer; it suggests instead.
 
 ### Fixed
 
@@ -29,6 +37,25 @@ All notable changes to Glaze are documented here. The format follows
 - Google Drive's daily backup keeps Notes and the Pet habitat on for a new install, so restoring it no longer turns them off.
 - Reset everything says so when it couldn't reset your school sites.
 - A sheet formula with many `*` wildcards, or a damaged .xlsx with thousands of column ranges, no longer freezes the tab.
+- Writer: Find and Replace works with hyphenated words. An AI suggestion or a citation fix next to a footnote or picture no longer deletes it, and Check with AI, Feedback, the outline and the gray text read your footnotes. Editing a footnote keeps its formatting.
+- Writer: autocorrect leaves other languages, quotations, block quotes and a variable named i alone, and uses straight apostrophes when Smart quotes is off. Long unbroken runs of letters no longer freeze the editor, and pasting a very large Word-style email no longer does either.
+- Writer's format and citation checks: Fix edits the right characters when a footnote, picture or line break comes earlier, and the block-quote Fix keeps italics, links and notes. Correctly ordered reference lists are no longer flagged and Sort uses the same order. (Figure 3) and (Table 2) are no longer turned into footnotes. Possessives, O'Malley-style names and van der Berg-style particles match their entries. The MLA date suggestion is right in US time zones.
+- Writer's sources: an edition typed in words ("Second edition") prints as 2nd ed.; Jr., III and "JK Rowling" read as people; APA adds 2020a and 2020b; distinct works no longer merge, and a Chicago journal entry no longer swallows the next one. Cite's AI reading of thin web pages runs.
+- Writer's exports: a form feed no longer glues the words either side of it in a .docx; a continued list keeps its own numbering style; .txt and .md place merged table cells correctly and number lists as the paper does. Pasted text keeps CJK and typographic spaces.
+- Sheets: the fill handle counts INV-0001 on to INV-0002 and CS-101 to CS-102. A workbook whose formula hits a text-length limit opens, showing #VALUE! there; a damaged chart anchor drops only that chart; a sheet that is cut short says so and still exports; a refused undo or redo keeps its step.
+- Slides: decks with a shared notes part, many placeholders or many pictures open far faster.
+- Grades and GPA: "You'd need about N%" no longer overstates a whole target by a tenth, and a GPA exactly on a half cent rounds up (3.825 shows 3.83). A Blackboard overall grade that is a letter or hidden reads as an estimate.
+- To Do and reminders: a Canvas tick stays ticked when a slower refresh lands, and one account's tick never carries to another. A reminder checks the site first when its information is over two minutes old, so work handed in since gets none. A Gradescope status Glaze can't read is no longer marked Missing.
+- Notes: a title typed just before another tab saves is kept, and a picture or paste dropped into a note in Firefox lands at the pointer. A dashboard note from a computer with a fast clock shows on your other computers.
+- Syllabus import: "Week 1 starts" uses your school's time zone.
+- On a shared browser profile, Canvas's Dashboard shows only the signed-in student's course cards, and Blackboard's remembered navigation is kept per student. Tabs of different schools no longer lose each other's course list and new-grade marks.
+- Search and the notes links skip content in folders a cut-short read never reached. The "N new" count opens its page where session storage is blocked. Turning bookmark icons off or on no longer resets other card settings when storage can't be read.
+- Moving a widget in the sidebar dock steps past widgets whose switch is off, and the position read out is where it went. Ctrl-click or middle-click on Blackboard items in Glaze's bar, and on its logo, opens Blackboard's page.
+- Moodle: courses you've left leave the course list, and card totals retry after a failed read.
+- Look animations and stickers go off on a quiz opened inside Blackboard in Firefox before 147. Animated backgrounds retry after a brief load failure, a gallery Look's background file is kept while you preview it, and the gallery's "Use this Look" falls back to copying the code after Glaze updates under an open tab.
+- Study help lists every Blackboard to-do item and reads it, even when its course's gradebook wasn't read, and no longer stalls on long pages of equations. A reminder card's Ask Rime still works after the browser unloads Glaze's background, and Dismiss clears it.
+- AI setup: a provider whose site access was refused no longer shows Connected, and Settings offers Allow; picking Your key turns AI on only once a key works; a slow model list no longer limits long documents for an hour. After a graphics reset or running out of graphics memory, the on-device model reloads on the next run and says what happened. The Sharing relay's Test asks for access correctly in Firefox.
+- Selected rows, chips, field edges, Writer's feedback chips, the course dots and the To Do count are easier to read in the light Looks; menus show where the keyboard is; the popup announces its status; Writer's citation edit button shows on touch screens.
 
 ## [4.0.6] — 2026-11-09
 
