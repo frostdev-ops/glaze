@@ -165,7 +165,7 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
     return s.title || s.author || s.editor ? s : null;
   };
 
-  // The same work twice: one DOI, ISBN or address, or one title, first name and year.
+  // The same work twice: one DOI, ISBN or address, or one title, first name and year (and book, and address, when both say).
   // Letters NFKD leaves whole file as their base letters (Æ as ae, Ø as o, Ł as l).
   const LETTERS = { æ: 'ae', ø: 'o', ł: 'l', đ: 'd', ð: 'd', þ: 'th', œ: 'oe', ß: 'ss', ı: 'i', ħ: 'h', ŧ: 't' };
   const fold = (v) => String(v || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[æøłđðþœßıħŧ]/g, (c) => LETTERS[c]).replace(/<\/?i>/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
@@ -175,7 +175,9 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
   const same = (a, b) => {
     if (a.DOI && b.DOI) return a.DOI.toLowerCase() === b.DOI.toLowerCase();
     if (a.ISBN && b.ISBN) return a.ISBN === b.ISBN;
-    if (a.URL && b.URL && where(a.URL) === where(b.URL)) return true;
+    // Two addresses, or two books holding a chapter, that differ are two works ("Introduction" in two books).
+    if (a.URL && b.URL) { if (where(a.URL) === where(b.URL)) return true; if (!a.unparsed && !b.unparsed) return false; }
+    if (a['container-title'] && b['container-title'] && fold(a['container-title']) !== fold(b['container-title'])) return false;
     if (a.unparsed || b.unparsed) return !!a.original && !!b.original && fold(a.original) === fold(b.original);
     return !!a.title && fold(a.title) === fold(b.title) && lead(a) === lead(b) && year(a) === year(b);
   };
