@@ -53,10 +53,15 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     const key = L.storeKey(location.origin, String(p.id)), now = Date.now(), { start, end } = L.fetchRange(o, now, L.zone(p.time_zone));
     let cache, due;
     if (ultra) {
+      // The site's lease before the read, as the page takes it (courses/ultra.js begin): a sign-out or site reset before
+      // the publish changes it, and the worker refuses the read.
+      const fences = ['ultraCopyFence', `ultraCopyFence:${location.origin}`], f = await get(fences);
+      const epoch = (await send({ type: 'glaze:ultraMine', op: 'begin', fence: fences.map((k) => f?.[k]?.epoch || '').join('/') }))?.epoch;
+      if (typeof epoch !== 'string') return no('stale');
       await libs(['courses/ultra.js', 'GZ_ULTRA']);
       const reader = GZ_ULTRA.read({ origin: go.origin, signal: go.signal, live: go });
       const r = await GZ_ULTRA.planner({ ...reader, me: async () => go.uid }, { from: Date.parse(start), to: Date.parse(end), now });
-      cache = { key, at: now, start, end, teach: o.teacher, progress: o.progress, items: r.items.map((i) => ({ ...i, url: go.origin + i.url })), complete: r.complete, grading: [], sums: {} };
+      cache = { key, at: now, epoch, start, end, teach: o.teacher, progress: o.progress, items: r.items.map((i) => ({ ...i, url: go.origin + i.url })), complete: r.complete, grading: [], sums: {} };
     } else {
       const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`, go, 10), x.canvasCourses()]);
       // A teacher's list also wants the grading: teach null, so the list asks for that alone (planner/page/todo.js load).

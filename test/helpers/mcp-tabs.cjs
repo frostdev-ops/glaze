@@ -3,7 +3,8 @@
 // there: GZ_CTX as content.js makes it (site, on, account, profile, canvasCourses, myCourses, settings, need), defaults.js,
 // location, the page's fetch (routes: path → JSON, or a function of (url, init)), storage and runtime.sendMessage. A func
 // runs from its source, as the browser serializes it; a file runs as the extension's. The worker's publish paths
-// ('glaze:todo', 'glaze:insights') write `store` as background/background.js's broker does, through planner/todo.js and planner/insights.js.
+// ('glaze:todo', 'glaze:insights') write `store` as background/background.js's broker does, through planner/todo.js and planner/insights.js;
+// an Ultra page's lease (glaze:ultraMine begin) is handed out.
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -75,6 +76,7 @@ const publish = async (m, store) => {
   if (!store) return { ok: false };
   if (m?.type === 'glaze:todo') return T.change(m, { local: writerArea(store) });
   if (m?.type === 'glaze:insights') return I.change(m, writerArea(store));
+  if (m?.type === 'glaze:ultraMine' && m.op === 'begin') return { epoch: 'all/' };
   return { ok: false, error: 'not here' };
 };
 
