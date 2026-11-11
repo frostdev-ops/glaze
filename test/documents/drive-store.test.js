@@ -2197,3 +2197,16 @@ test('a transient read failure does not permanently finish agreed-value seeding'
   await settled(a, b);
   for (const d of [a, b]) assert.deepEqual(await titles(d), ['Four', 'One', 'Three']);
 });
+
+test('removing the last task step keeps a concurrent session without restoring the step', async () => {
+  for (const deletedFirst of [true, false]) {
+    const step = { id: 'step1', title: 'Read chapter', done: false }, session = { at: 5000, min: 25 };
+    const { clock, devs: [a, b] } = await linked({ [TODO]: T.clean({ ...BASE3, items: { 'task:t1': { subs: [step] } } }) });
+    await retask(a, clock, (v) => ({ ...v, items: {} }));
+    await retask(b, clock, (v) => ({ ...v, items: { 'task:t1': { ...v.items['task:t1'], sessions: [session] } } }));
+    const [first, second] = deletedFirst ? [a, b] : [b, a];
+    assert.ok((await first.run({ push: true })).ok);
+    await settled(second, first);
+    for (const d of [a, b]) assert.deepEqual((await d.local.get(TODO))[TODO].items['task:t1'], { sessions: [session] });
+  }
+});
