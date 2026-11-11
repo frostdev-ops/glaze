@@ -313,6 +313,17 @@ test('a pretend assignment added while a grading period is shown belongs to that
   assert.ok(find(p.box(), (e) => e.dataset.f === `n:${saved[0].id}`), 'and is shown in it');
 });
 
+test('Aim for a whole percent: "You\'d need about" shows that percent, not a tenth more', async () => {
+  const groups = [{ id: '1', name: 'All', group_weight: 0, assignments: [{ id: 'a', name: 'Final', points_possible: 100, submission: {} }] }];
+  const p = gradesPage({ groups, list: [row({ apply_assignment_group_weights: false })] });
+  await ready(p);
+  const target = find(p.box(), (e) => e.dataset.f === 'target');
+  const said = () => find(p.box(), (e) => e.className === 'gz-calc-out').textContent;
+  const seen = [];
+  for (const goal of ['60', '70', '90', '95']) { target.value = goal; target.fire('input'); await settle(); seen.push(said()); }
+  assert.deepEqual(seen, ['60', '70', '90', '95'].map((n) => `You'd need about ${n}% on the item left.`));
+});
+
 // ---- the GPA on the Dashboard ----
 const gpaPage = ({ store = shared(), list, capi }) => {
   const doc = page();

@@ -124,6 +124,29 @@ test('what you need: the even share of the rest, through weights and drops', () 
   assert.equal(G.need(G.fromApi([g(0, [a(10, 8)])]), {}, 80).left, 0);
 });
 
+test('what you need: the percent shown is the smallest tenth that still reaches the target, so a whole target shows itself', () => {
+  const left = G.fromApi([g(0, [a(100, null)])]);
+  const two = G.fromApi([g(0, [a(50, null), a(50, null)])]);
+  const half = G.fromApi([g(0, [a(100, 90), a(100, null)])]);
+  for (const target of [55, 60, 65, 70, 80, 85, 90, 95]) {
+    assert.equal(G.need(left, {}, target).pct, target, `${target} on one item`);
+    assert.equal(G.need(two, {}, target).pct, target, `${target} on two`);
+  }
+  assert.equal(G.need(half, {}, 85).pct, 80, '90/100 and one more: 80 makes 85');
+  assert.equal(G.need(left, {}, 89.95).pct, 90, 'a target between tenths still rounds up to the one that reaches it');
+  // Whatever the target: the shown percent reaches it on every item left, and a tenth less does not.
+  const reach = (course, pct) => G.calc(course, { scores: Object.fromEntries(G.remaining(course).map((i) => [i.id, (pct / 100) * i.possible])) }).final;
+  for (const course of [left, two, half, G.fromApi([g(40, [a(20, 18), a(10, null)]), g(60, [a(30, null), a(30, null)])], { weighted: true })]) {
+    for (let k = 0; k < 40; k++) {
+      const target = Math.round((20 + k * 1.937) * 100) / 100;
+      const r = G.need(course, {}, target);
+      if (r.share == null || r.share === 0) continue;
+      assert.ok(reach(course, r.pct) >= target - 1e-9, `${r.pct}% reaches ${target}`);
+      assert.ok(r.pct <= 0 || reach(course, Math.round((r.pct - 0.1) * 10) / 10) < target - 1e-9, `${Math.round((r.pct - 0.1) * 10) / 10}% falls short of ${target}`);
+    }
+  }
+});
+
 test('saved what-if scores: kept while the real grade is the one they were saved against', () => {
   const items = [a(10, 8), a(10, null), a(10, null, { sub: { excused: true } })];
   const course = G.fromApi([g(0, items)]);
