@@ -288,19 +288,19 @@ const worker = ({ fetch, local: seed = {}, sync: syncSeed = {}, keyListing = tru
   const on = { message: [], changed: [], startup: [], installed: [] };
   const local = { ...seed }, sync = { ...syncSeed }, opened = [];
   const timers = [], localReads = [];
-  let readGate = null, historyGate = null;
+  let readGate = null, historyGate = null, failHistory = false;
   const holdHistorySnapshot = () => { let release; historyGate = new Promise((r) => { release = r; }); return () => { historyGate = null; release(); }; };
   const holdSyncSnapshot = () => { let release; const wait = new Promise((r) => { release = r; }); readGate = wait; return () => { readGate = null; release(); }; };
   const area = (store) => ({
     get: async (k) => { if (store === local) localReads.push(k); if (store === local && k === 'lookHistory' && historyGate) await historyGate; if (store === sync && k === null && readGate) await readGate; return k === null ? clone(store) : Object.fromEntries([].concat(k).filter((x) => x in store).map((x) => [x, clone(store[x])])); },
-    set: async (v) => { Object.assign(store, clone(v)); },
+    set: async (v) => { if (store === local && failHistory && 'lookHistory' in v) throw Error('storage write failed'); Object.assign(store, clone(v)); },
     remove: async (k) => { for (const x of [].concat(k)) delete store[x]; },
     ...(keyListing && { getKeys: async () => Object.keys(store) }),
   });
   const { indexedDB, IDBKeyRange } = fakeIDB();
   const senders = new Map();
   const context = vm.createContext({
-    URL, console, TextEncoder, TextDecoder, Blob, Response, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, crypto, AbortSignal, fetch,
+    URL, console: { ...console, warn: (...a) => (failHistory ? undefined : console.warn(...a)) }, TextEncoder, TextDecoder, Blob, Response, CompressionStream, DecompressionStream, btoa, atob, structuredClone, Promise, Date, crypto, AbortSignal, fetch,
     indexedDB, IDBKeyRange, setTimeout: (f) => { timers.push(f); return timers.length; }, clearTimeout: () => {}, navigator: {},
     importScripts: (...files) => { for (const f of files) vm.runInContext(fs.readFileSync(require.resolve(`../../extension/lib/${f}`), 'utf8'), context); },
     chrome: {
@@ -331,7 +331,7 @@ const worker = ({ fetch, local: seed = {}, sync: syncSeed = {}, keyListing = tru
     const r = indexedDB.open('glaze-media', 1);
     r.onsuccess = () => { const db = r.result; if (!indexedDB.dbs.get('glaze-media')?.has('files')) return res([]); const st = db.transaction('files').objectStore('files').getAllKeys(); st.onsuccess = () => res(st.result); };
   }));
-  return { on, ask, send, until, local, sync, opened, kept, indexedDB, timers, holdSyncSnapshot, holdHistorySnapshot, localReads };
+  return { on, ask, send, until, local, sync, opened, kept, indexedDB, timers, holdSyncSnapshot, holdHistorySnapshot, localReads, failHistoryWrites: (on = true) => { failHistory = on; } };
 };
 const editor = { id: 'glaze', frameId: 0, url: 'chrome-extension://glaze/options.html' };
 const page = { id: 'glaze', frameId: 0, tab: { id: 1 }, url: 'https://school.instructure.com/courses/1', origin: 'https://school.instructure.com' };
@@ -501,7 +501,7 @@ test('worker: only the editor keeps, cancels and resets; Reset everything takes 
 test('worker: media writes require the exact ticketed Settings document and cannot elevate an LMS caller', async () => {
   const w = worker({ local: { canvas: ['https://school.instructure.com/*'] } });
   const framed = { ...editor, frameId: 5, documentId: 'settings-one', tab: page.tab, origin: 'chrome-extension://glaze' };
-  for (const op of ['put', 'list', 'keep', 'drop', 'reset']) {
+  for (const op of ['put', 'list', 'keep', 'drop', 'touch', 'reset']) {
     assert.equal((await w.ask({ type: 'glaze:media', op }, framed)).error, 'sender');
     assert.equal((await w.ask({ type: 'glaze:media', op }, page)).error, 'sender');
   }
@@ -578,6 +578,38 @@ test('worker: favorite cleanup cannot collect the Look left while its history wr
   await w.until(() => w.local.lookHistory?.some((e) => e.theme.parts?.x?.bg?.media?.src === `file:${r.h}`));
 });
 
+test('worker: the editor touches a pending offer file and it keeps its hour; nobody else may', async () => {
+  const w = worker();
+  const r = await w.ask({ type: 'glaze:media', op: 'put', kind: 'image', b64: M.std(fx('anim.webp')), pending: true }, editor);
+  assert.equal(r.ok, true);
+  const old = Date.now() - 50 * 60e3;
+  w.local[M.INDEX][r.h].at = old;
+  for (const sender of [page, { ...editor, id: 'another-extension' }, { ...editor, frameId: 3 }]) {
+    assert.deepEqual(await w.ask({ type: 'glaze:media', op: 'touch', h: r.h }, sender), { ok: false, error: 'sender' }, JSON.stringify(sender));
+  }
+  assert.equal(w.local[M.INDEX][r.h].at, old, 'a refused sender changes nothing');
+  assert.deepEqual(await w.ask({ type: 'glaze:media', op: 'touch', h: r.h }, editor), { ok: true });
+  assert.ok(w.local[M.INDEX][r.h].at > old + 49 * 60e3, 'the hour starts again');
+});
+
+test('worker: a history write that fails does not stop every later sweep of files no Look names', async () => {
+  const w = worker();
+  const r = await w.ask({ type: 'glaze:media', op: 'put', kind: 'image', b64: M.std(fx('anim.webp')) }, editor);
+  w.local[M.INDEX][r.h].at = 0;
+  const old = await lookX(r.h);
+  w.sync.lookX = '';
+  w.failHistoryWrites();
+  for (const f of w.on.changed) f({ lookX: { oldValue: old, newValue: '' } }, 'sync');
+  await new Promise(setImmediate); // the theme-left snapshot has completed
+  w.timers.at(-1)(); // the resting period ends and the recording's write fails
+  for (let i = 0; i < 10; i++) await new Promise(setImmediate);
+  assert.equal(w.local.lookHistory, undefined, 'the write really failed');
+  w.failHistoryWrites(false);
+  for (const f of w.on.changed) f({ lookFavorites: { newValue: [] } }, 'local');
+  for (let i = 0; i < 200 && (await w.kept()).length; i++) await new Promise((x) => setTimeout(x, 5));
+  assert.deepEqual(await w.kept(), [], 'the file nobody names is collected: the failed recording no longer holds it');
+});
+
 test('worker: an update moves files kept in storage.local to the files store, and the start collects files nobody names', async () => {
   const bytes = fx('anim.webp'), h = await M.sha(bytes), stale = await M.sha(fx('still.webp'));
   const w = worker({ local: { [`${M.KEY}${h}`]: { t: 'image/webp', b: M.std(bytes) }, [`${M.KEY}${stale}`]: { t: 'image/webp', b: M.std(fx('still.webp')) } } });
@@ -604,7 +636,7 @@ test('editor: an offer whose file had no room says so', async () => {
   const controls = { '#share-code': { value: await codeWith('A'.repeat(43), 'video') }, '#share-offer': {}, '#share-what': { replaceChildren() {}, append: (...xs) => notes.push(...xs.map((x) => x.textContent ?? x)) } };
   const context = vm.createContext({
     GZ_SHARE: S, GZ_XPARTS: X, GZ_SANITIZE: G.GZ_SANITIZE, GZ_MATCH_PRESET: G.GZ_MATCH_PRESET, GZ_CARDS: require('../../extension/courses/cards.js'), GZ_FONTS: require('../../extension/looks/fonts.js'),
-    GZ_I18N: { ui: () => 'en', locale: () => 'en' }, s: G.GZ_SANITIZE(), offer: null, from: null, offerFile: '', offerGeneration: 0, letGo() {}, URL, Intl,
+    GZ_I18N: { ui: () => 'en', locale: () => 'en' }, s: G.GZ_SANITIZE(), offer: null, from: null, offerFile: '', offerGeneration: 0, letGo() {}, hold() {}, URL, Intl,
     $: (id) => controls[id], document: { createElement: () => ({}) }, fontName: (f) => f.name,
     t: (x, vars) => x.replace(/\{(\w+)(?:\|\w+)?\}/g, (_, k) => vars[k]), endOffer() {}, hint() {}, preview() {}, drawLooks() {}, GZ_UI: { paint() {} },
   });
@@ -620,7 +652,7 @@ test('editor: Cancel lets an offer\'s pending file go, using it keeps it, and Re
   const ends = pick('  let from = null;', '  const tryCode =');
   const listeners = {};
   const $ = (id) => (listeners[id] ||= { hidden: false, value: '', addEventListener: (type, f) => { listeners[id][type] = f; }, focus() {} });
-  const ctx = vm.createContext({ chrome, $, GZ_UI: { paint() {} }, preview() {}, drawLooks() {}, s: {}, offer: null, addEventListener() {} });
+  const ctx = vm.createContext({ chrome, $, GZ_UI: { paint() {} }, preview() {}, drawLooks() {}, s: {}, offer: null, addEventListener() {}, setInterval: () => 1, clearInterval() {} });
   vm.runInContext(`${ends}\nglobalThis.ends = { endOffer, take: (h, pending) => { offerFile = pending ? h : ''; } };`, ctx);
   ctx.ends.take('A'.repeat(43), true);
   ctx.ends.endOffer();
@@ -635,6 +667,48 @@ test('editor: Cancel lets an offer\'s pending file go, using it keeps it, and Re
   assert.match(reset, /type: 'glaze:media', op: 'reset'/);
 });
 
+test('editor: an open gallery offer touches its pending file every ten minutes, and stops when the offer ends', async () => {
+  const section = options.slice(options.indexOf('  let from = null;'), options.indexOf("  $('#share-try').addEventListener"));
+  const sent = [], beats = new Map(), controls = { '#share-code': { value: 'glaze2:pending' }, '#share-offer': {} };
+  let n = 0, pagehide;
+  const ctx = vm.createContext({
+    chrome: { runtime: { lastError: null, sendMessage: (m, cb) => { sent.push(clone(m)); cb?.({ ok: true }); } } },
+    $: (id) => controls[id], GZ_SHARE: { decode: () => new Promise(() => {}) },
+    GZ_UI: { paint() {} }, GZ_I18N: { locale: () => 'en', ui: () => 'en' },
+    s: {}, offer: null, preview() {}, drawLooks() {}, t: (x) => x, hint() {}, Intl,
+    addEventListener: (type, f) => { if (type === 'pagehide') pagehide = f; },
+    setInterval: (f, ms) => { beats.set(++n, { f, ms }); return n; }, clearInterval: (id) => { beats.delete(id); },
+  });
+  vm.runInContext(`${section}\nglobalThis.startOffer = tryCode; globalThis.cancel = endOffer;`, ctx);
+  const [h1, h2] = ['A'.repeat(43), 'B'.repeat(43)];
+  assert.equal(beats.size, 0);
+  ctx.startOffer({ media: { h: h1, pending: true } });
+  assert.deepEqual([...beats.values()].map((b) => b.ms), [10 * 60e3], 'one beat, every ten minutes');
+  sent.length = 0;
+  [...beats.values()][0].f();
+  assert.deepEqual(sent, [{ type: 'glaze:media', op: 'touch', h: h1 }]);
+  // Another offer takes its place: the first file goes and the beat is the second's.
+  ctx.startOffer({ media: { h: h2, pending: true } });
+  assert.equal(beats.size, 1);
+  sent.length = 0;
+  [...beats.values()][0].f();
+  assert.deepEqual(sent, [{ type: 'glaze:media', op: 'touch', h: h2 }]);
+  // Cancel, or using the Look (endOffer(true)), ends it.
+  ctx.cancel();
+  assert.equal(beats.size, 0, 'Cancel stops the beat');
+  ctx.startOffer({ media: { h: h1, pending: true } });
+  ctx.cancel(true);
+  assert.equal(beats.size, 0, 'so does using the Look');
+  // An offer with no pending file has nothing to touch; leaving the editor stops one that has.
+  ctx.startOffer({ media: { h: h1 } });
+  ctx.startOffer({});
+  assert.equal(beats.size, 0);
+  ctx.startOffer({ media: { h: h2, pending: true } });
+  assert.equal(beats.size, 1);
+  pagehide();
+  assert.equal(beats.size, 0, 'leaving the editor stops it');
+});
+
 test('editor: a refused gallery code releases its pending file, and Cancel wins over a decoding offer', async () => {
   const section = options.slice(options.indexOf('  let from = null;'), options.indexOf("  $('#share-try').addEventListener"));
   let decode;
@@ -643,7 +717,7 @@ test('editor: a refused gallery code releases its pending file, and Cancel wins 
     chrome: { runtime: { sendMessage: (m, cb) => { sent.push(clone(m)); cb?.({ ok: true }); } } },
     $: (id) => controls[id], GZ_SHARE: { decode: () => new Promise((resolve, reject) => { decode = { resolve, reject }; }) },
     GZ_UI: { paint() {} }, GZ_I18N: { locale: () => 'en', ui: () => 'en' },
-    s: {}, offer: null, preview() {}, drawLooks() {}, addEventListener() {}, t: (s) => s, hint() {}, Intl,
+    s: {}, offer: null, preview() {}, drawLooks() {}, addEventListener() {}, t: (s) => s, hint() {}, Intl, setInterval: () => 1, clearInterval() {},
   });
   vm.runInContext(`${section}\nglobalThis.startOffer = tryCode; globalThis.cancel = endOffer;`, ctx);
   const h = 'A'.repeat(43);
