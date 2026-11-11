@@ -41,12 +41,15 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
 
   // ---- names --------------------------------------------------------------------------------------------------------
   const fam = (n) => n.literal || n.family || '';
-  const fwd = (n) => (n.literal ? n.literal : n.given ? `${n.given} ${n.family}` : n.family);
-  const inv = (n) => (n.literal ? n.literal : n.given ? `${n.family}, ${n.given}` : n.family);
-  // APA's initials: Shao-Hsun → S.-H., R. M. → R. M., Peter F. → P. F.
-  const initials = (given) => given.split(/\s+/).filter(Boolean).map((w) => w.split('-').map((p) => (/^[\p{L}]/u.test(p) ? `${p[0].toUpperCase()}.` : '')).filter(Boolean).join('-')).join(' ');
-  const apaInv = (n) => (n.literal ? n.literal : n.given ? `${n.family}, ${initials(n.given)}` : n.family);
-  const apaFwd = (n) => (n.literal ? n.literal : n.given ? `${initials(n.given)} ${n.family}` : n.family);
+  // A suffix follows the name: "Martin Luther King Jr." in natural order (CMOS 6.43), after a comma when inverted
+  // ("King, Martin Luther, Jr."; APA 9.8 "King, M. L., Jr.").
+  const fwd = (n) => (n.literal ? n.literal : [n.given, n.family, n.suffix].filter(Boolean).join(' '));
+  const inv = (n) => (n.literal ? n.literal : [n.family, n.given, n.suffix].filter(Boolean).join(', '));
+  // APA's initials: Shao-Hsun → S.-H., R. M. → R. M., Peter F. → P. F., J.K. and JK → J. K.
+  const initials = (given) => given.split(/\s+/).filter(Boolean).flatMap((w) => (/^(?:\p{Lu}\.)+$|^\p{Lu}{2,3}$/u.test(w) ? [...w.replace(/\./g, '')] : [w]))
+    .map((w) => w.split('-').map((p) => (/^[\p{L}]/u.test(p) ? `${p[0].toUpperCase()}.` : '')).filter(Boolean).join('-')).join(' ');
+  const apaInv = (n) => (n.literal ? n.literal : [n.family, n.given && initials(n.given), n.suffix].filter(Boolean).join(', '));
+  const apaFwd = (n) => (n.literal ? n.literal : [n.given && initials(n.given), n.family, n.suffix].filter(Boolean).join(' '));
   const and = (list, word = 'and', serial = true) => (list.length < 2 ? list[0] || '' : list.length === 2 ? `${list[0]}${serial && list[0].includes(',') ? ',' : ''} ${word} ${list[1]}` : `${list.slice(0, -1).join(', ')}, ${word} ${list.at(-1)}`);
   const N = {
     // MLA: Family, Given / Family, Given, and Given Family / Family, Given, et al.

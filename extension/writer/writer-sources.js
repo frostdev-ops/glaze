@@ -37,29 +37,47 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
     if (typeof n === 'string') return parseName(n);
     if (!isObj(n)) return null;
     const literal = clean(n.literal || n.name, 200);
-    const family = clean(n.family, 120), given = clean(n.given, 120);
-    if (family) return given ? { family, given } : { family };
+    const family = clean(n.family, 120), given = clean(n.given, 120), suffix = clean(n.suffix, 20);
+    if (family) return { family, ...(given && { given }), ...(suffix && SUFFIX.test(suffix) && { suffix }) };
     return literal ? { literal } : given ? { family: given } : null;
   };
-  // What a student types: "Morrison, Toni", "Toni Morrison", "World Health Organization", "Beyoncé".
+  // A generational suffix: Jr., Sr., II, III, IV.
+  const SUFFIX = /^(?:jr|sr|ii|iii|iv)\.?$/i;
+  // Initials: "W.", "J.K.", or two or three capitals ("JK", "JRR"), unless the word is a well-known group's acronym.
+  const ACRONYM = /^(?:UN|EU|UK|US|USA|IBM|BBC|CNN|NBC|CBS|ABC|NPR|PBS|HBO|NHS|WHO|CDC|FDA|NIH|NSF|NOAA|MIT|AP|AFP|IMF|ILO|IEA|ACM|APA|MLA|AMA|AAP|ACS|RAND|NYU|UCL|LSE)$/;
+  const initial = (w) => /^(?:\p{Lu}\.)+$/u.test(w) || (/^\p{Lu}{2,3}$/u.test(w) && !ACRONYM.test(w));
+  const person = (family, given, suffix) => ({ family, ...(given && { given }), ...(suffix && { suffix }) });
+  // What a student types: "Morrison, Toni", "Toni Morrison", "World Health Organization", "Beyoncé", "Martin Luther King
+  // Jr.", "King, Martin Luther, Jr.", "JK Rowling", "W. E. B. Du Bois".
   const parseName = (s) => {
     const v = clean(s, 200);
     if (!v) return null;
     if (v.includes(',')) {
-      const [family, ...rest] = v.split(',');
-      const given = clean(rest.join(','));
-      return family.trim() ? (given ? { family: family.trim(), given } : { family: family.trim() }) : null;
+      const parts = v.split(',').map((x) => x.trim());
+      // "Martin Luther King, Jr.": natural order with its suffix after a comma.
+      if (parts.length === 2 && SUFFIX.test(parts[1]) && parts[0].includes(' ')) { const n = parseName(parts[0]); return n?.family ? { ...n, suffix: parts[1] } : n; }
+      let suffix = parts.length > 2 && SUFFIX.test(parts.at(-1)) ? parts.pop() : '';
+      let family = parts[0];
+      const fw = family.split(' ');
+      // "King Jr., Martin Luther"
+      if (!suffix && fw.length > 1 && SUFFIX.test(fw.at(-1))) { suffix = fw.pop(); family = fw.join(' '); }
+      return family ? person(family, clean(parts.slice(1).join(', ')), suffix) : null;
     }
-    const words = v.split(' ');
+    let words = v.split(' '), suffix = '';
+    if (words.length > 2 && SUFFIX.test(words.at(-1))) { suffix = words.at(-1); words = words.slice(0, -1); }
     if (words.length === 1) return { family: v };
-    if (group(v) || words.length > 4) return { literal: v };
+    // Leading initials count as one given name, so "W. E. B. Du Bois" is a person and "JK" no group's acronym.
+    let k = 0;
+    while (k < words.length - 1 && initial(words[k])) k++;
+    const rest = words.slice(k).join(' ');
+    if (!suffix && (group(k ? rest : v) || words.length - Math.max(0, k - 1) > 4)) return { literal: v };
     // Particles stay with the family name: "Ludwig van Beethoven", "Rodrigo de la Fuente".
     let i = words.length - 1;
-    while (i > 1 && /^(van|von|der|den|de|del|della|di|da|du|la|le|ter|ten|bin|ibn|al|el)$/i.test(words[i - 1])) i--;
-    return { family: words.slice(i).join(' '), given: words.slice(0, i).join(' ') };
+    while (i > Math.max(1, k) && /^(van|von|der|den|de|del|della|di|da|du|la|le|ter|ten|bin|ibn|al|el)$/i.test(words[i - 1])) i--;
+    return person(words.slice(i).join(' '), words.slice(0, i).join(' '), suffix);
   };
   const names = (list) => (Array.isArray(list) ? list : typeof list === 'string' ? list.split(/\n|;/) : []).map(name).filter(Boolean).slice(0, MAX.names);
-  const showName = (n) => (n.literal ? n.literal : n.given ? `${n.family}, ${n.given}` : n.family);
+  const showName = (n) => (n.literal ? n.literal : `${[n.family, n.given, n.suffix].filter(Boolean).join(', ')}`);
 
   // ---- dates --------------------------------------------------------------------------------------------------------
   const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
