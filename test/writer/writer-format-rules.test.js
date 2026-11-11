@@ -88,3 +88,25 @@ test('the block-quote Fix moves the quotation with its italics, links and footno
   assert.deepEqual(r.nodes.map((n) => n.textContent), ['She wrote ', 'It was very long, and linked too', ' here.']);
   assert.deepEqual(r.nodes[0].content.content.map((c) => c.type.name), ['text', 'footnote_ref', 'text'], 'the note before the quotation stays in the paragraph');
 });
+
+// MLA 9 §1.3 and §1.4: the heading's date goes day, month, year ("10 November 2026"). The suggestion is that same date,
+// whatever the computer's time zone; a numeric date that could be read either way gets none.
+test('the MLA heading-date suggestion keeps the typed date in any time zone and skips ambiguous numeric dates (MLA 1.3)', () => {
+  const was = process.env.TZ;
+  try {
+    for (const tz of ['America/New_York', 'America/Los_Angeles', 'Pacific/Kiritimati', 'UTC']) {
+      process.env.TZ = tz;
+      const want = (date) => {
+        const json = FX.papers.mla9(); json.content[3].content[0].text = date;
+        return F.check(S.paper.nodeFromJSON(json), ST.FORMATS.mla9).issues.find((i) => i.rule === 'heading-date')?.suggestions[0] ?? null;
+      };
+      assert.equal(want('2026-11-10'), '10 November 2026', tz);
+      assert.equal(want('November 10, 2026'), '10 November 2026', tz);
+      assert.equal(want('Nov. 1, 2026'), '1 November 2026', tz);
+      assert.equal(want('25/11/2026'), '25 November 2026', tz);
+      assert.equal(want('11/25/2026'), '25 November 2026', tz);
+      assert.equal(want('10/11/2026'), null, `${tz}: 10/11 may be either month`);
+      assert.equal(want('10 November 2026'), null, tz);
+    }
+  } finally { if (was === undefined) delete process.env.TZ; else process.env.TZ = was; }
+});
