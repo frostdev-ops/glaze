@@ -67,7 +67,10 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
       return service('core_course_get_enrolled_courses_by_timeline_classification', { classification: 'all', limit: 0, offset: 0, sort: 'fullname' })
         .then((d) => {
           const seen = M.seen(d, GZ_CTX.canvasCourseKey);
-          return get('seenCourses').then((now) => GZ_CTX.local((l) => l.set({ seenCourses: { ...now.seenCourses, ...seen }, [at]: Date.now() })));
+          // This root's courses are what Moodle lists now: one it dropped leaves, as an Ultra site's do (content-ultra.js record).
+          // Other sites', other roots' (a folder's keys also start with this root's) stay, and an empty answer drops nothing.
+          const mine = ([k]) => k.startsWith(pre) && /^\d+$/.test(k.slice(pre.length));
+          return get('seenCourses').then((now) => GZ_CTX.local((l) => l.set({ seenCourses: { ...Object.fromEntries(Object.entries(now.seenCourses || {}).filter((e) => !Object.keys(seen).length || !mine(e))), ...seen }, [at]: Date.now() })));
         });
     }).catch((e) => { recording = null; throw e; }));
   };
@@ -109,12 +112,14 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
   // Grades on course cards (Dashboard and My courses): the totals from the grades overview, asked once a page load when a
   // card is on the page. Each card's name is tagged; moodle.css draws the chip. Only on change: the cards are redrawn
   // when the student pages, filters or switches views, and come back here through content.js's sweep.
-  let totals = null;
+  // A read that failed is asked again a minute on, not kept for the page's life; sooner, every pass would ask a broken page.
+  let totals = null, failed = 0;
   const cards = () => {
     const s = session();
     if (!s) return;
+    if (failed && Date.now() - failed >= 60000) totals = null;
     totals ||= fetch(`${s.root}/grade/report/overview/index.php`, { credentials: 'same-origin' })
-      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status))))).then(M.overview).catch(() => ({}));
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status))))).then(M.overview).then((byId) => { failed = 0; return byId; }, () => { failed = Date.now(); return {}; });
     totals.then((byId) => {
       const now = GZ_CTX.settings();
       if (!now.enabled || !now.enhance.overall) return; // switched off while it was asked
