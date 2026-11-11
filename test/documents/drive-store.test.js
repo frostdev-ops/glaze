@@ -345,10 +345,12 @@ test('a local edit arriving during a record download survives and syncs on retry
     return r;
   };
   const r = await b.run();
-  assert.equal((await b.local.get(NOTE))[NOTE].text, 'New local edit');
+  assert.match((await b.local.get(NOTE))[NOTE].text, /^New local edit/);
   if (!r.ok) b.clock.t = (await b.local.get(S.STATE))[S.STATE].wait + 1;
   assert.ok((await b.run()).ok);
-  assert.equal(body(recFile(drive, 'local', NOTE)).value.text, 'New local edit');
+  // Both changed the note's one line since they agreed: both lines stay, the later edit's first.
+  assert.equal(body(recFile(drive, 'local', NOTE)).value.text, 'New local edit\nRemote edit');
+  assert.equal((await b.local.get(NOTE))[NOTE].text, 'New local edit\nRemote edit');
 });
 
 test('every category Back up… covers goes up, one file a record, in Glaze/Data; what never syncs stays here', async () => {
@@ -1853,4 +1855,396 @@ test('a staged picture download whose note is deleted for good is let go before 
   assert.equal(drive.log.slice(n).filter((x) => x.path === `/drive/v3/files/${f.meta.id}` && x.query.alt === 'media').length, 0, 'none of its bytes fetched');
   assert.equal(Object.keys((await b.local.get(S.MOVES))[S.MOVES] || {}).length, 0, 'the transfer let go');
   assert.deepEqual([...chunks.keys()], [], 'nothing left staged');
+});
+
+// ---- records changed on two devices merge item by item (the owner's call, 2026-11-11): each side's change since the value
+// both last agreed goes into the other; an item deleted on one side and edited on the other keeps the edit.
+const task = (id, title, o = {}) => ({ id: `t${id}`, title, done: 0, at: 1000, ...o });
+const tasks = (...list) => T.clean({ tasks: list, items: {} });
+const BASE3 = tasks(task(1, 'One'), task(2, 'Two'), task(3, 'Three'));
+// Devices that all hold value, linked and settled.
+const linked = async (value, n = 2) => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, devs = [...Array(n)].map(() => device(drive, { clock }));
+  await devs[0].local.set(value);
+  for (const d of devs) assert.ok((await d.on()).ok);
+  for (const d of devs) assert.ok((await d.run()).ok);
+  return { drive, clock, devs };
+};
+const settled = async (...ds) => { for (let i = 0; i < 2; i++) for (const d of ds) assert.ok((await d.run()).ok); };
+const change = async (d, clock, key, f) => { clock.t += 1000; await d.local.set({ [key]: f(structuredClone((await d.local.get(key))[key])) }); };
+const retask = (d, clock, f) => change(d, clock, TODO, (v) => T.clean(f(v)));
+const titles = async (d) => (await d.local.get(TODO))[TODO].tasks.map((x) => `${x.title}${x.done ? ' done' : ''}`).sort();
+const tick = (id) => (v) => ({ ...v, tasks: v.tasks.map((x) => (x.id === `t${id}` ? { ...x, done: 5000 } : x)) });
+const add = (...more) => (v) => ({ ...v, tasks: [...v.tasks, ...more] });
+const drop = (...ids) => (v) => ({ ...v, tasks: v.tasks.filter((x) => !ids.includes(x.id)) });
+
+test('two devices that each add a task keep both', async () => {
+  const { clock, devs: [a, b] } = await linked({ [TODO]: BASE3 });
+  await retask(a, clock, add(task(4, 'Four')));
+  await retask(b, clock, add(task(5, 'Five')));
+  assert.ok((await a.run({ push: true })).ok);
+  await settled(b, a);
+  for (const d of [a, b]) assert.deepEqual(await titles(d), ['Five', 'Four', 'One', 'Three', 'Two']);
+});
+
+for (const first of ['the tick', 'the new task']) {
+  test(`one device ticks a task while the other adds one: both stay (${first} up first)`, async () => {
+    const { clock, devs: [a, b] } = await linked({ [TODO]: BASE3 });
+    await retask(a, clock, tick(1));
+    await retask(b, clock, add(task(4, 'Four')));
+    const [x, y] = first === 'the tick' ? [a, b] : [b, a];
+    assert.ok((await x.run({ push: true })).ok);
+    await settled(y, x);
+    for (const d of [a, b]) assert.deepEqual(await titles(d), ['Four', 'One done', 'Three', 'Two']);
+  });
+}
+
+test('a task deleted on one device and retitled on the other keeps the edit; the other deletion and the new task stay', async () => {
+  const { clock, devs: [a, b] } = await linked({ [TODO]: BASE3 });
+  await retask(a, clock, drop('t1', 't2'));
+  await retask(b, clock, (v) => add(task(4, 'Four'))({ ...v, tasks: v.tasks.map((x) => (x.id === 't1' ? { ...x, title: 'One, again' } : x)) }));
+  assert.ok((await a.run({ push: true })).ok);
+  await settled(b, a);
+  for (const d of [a, b]) assert.deepEqual(await titles(d), ['Four', 'One, again', 'Three']);
+});
+
+test('a task both devices delete stays deleted', async () => {
+  const { clock, devs: [a, b] } = await linked({ [TODO]: BASE3 });
+  await retask(a, clock, drop('t1'));
+  await retask(b, clock, drop('t1'));
+  assert.ok((await a.run({ push: true })).ok);
+  await settled(b, a);
+  for (const d of [a, b]) assert.deepEqual(await titles(d), ['Three', 'Two']);
+});
+
+test('three devices each change the list: an addition, a tick and a deletion all reach every device', async () => {
+  const { clock, devs: [a, b, c] } = await linked({ [TODO]: BASE3 }, 3);
+  await retask(a, clock, add(task(4, 'Four')));
+  await retask(b, clock, tick(2));
+  await retask(c, clock, drop('t3'));
+  for (const d of [a, b, c]) assert.ok((await d.run({ push: true })).ok);
+  await settled(a, b, c);
+  for (const d of [a, b, c]) assert.deepEqual(await titles(d), ['Four', 'One', 'Two done']);
+});
+
+test('a task added and then deleted on one device after the other device\'s new task reached Drive stays deleted, and the other\'s stays', async () => {
+  const { clock, devs: [a, b] } = await linked({ [TODO]: BASE3 });
+  await retask(a, clock, add(task(4, 'Four')));
+  assert.ok((await a.run({ push: true })).ok); assert.ok((await b.run()).ok);
+  await retask(b, clock, add(task(5, 'Five')));
+  assert.ok((await b.run({ push: true })).ok);
+  await retask(a, clock, drop('t4'));
+  await settled(a, b);
+  for (const d of [a, b]) assert.deepEqual(await titles(d), ['Five', 'One', 'Three', 'Two']);
+});
+
+test('class schedules changed on two devices keep each course\'s change', async () => {
+  const course = (id, name, at) => ({ id, name, at, periods: [{ days: [1], start: 540, end: 600 }] });
+  const { clock, devs: [a, b] } = await linked({ [CLASSES]: C.clean({ courses: [course('101', 'Bio', 10), course('103', 'Art', 10)] }) });
+  await change(a, clock, CLASSES, (v) => C.clean({ ...v, courses: v.courses.map((x) => (x.id === '101' ? { ...x, name: 'Biology', at: clock.t } : x)) }));
+  await change(b, clock, CLASSES, (v) => C.clean({ ...v, courses: [...v.courses, course('102', 'Chem', clock.t)] }));
+  assert.ok((await a.run({ push: true })).ok);
+  await settled(b, a);
+  for (const d of [a, b]) assert.deepEqual((await d.local.get(CLASSES))[CLASSES].courses.map((x) => `${x.id} ${x.name}`).sort(), ['101 Biology', '102 Chem', '103 Art']);
+});
+
+test('GPA past terms added on two devices are both kept', async () => {
+  const GPA = 'gpaTerms:https://school.instructure.com:u42', G = require('../../extension/planner/gpa.js');
+  const term = (id, at) => ({ id, n: `Term ${id}`, c: [{ n: 'Course', cr: 3, g: 'A' }], at });
+  const { clock, devs: [a, b] } = await linked({ [GPA]: G.clean({ t: [term('t1', 10)] }) });
+  await change(a, clock, GPA, (v) => G.clean({ ...v, t: [...v.t, term('t2', clock.t)] }));
+  await change(b, clock, GPA, (v) => G.clean({ ...v, t: [...v.t, term('t3', clock.t)] }));
+  assert.ok((await a.run({ push: true })).ok);
+  await settled(b, a);
+  for (const d of [a, b]) assert.deepEqual((await d.local.get(GPA))[GPA].t.map((x) => x.id).sort(), ['t1', 't2', 't3']);
+});
+
+test('the personal dictionary merges as a set: a word added on one device and one removed on the other both hold', async () => {
+  const { clock, devs: [a, b] } = await linked({ writerWords: ['Alpha', 'Beta', 'Gamma'] });
+  await change(a, clock, 'writerWords', (v) => [...v, 'Delta']);
+  await change(b, clock, 'writerWords', (v) => v.filter((w) => w !== 'Beta'));
+  assert.ok((await a.run({ push: true })).ok);
+  await settled(b, a);
+  for (const d of [a, b]) assert.deepEqual((await d.local.get('writerWords')).writerWords.sort(), ['Alpha', 'Delta', 'Gamma']);
+});
+
+test('Look favorites merge by code: one added on one device and one renamed on the other both hold', async () => {
+  const { clock, devs: [a, b] } = await linked({ lookFavorites: [{ code: 'a', name: 'A' }, { code: 'b', name: 'B' }] });
+  await change(a, clock, 'lookFavorites', (v) => [{ code: 'c', name: 'C' }, ...v]);
+  await change(b, clock, 'lookFavorites', (v) => v.map((f) => (f.code === 'b' ? { ...f, name: 'Bee' } : f)));
+  assert.ok((await a.run({ push: true })).ok);
+  await settled(b, a);
+  for (const d of [a, b]) assert.deepEqual((await d.local.get('lookFavorites')).lookFavorites.map((f) => `${f.code} ${f.name}`).sort(), ['a A', 'b Bee', 'c C']);
+});
+
+test('a dashboard note edited on two devices keeps both devices\' lines, at a time later than either', async () => {
+  const { clock, devs: [a, b] } = await linked({ [NOTE]: { text: 'one\ntwo\nthree', at: 100 } });
+  await change(a, clock, NOTE, (v) => ({ text: v.text.replace('one', 'ONE'), at: 200 }));
+  await change(b, clock, NOTE, (v) => ({ text: `${v.text}\nfour`, at: 300 }));
+  assert.ok((await a.run({ push: true })).ok);
+  await settled(b, a);
+  for (const d of [a, b]) {
+    const n = (await d.local.get(NOTE))[NOTE];
+    assert.equal(n.text, 'ONE\ntwo\nthree\nfour');
+    assert.ok(n.at > 300, `its time ${n.at} is later than either device's, so an open tile takes it`);
+  }
+});
+
+test('with no agreed value kept for a record, two devices\' changes are joined: nothing is lost, a deleted task may come back once', async () => {
+  const { clock, devs: [a, b] } = await linked({ [TODO]: BASE3 });
+  await retask(a, clock, (v) => add(task(5, 'Five'))(drop('t2')(v)));
+  await retask(b, clock, add(task(4, 'Four')));
+  assert.ok((await a.run({ push: true })).ok);
+  await b.local.remove((await b.local.keys()).filter((k) => k.startsWith('driveSyncBase:')));
+  await settled(b, a);
+  for (const d of [a, b]) assert.deepEqual(await titles(d), ['Five', 'Four', 'One', 'Three', 'Two']);
+});
+
+test('records linked before agreed values were kept get them on the next run, so a deletion on one device holds against a new task on the other', async () => {
+  const { clock, devs: [a, b] } = await linked({ [TODO]: BASE3 });
+  // As an install from before: no agreed values, and no mark that they were made.
+  for (const d of [a, b]) {
+    await d.local.remove((await d.local.keys()).filter((k) => k.startsWith('driveSyncBase:')));
+    const { based, ...st } = (await d.local.get('driveSync')).driveSync;
+    await d.local.set({ driveSync: st });
+  }
+  assert.ok((await a.run()).ok); assert.ok((await b.run()).ok);
+  await retask(a, clock, drop('t2'));
+  await retask(b, clock, add(task(4, 'Four')));
+  assert.ok((await a.run({ push: true })).ok);
+  await settled(b, a);
+  for (const d of [a, b]) assert.deepEqual(await titles(d), ['Four', 'One', 'Three']);
+});
+
+test('two devices pushing one record in the same window both keep their change: the later upload is fenced on Drive\'s head, then merges', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  const text = (b) => (typeof b === 'string' ? b : Buffer.from(b || []).toString('latin1'));
+  let gate = false, reached, release;
+  const at = new Promise((r) => { reached = r; }), held = new Promise((r) => { release = r; });
+  // A's record upload waits, its file read already, until B's upload of the same record has landed.
+  const gateA = { ...drive, fetch: async (u, i = {}) => {
+    if (gate && u.includes('/upload/') && ['PATCH', 'PUT'].includes(i.method) && text(i.body).includes('"glaze":"record"')) { gate = false; reached(); await held; }
+    return drive.fetch(u, i);
+  } };
+  const a = device(gateA, { clock }), b = device(drive, { clock });
+  await a.local.set({ writerWords: ['Alpha'] });
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  clock.t += 1000; await a.local.set({ writerWords: ['Alpha', 'Beta'] });
+  clock.t += 1000; await b.local.set({ writerWords: ['Alpha', 'Gamma'] });
+  gate = true;
+  const first = a.run({ push: true });
+  await at;
+  assert.ok((await b.run({ push: true })).ok);
+  release();
+  await first;
+  await settled(a, b);
+  for (const d of [a, b]) assert.deepEqual((await d.local.get('writerWords')).writerWords.sort(), ['Alpha', 'Beta', 'Gamma']);
+  assert.deepEqual(body(recFile(drive, 'local', 'writerWords')).value.sort(), ['Alpha', 'Beta', 'Gamma']);
+});
+
+test('a device joining while Drive\'s search doesn\'t show another device\'s record yet meets it once the records are listed again', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  let hide = null;
+  // Drive's search lag: a file made just before B's page token stays out of B's lists (its change never comes either).
+  const lag = { ...drive, fetch: async (u, i = {}) => {
+    const r = await drive.fetch(u, i);
+    if (hide && (i.method || 'GET') === 'GET' && new URL(u).pathname === '/drive/v3/files' && decodeURIComponent(u).includes("value='rec'")) {
+      const j = await r.json();
+      j.files = j.files.filter((f) => !hide.has(f.id));
+      return new Response(JSON.stringify(j), { status: 200, headers: { 'content-type': 'application/json; charset=UTF-8' } });
+    }
+    return r;
+  } };
+  const a = device(drive, { clock }), b = device(lag, { clock });
+  await a.local.set({ writerWords: ['Alpha'] });
+  assert.ok((await a.on()).ok);
+  hide = new Set([recFile(drive, 'local', 'writerWords').meta.id]);
+  await b.local.set({ writerWords: ['Beta'] });
+  assert.ok((await b.on()).ok);
+  hide = null;
+  clock.t += 61e3;
+  await settled(b, a);
+  for (const d of [a, b]) assert.deepEqual((await d.local.get('writerWords')).writerWords.sort(), ['Alpha', 'Beta']);
+});
+
+test('a device joining keeps the bibliography entries each side removed from its saved sources', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'writer:sources:school|_1_1|_2_1|_3_1';
+  await a.local.set({ [key]: { sources: [{ id: 's-aa1', type: 'book', title: 'Alpha' }], removed: ['s-bib-a1'], at: 10 } });
+  assert.ok((await a.on()).ok);
+  await b.local.set({ [key]: { sources: [{ id: 's-bb2', type: 'book', title: 'Beta' }], removed: ['s-bib-b2'], at: 20 } });
+  assert.ok((await b.on()).ok); assert.ok((await a.run()).ok);
+  for (const d of [a, b]) {
+    const v = (await d.local.get(key))[key];
+    assert.deepEqual(v.sources.map((x) => x.id).sort(), ['s-aa1', 's-bb2']);
+    assert.deepEqual([...(v.removed || [])].sort(), ['s-bib-a1', 's-bib-b2'], `${d === a ? 'A' : 'B'} keeps both removals`);
+  }
+});
+
+test('an equal first meeting keeps the agreed value for later task deletions and additions', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  await a.local.set({ [TODO]: BASE3 });
+  assert.ok((await a.on()).ok);
+  await b.local.set({ [TODO]: BASE3 });
+  assert.ok((await b.on()).ok);
+  await retask(a, clock, drop('t2'));
+  await retask(b, clock, add(task(4, 'Four')));
+  assert.ok((await a.run({ push: true })).ok);
+  await settled(b, a);
+  for (const d of [a, b]) assert.deepEqual(await titles(d), ['Four', 'One', 'Three']);
+});
+
+test('a task deletion keeps another device\'s edit to its steps or sessions', async () => {
+  for (const deletedFirst of [true, false]) {
+    const { clock, devs: [a, b] } = await linked({ [TODO]: BASE3 });
+    await retask(a, clock, drop('t1'));
+    const details = { subs: [{ id: 'step1', title: 'Read chapter', done: true }], sessions: [{ at: 5000, min: 25 }] };
+    await retask(b, clock, (v) => ({ ...v, items: { ...v.items, 'task:t1': details } }));
+    const [first, second] = deletedFirst ? [a, b] : [b, a];
+    assert.ok((await first.run({ push: true })).ok);
+    await settled(second, first);
+    for (const d of [a, b]) {
+      assert.deepEqual(await titles(d), ['One', 'Three', 'Two']);
+      assert.deepEqual((await d.local.get(TODO))[TODO].items['task:t1'], details);
+    }
+  }
+});
+
+test('adjacent dashboard note edits merge independently without restoring old lines', async () => {
+  for (const [here, there, expected] of [['ONE\ntwo', 'one\nTWO', 'ONE\nTWO'], ['two', 'one\nTWO', 'TWO']]) {
+    const { clock, devs: [a, b] } = await linked({ [NOTE]: { text: 'one\ntwo', at: 100 } });
+    await change(a, clock, NOTE, () => ({ text: here, at: 200 }));
+    await change(b, clock, NOTE, () => ({ text: there, at: 300 }));
+    assert.ok((await a.run({ push: true })).ok);
+    await settled(b, a);
+    for (const d of [a, b]) assert.equal((await d.local.get(NOTE))[NOTE].text, expected);
+  }
+});
+
+test('removing the last saved source merges with a source added on another device', async () => {
+  for (const deletedFirst of [true, false]) {
+    const key = 'writer:sources:school|_1_1|_2_1|_3_1', old = { id: 's-old1', type: 'book', title: 'Old' }, added = { id: 's-new1', type: 'book', title: 'New' };
+    const { clock, devs: [a, b] } = await linked({ [key]: { sources: [old], at: 100 } });
+    await change(b, clock, key, (v) => ({ sources: [...v.sources, added], at: clock.t }));
+    // writer-sources.js save removes the key when the last source is removed.
+    clock.t += 1000; await a.local.remove(key);
+    const [first, second] = deletedFirst ? [a, b] : [b, a];
+    assert.ok((await first.run({ push: true })).ok);
+    await settled(second, first);
+    for (const d of [a, b]) assert.deepEqual((await d.local.get(key))[key]?.sources, [added]);
+  }
+});
+
+test('a fenced first-meeting retry keeps deletions made against the matching saved base', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock });
+  await a.local.set({ [TODO]: BASE3 }); await a.on();
+  const id = recFile(drive, 'local', TODO).meta.id;
+  let hidden = true, race = false;
+  const lag = { ...drive, fetch: async (u, i = {}) => {
+    if (race && u.includes('/upload/') && u.includes(`/${id}?`)) {
+      race = false;
+      assert.ok((await a.run({ push: true })).ok);
+    }
+    const r = await drive.fetch(u, i);
+    if (hidden && (i.method || 'GET') === 'GET' && new URL(u).pathname === '/drive/v3/files' && decodeURIComponent(u).includes("value='rec'")) {
+      const j = await r.json(); j.files = j.files.filter((f) => f.id !== id);
+      return new Response(JSON.stringify(j), { status: 200 });
+    }
+    return r;
+  } };
+  const b = device(lag, { clock });
+  await b.local.set({ [TODO]: BASE3 }); assert.ok((await b.on()).ok);
+  hidden = false;
+  await retask(b, clock, (v) => add(task(4, 'Four'))(drop('t2')(v)));
+  await retask(a, clock, add(task(5, 'Five')));
+  race = true;
+  assert.ok((await b.run({ full: true })).ok);
+  assert.equal(race, false, 'another device changed the adopted file before the fenced upload');
+  await settled(a, b);
+  for (const d of [a, b]) assert.deepEqual(await titles(d), ['Five', 'Four', 'One', 'Three']);
+});
+
+test('a tombstone agreement invalidates the older base before meeting a replacement record', async () => {
+  const { drive, clock, devs: [a] } = await linked({ [TODO]: BASE3 }, 1);
+  const file = recFile(drive, 'local', TODO), meta = structuredClone(file.meta), bytes = Buffer.from(file.bytes);
+  clock.t += 1000; await a.local.remove(TODO);
+  assert.ok((await a.run({ push: true })).ok);
+  assert.equal(body(file).deleted, true);
+  // An offline device restored an older copy after the agreed tombstone's file was deleted for good.
+  drive.remove(file.meta.id);
+  const replacement = drive.seed(meta, bytes);
+  clock.t += 1000; await a.local.set({ [TODO]: tasks(task(4, 'Four')) });
+  assert.ok((await a.run({ full: true })).ok);
+  assert.deepEqual(await titles(a), ['Four', 'One', 'Three', 'Two'], 'a different agreement cannot lend its old base to this first meeting');
+  assert.deepEqual(body(replacement).value.tasks.map((x) => x.title).sort(), ['Four', 'One', 'Three', 'Two']);
+});
+
+test('a transient read failure does not permanently finish agreed-value seeding', async () => {
+  const { clock, devs: [a, b] } = await linked({ [TODO]: BASE3 });
+  await a.local.remove((await a.local.keys()).filter((k) => k.startsWith('driveSyncBase:')));
+  const { based, ...st } = (await a.local.get('driveSync')).driveSync;
+  await a.local.set({ driveSync: st });
+  const get = a.local.m.get.bind(a.local.m); let failed = false;
+  a.local.m.get = (key) => { if (key === TODO && !failed) { failed = true; throw new Error('temporary storage read failure'); } return get(key); };
+  assert.equal((await a.run()).ok, false, 'a failed seed remains retryable');
+  assert.notEqual((await a.local.get('driveSync')).driveSync.based, true);
+  a.local.m.get = get;
+  clock.t = Math.max(clock.t, ((await a.local.get('driveSync')).driveSync.wait || 0) + 1);
+  assert.ok((await a.run()).ok);
+  await retask(b, clock, drop('t2'));
+  await retask(a, clock, add(task(4, 'Four')));
+  assert.ok((await b.run({ push: true })).ok);
+  await settled(a, b);
+  for (const d of [a, b]) assert.deepEqual(await titles(d), ['Four', 'One', 'Three']);
+});
+
+test('removing the last task step keeps a concurrent session without restoring the step', async () => {
+  for (const deletedFirst of [true, false]) {
+    const step = { id: 'step1', title: 'Read chapter', done: false }, session = { at: 5000, min: 25 };
+    const { clock, devs: [a, b] } = await linked({ [TODO]: T.clean({ ...BASE3, items: { 'task:t1': { subs: [step] } } }) });
+    await retask(a, clock, (v) => ({ ...v, items: {} }));
+    await retask(b, clock, (v) => ({ ...v, items: { 'task:t1': { ...v.items['task:t1'], sessions: [session] } } }));
+    const [first, second] = deletedFirst ? [a, b] : [b, a];
+    assert.ok((await first.run({ push: true })).ok);
+    await settled(second, first);
+    for (const d of [a, b]) assert.deepEqual((await d.local.get(TODO))[TODO].items['task:t1'], { sessions: [session] });
+  }
+});
+
+test('a fenced duplicate adoption merges a whole-key deletion with a concurrent addition', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock });
+  await a.local.set({ [TODO]: BASE3 }); await a.on();
+  const id = recFile(drive, 'local', TODO).meta.id;
+  let hidden = true, race = false;
+  const lag = { ...drive, fetch: async (u, i = {}) => {
+    if (race && u.includes('/upload/') && u.includes(`/${id}?`)) { race = false; assert.ok((await a.run({ push: true })).ok); }
+    const r = await drive.fetch(u, i);
+    if (hidden && (i.method || 'GET') === 'GET' && new URL(u).pathname === '/drive/v3/files' && decodeURIComponent(u).includes("value='rec'")) {
+      const j = await r.json(); j.files = j.files.filter((f) => f.id !== id);
+      return new Response(JSON.stringify(j), { status: 200 });
+    }
+    return r;
+  } };
+  const b = device(lag, { clock });
+  await b.local.set({ [TODO]: BASE3 }); assert.ok((await b.on()).ok);
+  hidden = false;
+  await retask(a, clock, add(task(5, 'Five')));
+  clock.t += 1000; await b.local.remove(TODO);
+  race = true;
+  assert.ok((await b.run({ full: true })).ok);
+  assert.equal(race, false);
+  await settled(a, b);
+  for (const d of [a, b]) assert.deepEqual((await d.local.get(TODO))[TODO]?.tasks.map((x) => x.title), ['Five']);
+});
+
+test('an equal first meeting does not retell a mergeable record with a newer local stamp', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  await a.local.set({ [TODO]: BASE3 }); assert.ok((await a.on()).ok);
+  const file = recFile(drive, 'local', TODO), rev = file.meta.headRevisionId;
+  await b.local.set({ [TODO]: BASE3 });
+  await b.store.stamp({ [TODO]: { newValue: BASE3 } }, 'local');
+  assert.ok((await b.on()).ok);
+  assert.equal(file.meta.headRevisionId, rev, 'an unchanged mergeable value is linked without an upload');
+  const h = sha(`local\n${TODO}`).slice(0, 32);
+  assert.equal((await b.local.get('driveSyncBase:' + h))['driveSyncBase:' + h]?.sum, file.meta.appProperties.sum);
 });

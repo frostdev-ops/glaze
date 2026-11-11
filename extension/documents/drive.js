@@ -244,7 +244,14 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       return { id: j.id, fresh: !!id && !to, rev: mark(j.headRevisionId), mod: mark(j.modifiedTime) };
     };
     // ---- Sync to Google Drive's calls (documents/drive-sync.js): each → Drive's JSON answer, or bytes; Drive's errors as reasons (WHY).
-    const json = async (r) => { const j = await r.json().catch(() => null); if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Fail('bad'); return j; };
+    // An answer cut off while it is read is the network's ('network': tried again), not Drive's ('bad': a lost page token).
+    const json = async (r) => {
+      let s, j = null;
+      try { s = await r.text(); } catch { throw new Fail('network'); }
+      try { j = JSON.parse(s); } catch { /* not JSON */ }
+      if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Fail('bad');
+      return j;
+    };
     const idOf = (id) => { if (typeof id !== 'string' || !ID.test(id)) throw new Fail('bad'); return id; };
     const JSON_TYPE = 'application/json; charset=UTF-8';
     // files.get: the fields sync reads.
@@ -309,12 +316,15 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
     // bytes and file goes on from what Drive says it has (Content-Range bytes */N); one expired (404) starts over.
     const put = async ({ id = null, meta = {}, mime, bytes, fields = SYNC, all = false, keep = null, match = null }) => {
       if ((id !== null && (typeof id !== 'string' || !ID.test(id))) || typeof mime !== 'string' || !MIME.test(mime) || !(bytes instanceof Uint8Array) || bytes.length > kinds().FILE * 4) throw new Fail('bad');
-      // Saved-memory updates alone opt in. v3 has no File.etag; v2 retains it and the conditional upload contract.
-      // Fence the exact head that was merged, then use that File ETag at the write itself. Never fall back to an
-      // unconditional update when the ETag is absent or the endpoint refuses it. No new history files are created.
+      // Sync's record updates opt in (documents/drive-sync.js, background/drive-store.js push). v3 has no File.etag; v2 retains
+      // it and the conditional upload contract. Fence the exact head that was merged, then use that File ETag at the write
+      // itself. Never fall back to an unconditional update when the ETag is absent or the endpoint refuses it. No new history
+      // files are created. A record past one request goes resumable, unfenced: its transfer checks the file as Drive holds it
+      // before any byte goes (documents/drive-sync.js aimed); a saved memory never does.
+      if (match !== null && bytes.length > SMALL && meta.appProperties?.glaze === 'rec' && meta.appProperties.cat !== 'memories') match = null;
       if (match !== null) {
         if (!id || typeof match !== 'string' || !ID.test(match) || bytes.length > SMALL || Object.keys(meta).some((k) => k !== 'appProperties')
-          || !meta.appProperties || meta.appProperties.cat !== 'memories') throw new Fail('bad');
+          || !meta.appProperties || (meta.appProperties.glaze !== 'rec' && meta.appProperties.cat !== 'memories')) throw new Fail('bad');
         const api = 'https://www.googleapis.com/drive/v2/files', upload = 'https://www.googleapis.com/upload/drive/v2/files';
         const old = await json(await call(`${api}/${id}?${q({ fields: 'id,etag,headRevisionId' })}`));
         if (old.id !== id || typeof old.etag !== 'string' || !/^"[^"\r\n]{1,1000}"$/.test(old.etag)) throw new Fail('bad');

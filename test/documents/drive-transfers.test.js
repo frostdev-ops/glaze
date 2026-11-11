@@ -106,6 +106,37 @@ const pdfOn = async (w, dk, key, bytes, title) => {
   return ref;
 };
 
+test('a staged document upload denied by Drive stays dirty and retries on the next run', async () => {
+  const drive = standin(), dk = disk(), a = worker(drive, dk), key = 'doc:00000000-0000-4000-8000-00000000d001';
+  await a.papers.save(key, { doc: doc('Original'), title: 'Essay', named: true });
+  assert.ok((await a.sync.set(true)).ok);
+  const text = 'Changed '.repeat(800000);
+  await a.papers.save(key, { doc: doc(text) });
+  await a.sync.touched(key);
+  const denied = { error: { code: 403, message: 'Forbidden', errors: [{ reason: 'forbidden' }] } };
+  drive.fail(403, denied, (x) => x.path.startsWith('/upload/'), 20);
+  assert.ok((await a.sync.run({ push: true })).ok);
+  assert.ok(((await dk.store.get(a.S.DIRTY))[a.S.DIRTY] || {})[key], 'the refused transfer stays marked');
+  drive.clearFaults();
+  assert.ok((await worker(drive, dk).sync.run({ push: true })).ok);
+  assert.equal(sha(textOf(JSON.parse(fileOf(drive, key, 'doc').bytes).record.doc) || ''), sha(text), 'the retry uploads the changed document');
+  assert.deepEqual(await moves(dk), {});
+});
+
+test('a first staged document upload denied during a full pass gets a retry mark', async () => {
+  const drive = standin(), dk = disk(), a = worker(drive, dk), key = 'doc:00000000-0000-4000-8000-00000000d002';
+  const text = 'First '.repeat(1000000);
+  await a.papers.save(key, { doc: doc(text), title: 'Essay', named: true });
+  const denied = { error: { code: 403, message: 'Forbidden', errors: [{ reason: 'forbidden' }] } };
+  drive.fail(403, denied, (x) => x.path.startsWith('/upload/'), 20);
+  assert.ok((await a.sync.set(true)).ok);
+  assert.ok(((await dk.store.get(a.S.DIRTY))[a.S.DIRTY] || {})[key], 'a refused first transfer is marked even though no prior upload linked it');
+  drive.clearFaults();
+  dk.clock.t += a.S.WAIT.lag + 1;
+  assert.ok((await worker(drive, dk).sync.run({ push: true })).ok);
+  assert.equal(sha(textOf(JSON.parse(fileOf(drive, key, 'doc').bytes).record.doc) || ''), sha(text));
+});
+
 test('an upload queued before its document was trashed or deleted is discarded before sending more bytes', async () => {
   for (const deleted of [false, true]) {
     const drive = standin(), dk = disk(), key = 'doc:00000000-0000-4000-8000-00000000a010', a = worker(drive, dk);
@@ -564,7 +595,9 @@ test('a worker whose stage won\'t open (IndexedDB refused) still syncs: small it
   assert.deepEqual(await moves(dk), {});
 });
 
-test('a staged record update cannot overwrite a later change back to the original value on another device', async () => {
+// Saved sources merge item by item (background/drive-store.js three): another device's change and back is no change there,
+// so it sends nothing, and the staged change, aimed at the value both agreed, lands.
+test('a staged record update lands over another device\'s later change back to the original value, which sends nothing', async () => {
   const drive = standin(), da = disk(), db = disk(da.clock), key = 'writer:sources:local|local|papers|reader';
   const original = { at: da.clock.t, sources: [{ id: 's1', title: 'Original source' }] };
   await da.store.set({ [key]: original });
@@ -584,12 +617,15 @@ test('a staged record update cannot overwrite a later change back to the origina
   await b.more.stamp({ [key]: { oldValue: original, newValue: temporary } }, 'local');
   await db.store.set({ [key]: original });
   await b.more.stamp({ [key]: { oldValue: temporary, newValue: original } }, 'local');
+  const rev = drive.view(id).headRevisionId;
   assert.ok((await b.sync.run({ push: true })).ok);
-  assert.equal(Number(drive.view(id).appProperties.at), db.clock.t, 'Drive records the later return to this value');
+  assert.equal(drive.view(id).headRevisionId, rev, 'the change and back sends nothing');
   assert.ok((await worker(drive, da, { records: true }).sync.run()).ok);
-  assert.equal(JSON.parse(drive.files.get(id).bytes).value.sources[0].title, 'Original source', 'the later change wins even though its sum matches the staged aim');
-  assert.deepEqual((await da.store.get(key))[key], original);
+  assert.equal(JSON.parse(drive.files.get(id).bytes).value.sources[0].title, 'Earlier change', 'the staged change lands');
+  assert.deepEqual((await da.store.get(key))[key], changed);
   assert.deepEqual(await moves(da), {});
+  assert.ok((await b.sync.run()).ok);
+  assert.equal((await db.store.get(key))[key].sources[0].title, 'Earlier change', 'and reaches the other device');
 });
 
 test('a completed download still settles when the next worker cannot open its stage', async () => {

@@ -355,12 +355,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // Its revision is Glaze's only while the file holds these very bytes: an answer asked again later (the worker stopped
     // before writing it) names the file as it is then, perhaps edited outside Glaze since, which is then no revision of
     // Glaze's (none recorded: the next meeting tells the edit as one).
-    const commit = async (slot, t, file) => {
+    // bytes: what was sent, for a record's link (its value as both sides agree), when the stage still holds them.
+    const commit = async (slot, t, file, bytes = null) => {
       const c = t.commit, sum = String(file.sha256Checksum || '').toLowerCase(), rev = !sum || !t.b || sum === t.b ? file.headRevisionId || null : null;
       if (c.doc) {
         await putDoc(c.doc, { ...c.link, ...(c.set === 'file' ? { file: file.id, fh: rev } : { json: file.id, jh: rev }) }, await docOf(c.doc));
         if (c.set === 'file') await unwait(`up:${c.doc}`);
-      } else if (c.rec) await more.commit(c.rec, c.link, file);
+      } else if (c.rec) await more.commit(c.rec, c.link, file, bytes);
       await owe(slot);
     };
     // One upload sent: its session kept on its record between requests and workers, and Drive's answer written down. A
@@ -371,7 +372,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (!bytes) throw new Fail('missing');
       const keep = { get: async () => (await moveOf(slot))?.session || null, set: (session) => patchMove(slot, { session }), drop: () => patchMove(slot, { session: null }) };
       const file = await send(t, bytes, keep, t.owner?.doc ? null : () => patchMove(slot, { id: null, aim: null }));
-      if (t.commit) await commit(slot, t, file);
+      if (t.commit) await commit(slot, t, file, bytes);
       else await patchMove(slot, { file, session: null });
     };
     // An upload's target as Drive holds it now, before any of its bytes go in this run. → 'send'; 'landed' (it holds these
@@ -486,7 +487,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
                 await meet(slot, (await moveOf(slot)) || t);
                 continue;
               }
-              if (a.as === 'landed' && t.commit) await commit(slot, t, a.F);
+              if (a.as === 'landed' && t.commit) await commit(slot, t, a.F, t.commit.rec ? await unstaged(slot, t.size) : null);
               else await sendMove(slot, t);
             } else if (t.dir === 'down' && !t.done) await bringMove(slot, t);
           } catch (e) {
@@ -494,7 +495,8 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
             if (SKIP.has(e?.why) || (t.owner?.snap && e?.why === 'quota')) {
               console.warn('Sync to Google Drive: passed over a transfer', slot, e.why);
               await dropMove(slot);
-              if (t.owner?.key) await held('dirty', async () => { const m = (await S.get(DIRTY))[DIRTY] || {}; if (m[t.owner.key]) { delete m[t.owner.key]; await S.set({ [DIRTY]: m }); } });
+              if (e.why === 'denied' && t.owner?.doc && t.owner.key) await mark(t.owner.key);
+              if (e.why !== 'denied' && t.owner?.key) await held('dirty', async () => { const m = (await S.get(DIRTY))[DIRTY] || {}; if (m[t.owner.key]) { delete m[t.owner.key]; await S.set({ [DIRTY]: m }); } });
               if (t.owner?.snap || t.owner?.rec) await more?.failed?.(t.owner, e.why, hooks(folder));
               continue;
             }
@@ -1051,7 +1053,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // Too large to sync: passed over, marked while this device holds it.
       if (e?.why === 'large') { const k = key || (await docOf(h))?.key; if (k && await env.papers.get(k)) await tooLarge('docs', k, true); return; }
       if (e?.why === 'pending') return 'pending';
-      if (SKIP.has(e?.why)) { console.warn('Sync to Google Drive: passed over', h, e.why); return; }
+      // Refused by Drive for a reason it doesn't name as busy or full (denied): passed over this run, still marked if it was
+      // changed here, so it goes up once Drive takes it.
+      if (SKIP.has(e?.why)) {
+        console.warn('Sync to Google Drive: passed over', h, e.why);
+        const k = e.why === 'denied' && (key || (await docOf(h))?.key);
+        if (k) await mark(k);
+        return;
+      }
       if (e instanceof Fail ? e.why !== 'stale' : typeof e?.why === 'string') throw e;
       console.warn('Sync to Google Drive: again next run', h, e);
       const k = key || (await docOf(h))?.key;
@@ -1130,10 +1139,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     };
     // The copies listed again, once, WAIT.again after a full pass: one Drive's search didn't show then (made just before that
     // pass's page token, so its change never comes either) is met now, as that pass would have; one this device is linked to
-    // already is passed over.
+    // already is passed over. The records too (background/drive-store.js recheck).
     const recheck = async (folder) => {
       for (const [h, R] of await copies(folder)) { const d = await docOf(h); if (d ? d.json !== R.id : !R.trashed) await one(null, h, { R, folder }); }
       for (const F of await owns(folder)) await stray(F, folder);
+      if (more?.recheck) await more.recheck(hooks(folder));
       await setState({ again: 0 });
     };
     // Every document's own file in the folder, in Drive's trash too.

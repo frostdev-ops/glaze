@@ -452,6 +452,8 @@ ones described below as on this device only or never synced.
   `wait`), when the run under way began (`busy`), when the day's backup was last tried (`snap`) and whether it was skipped
   because Drive was full (`snapSkip`) (`driveSync`); for each document and each synced record, the ids
   of its Drive files and a SHA-256 of what each side last held (`driveSyncDoc:…`, `driveSyncRec:…`, `driveSyncFile:…`);
+  for tasks, dashboard notes, Looks history and favorites, the personal dictionary and saved sources, the value both
+  sides last agreed, so a change on each device merges item by item (`driveSyncBase:…`);
   which documents were saved since their last upload (`driveSyncDirty`); for a document whose Drive file was seen ahead
   of its JSON copy, how many times and since when (`driveSyncWaiting`); the ids of a document's duplicate Drive files
   still to be moved into Glaze/Data (`driveSyncAway`); when each synced setting or record last
@@ -906,8 +908,11 @@ you import) are bundled. It makes requests in these cases:
       Gradescope, which stay on the device that read them; a device signed in to another Gradescope account keeps its
       own), and Notes: each account's folders (with the ids of those deleted for good in the last 30 days, and when), each
       note (its title, folder, course, times, whether it is in Trash, and its text) and each picture or attachment. Each
-      carries when it last changed. When both sides changed one, the later change is kept, for a note or Notes' folders
-      field by field (a rename on one device and an edit on another both stay); when a second device connects, its own
+      carries when it last changed. When both sides changed one, tasks, dashboard notes, Looks history and favorites, the
+      dictionary and saved sources merge item by item (a task added on one device and one ticked on another both stay; a
+      task deleted on one and edited on the other keeps the edit), class schedules and GPA terms keep each course's and
+      term's later change, a note or Notes' folders merge field by field (a rename on one device and an edit on another
+      both stay), and for the rest the later change is kept; when a second device connects, its own
       records are joined with the folder's as Restore joins a backup's (a note keeps the newer of each field), never
       replaced.
     - in Glaze/Backups, once a day, a **Back up…** zip of Settings, tasks, records, Notes and documents (without their
