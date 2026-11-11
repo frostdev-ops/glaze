@@ -1173,7 +1173,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
             output = { ...output, ...(reply && { reply: reply.text }), ...(followUp && { followUp: followUp.text }) };
           }
           if (level >= 3 && isObj(output)) void compact({ id, open, turn: { question, answer: [output.reply, output.followUp].filter((x) => typeof x === 'string' && x).join('\n\n') }, locale, tools, zone }).catch(() => {});
-          post({ id, type: 'end', task: r.task, output, links });
+          post({ id, type: 'end', task: r.task, output, ...(links.length && { links }) });
           return;
         }
         const reader = { question, tools: r.tools, steps: [], now: env.now(), zone, locale, first: true, ...inCurrent, ...inRecall,
@@ -1200,7 +1200,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         // A built answer also carries the failed answer it replaced and its code, to this panel only (never Activity).
         const { text, links } = linked(res.answer.text, [...held(res.steps), ...(record ? [record] : [])]);
         if (level >= 3) void compact({ id, open, turn: { question, answer: text }, locale, tools, zone }).catch(() => {});
-        post({ id, type: 'end', task: r.task, answer: { text, ...(res.built && { built: true }) }, links, ...(res.built && { ...(res.why && { why: res.why }), ...(res.raw && { raw: res.raw.slice(0, 2000) }) }) });
+        post({ id, type: 'end', task: r.task, answer: { text, ...(res.built && { built: true }) }, ...(links.length && { links }), ...(res.built && { ...(res.why && { why: res.why }), ...(res.raw && { raw: res.raw.slice(0, 2000) }) }) });
       } catch (e) {
         // { id, type: 'error', error, why?, steps?, raw? }: the check's code, the tool steps run, and the model's raw answer
         // (to this panel only; Activity keeps the code, never the answer).
