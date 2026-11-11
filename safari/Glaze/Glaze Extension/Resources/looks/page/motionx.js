@@ -423,11 +423,12 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
   };
 
   // ---- the parts ---------------------------------------------------------------------------------------------------------------
-  let gen = 0, config = '';
+  let gen = 0, config = '', was = null; // was: whether the page was a quiz or a tool's at the last sync
   const sync = async () => {
     const g = ++gen;
     try { await lib(); } catch { return; }
     if (g !== gen) return;
+    was = quiet();
     if (!live || !ctx.on()) return off();
     const p = quiet() ? null : ctx.parts() || null;
     css(GZ_MX.compile(p?.anim));
@@ -461,8 +462,10 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
   document.addEventListener('visibilitychange', () => { if (document.hidden) engine.end(); });
   addEventListener('pagehide', () => { live = false; off(); });
   addEventListener('pageshow', () => { live = true; sync(); });
-  // Ultra changes pages in place: a quiz may have come or gone.
+  // Ultra changes pages in place: a quiz may have come or gone. Where there is no window.navigation (Firefox before 147) content.js's
+  // pass says so, through content-ultra.js.
   globalThis.navigation?.addEventListener('navigatesuccess', sync);
+  const route = () => { if (was !== null && quiet() !== was) sync(); };
   // A mod's effect (glaze.effects.play, cleaned by the worker into GZ_MX.fx's form) at (x, y), as a Look's would play.
   const burst = async (f, x, y) => {
     try { await lib(); } catch { return false; }
@@ -470,7 +473,7 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
     engine.add(GZ_MX.spawn(GZ_MX.fx(f), x, y, innerWidth, innerHeight));
     return true;
   };
-  return { sync, off, burst, has: (name) => Object.hasOwn(fxs, name) };
+  return { sync, off, burst, route, has: (name) => Object.hasOwn(fxs, name) };
 })();
 
 GZ_MOTIONX;

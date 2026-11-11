@@ -206,7 +206,7 @@ test('a total\'s chip: Moodle\'s own text, and its share where it says a percent
 
 // ---- courses/page/moodle.js, in a stand-in page ---------------------------------------------------------------------------
 const D = require('../../extension/content/defaults.js');
-const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = [], settings = { enabled: true, enhance: { overall: true } }, overview = '', courses = [], stored = {}, root = ORIGIN, list = {}, dark = true, live = { on: true } } = {}) => {
+const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = [], settings = { enabled: true, enhance: { overall: true } }, overview = '', courses = [], stored = {}, root = ORIGIN, list = {}, dark = true, live = { on: true }, status = { overview: 200 } } = {}) => {
   const asked = [];
   // storage.local, as GZ_CTX.local hands it over.
   const local = { get: (k, cb) => cb(Object.fromEntries([k].flat().map((x) => [x, stored[x]]))), set: (o) => Object.assign(stored, o) };
@@ -222,7 +222,11 @@ const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = []
     GZ_COURSE_COLOR: D.GZ_COURSE_COLOR, GZ_SURFACE_VARS: D.GZ_SURFACE_VARS, GZ_ACTIVE_COLORS: D.GZ_ACTIVE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_TINT: D.GZ_TINT, GZ_COLORS: D.GZ_COLORS, GZ_COLOR: require('../../extension/core/color.js'),
     GZ_MOODLE: M, GZ_PAGE: { score },
     GZ_CTX: { t: (k) => k, settings: () => settings, local: (fn) => fn(local), canvasCourseKey: (id) => (id ? `moodle:${root}/${id}` : null), courseList: () => list, on: () => live.on },
-    fetch: async (url, opts = {}) => { asked.push({ url, ...opts }); return { ok: true, status: 200, text: async () => overview, json: async () => [{ error: false, data: { events: [], courses } }] }; },
+    fetch: async (url, opts = {}) => {
+      asked.push({ url, ...opts });
+      const code = /grade\/report\/overview/.test(url) ? status.overview : 200;
+      return { ok: code === 200, status: code, text: async () => overview, json: async () => [{ error: false, data: { events: [], courses } }] };
+    },
   });
   context.globalThis = context;
   const api = vm.runInContext(read('courses/page/moodle.js'), context);
@@ -659,4 +663,76 @@ test('Moodle card surface tint uses known colors without whole-palette tint and 
   assert.deepEqual(plain(p.cards[0].style.vars), {}, 'lost records clear the previous color');
   list[key].color = '#112233'; p.api.paint(); live.on = false; p.api.paint();
   assert.deepEqual(plain(p.cards[0].style.vars), {}, 'Glaze off clears the course color');
+});
+
+// Audit 2026-11-11 B13: a course Moodle no longer lists stayed in seenCourses for good.
+test('a course gone from Moodle\'s answer leaves the list for that Moodle root only', async () => {
+  const canvas = { 'canvas:https://c.example/1': { name: 'Canvas course', canvas: true } };
+  const ultra = { _7_1: { name: 'Ultra course', site: 'https://bb.example' } };
+  const folder = { 'moodle:http://localhost:8081/archive/16': { name: 'Folder course', moodle: true } };
+  const other = { 'moodle:https://other.edu/16': { name: 'Other Moodle', moodle: true } };
+  const stored = { seenCourses: { ...canvas, ...ultra, ...folder, ...other, [`moodle:${ORIGIN}/15`]: { name: 'Dropped', moodle: true }, [`moodle:${ORIGIN}/16`]: { name: 'Old name', moodle: true } } };
+  const p = page({ stored, courses: [{ id: 16, fullname: 'BIO 1100', shortname: 'BIO 1100' }] });
+  await p.api.record();
+  assert.deepEqual(Object.keys(stored.seenCourses).sort(), ['_7_1', 'canvas:https://c.example/1', `moodle:${ORIGIN}/16`, 'moodle:http://localhost:8081/archive/16', 'moodle:https://other.edu/16'].sort(),
+    'the dropped course is gone; other sites, another root on the host and another Moodle stay');
+  assert.equal(stored.seenCourses[`moodle:${ORIGIN}/16`].name, 'BIO 1100', 'and the one still listed is as Moodle names it now');
+  // An empty answer drops nothing (the existing rule: a failed or empty read changes nothing kept).
+  const kept = plain(stored.seenCourses);
+  stored[`seenCoursesAt moodle:${ORIGIN}/`] = 0;
+  await page({ stored, courses: [] }).api.record();
+  assert.deepEqual(plain(stored.seenCourses), kept);
+});
+
+test('a failed grades overview is asked again, not kept as no totals for the page\'s life', async () => {
+  const overview = fixtures.find(({ f }) => f === 'moodle-grades.html').html.replace('>93.00<', '>93.00 %<');
+  const status = { overview: 503 };
+  const p = page({ cards: [['16']], overview, status });
+  let now = Date.now();
+  p.context.Date = class extends Date { static now() { return now; } };
+  p.api.cards();
+  await settle();
+  assert.equal(p.asked.length, 1);
+  assert.deepEqual(p.cards[0].name.attrs, {}, 'no totals while it fails');
+  p.api.cards();
+  await settle();
+  assert.equal(p.asked.length, 1, 'a broken page is not asked on every pass');
+  now += 61000;
+  status.overview = 200;
+  p.api.cards();
+  await settle();
+  assert.equal(p.asked.length, 2, 'asked again once the wait is over');
+  assert.equal(p.cards[0].name.attrs['data-gz-grade'], '93.00 %');
+  now += 3600000;
+  p.api.cards();
+  await settle();
+  assert.equal(p.asked.length, 2, 'a read that worked is kept');
+});
+
+test('passes share a grades-overview retry while its response is pending', async () => {
+  const status = { overview: 503 };
+  const p = page({ cards: [['16']], status });
+  let now = Date.now();
+  p.context.Date = class extends Date { static now() { return now; } };
+  p.api.cards();
+  await settle();
+  assert.equal(p.asked.length, 1);
+  now += 61000;
+  status.overview = 200;
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  const fetch = p.context.fetch;
+  p.context.fetch = async (...args) => { const response = await fetch(...args); await pending; return response; };
+  p.api.cards();
+  await settle();
+  p.api.cards();
+  p.api.cards();
+  await settle();
+  const requests = p.asked.length;
+  release();
+  await settle();
+  assert.equal(requests, 2, 'only the original failure and one pending retry');
+  p.api.cards();
+  await settle();
+  assert.equal(p.asked.length, 2, 'the successful retry stays cached');
 });

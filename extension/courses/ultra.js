@@ -78,8 +78,10 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     { kind: 'Discussion', list: 'discussions', fields: 'id,title,available,topic.body,topic.status' },
   ];
   // Content a student may see now, the one rule search and the notes app's links share: x → until when (ms, Infinity), or
-  // null when it, or any folder above it, isn't released now, has unknown or malformed availability, or loops.
-  const visibleIn = (items, now = Date.now()) => {
+  // null when it, or any folder above it, isn't released now, has unknown or malformed availability, or loops. On a read
+  // that didn't finish (complete false, which a recursive list marks on its items) a folder that isn't in the list may be
+  // one the read never reached, so what it holds isn't proven released either.
+  const visibleIn = (items, now = Date.now(), complete = items?.complete !== false) => {
     const byId = new Map(arr(items).map((x) => [x?.id, x]));
     // An empty release object is unrestricted in B0. Missing, malformed or unknown rules are not proof of access.
     const released = (a) => {
@@ -95,7 +97,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
       let until = Infinity;
       for (let p = x; p; p = byId.get(p.parentId)) {
         const end = released(p.availability);
-        if (seen.has(p.id) || end === null) return null;
+        if (seen.has(p.id) || end === null || !complete && p.parentId && !byId.has(p.parentId)) return null;
         until = Math.min(until, end);
         seen.add(p.id);
       }
@@ -393,7 +395,8 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
         // A nextPage may page this list only, never switch to a thread, private API or another site.
         query = next ? (next.origin === origin && next.pathname === path ? next.search || '?' : (complete = false, '')) : '';
       }
-      return { items, complete };
+      // A recursive list holds each item's folders, so on an incomplete one a missing parent was missed, not absent (visibleIn).
+      return { items: recursive ? Object.defineProperty(items, 'complete', { value: complete }) : items, complete };
     };
     return {
       get, all, list,

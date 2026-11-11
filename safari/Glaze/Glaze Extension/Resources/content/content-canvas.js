@@ -65,6 +65,17 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   const snap = () => (canvasSnapshot ? profile().then((p) => (String(p?.id) === canvasSnapshot.uid ? canvasSnapshot : null), () => null) : Promise.resolve(null));
   const canvasCourses = () => (canvasList ||= snap().then((s) => s ? s.list : readCourses()
     .then((j) => { coursesRead = Array.isArray(j); return coursesRead ? j : []; }, () => { setTimeout(() => { canvasList = null; }, 60000); return []; }))); // asked again after a minute
+  // A key several tabs write: one writer at a time. Web Locks hold this origin's other tabs until the set lands (not another site's),
+  // a queue this tab's own, all there is without them (as canvasNews, content-canvas.js).
+  const writing = new Map();
+  const update = (key, merge, more) => {
+    const write = () => new Promise((done) => {
+      try { chrome.storage.local.get(key, (r) => { try { chrome.storage.local.set({ [key]: merge(r?.[key]), ...more }, done); } catch { done(); } }); } catch { done(); } // extension reloaded under the tab
+    });
+    const run = (writing.get(key) || Promise.resolve()).then(() => (globalThis.navigator?.locks?.request ? navigator.locks.request(`glaze:${key}`, write).catch(write) : write()));
+    writing.set(key, run);
+    return run;
+  };
   const record = () => snap().then((s) => Promise.all([canvasCourses(), s ? s.colors : capi('/users/self/colors').catch(() => null), profile().catch(() => null)])).then(([list, colors, me]) => {
     // Failed reads must not turn into a fresh, empty snapshot.
     if (coursesRead && colors && /^\d+$/.test(me?.id)) try { sessionStorage.setItem(COURSE_CACHE, JSON.stringify({ at: Date.now(), uid: String(me.id), list, colors })); } catch { /* blocked or full */ }
@@ -72,11 +83,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
       name: c.name, code: c.course_code, canvas: true, color: /^#[0-9a-f]{6}$/i.test(colors?.custom_colors?.[`course_${c.id}`]) ? colors.custom_colors[`course_${c.id}`] : null,
     }]));
     // Preserve Blackboard and other schools; Canvas ids alone are only unique within their own host.
-    chrome.storage.local.get('seenCourses', (r) => {
-      const all = { ...r?.seenCourses, ...seen };
-      chrome.storage.local.set({ seenCourses: all });
-      I.setCourseList(all);
-    });
+    update('seenCourses', (kept) => { const all = { ...kept, ...seen }; I.setCourseList(all); return all; });
   });
 
   // ---- code on demand ------------------------------------------------------------------------------
@@ -412,7 +419,7 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
       const raw = C.parse(card.querySelector('.ic-DashboardCard__header_hero')?.style.backgroundColor || '');
       if (c && raw && c.color !== C.hex(raw)) { c.color = C.hex(raw); changed[canvasCourseKey(id)] = c; }
     }
-    if (Object.keys(changed).length) try { chrome.storage.local.get('seenCourses', (r) => chrome.storage.local.set({ seenCourses: { ...r?.seenCourses, ...changed } })); } catch { /* reloaded */ }
+    if (Object.keys(changed).length) update('seenCourses', (kept) => ({ ...kept, ...changed }));
     const cid = canvasCourseKey();
     const targets = new Map();
     if (cid) for (const el of document.querySelectorAll('#breadcrumbs li:nth-child(2), #section-tabs')) targets.set(el, cid);

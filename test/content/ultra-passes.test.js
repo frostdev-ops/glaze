@@ -23,7 +23,7 @@ test('a failed startup read still completes consumers when the direct fallback t
   assert.equal(answered, true, 'settings readiness must settle even after extension reload');
 });
 
-const boot = async ({ pathname = '/ultra/stream', localGet, byId = false } = {}) => {
+const boot = async ({ pathname = '/ultra/stream', localGet, byId = false, store, locks } = {}) => {
   let now = 0;
   const timers = [], styleReads = [], radiusReads = [], loads = [], localGets = [], syncGets = [], changed = [], listeners = {}, observers = [];
   class El {
@@ -55,11 +55,11 @@ const boot = async ({ pathname = '/ultra/stream', localGet, byId = false } = {})
     createElement: (t) => new El(t), createElementNS: (_, t) => new El(t), createTextNode: () => new El('#text'),
     createTreeWalker: () => ({ nextNode: () => null }), createRange: () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({}) }),
     addEventListener: (type, f) => (listeners[type] ||= []).push(f), removeEventListener() {}, fonts: { load: () => Promise.resolve([]), add() {} } };
-  const local = { get: (k, cb) => { localGets.push(k); if (localGet?.(k, cb)) return; const r = k === 'ultra' || (Array.isArray(k) && k.includes('ultra')) ? { ultra: ['https://school.test'] } : {}; return cb ? cb(r) : Promise.resolve(r); },
-    set: (o, cb) => { cb?.(); return Promise.resolve(); }, remove: (k, cb) => { cb?.(); return Promise.resolve(); } };
+  const local = { get: (k, cb) => { localGets.push(k); if (localGet?.(k, cb)) return; if (store) return store.get(k, cb); const r = k === 'ultra' || (Array.isArray(k) && k.includes('ultra')) ? { ultra: ['https://school.test'] } : {}; return cb ? cb(r) : Promise.resolve(r); },
+    set: (o, cb) => { if (store) return store.set(o, cb); cb?.(); return Promise.resolve(); }, remove: (k, cb) => { cb?.(); return Promise.resolve(); } };
   const location = { protocol: 'https:', origin: 'https://school.test', pathname, href: `https://school.test${pathname}`, search: '', hash: '' };
   const c = vm.createContext({ document, console, Intl, URL, URLSearchParams, TextEncoder, structuredClone, crypto: require('node:crypto').webcrypto, location,
-    navigator: { language: 'en' }, Element: El, HTMLElement: El, SVGElement: class {}, Node: El, NodeFilter: { SHOW_TEXT: 4 },
+    navigator: { language: 'en', ...(locks && { locks }) }, Element: El, HTMLElement: El, SVGElement: class {}, Node: El, NodeFilter: { SHOW_TEXT: 4 },
     getComputedStyle: (e) => { styleReads.push(e); return { getPropertyValue: () => '', color: 'rgb(0, 0, 0)', backgroundColor: 'rgba(0, 0, 0, 0)', backgroundImage: 'none', position: 'static', transitionDuration: '0s' }; },
     CSS: { supports: () => false, escape: (s) => s }, matchMedia: () => ({ matches: false, addEventListener() {} }), Image: class {},
     MutationObserver: class { constructor(f) { this.f = f; } observe(target, o) { observers.push({ f: this.f, target, o }); } disconnect() {} takeRecords() { return []; } },
@@ -72,7 +72,7 @@ const boot = async ({ pathname = '/ultra/stream', localGet, byId = false } = {})
       sendMessage: (m) => { if (m?.type === 'glaze:load') { loads.push(m.files); return Promise.resolve({ ok: false, error: 'not loadable' }); } return Promise.resolve({ ok: false }); } },
       storage: { sync: { get: (k, cb) => { syncGets.push(k); cb({}); } }, local, onChanged: { addListener: (f) => changed.push(f) } } } });
   c.window = c; c.top = c; c.globalThis = c;
-  for (const f of ['core/color.js', 'core/i18n.js', 'core/page.js', 'planner/grades.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'navigation/nav.js', 'content/content-ultra.js']) vm.runInContext(read(f).replace('  const shown = new Map();', '  globalThis.__seen = () => ({ seen, seenItems }); globalThis.__loadSeen = () => loadSeen();\n  const shown = new Map();'), c, { filename: f });
+  for (const f of ['core/color.js', 'core/i18n.js', 'core/page.js', 'planner/grades.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'navigation/nav.js', 'content/content-ultra.js']) vm.runInContext(read(f).replace('  const shown = new Map();', '  globalThis.__seen = () => ({ seen, seenItems }); globalThis.__loadSeen = () => loadSeen();\n  globalThis.__site = { keepSeen: (...a) => keepSeen(...a), record: () => record(), openNew: (e) => openNew(e), renderNew: () => renderNew(), books: () => books, contents: () => contents };\n  const shown = new Map();').replace('  const myCourses = () => {', '  const myCourses = () => { if (globalThis.__courses) return Promise.resolve(globalThis.__courses);'), c, { filename: f });
   vm.runInContext(read('content/content.js').replace('  const courseSlots = {};', '  const courseSlots = {}; globalThis.__slots = courseSlots;').replace('  let lookX;', '  let lookX; globalThis.__look = () => lookX;'), c, { filename: 'content/content.js' });
   await settle();
   const wait = async (ms) => {
@@ -294,4 +294,112 @@ test("Ultra's own additions reach the Courses page panel's held() in the mutatio
   p.body.append(added);
   p.mutate([{ type: 'childList', target: p.body, addedNodes: [added], removedNodes: [] }]);
   assert.ok(held > 0, 'held at once, not at the next pass');
+});
+
+// Audit 2026-11-11 A2: Ultra changes page by pushState (no popstate), and a browser without window.navigation (Firefox before
+// 147) has no other notice: content.js's pass is the notice, and it tells the Look's page modules (looks/page/motionx.js and
+// lookx.js, loaded on demand) to look at the route.
+test('every pass on Ultra tells the Look animations and stickers to look at the route, with or without them loaded', async () => {
+  const p = await boot({ pathname: '/ultra/courses/_1_1/outline' });
+  assert.equal(p.c.navigation, undefined, 'a browser without the Navigation API');
+  const heard = [];
+  const pass = async () => {
+    const added = p.tree(1);
+    p.body.append(added);
+    p.mutate([{ type: 'childList', target: p.body, addedNodes: [added], removedNodes: [] }]);
+    await p.wait(500);
+  };
+  await pass();
+  assert.deepEqual(heard, [], 'nothing loaded, nothing asked');
+  p.c.GZ_MOTIONX = { route: () => heard.push('motionx') };
+  await pass();
+  assert.deepEqual(heard, ['motionx']);
+  p.c.GZ_LOOKX = { route: () => heard.push('lookx') };
+  p.c.location.pathname = '/ultra/courses/_1_1/assessment/_2_1/attempt/_3_1';
+  await pass();
+  assert.deepEqual(heard, ['motionx', 'motionx', 'lookx'], 'both, each pass');
+});
+
+// ---- storage that several tabs share (audit 2026-11-11 A4) ----
+// Every get and set answers a turn later, as chrome.storage does, so two tabs' read-modify-writes can interleave. Web Locks as
+// one origin's tabs share them: one holder at a time per name, until the callback's promise settles.
+const sharedStorage = () => {
+  const data = { ultra: ['https://school.test'] };
+  return { data,
+    get: (k, cb) => setImmediate(() => cb(Object.fromEntries([].concat(k).filter((x) => x in data).map((x) => [x, structuredClone(data[x])])))),
+    set: (o, cb) => setImmediate(() => { Object.assign(data, structuredClone(o)); cb?.(); }) };
+};
+const originLocks = () => {
+  const tails = new Map(), asked = [];
+  return { asked, request: (name, cb) => { asked.push(name); const run = (tails.get(name) || Promise.resolve()).then(() => cb()); tails.set(name, run.catch(() => {})); return run; } };
+};
+
+test('two tabs of a school recording seen grades and content at the same instant both keep their entries', async () => {
+  const store = sharedStorage(), locks = originLocks();
+  const a = await boot({ store, locks }), b = await boot({ store, locks });
+  a.c.__site.keepSeen('seenGrades', '_1_1', { _9_1: 'A' }); b.c.__site.keepSeen('seenGrades', '_2_1', { _8_1: 'B' });
+  a.c.__site.keepSeen('seenContent', '_1_1', ['_3_1', '+']); b.c.__site.keepSeen('seenContent', '_2_1', ['_4_1', '+']);
+  await settle(30);
+  assert.deepEqual(JSON.parse(JSON.stringify(store.data.seenGrades)), { _1_1: { _9_1: 'A' }, _2_1: { _8_1: 'B' } });
+  assert.deepEqual(JSON.parse(JSON.stringify(store.data.seenContent)), { _1_1: ['_3_1', '+'], _2_1: ['_4_1', '+'] });
+  assert.deepEqual([...new Set(locks.asked)].sort(), ['glaze:seenContent', 'glaze:seenGrades']);
+});
+
+test('without Web Locks a tab still orders its own writes to a shared key', async () => {
+  const store = sharedStorage();
+  const a = await boot({ store });
+  assert.equal(a.c.navigator.locks, undefined);
+  a.c.__site.keepSeen('seenGrades', '_1_1', { _9_1: 'A' }); a.c.__site.keepSeen('seenGrades', '_2_1', { _8_1: 'B' });
+  await settle(30);
+  assert.deepEqual(JSON.parse(JSON.stringify(store.data.seenGrades)), { _1_1: { _9_1: 'A' }, _2_1: { _8_1: 'B' } });
+});
+
+test("an Ultra site's course list is written under the lock too, keeping other sites' courses and replacing its own", async () => {
+  const store = sharedStorage(), locks = originLocks();
+  store.data.seenCourses = { 'canvas:https://c.example/1': { name: 'Canvas' }, _5_1: { name: 'Gone', site: 'https://school.test' }, _6_1: { name: 'Other school', site: 'https://other.test' } };
+  const p = await boot({ store, locks });
+  vm.runInContext('globalThis.__courses = [{ courseId: "_1_1", courseCardColorIndex: 2, course: { name: "Biology", displayId: "BIO" } }]', p.c);
+  delete store.data.seenCoursesAt;
+  await p.c.__site.record();
+  await settle(30);
+  assert.deepEqual(Object.keys(store.data.seenCourses).sort(), ['_1_1', '_6_1', 'canvas:https://c.example/1']);
+  assert.ok(locks.asked.includes('glaze:seenCourses'));
+});
+
+// Audit 2026-11-11 A5: sessionStorage throws when storage is off, in a sandboxed or partitioned frame, or full.
+test("a sessionStorage that throws neither stops a new-count's click nor the rest of a pass", async () => {
+  const p = await boot({ pathname: '/ultra/courses/_1_1/grades' });
+  const calls = [];
+  const boom = (k) => () => { calls.push(k); throw new Error('The operation is insecure.'); };
+  p.c.sessionStorage = { getItem: boom('get'), setItem: boom('set'), removeItem: boom('remove') };
+  // The "N new" count on a card: the click still opens the page it names.
+  const assigned = [];
+  p.c.location.assign = (url) => assigned.push(url);
+  const pill = { dataset: { kind: 'grades', cid: '_1_1' }, closest: () => null };
+  const target = new p.El('span');
+  target.closest = () => pill;
+  let stopped = 0;
+  p.c.__site.openNew({ type: 'click', target, preventDefault: () => { stopped++; }, stopPropagation() {} });
+  assert.equal(stopped, 1);
+  assert.deepEqual(assigned, ['https://school.test/ultra/courses/_1_1/grades']);
+  // A grades page with a gradebook read, and an outline with rows: the badges are drawn, nothing throws.
+  p.c.__loadSeen();
+  await p.wait(100);
+  p.c.__site.books().set('_1_1', { key: '', at: Date.now(), pending: false, results: [] });
+  p.c.__site.renderNew();
+  assert.deepEqual(calls, ['set', 'get'], 'the click kept its jump, the grades page looked for one');
+  p.c.location.pathname = '/ultra/courses/_1_1/outline';
+  const row = new p.El('li');
+  row.dataset = { contentId: '_5_1' };
+  const everything = p.document.querySelectorAll;
+  p.document.querySelectorAll = (sel) => (sel === '.content-list-item[data-content-id]' ? [row] : []);
+  p.c.__site.contents().set('_1_1', { at: Date.now(), items: [{ id: '_5_1' }] });
+  p.c.__site.renderNew();
+  assert.deepEqual(calls, ['set', 'get', 'get'], 'and the outline looked for one');
+  p.document.querySelectorAll = everything;
+  // And a whole pass runs through.
+  const added = p.tree(1);
+  p.body.append(added);
+  p.mutate([{ type: 'childList', target: p.body, addedNodes: [added], removedNodes: [] }]);
+  await p.wait(500);
 });

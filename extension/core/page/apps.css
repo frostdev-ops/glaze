@@ -458,7 +458,7 @@ html[data-gz-dash]:not([data-gz-dash="ip"]) institution-page-home { display: non
 }
 #gz-todo summary { cursor: pointer; list-style-position: inside; }
 #gz-todo .gz-todo-group[data-kind="past"] h3 { color: var(--gz-err); }
-#gz-todo .gz-todo-n { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--gz-ink-faint); font-variant-numeric: tabular-nums; }
+#gz-todo .gz-todo-n { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--gz-ink-muted); font-variant-numeric: tabular-nums; }
 #gz-todo .gz-todo-list,
 #gz-todo .gz-todo-steps { list-style: none; margin: 0; padding: 0; }
 #gz-todo .gz-todo-item {

@@ -68,8 +68,20 @@ const tab = (env, site = 'canvas') => {
     storage: {
       onChanged: { addListener() {} },
       ...Object.fromEntries(['sync', 'local'].map((name) => [name, {
-        get(keys, cb) { const s = env.store[name]; const ks = keys === null ? Object.keys(s) : [].concat(keys); setTimeout(() => cb(structuredClone(Object.fromEntries(ks.filter((k) => k in s).map((k) => [k, s[k]]))))); },
-        set(patch, cb) { setTimeout(() => { Object.assign(env.store[name], structuredClone(patch)); cb?.(); }); },
+        get(keys, cb) {
+          const s = env.store[name]; const ks = keys === null ? Object.keys(s) : [].concat(keys);
+          setTimeout(() => {
+            // A read the browser refused: lastError is set for the callback, whose answer is empty.
+            if (name === 'sync' && env.failSyncGet) { chrome.runtime.lastError = { message: 'read failed' }; try { cb({}); } finally { chrome.runtime.lastError = undefined; } return; }
+            cb(structuredClone(Object.fromEntries(ks.filter((k) => k in s).map((k) => [k, s[k]]))));
+          });
+        },
+        set(patch, cb) {
+          setTimeout(() => {
+            if (name === 'sync' && env.failSyncSet) { chrome.runtime.lastError = { message: 'write failed' }; try { cb?.(); } finally { chrome.runtime.lastError = undefined; } return; }
+            Object.assign(env.store[name], structuredClone(patch)); cb?.();
+          });
+        },
         remove(keys, cb) { for (const k of [].concat(keys)) delete env.store[name][k]; setTimeout(() => cb?.()); },
       }])),
     },
@@ -395,4 +407,52 @@ test('a card pass after Glaze was reloaded under the tab does nothing (no extens
   assert.match(src, /const paint = async \(\) => \{\n\s+if \(!chrome\.runtime\?\.id\) return;/);
   const core = require('fs').readFileSync(require('path').join(__dirname, '../../extension/content/content.js'), 'utf8');
   assert.match(core, /if \(!chrome\.runtime\?\.id\) \{ observer\?\.disconnect\(\); observer = null; return; \}/, 'the main watcher stops itself');
+});
+
+// Audit 2026-11-11 A3: the switch used to write the defaults over every card setting when its read failed.
+test('the bookmark-icons switch writes nothing when the card settings cannot be read, and goes back', async () => {
+  const { env, store, ui, find } = load();
+  store.sync.card = { width: 300, gap: 20, hover: 'glow', icons: true };
+  await ui.open(A);
+  const box = find((e) => e.className === 'gz-ce-check')?.children[0];
+  assert.equal(box.checked, true);
+  env.failSyncGet = true;
+  box.checked = false;
+  await box.fire('change');
+  await tick(20);
+  assert.deepEqual(store.sync.card, { width: 300, gap: 20, hover: 'glow', icons: true }, 'the stored settings are as they were');
+  assert.equal(box.checked, true, 'the box shows what is stored');
+  env.failSyncGet = false;
+  box.checked = false;
+  await box.fire('change');
+  await tick(20);
+  assert.deepEqual({ ...store.sync.card }, { width: 300, gap: 20, radius: -1, height: 146, condensed: false, overlay: true, hover: 'glow', particles: 'none', pet: 'none', icons: false, create: false }, 'a readable store changes the one setting');
+  env.failSyncSet = true;
+  box.checked = true;
+  await box.fire('change');
+  await tick(20);
+  assert.equal(store.sync.card.icons, false, 'a refused write changes nothing');
+  assert.equal(box.checked, false, 'and the box goes back');
+});
+
+test('overlapping bookmark-icon changes return to the saved value when both fail', async () => {
+  for (const failure of ['failSyncGet', 'failSyncSet']) {
+    const { env, store, ui, find } = load();
+    store.sync.card = { icons: true };
+    await ui.open(A);
+    const box = find((e) => e.className === 'gz-ce-check').children[0];
+    env[failure] = true;
+    box.checked = false;
+    const first = box.fire('change');
+    box.checked = true;
+    const second = box.fire('change');
+    await Promise.all([first, second]);
+    assert.equal(store.sync.card.icons, true);
+    assert.equal(box.checked, true, `${failure}: the box shows the saved value`);
+    env[failure] = false;
+    box.checked = false;
+    await box.fire('change');
+    assert.equal(store.sync.card.icons, false, 'a later change still saves');
+    assert.equal(box.checked, false);
+  }
 });

@@ -329,6 +329,37 @@ test('page: saved stickers stay off a Moodle quiz attempt', async () => {
   assert.equal(p.body.find('gz-stk-panel'), null, 'no sticker mode there either');
 });
 
+// Audit 2026-11-11 A2: content.js's pass calls route() where the browser has no Navigation API to say a quiz came or went.
+test('page: route() puts the stickers away on a quiz entered in place', async () => {
+  const quiz = `stk:${SITE}/courses/1/quizzes/9/take`;
+  const p = page({ [KEY]: [sticker('a')], [quiz]: [sticker('b')] }, '/courses/1');
+  await p.lx.sync();
+  await tick(5);
+  assert.ok(p.body.find('gz-stickers'), 'drawn on an ordinary page');
+  p.location.pathname = '/courses/1/quizzes/9/take';
+  p.lx.route();
+  await tick(5);
+  assert.equal(p.body.find('gz-stickers'), null, 'a quiz: none, though it has some saved');
+});
+
+test('page: route() restores stickers after leaving a quiz in place', async () => {
+  const home = '/ultra/courses/_1_1/outline';
+  const quiz = '/ultra/courses/_1_1/assessment/_2_1/attempt/_3_1';
+  for (const start of [home, quiz]) {
+    const p = page({ [`stk:${SITE}${home}`]: [sticker('a')] }, start);
+    await p.lx.sync();
+    await tick(5);
+    p.location.pathname = quiz;
+    p.lx.route();
+    await tick(5);
+    assert.equal(p.body.find('gz-stickers'), null);
+    p.location.pathname = home;
+    p.lx.route();
+    await tick(5);
+    assert.ok(p.body.find('gz-stickers'), `stickers restored after starting on ${start}`);
+  }
+});
+
 test('page: Place stickers with Show stickers off opens sticker mode with its layer, and placing works', async () => {
   const p = page({});
   p.settings.extras = { ...p.settings.extras, stickers: false };
