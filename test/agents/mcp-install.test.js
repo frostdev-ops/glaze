@@ -312,6 +312,31 @@ test('launchers name node by the PATH entry that leads to it, so a Homebrew upgr
   assert.equal(I.context({ platform: 'darwin', env: { HOME: d, PATH: path.join(d, 'link') }, node: '/given/node' }).node, '/given/node');
 });
 
+test('launchers never name fnm\'s per-shell alias or a Linux session\'s runtime folder: they end at logout', { skip: posixOnly('POSIX symlinks') }, (t) => {
+  const d = scratch(t);
+  const node = path.join(mk(d, 'fnm', 'node-versions', 'v26.0.0', 'installation', 'bin'), 'node');
+  fs.writeFileSync(node, '');
+  const resolved = fs.realpathSync(node);
+  const alias = (...base) => { const bin = mk(d, ...base, 'fnm_multishells', '4242_1700000000', 'bin'); fs.symlinkSync(node, path.join(bin, 'node')); return bin; };
+  const shell = alias('state');
+  // Only the alias leads to this node: it is named as it stands, never by the per-shell folder.
+  for (const platform of ['darwin', 'linux']) assert.equal(I.stableNode(node, platform, { HOME: d, PATH: shell }), node, platform);
+  // A name that lasts, later in PATH, is still the one chosen.
+  fs.symlinkSync(node, path.join(mk(d, 'bin'), 'node'));
+  assert.equal(I.stableNode(node, 'darwin', { HOME: d, PATH: [shell, path.join(d, 'bin')].join(':') }), path.join(d, 'bin', 'node'));
+  // Given the alias itself, it names the real node behind it.
+  assert.equal(I.stableNode(path.join(shell, 'node'), 'darwin', { HOME: d, PATH: shell }), resolved);
+  // Linux puts a session's folders under XDG_RUNTIME_DIR (/run/user/<uid>), which is gone at logout too.
+  const run = mk(d, 'run', 'user', '1000');
+  const session = mk(run, 'tools', 'bin');
+  fs.symlinkSync(node, path.join(session, 'node'));
+  const env = { HOME: d, XDG_RUNTIME_DIR: run, PATH: session };
+  assert.equal(I.stableNode(node, 'linux', env), node);
+  assert.equal(I.stableNode(path.join(session, 'node'), 'linux', env), resolved);
+  // Elsewhere that folder is only a folder.
+  assert.equal(I.stableNode(node, 'darwin', env), path.join(session, 'node'));
+});
+
 test('the .bat launcher setup writes runs node on the copied script through cmd, as Chromium starts it', { skip: windowsOnly('cmd.exe is Windows only; the sh launcher test covers POSIX') }, async (t) => {
   // %, ! and parentheses, which cmd would expand or split on outside quotes, and an apostrophe.
   const base = path.join(scratch(t), "Jo's (100%) !x!");
