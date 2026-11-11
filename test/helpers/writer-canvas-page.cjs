@@ -10,7 +10,8 @@ const { parse } = require('../fixture-dom.js');
 // strict: writes go through the real page-world script (writer/writer-main-canvas.js), which refuses what isn't Canvas's
 // dialect (TinyMCE's data-mce-* bookkeeping included), into a stand-in TinyMCE whose setContent collapses runs of
 // whitespace as TinyMCE's parser does. There, helper 'fail' (or a function answering it) is an RCE TinyMCE can't give.
-const page = async ({ fixture = 'discussion', helper = 'ok', ready = () => true, draft = () => false, strict = false } = {}) => {
+// scripts: more of the extension's files, run before the controller (writer/writer-target.js, which X.need would load).
+const page = async ({ fixture = 'discussion', helper = 'ok', ready = () => true, draft = () => false, strict = false, scripts = [] } = {}) => {
   const doc = { activeElement: null }, ports = [], clicks = [], timers = new Map(), observers = [], kept = [];
   let seq = 0, now = 100000, mode = helper;
   doc.root = doc.documentElement = new El('html', doc);
@@ -62,6 +63,7 @@ const page = async ({ fixture = 'discussion', helper = 'ok', ready = () => true,
   ctx.window = ctx; ctx.top = ctx;
   const run = (f) => vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8'), ctx);
   run('writer/writer-canvas.js');
+  for (const f of scripts) run(f);
   if (strict) {
     const handlers = new WeakMap();
     class HTMLTextAreaElement {}
