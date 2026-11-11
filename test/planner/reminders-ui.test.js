@@ -275,8 +275,9 @@ test('no planner request where To Do or the card tasks will make it, drawn yet o
   listView.ui.sync(true);
   await settle();
   assert.equal(listView.fetched.length, 1);
-  // Within ten minutes of the last answer, it doesn't.
-  const fresh = world(2 * 36e5, { cacheAge: 5 * 6e4 }).tab({ pathname: '/', enhance: { cardTasks: true } });
+  // Within ten minutes of the last answer, it doesn't (with nothing to remind of yet: a reminder about to be shown asks
+  // first once the answer is two minutes old, as the test after this one has it).
+  const fresh = world(6 * 24 * 36e5, { cacheAge: 5 * 6e4 }).tab({ pathname: '/', enhance: { cardTasks: true } });
   fresh.ui.sync(true);
   await settle();
   assert.deepEqual(fresh.fetched, []);
