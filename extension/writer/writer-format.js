@@ -35,6 +35,24 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
   const text = (n) => (typeof n?.textContent === 'string' ? n.textContent : (n?.content || []).map((c) => c.text || text(c)).join(''));
   const attrs = (n) => n?.attrs || {};
   const DATE = /^(\d{1,2}\s+[A-Z][a-z]+\.?\s+\d{4}|[A-Z][a-z]+\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}-\d{2}-\d{2})$/;
+  // A heading's date (DATE's forms) → that day as a local Date, or null. Built from its parts, never through Date.parse
+  // (which reads 2026-11-10 as UTC midnight, the 9th in the Americas); 10/11/2026 could be either month: null.
+  const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  const dayOf = (s) => {
+    const mon = (w) => MONTH_NAMES.indexOf(w.toLowerCase().slice(0, 3)) + 1;
+    let y, m, d, x;
+    if ((x = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s))) [y, m, d] = [+x[1], +x[2], +x[3]];
+    else if ((x = /^(\d{1,2})\s+([A-Za-z]+)\.?\s+(\d{4})$/.exec(s))) [y, m, d] = [+x[3], mon(x[2]), +x[1]];
+    else if ((x = /^([A-Za-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})$/.exec(s))) [y, m, d] = [+x[3], mon(x[1]), +x[2]];
+    else if ((x = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(s))) {
+      const a = +x[1], b = +x[2];
+      if (a <= 12 && b <= 12 && a !== b) return null;
+      [m, d] = a > 12 ? [b, a] : [a, b];
+      y = x[3].length === 2 ? 2000 + +x[3] : +x[3];
+    } else return null;
+    const date = new Date(y, m - 1, d);
+    return m >= 1 && date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d ? date : null;
+  };
   // The opening as the format makes it, if the paper still has that shape: { end (first body index), lines: { name,
   // instructor, course, date, title }, at: { line → top-level index } }. null when it doesn't. Blank's is always there, empty.
   const read = (doc, f) => {
@@ -141,9 +159,9 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
       if (roles.some((r, i) => r && r !== ['name', 'instructor', 'course', 'date'][i])) {
         add('heading', 'heading-order', tops[0].pos + 1, tops[3].pos + tops[3].node.nodeSize - 1, 'Heading lines go in this order: your name, instructor, course, date', { fix: { op: 'heading-order', roles } });
       }
-      const date = open.lines.date || '', d = Date.parse(date.replace(/(\d)(st|nd|rd|th)\b/, '$1'));
-      if (date && DATE.test(date) && Number.isFinite(d)) {
-        const want = ST().dateText(f, new Date(d));
+      const date = open.lines.date || '', d = DATE.test(date) ? dayOf(date) : null;
+      if (d) {
+        const want = ST().dateText(f, d);
         if (want !== date) { const t = span(tops[3]); add('heading', 'heading-date', t.from, t.to, 'MLA dates go day, month, year', { suggestions: [want] }); }
       }
     }
