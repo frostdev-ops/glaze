@@ -4,23 +4,27 @@
 // gains a graded piece of work or moves), announcement (a new one in Canvas's planner), due (an item's due date moves), submitted (an item shows as
 // handed in). Glaze compares what it reads with what it read when the monitor was made; no model runs until one fires.
 // Fired ones wait in storage.local until the student's next school page takes them (take), where Ask Rime shows them and
-// runs their instruction (integration: ai/page/ask.js). With the switch off (Settings → AI → Ask Rime → Reminders and
+// runs their instruction (integration: ai/page/ask.js); a shown one stays, marked for that page, until the student asks
+// about it or dismisses it (claim), or an hour passes. With the switch off (Settings → AI → Ask Rime → Reminders and
 // watches) nothing is made, checked or shown. Safari unloads Glaze's background about 30 s after its last event, so an
 // alarm may come late there; take() checks everything due before it answers, so nothing is lost, only shown later.
 // storage.local rimeWakes: { wakes: [{ id, at, say, made }], monitors: [{ id, watch, account, course?, item?: { type, id },
-//   say, made, until, base }], fired: [{ id, what, watch?, say, at, fact? }] }, each list capped (LIMIT).
+//   say, made, until, base }], fired: [{ id, what, watch?, say, at, fact?, shown?, to? }] }, each list capped (LIMIT); shown: when
+//   a page took it, to: that page's scope.
 // env: { local (storage.local: get, set), alarms (chrome.alarms: create, clear, getAll), read(name, args, account) → an Agents
 //   tool's answer (todo_list, course_grades), on() → whether the switch and Ask Rime are on, now() }.
 //   tools(env) → wake_create, monitor_create, wakes_list, wake_cancel for ai/tools.js define; ctx { account, zone, locale }.
-//   tick(env) checks what is due and fires it; alarm(env, alarm) for the worker's alarms.onAlarm; take(env) → the fired
-//   ones, then forgets them.
+//   tick(env) checks what is due and fires it; alarm(env, alarm) for the worker's alarms.onAlarm; take(env, to?) → the fired
+//   ones not yet shown, marked shown to `to`; claim(env, id, { to, now }) → a shown one's record, forgotten (null if
+//   another page's, gone or past LIMIT.hold).
 // Classic script for the worker; module.exports for node.
 var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
   const AT = () => (typeof GZ_AI_TASK_AGENT_TOOLS !== 'undefined' ? GZ_AI_TASK_AGENT_TOOLS : require('../tasks/agent-tools.js'));
   const KEY = 'rimeWakes', ALARM = 'gz-rime:', TICK = 'gz-rime:tick', DAY = 864e5;
   // ahead: how far off a wake may be (agent.tools check holds the same); days: how long a monitor watches; period: minutes
   // between monitor checks; lead: the least time before a wake.
-  const LIMIT = { wakes: 20, monitors: 20, fired: 20, say: 200, ahead: 60 * DAY, days: 30, period: 30, lead: 60e3, titles: 5 };
+  // hold: how long a shown record waits for the student's Ask or Dismiss.
+  const LIMIT = { wakes: 20, monitors: 20, fired: 20, say: 200, ahead: 60 * DAY, days: 30, period: 30, lead: 60e3, titles: 5, hold: 36e5, scope: 400 };
   const WATCHES = ['grade', 'announcement', 'due', 'submitted'];
   const UID = /^(\d{1,20}|_\d{1,20}_\d{1,20})$/, TYPE = /^[a-z_]{1,40}$/, ID = /^[wm]-[a-z0-9]{8}$/;
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
@@ -68,7 +72,8 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
           ...(isObj(m.item) && { item: { type: m.item.type, id: m.item.id } }), say: text(m.say, LIMIT.say), made: when(m.made), until: m.until, base: baseOf(m) })).filter((m) => m.base))
         .slice(0, LIMIT.monitors),
       fired: unique(list(r.fired).filter((f) => ID.test(f.id) && (f.what === 'wake' ? f.id[0] === 'w' : f.what === 'monitor' && f.id[0] === 'm') && when(f.at)))
-        .slice(-LIMIT.fired).map((f) => ({ id: f.id, what: f.what, ...(WATCHES.includes(f.watch) && { watch: f.watch }), say: text(f.say, LIMIT.say), at: f.at, ...(factOf(f.fact) && { fact: factOf(f.fact) }) })),
+        .slice(-LIMIT.fired).map((f) => ({ id: f.id, what: f.what, ...(WATCHES.includes(f.watch) && { watch: f.watch }), say: text(f.say, LIMIT.say), at: f.at, ...(factOf(f.fact) && { fact: factOf(f.fact) }),
+          ...(when(f.shown) && { shown: f.shown }), ...(when(f.shown) && typeof f.to === 'string' && f.to.length <= LIMIT.scope && { to: f.to }) })),
     };
   };
   // One change at a time: every write reads the store fresh inside the queue.
@@ -162,19 +167,36 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
     return n;
   });
   const alarm = (env, a) => (typeof a?.name === 'string' && a.name.startsWith(ALARM) ? tick(env) : Promise.resolve(0));
-  // The student's school page asks: what fired, checked first, then forgotten.
-  const take = async (env) => {
+  // The student's school page asks: what fired, checked first, then marked shown (to that page) so no page shows it again.
+  const record = ({ shown: _s, to: _t, ...f }) => f;
+  const take = async (env, to) => {
     if (!(await env.on())) return [];
     await tick(env);
-    return turn(async () => { const s = await read(env); if (!(await env.on())) return []; const out = s.fired; s.fired = []; await write(env, s); return out; });
+    return turn(async () => {
+      const s = await read(env), now = clock(env);
+      if (!(await env.on())) return [];
+      const out = s.fired.filter((f) => !f.shown);
+      s.fired = s.fired.filter((f) => f.shown && f.shown + LIMIT.hold > now)
+        .concat(out.map((f) => ({ ...f, shown: now, ...(typeof to === 'string' && to.length <= LIMIT.scope && { to }) })));
+      await write(env, s);
+      return out;
+    });
   };
+  // The student's Ask Rime or Dismiss on a shown one, from the page it was shown to: its record, now forgotten.
+  const claim = (env, id, { to, now = clock(env) } = {}) => turn(async () => {
+    const s = await read(env), f = s.fired.find((x) => x.id === id && x.shown);
+    if (!f || (f.to !== undefined && f.to !== to)) return null;
+    s.fired = s.fired.filter((x) => x !== f && (!x.shown || x.shown + LIMIT.hold > now));
+    await write(env, s);
+    return f.shown + LIMIT.hold > now ? record(f) : null;
+  });
   // How many wait to be shown, including due wakes; no monitor reads, writes or alarm changes: the school page's cheap look before it loads the panel.
   const peek = async (env) => {
     if (!(await env.on())) return 0;
     return turn(async () => {
       const s = await read(env);
       if (!(await env.on())) return 0;
-      return Math.min(LIMIT.fired, s.fired.length + s.wakes.filter((w) => w.at <= clock(env)).length);
+      return Math.min(LIMIT.fired, s.fired.filter((f) => !f.shown).length + s.wakes.filter((w) => w.at <= clock(env)).length);
     });
   };
 
@@ -288,6 +310,6 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
     }),
   ];
   const register = (registry, env) => tools(env).map((t) => registry.add(t));
-  return { KEY, ALARM, TICK, LIMIT, WATCHES, WORDS, clean, shape, changed, tick, alarm, take, peek, tools, register };
+  return { KEY, ALARM, TICK, LIMIT, WATCHES, WORDS, clean, shape, changed, tick, alarm, take, claim, peek, tools, register };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_RIME_WAKES; else GZ_AI_RIME_WAKES;

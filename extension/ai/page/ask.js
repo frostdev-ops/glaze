@@ -102,7 +102,7 @@ var GZ_ASK_UI = globalThis.GZ_ASK_UI || (() => {
       make('div', { className: 'gz-ask-fired-acts' }, go, no));
     const gone = () => { li.remove(); if (tray && !tray.querySelector('li')) { tray.remove(); tray = null; } };
     go.addEventListener('click', (e) => { if (!real(e)) return; gone(); void run({ event: e, question: words, fired: f.id }); });
-    no.addEventListener('click', (e) => { if (real(e)) gone(); });
+    no.addEventListener('click', (e) => { if (!real(e)) return; gone(); K.request({ op: 'dismiss', fired: f.id }).catch(() => {}); });
     return li;
   };
   const arrive = async ({ fired = 0, carried = false } = {}) => {
