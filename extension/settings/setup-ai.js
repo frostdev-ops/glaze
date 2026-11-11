@@ -42,7 +42,8 @@ var GZ_SETUP_AI = globalThis.GZ_SETUP_AI || (() => {
   // The done step's row: [label, value, raw (a provider's own name)]; on with no model yet runs nothing.
   const summary = (s, t) => {
     const c = choiceOf(s), p = providerOf(s);
-    return [[t('AI'), c === KEYED && p ? X().CARDS[p][0] : c === KEYED && !s.model?.use ? t('Choose a model') : label(c, t), c === KEYED && !!p]];
+    const needsModel = c === KEYED && (!s.model?.use || !s.model.model);
+    return [[t('AI'), needsModel ? t('Choose a model') : c === KEYED && p ? X().CARDS[p][0] : label(c, t), c === KEYED && !!p && !needsModel]];
   };
   // A provider's key kept (conn: the worker's masked record) and its host held: the worker's reach, unless this page's own
   // Connect (tested) has said since.
