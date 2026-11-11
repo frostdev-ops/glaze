@@ -374,7 +374,12 @@ const RETURN = 0xff0d, TAB = 0xff09;
 // ---- the steps --------------------------------------------------------------------------------------------------------
 let E1, P1, P2;
 
-// 1: setup under P1's HOME, into the profile Chromium will use.
+// 1: setup under P1's HOME, into the profile Chromium will use. A launcher with no Node.js only says no-node to the browser.
+const installed = ({ code, manifest, launcher }, id, root) => {
+  const l = L.parse(launcher);
+  return code === 0 && !!manifest?.allowed_origins?.includes(IDS.origin(id)) && l?.browser === 'chromium' && typeof l.node === 'string'
+    && l.script === path.join(root, VERSION, 'bin', 'glaze-mcp.js');
+};
 function setup() {
   const home = path.join(scratch, 'home1');
   const row = BR.table(process.platform, envFor(home)).find((b) => b.id === 'chromium');
@@ -385,8 +390,7 @@ function setup() {
   const mf = path.join(row.dir, `${BR.HOST}.json`), manifest = fs.existsSync(mf) ? JSON.parse(fs.readFileSync(mf, 'utf8')) : null;
   const launcher = manifest && fs.existsSync(manifest.path) ? fs.readFileSync(manifest.path, 'utf8') : null;
   R.phases.setup = { out, code, profile: row.data, manifestFile: mf, manifest, launcher };
-  ok('1', 'glaze-mcp setup --browser chromium --dev <staged copy> installs into the profile\'s NativeMessagingHosts', code === 0 && manifest?.allowed_origins?.includes(IDS.origin(E1.id))
-    && L.parse(launcher)?.browser === 'chromium' && L.parse(launcher)?.script === path.join(BR.folder(process.platform, envFor(home)).root, VERSION, 'bin', 'glaze-mcp.js'), R.phases.setup);
+  ok('1', 'glaze-mcp setup --browser chromium --dev <staged copy> installs into the profile\'s NativeMessagingHosts, with a launcher that names a Node.js', installed(R.phases.setup, E1.id, BR.folder(process.platform, envFor(home)).root), R.phases.setup);
   P1 = { home, prof: row.data };
   probeFor(P1.prof, 'port', E1);
 }
