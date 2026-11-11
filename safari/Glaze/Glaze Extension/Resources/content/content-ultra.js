@@ -23,23 +23,15 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
           for (const m of ms) if (seen[m.courseId]) Object.assign(seen[m.courseId], { site: location.origin, code: String(m.course.displayId || '').slice(0, 80) });
           // Canvas's and Moodle's (keyed by site) and other Ultra sites' stay; this site's go, with any kept before Ultra's
           // records named their site.
-          update('seenCourses', (all) => ({ ...Object.fromEntries(Object.entries(all || {}).filter(([k, c]) => k.includes(':') || (c?.site && c.site !== location.origin))), ...seen }), { [at]: Date.now(), courseSlots });
+          seenPut({ key: 'seenCourses', set: seen, drop: true, stamp: true });
+          seenPut({ key: 'courseSlots', set: Object.fromEntries(Object.keys(seen).map((id) => [id, courseSlots[id]])) });
         });
       });
     } catch { /* extension reloaded under the tab */ }
   };
 
-  // A key several tabs write: one writer at a time. Web Locks hold this origin's other tabs until the set lands (not another site's),
-  // a queue this tab's own, all there is without them (as canvasNews, content-canvas.js).
-  const writing = new Map();
-  const update = (key, merge, more) => {
-    const write = () => new Promise((done) => {
-      try { chrome.storage.local.get(key, (r) => { try { chrome.storage.local.set({ [key]: merge(r?.[key]), ...more }, done); } catch { done(); } }); } catch { done(); } // extension reloaded under the tab
-    });
-    const run = (writing.get(key) || Promise.resolve()).then(() => (globalThis.navigator?.locks?.request ? navigator.locks.request(`glaze:${key}`, write).catch(write) : write()));
-    writing.set(key, run);
-    return run;
-  };
+  // A key the tabs of every site write: the worker merges each patch in turn (courses/seen.js).
+  const seenPut = (m) => { try { chrome.runtime.sendMessage({ type: 'glaze:seen', ...m }).catch(() => {}); } catch { /* extension reloaded under the tab */ } };
 
   // ---- the gradebook --------------------------------------------------------------------------
   // Who's signed in, their courses, gradebooks and content: courses/ultra.js's stores, through the site's queue. A failure
@@ -283,7 +275,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     if (c.seenGrades || c.seenContent) renderNew();
   });
   // One course at a time, over what's stored: another tab may have recorded other courses since.
-  const keepSeen = (key, cid, v) => { update(key, (all) => ({ ...all, [cid]: v })); };
+  const keepSeen = (key, cid, v) => seenPut({ key, set: { [cid]: v } });
   // [card selector, its course id, where the badge goes]. Course list cards, recent courses, Grades tiles.
   const COURSE_CARDS = [
     [CARD, (e) => e.id.slice(19), (e) => e.querySelector('h4[id^="course-name-"]')],
@@ -537,7 +529,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     const id = sec?.getAttribute('bb-course-membership-markups') || cid;
     if (id && slot && courseSlots[id] !== slot) {
       courseSlots[id] = slot;
-      try { chrome.storage.local.set({ courseSlots }); } catch { /* reloaded */ }
+      seenPut({ key: 'courseSlots', set: { [id]: slot } });
     }
     const { tint, tinted: picked } = I.settings.courses;
     // Cut off by a reload or update of Glaze (no runtime id), ticks since removed never arrive: no tint.

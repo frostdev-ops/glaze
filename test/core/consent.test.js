@@ -540,6 +540,7 @@ test('the update from 3.3.4 files the one due list under its site and drops the 
 
 // ---- Ultra's course records (content-ultra.js record) -----------------------------------------------------------------
 // content-ultra.js's GZ_SITE_ULTRA on an inert page at `origin`, made as content.js makes it, over a shared storage.local.
+const SEEN = require('../../extension/courses/seen.js');
 const ultraPart = ({ origin, local, courses }) => {
   const calls = [], sent = [];
   const El = class {
@@ -554,7 +555,7 @@ const ultraPart = ({ origin, local, courses }) => {
     console, Promise, setTimeout, clearTimeout, queueMicrotask, Date, JSON, Map, Set, Object, Array, String, Number, RegExp, Math, Intl, structuredClone,
     IntersectionObserver: class { observe() {} unobserve() {} disconnect() {} }, MutationObserver: class { observe() {} disconnect() {} }, PerformanceObserver: class { observe() {} },
     addEventListener() {}, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
-    chrome: { runtime: { id: ID, sendMessage: (m) => { sent.push(m); return Promise.resolve(); } },
+    chrome: { runtime: { id: ID, sendMessage: (m) => { sent.push(m); if (m?.type === 'glaze:seen') Object.assign(local, structuredClone(SEEN.merge(local[m.key], m, { kind: 'ultra', origin }) || {})); return Promise.resolve(); } },
       storage: { local: { get: (k, cb) => cb(structuredClone(local)), set: (o) => { Object.assign(local, structuredClone(o)); calls.push(['set', Object.keys(o)]); } }, sync: { get: (k, cb) => cb({}) }, onChanged: { addListener() {} } } },
     GZ_NAV: { native: () => null }, GZ_GRADES: require('../../extension/planner/grades.js'), GZ_PAGE: require('../../extension/core/page.js'), GZ_COURSES: require('../../extension/content/defaults.js').GZ_COURSES,
     URL, URLSearchParams, Response,

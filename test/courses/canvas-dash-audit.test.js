@@ -29,6 +29,7 @@ class E extends El {
   }
 }
 
+const SEEN = require('../../extension/courses/seen.js');
 const page = ({ where = '/', frame = '', parent = {}, enhance = {}, api = async (p) => p === '/users/self/profile' ? { id: '42' } : p === '/users/self/colors' ? {} : p.includes('/modules?') ? modules() : [course()], store = {}, session = new Map() } = {}) => {
   const doc = {}, make = (tag, props = {}, ...kids) => { const e = Object.assign(new E(tag, doc), props); e.append(...kids); return e; };
   doc.root = make('html'); doc.head = make('head'); doc.body = make('body'); doc.root.append(doc.head, doc.body);
@@ -51,7 +52,8 @@ const page = ({ where = '/', frame = '', parent = {}, enhance = {}, api = async 
     setTimeout: (fn, ms = 0) => { const id = ++serial; timers.set(id, { at: now + ms, fn }); return id; }, clearTimeout: (id) => timers.delete(id),
     MutationObserver: class { constructor(fn) { this.fn = fn; observers.push(this); } observe() {} disconnect() {} },
     requestAnimationFrame: (fn) => c.setTimeout(fn, 16),
-    chrome: { runtime: { id: 'audit', sendMessage: (m) => F.change(m, { local }) }, storage: { local, onChanged: { addListener: (fn) => storeListeners.push(fn) } } },
+    // The worker merges a course-list patch (courses/seen.js); content.js takes the stored list back from storage's change.
+    chrome: { runtime: { id: 'audit', sendMessage: (m) => (m?.type === 'glaze:seen' ? local.set(SEEN.merge(store[m.key], m, { kind: 'canvas', origin }) || {}).then(() => { input.courseList = store.seenCourses; }) : F.change(m, { local })) }, storage: { local, onChanged: { addListener: (fn) => storeListeners.push(fn) } } },
   };
   c.window = c; c.top = frame ? parent : c; c.globalThis = c;
   const settings = D.GZ_SANITIZE({ enhance: { progress: true, hideFolders: false, ...enhance } });

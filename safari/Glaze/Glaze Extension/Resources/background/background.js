@@ -1,4 +1,4 @@
-importScripts('../courses/download.js', '../core/color.js', '../looks/fonts.js', '../looks/surfaces.js', '../content/defaults.js', '../looks/lookset.js', '../looks/history.js', '../courses/cards.js', '../navigation/nav.js', '../navigation/nav-items.js', '../navigation/navlayout.js', '../navigation/navbar.js', '../looks/motionx.js', '../looks/parts.js', '../navigation/nav-store.js', '../planner/todo.js', '../pet/petbrain.js', '../pet/pet.js', '../pet/petsprites.js', '../planner/remind.js', '../core/widgets.js', '../navigation/sidebar.js', '../looks/lookparts.js', '../sharing/share.js', '../looks/lookx.js', '../looks/looks.js', '../planner/gradescope.js', '../core/doctext.js', '../courses/folders.js', '../planner/notes.js', '../planner/calexport.js', '../planner/gcal.js', '../planner/gcal-auth.js', '../core/site.js', '../navigation/coursetabs.js');
+importScripts('../courses/download.js', '../courses/seen.js', '../core/color.js', '../looks/fonts.js', '../looks/surfaces.js', '../content/defaults.js', '../looks/lookset.js', '../looks/history.js', '../courses/cards.js', '../navigation/nav.js', '../navigation/nav-items.js', '../navigation/navlayout.js', '../navigation/navbar.js', '../looks/motionx.js', '../looks/parts.js', '../navigation/nav-store.js', '../planner/todo.js', '../pet/petbrain.js', '../pet/pet.js', '../pet/petsprites.js', '../planner/remind.js', '../core/widgets.js', '../navigation/sidebar.js', '../looks/lookparts.js', '../sharing/share.js', '../looks/lookx.js', '../looks/looks.js', '../planner/gradescope.js', '../core/doctext.js', '../courses/folders.js', '../planner/notes.js', '../planner/calexport.js', '../planner/gcal.js', '../planner/gcal-auth.js', '../core/site.js', '../navigation/coursetabs.js');
 
 importScripts('../pearson/notation.js','../pearson/native.js','../background/pearson.js');
 importScripts('../pearson/embed.js', '../background/pearson-embed.js');
@@ -106,6 +106,11 @@ const moodleAt = async (s) => {
 const fromMoodle = (s) => (s.frameId === 0 ? moodleAt(s) : null);
 // A page of any site Glaze runs on, in a frame Glaze is in (its top frame, a course tab's): what the student does there
 // (the command palette's Look, rotation, opening Settings) and the code it loads. Never a tab where only content/detect.js runs.
+// Which site's page asks, and its kind: what its patches to the shared seen keys may touch (BROKER.seen).
+const seenSite = async (s) => {
+  const ultra = ultraPage(s) && await fromUltra(s), canvas = !ultra && await fromCanvas(s), moodle = !ultra && !canvas && await moodleAt(s);
+  return ultra ? { kind: 'ultra', origin: ultra } : canvas ? { kind: 'canvas', origin: canvas } : moodle ? { kind: 'moodle', origin: moodle } : null;
+};
 const lmsPage = async (s) => (await fromCanvas(s)) || (await fromUltra(s)) || (await moodleAt(s));
 // Glaze's own pages: the popup, the editor and the frames it opens.
 const fromGlaze = (s) => s.id === chrome.runtime.id && typeof s.url === 'string' && s.url.startsWith(chrome.runtime.getURL('')) && extensionOrigin(s);
@@ -396,6 +401,15 @@ const BROKER = {
   notes: {
     allow: async (m, s) => typeof m.key === 'string' && GZ_WIDGETS.NOTES_KEY.test(m.key) && m.key.startsWith(`notes:${(await fromCanvas(s)) || (await fromUltra(s))}/`),
     run: (m, { local }) => GZ_WIDGETS.saveNote(m, local),
+  },
+  // What a site's pages have seen (courses/seen.js): a Canvas, Ultra or Moodle page's patch to the keys every site's tabs
+  // share, merged here one at a time over what is stored, for that site's own entries only. A read that fails writes nothing.
+  seen: {
+    allow: async (m, s) => GZ_SEEN.KEYS.includes(m.key) && !!await seenSite(s),
+    run: async (m, { local }, s) => {
+      const site = await seenSite(s), patch = site && GZ_SEEN.merge((await local.get(m.key))[m.key], m, site);
+      return { ok: !!patch && await local.set(patch) };
+    },
   },
   // Where you were in a course (core/widgets.js placeChange, navigation/page/place.js): the top frame of a Canvas page, or an Ultra
   // page, changes its own site's courses. Each tab's change is applied to what is stored when its turn comes, so two tabs

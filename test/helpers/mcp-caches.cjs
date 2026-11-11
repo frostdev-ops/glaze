@@ -10,6 +10,7 @@ const T = require('../../extension/planner/todo.js');
 const U = require('../../extension/courses/ultra.js');
 const I = require('../../extension/planner/insights.js');
 const { GZ_COURSES } = require('../../extension/content/defaults.js');
+const SEEN = require('../../extension/courses/seen.js');
 
 const load = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', n), 'utf8'));
 const CANVAS = 'https://school.instructure.com', ULTRA = 'https://lms.example.edu', ULTRA_UID = '_900_1';
@@ -57,23 +58,30 @@ const ultraPlan = (at = NOW - 120e3, complete = true) => {
     GZ_ULTRA: { page: { due: async () => ({ items: U.due({ todo: [load('ultra-todo.json')], names, now: at }), complete }) } },
   });
 };
-const seenCache = (file, start, end, scope) => new Promise((resolve, reject) => {
+const seenCache = (file, start, end, scope, site) => new Promise((resolve, reject) => {
   const store = {};
-  const local = { get: (k, cb) => cb({ [k]: store[k] }), set: (patch) => { Object.assign(store, structuredClone(patch)); resolve(store); } };
+  const local = { get: (k, cb) => cb({ [k]: store[k] }), set: (patch) => { Object.assign(store, structuredClone(patch)); } };
+  // The page sends its patch; the worker merges it over what is stored (courses/seen.js), as background/background.js does.
+  const sendMessage = async (m) => {
+    const patch = m?.type === 'glaze:seen' && SEEN.merge(store[m.key], m, site, NOW - 300e3);
+    if (patch) Object.assign(store, structuredClone(patch));
+    if (m?.key === 'seenCourses') resolve(store);
+    return { ok: !!patch };
+  };
   // content.js's startup read (stored) is the same storage.local read.
-  const record = vm.runInNewContext(part(file, start, end) + '\nrecord;', { chrome: { storage: { local } }, stored: (k, cb) => local.get(k, cb), Date: { now: () => NOW - 300e3 }, ...scope });
+  const record = vm.runInNewContext(part(file, start, end) + '\nrecord;', { chrome: { storage: { local }, runtime: { sendMessage } }, stored: (k, cb) => local.get(k, cb), Date: { now: () => NOW - 300e3 }, ...scope });
   Promise.resolve(record()).catch(reject);
 });
 // Both course caches come from the unmodified content-script writer, with only its LMS/extension APIs replaced.
 const ultraSeen = async () => (await seenCache('content/content-ultra.js', '  const record = ', '  // ---- the gradebook', {
   location: { origin: ULTRA }, myCourses: async () => memberships(), GZ_COURSES, courseSlots: {},
-})).seenCourses;
+}, { kind: 'ultra', origin: ULTRA })).seenCourses;
 const canvasSeen = async (list) => (await seenCache('content/content-canvas.js', '  const COURSE_CACHE = ', '  // ---- code on demand', {
   URL, I: { settings: {}, setCourseList: () => {} }, location: { origin: CANVAS },
   sessionStorage: { getItem: () => null, setItem: () => {} }, canvasCourseKey: (id) => `canvas:${CANVAS}/${id}`,
   capi: async (p) => p.startsWith('/courses?') ? list : p === '/users/self/profile' ? { id: '5' }
     : { custom_colors: Object.fromEntries(list.map((c) => [`course_${c.id}`, c.color])) },
-})).seenCourses;
+}, { kind: 'canvas', origin: CANVAS })).seenCourses;
 
 // Insights' courses, as planner/page/insights.js one() makes them: Canvas's from the live gradebooks (named by their code, which
 // the fixture keeps in place of the name), Ultra's from its gradebook rows.
