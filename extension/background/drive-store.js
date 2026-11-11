@@ -219,16 +219,33 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     return m;
   };
   const lines = (o, a, b, win) => {
-    const O = o.split('\n'), A = a.split('\n'), B = b.split('\n'), ma = matched(O, A), mb = matched(O, B), out = [];
-    let i = 0, x = 0, y = 0;
-    for (let k = 0; k <= O.length; k++) {
-      if (k < O.length && !(ma.has(k) && mb.has(k))) continue;
-      const ea = k < O.length ? ma.get(k) : A.length, eb = k < O.length ? mb.get(k) : B.length;
-      const oc = O.slice(i, k), ac = A.slice(x, ea), bc = B.slice(y, eb);
-      out.push(...(same(ac, oc) ? bc : same(bc, oc) || same(ac, bc) ? ac : win ? [...ac, ...bc] : [...bc, ...ac]));
-      if (k < O.length) { out.push(O[k]); i = k + 1; x = ea + 1; y = eb + 1; }
+    const O = o.split('\n'), A = a.split('\n'), B = b.split('\n'), out = [];
+    const edits = (v, side) => {
+      const changes = []; let i = 0, j = 0;
+      for (const [k, n] of [...[...matched(O, v)].sort(([x], [y]) => x - y), [O.length, v.length]]) {
+        if (k > i || n > j) changes.push({ start: i, end: k, value: v.slice(j, n), side });
+        i = k + 1; j = n + 1;
+      }
+      return changes;
+    };
+    // Only overlapping edits conflict. Adjacent edits need no common unchanged line between them.
+    const changes = [...edits(A, 0), ...edits(B, 1)].sort((x, y) => x.start - y.start || x.end - y.end);
+    let at = 0;
+    for (let p = 0; p < changes.length;) {
+      const group = [changes[p++]], start = group[0].start; let end = group[0].end;
+      while (p < changes.length && (changes[p].start < end || (end === start && changes[p].start === start && changes[p].end === start))) {
+        end = Math.max(end, changes[p].end); group.push(changes[p++]);
+      }
+      const chunk = (side) => {
+        const v = []; let i = start;
+        for (const c of group.filter((x) => x.side === side)) { v.push(...O.slice(i, c.start), ...c.value); i = c.end; }
+        return [...v, ...O.slice(i, end)];
+      };
+      const oc = O.slice(start, end), ac = chunk(0), bc = chunk(1);
+      out.push(...O.slice(at, start), ...(same(ac, oc) ? bc : same(bc, oc) || same(ac, bc) ? ac : win ? [...ac, ...bc] : [...bc, ...ac]));
+      at = end;
     }
-    return out.join('\n');
+    return [...out, ...O.slice(at)].join('\n');
   };
   // → the merged value, each as its store keeps it. More than a store keeps (planner/todo.js MAX, a note's length): refused
   // ('bad'), each device keeping its own, as a join Restore refuses is.
