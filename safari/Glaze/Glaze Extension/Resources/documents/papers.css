@@ -43,7 +43,7 @@
 .gd-search input::-webkit-search-cancel-button { display: none; }
 .gd-tools, .gd-extra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .gd-extra[hidden] { display: none; }
-.gd-bar select { height: 36px; max-width: 220px; padding: 0 10px; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: calc(var(--gd-radius) * 2 / 3); background: var(--gz-surface-fill-2, var(--gz-surface-2)); color: var(--gz-ink); font: inherit; font-size: 13px; }
+.gd-bar select { height: 36px; max-width: 220px; padding: 0 10px; border: 1px solid var(--gz-border-field, var(--gz-ink-faint)); border-radius: calc(var(--gd-radius) * 2 / 3); background: var(--gz-surface-fill-2, var(--gz-surface-2)); color: var(--gz-ink); font: inherit; font-size: 13px; }
 .gd-bar select:focus-visible, .gd-btn:focus-visible, .gd-views button:focus-visible, .gd-more:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
 .gd-views { display: inline-flex; gap: 2px; padding: 2px; height: 36px; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: calc(var(--gd-radius) * 2 / 3); background: var(--gz-surface-fill-2, var(--gz-surface-2)); }
 .gd-views button { width: 32px; display: grid; place-items: center; border-radius: calc(var(--gd-radius) / 2); color: var(--gz-ink-muted); }

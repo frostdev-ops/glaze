@@ -142,10 +142,11 @@ test('Moodle cards: Moodle\'s own course color is handed to moodle.css to tone, 
 
 test('moodle.css tones a card\'s own course color as canvas.css and theme.css do, and data-gz-raw-courses keeps it', () => {
   const r = rules(read('content/moodle.css'));
-  const toned = r.find((x) => /^html \[data-region="course-content"\]\[style\*="--gz-course-raw"\]$/.test(x.sel));
-  assert.ok(toned);
-  assert.equal(toned.body, '--gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0));');
-  assert.ok(read('content/canvas.css').includes(toned.body.replace(/;$/, '')), 'the same toning as Canvas');
+  // Toned inside @supports where relative colours are read; the card's own colour before Chrome 119 (css-engines.test.js).
+  const toned = read('content/moodle.css').match(/@supports \(color: oklab\(from red l 0 0\)\) \{ html \[data-region="course-content"\]\[style\*="--gz-course-raw"\] \{ (--gz-course: [^;]+;) \} \}/)?.[1];
+  assert.equal(toned, '--gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0));');
+  assert.ok(read('content/canvas.css').includes(toned.replace(/;$/, '')), 'the same toning as Canvas');
+  assert.equal(r.find((x) => x.sel === 'html [data-region="course-content"][style*="--gz-course-raw"]')?.body, '--gz-course: var(--gz-course-raw);');
   const raw = r.find((x) => x.sel === 'html[data-gz-raw-courses] [data-region="course-content"][style*="--gz-course-raw"]');
   assert.equal(raw?.body, '--gz-course: var(--gz-course-raw);');
 });

@@ -28,8 +28,8 @@
 .gs-body { display: grid; gap: 18px; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 2px; }
 .gs-form h2 { margin: 0; font-size: 19px; line-height: 1.5; overflow-wrap: anywhere; }
 .gs-field label { display: block; font-size: 13px; color: var(--gz-ink-muted); margin-bottom: 6px; }
-.gs-field textarea { display: block; width: 100%; height: 110px; resize: none; padding: 10px 12px; border: 1px solid var(--gz-line-strong); border-radius: 10px; background: var(--gz-surface-2); color: var(--gz-ink); font: inherit; outline: none; }
-.gs-field textarea:focus-visible { border-color: color-mix(in srgb, var(--gz-accent) 60%, var(--gz-line-strong)); }
+.gs-field textarea { display: block; width: 100%; height: 110px; resize: none; padding: 10px 12px; border: 1px solid var(--gz-ink-faint); border-radius: 10px; background: var(--gz-surface-2); color: var(--gz-ink); font: inherit; outline: none; }
+.gs-field textarea:focus-visible { border-color: var(--gz-accent); box-shadow: 0 0 0 1px var(--gz-accent); }
 .gs-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; cursor: pointer; }
 .gs-sw { width: 38px; height: 22px; flex: none; border-radius: 11px; background: var(--gz-line-strong); position: relative; }
 .gs-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--gz-ink-muted); transition: transform var(--gs-t) ease-out; }

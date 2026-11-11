@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 // A sheet's rules as [selector, body], comments removed, @media and @supports blocks flattened, in file order.
-const cssRules = (file) => {
+const cssRules = (file, active = () => true) => {
   const css = fs.readFileSync(path.join(__dirname, '../../extension', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const out = [];
   const walk = (text) => {
@@ -15,7 +15,7 @@ const cssRules = (file) => {
       let depth = 1, j = open + 1;
       for (; depth && j < text.length; j++) if (text[j] === '{') depth++; else if (text[j] === '}') depth--;
       const body = text.slice(open + 1, j - 1);
-      if (sel.startsWith('@media') || sel.startsWith('@supports')) walk(body); else if (!sel.startsWith('@')) out.push([sel, body]);
+      if (sel.startsWith('@media') || sel.startsWith('@supports')) { if (active(sel)) walk(body); } else if (!sel.startsWith('@')) out.push([sel, body]);
       i = j;
     }
   };
@@ -74,9 +74,11 @@ const matchCompound = (el, compound) => simples(compound).every((s) => {
   if (s[0] === '#') return el.id === s.slice(1);
   if (s[0] === '.') return el.cls.includes(s.slice(1));
   if (s[0] === '[') {
-    const [, k, op = '', v = ''] = s.match(/^\[([\w-]+)(?:([*^$~]?)=["']?([^"'\]]*)["']?)?\]$/);
-    const a = k === 'class' ? el.cls.join(' ') : el.attrs?.[k];
+    const [, k, op = '', v0 = '', flag = ''] = s.match(/^\[([\w-]+)(?:([*^$~]?)=["']?([^"'\]]*?)["']?(?:\s+([is]))?)?\]$/);
+    let a = k === 'class' ? el.cls.join(' ') : el.attrs?.[k];
     if (a == null) return false;
+    let v = v0;
+    if (flag === 'i') { a = a.toLowerCase(); v = v.toLowerCase(); }
     return op === '*' ? a.includes(v) : op === '^' ? a.startsWith(v) : op === '$' ? a.endsWith(v) : op === '~' ? a.split(/\s+/).includes(v) : s.includes('=') ? a === v : true;
   }
   const m = s.match(/^:(is|not|where)\(([\s\S]*)\)$/);
