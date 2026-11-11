@@ -98,6 +98,18 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
 .hint.err { color: var(--gz-err); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
 
+/* Forced colours (Windows High Contrast) drop fills and shadows: the switches, the chosen segment and the chosen swatch are drawn in
+   system colours (as content/extras.css draws the course menu's), and the swatches keep their own colours, edged. */
+@media (forced-colors: active) {
+  input[type="checkbox"]:not(.switch > input), .switch span { forced-color-adjust: none; background: Canvas; border: 1px solid ButtonText; box-shadow: none; }
+  input[type="checkbox"]:not(.switch > input)::before, .switch span::after { top: 2px; left: 2px; background: ButtonText; }
+  input[type="checkbox"]:not(.switch > input):checked, .switch input:checked + span { background: Highlight; border-color: Highlight; }
+  input[type="checkbox"]:not(.switch > input):checked::before, .switch input:checked + span::after { background: HighlightText; }
+  .seg label:has(input:checked) { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  .swatch { forced-color-adjust: none; border-color: CanvasText; }
+  .swatch[aria-pressed="true"], .look[aria-pressed="true"] { outline: 3px solid Highlight; outline-offset: 2px; }
+}
+
 /* Touch screens (Safari on iPhone and iPad): fingertip-sized controls, text fields iOS won't zoom into
    (it zooms on focus below 16px), and no hover state left stuck on whatever was tapped last. */
 @media (pointer: coarse) {

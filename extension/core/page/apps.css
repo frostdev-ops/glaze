@@ -160,6 +160,13 @@ html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
 }
 #gz-hub input[type="checkbox"]:checked { background: var(--gz-accent) !important; }
 #gz-hub input[type="checkbox"]:checked::before { transform: translateX(14px); background: var(--gz-accent-ink); }
+/* Forced colours drop fills: the hub's switches in system colours, as the popup's are (core/ui.css). */
+@media (forced-colors: active) {
+  #gz-hub input[type="checkbox"] { forced-color-adjust: none; background: Canvas !important; border: 1px solid ButtonText !important; }
+  #gz-hub input[type="checkbox"]::before { top: 2px; left: 2px; background: ButtonText; }
+  #gz-hub input[type="checkbox"]:checked { background: Highlight !important; border-color: Highlight !important; }
+  #gz-hub input[type="checkbox"]:checked::before { background: HighlightText; }
+}
 #gz-hub footer { margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
 .gz-tour-ring { position: absolute; z-index: 10000; pointer-events: none; border: 2px solid var(--gz-accent); border-radius: var(--gz-radius); box-shadow: 0 0 0 9999px color-mix(in srgb, #000 35%, transparent); }
 .gz-tour {
