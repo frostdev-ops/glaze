@@ -113,6 +113,28 @@ test('status words: a score, "Graded", "Submitted", "No Submission", and the com
   assert.equal(st('Something new').sub, false); // unknown words: still open, the student can tick it
 });
 
+test('a status the reader does not know is unknown: kept without a state, counted as unreadable, never Missing', () => {
+  const st = (status, cls) => G.row({ title: 'x', aid: '1', status, cls, due: [] }, '42');
+  // Reworded, translated, emptied (the cell moved) or a negative that holds "submitted": none of it says "not submitted".
+  for (const status of ['Turned in', '', 'Eingereicht', 'Unsubmitted', 'Something new']) {
+    const r = st(status);
+    assert.deepEqual([status, r.sub, r.graded, r.unknown], [status, false, false, true]);
+  }
+  // What the reader knows has no flag, and its shape is unchanged.
+  for (const [status, cls] of [['No Submission'], ['Not submitted'], ['NoSubmission'], ['Submitted'], ['SubmittedLate'], ['8.5 / 10.0'], ['Graded'], ['', 'submissionStatus submissionStatus-complete']]) {
+    assert.equal('unknown' in st(status, cls), false, status || cls);
+  }
+  // A course page: the row stays, the count says one row could not be read.
+  const p = G.parse(docOf([tr({ title: 'HW 1', aid: '101', status: 'Turned in', due: ['2026-10-01 23:59:00 -0700'] }), tr({ title: 'HW 2', aid: '102', status: 'No Submission', due: ['2026-10-02 23:59:00 -0700'] })]), '42');
+  assert.equal(p.bad, 1);
+  assert.deepEqual(p.rows.map((r) => [r.id, r.unknown === true]), [['101', true], ['102', false]]);
+  // Kept as read, and past due it is no Missing item, where a row that said "No Submission" is.
+  const now = at('2026-10-15T12:00:00Z');
+  const rec = { acct: { id: A1, name: 'Sam' }, map: { 42: { to: 'canvas:https://c.test/7', name: 'MATH 241' } }, courses: { 42: { at: now, bad: 1, rows: p.rows } }, bind: { 'https://c.test/111': { id: A1, show: true } } };
+  assert.deepEqual(G.clean(rec).courses[42].rows.map((r) => r.unknown === true), [true, false], 'the flag survives what is kept');
+  assert.deepEqual(G.items(rec, 'https://c.test', '111', now).map((i) => [i.id, i.sub.missing]), [['101', false], ['102', true]]);
+});
+
 test('whose: the account page names the account by a hash of its email, never the address itself', async () => {
   const page = (v) => el({ one: Object.fromEntries(Object.entries(v).map(([k, x]) => [`input[name="user[${k}]"]`, el({ attrs: { value: x } })])) });
   assert.deepEqual(await G.account(page({ email: ' Student@School.edu ', name: 'Sam Student' })), { id: A1, name: 'Sam Student' });
