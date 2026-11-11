@@ -66,8 +66,14 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   // drawn on this student's boards: theirs, or, while the list is on its way, a course this site's stored records or its
   // page know, so the student's own cards never wait for the list (no jump on every load). Records are rewritten from the
   // signed-in student's list, so another student's card can show only in the minutes after a switch, until the list says.
-  // Canvas's are always shown.
-  const own = (key) => { const c = W.course(key); return !ultra || !c || c.origin !== location.origin ? true : members?.has(c.id) || nativeCards.has(c.id) || (membersComplete ? false : undefined); };
+  // Canvas's the same, from the course list its page asked for (canvasRows) and its own cards; a read that failed or was cut
+  // short is marked complete: false and confirms only what it holds.
+  const own = (key) => {
+    const c = W.course(key);
+    if (!c || c.origin !== location.origin) return true;
+    if (!ultra) return nativeCards.has(c.id) || !!canvasRows?.some((r) => String(r?.id) === c.id) || (canvasRows && canvasRows.complete !== false ? false : undefined);
+    return members?.has(c.id) || nativeCards.has(c.id) || (membersComplete ? false : undefined);
+  };
   const shows = (key) => { const o = own(key); return o === undefined ? cards.has(W.course(key).id) : o; };
   // The color a card wears from its course (Ultra's slot, or a pick): its class and variables, on the board and in the
   // Course cards dialog. Only what differs is written.
@@ -120,7 +126,8 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       cards.set(id, { id, name: n.name || edited.name || a.name || l.name || id, code: n.code || a.course_code || l.code || '', term: n.term || a.term?.name || '',
         color: n.color || edited.color || (COLOR.test(l.color || '') ? l.color : ''), image: shown[id] ? n.image : cards.get(id)?.image || '' }); // retain the picture across native card replacement
     }
-    if (!canvasRows) watch(ctx.canvasCourses(), (rows) => { canvasRows = Array.isArray(rows) ? rows : []; sync(); });
+    // A failed read is asked again (content-canvas.js canvasCourses lets it go after a minute).
+    if (!canvasRows || canvasRows.complete === false) watch(ctx.canvasCourses(), (rows) => { canvasRows = Array.isArray(rows) ? rows : Object.assign([], { complete: false }); sync(); });
   };
   // Menu edits must also reach board cards when Canvas is in list view, where no native card can supply them.
   const canvasEdit = (id, patch) => {
@@ -561,6 +568,6 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
 
   // Canvas: the courses its card view shows now, in its order (an empty list in its list view).
   const shown = () => [...nativeCards.keys()].map((id) => list().find((c) => c.id === id)).filter(Boolean);
-  return { sync, list, shown, own, shows, complete: () => !ultra || membersComplete, title, fill, canvasEdit, picker: { open: openPicker, sync: syncPicker, close: closePicker } };
+  return { sync, list, shown, own, shows, complete: () => (ultra ? membersComplete : !!canvasRows && canvasRows.complete !== false), title, fill, canvasEdit, picker: { open: openPicker, sync: syncPicker, close: closePicker } };
 })();
 GZ_COURSE_CARDS;

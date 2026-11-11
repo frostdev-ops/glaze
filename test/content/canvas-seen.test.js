@@ -13,7 +13,7 @@ const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise
 const ORIGIN = 'https://school.instructure.com';
 
 const SEEN = require('../../extension/courses/seen.js');
-const tab = ({ data, rows = [{ id: '5', name: 'Calculus', course_code: 'MATH' }] }) => {
+const tab = ({ data, rows = [{ id: '5', name: 'Calculus', course_code: 'MATH' }], colors = {} }) => {
   const asked = [];
   const chrome = { runtime: { sendMessage: (m) => new Promise((res) => setImmediate(() => {
     asked.push(m);
@@ -28,7 +28,7 @@ const tab = ({ data, rows = [{ id: '5', name: 'Calculus', course_code: 'MATH' }]
   const ctx = vm.createContext({ chrome, document, I, C: require('../../extension/core/color.js'), Promise, Object, JSON, Date, URL,
     location: { origin: ORIGIN, pathname: '/' }, sessionStorage: { setItem() {}, getItem: () => null },
     canvasCourseKey: (id) => (id ? `canvas:${ORIGIN}/${id}` : undefined), canvasAll: () => (rows instanceof Error ? Promise.reject(rows) : Promise.resolve(rows)),
-    capi: (p) => Promise.resolve(p.includes('colors') ? { custom_colors: {} } : { id: '77' }), setTimeout: () => 1 });
+    capi: (p) => Promise.resolve(p.includes('colors') ? { custom_colors: colors } : { id: '77' }), setTimeout: () => 1 });
   ctx.globalThis = ctx;
   vm.runInContext(`let canvasList = null, canvasSnapshot = null, coursesRead = false; const COURSE_CACHE = 'c';
     const readCourses = () => canvasAll();\n${block('  let mine = null;', '  // ---- code on demand')}\n${block('  const paintCourses = () => {', '  // ---- the global navigation')}
@@ -39,7 +39,8 @@ const names = (data) => Object.keys(data.seenCourses).sort();
 
 test('a Dashboard colour edit and a page load recording the course list in the same instant both keep their courses', async () => {
   const data = { seenCourses: { [`canvas:${ORIGIN}/6`]: { name: 'Art', color: '#ffffff' }, 'other:1': { name: 'Elsewhere' } } };
-  const t = tab({ data });
+  // Course 6 is the student's (in the list Canvas answers), its colour as Canvas keeps it the one the card shows.
+  const t = tab({ data, rows: [{ id: '5', name: 'Calculus', course_code: 'MATH' }, { id: '6', name: 'Art', course_code: 'ART' }], colors: { course_6: '#010203' } });
   t.record();
   t.paint();
   await settle();

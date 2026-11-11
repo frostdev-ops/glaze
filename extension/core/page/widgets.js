@@ -157,13 +157,14 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   };
   const change = (m) => {
     // An explicit Dashboard edit opts this student out too, even before their membership/profile reads finish.
-    if (ultra && lay?.starter && !m.fill && m.ops?.some((o) => o?.s === 'dash')) {
+    if (lay?.starter && !m.fill && m.ops?.some((o) => o?.s === (ultra ? 'dash' : 'cdash'))) {
       dashboardEdited = true;
       const n = identity;
       const mark = () => {
         if (n !== identity || !me) return;
         const account = `${location.origin}/${me.uid}`;
-        if (!lay.filled.includes(`dash ${account}`)) change({ fill: 'dash', account, ops: [] });
+        const b = ultra ? 'dash' : 'cdash';
+        if (!lay.filled.includes(`${b} ${account}`)) change({ fill: b, account, ops: [] });
       };
       if (me) mark(); else who().then(mark, () => {});
     }
@@ -1214,11 +1215,11 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   };
   // Both Dashboards get their first course cards once (owner, 2026-10-20). The stored filled marker protects edits,
   // emptied boards and removed defaults; starter utilities share the board with its cards.
-  // Ultra: once per student on this device. A Dashboard filled for another student, with only their cards on it, gets
-  // this student's first cards once their course list is in (marked '<board> <site>/<id>', core/widgets.js apply).
+  // Once per student on this device. A Dashboard filled for another student, with only their cards on it, gets this
+  // student's first cards once their course list is in (marked '<board> <site>/<id>', core/widgets.js apply).
   let askedWho = false;
-  // Board order is age. Only a complete membership answer can identify another student's cards at this school.
-  const foreignCourses = (rows) => ultra ? rows.filter((x) => W.course(x.id)?.origin === location.origin && globalThis.GZ_COURSE_CARDS?.own(x.id) === false) : [];
+  // Board order is age. Only a complete course list can identify another student's cards at this school.
+  const foreignCourses = (rows) => rows.filter((x) => W.course(x.id)?.origin === location.origin && globalThis.GZ_COURSE_CARDS?.own(x.id) === false);
   const courseDrops = (b, keys) => {
     const rows = lay.boards[b], present = new Set(rows.map((x) => x.id)), wanted = new Set(keys);
     const added = [...wanted].filter((id) => !present.has(id)).length;
@@ -1228,9 +1229,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const fillCourses = () => {
     if (!['cdash', 'dash'].includes(board) || !on || !lay?.starter || editing || flying) return;
     const first = !lay.filled.includes(board), C = globalThis.GZ_COURSE_CARDS;
-    if (!first && !(ultra && C)) return;
     if (!C) { loadCourses(); return; }
-    let keep = ultra && dashboardEdited;
+    let keep = dashboardEdited;
     if (!first) {
       const here = lay.boards[board].filter((x) => W.course(x.id)?.origin === location.origin);
       // Only a legacy unmarked board needs inference. A shared course on a board marked for someone else is not
@@ -1239,8 +1239,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
       keep ||= legacy && here.some((x) => C.own(x.id) === true);
       if (legacy && !keep && (!here.length || here.some((x) => C.own(x.id) !== false))) return;
     }
-    if (ultra && !me) { if (!askedWho) { askedWho = true; who().then(() => { askedWho = false; if (on) fillCourses(); }, () => { askedWho = false; }); } return; }
-    const account = ultra && me ? `${location.origin}/${me.uid}` : undefined;
+    if (!me) { if (!askedWho) { askedWho = true; who().then(() => { askedWho = false; if (on) fillCourses(); }, () => { askedWho = false; }); } return; }
+    const account = `${location.origin}/${me.uid}`;
     if (!first && lay.filled.includes(`${board} ${account}`)) return;
     if (keep) { change({ fill: board, account, ops: [] }); return; }
     if (ultra && !C.complete()) return;
@@ -1310,7 +1310,7 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
     const edit = button(t('Edit layout'), () => setEditing(!editing), { className: 'gz-w-small gz-dash-edit' });
     edit.setAttribute('aria-pressed', 'false');
     const reset = board && button(t('Reset layout'), () => {
-      const ops = lay.boards[board].filter((x) => !W.course(x.id) || (W.course(x.id).origin === location.origin && (!ultra || globalThis.GZ_COURSE_CARDS?.shows(x.id)))).map((x) => ({ s: board, id: x.id, set: { x: null, y: null, r: false, z: 0, fold: false, w: null, h: null } }));
+      const ops = lay.boards[board].filter((x) => !W.course(x.id) || (W.course(x.id).origin === location.origin && (globalThis.GZ_COURSE_CARDS ? GZ_COURSE_CARDS.shows(x.id) : !ultra))).map((x) => ({ s: board, id: x.id, set: { x: null, y: null, r: false, z: 0, fold: false, w: null, h: null } }));
       // Shared course sets can exceed one message's 64 operations. Keep each patch within the worker's limit.
       for (let i = 0; i < ops.length || i === 0; i += 64) change({ ops: ops.slice(i, i + 64), ...(i === 0 && { widths: { [board]: 0 } }) });
       say(t('Layout reset.'));

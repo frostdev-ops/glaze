@@ -64,17 +64,18 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   // only for that account, so one signed in a moment ago never lends its courses or grades.
   const snap = () => (canvasSnapshot ? profile().then((p) => (String(p?.id) === canvasSnapshot.uid ? canvasSnapshot : null), () => null) : Promise.resolve(null));
   const canvasCourses = () => (canvasList ||= snap().then((s) => s ? s.list : readCourses()
-    .then((j) => { coursesRead = Array.isArray(j); return coursesRead ? j : []; }, () => { setTimeout(() => { canvasList = null; }, 60000); return []; }))); // asked again after a minute
+    .then((j) => { coursesRead = Array.isArray(j); return coursesRead ? j : []; }, () => { setTimeout(() => { canvasList = null; }, 60000); return Object.assign([], { complete: false }); }))); // asked again after a minute
   // A key the tabs of every site write: the worker merges each patch in turn (courses/seen.js).
   const seenPut = (m) => { try { chrome.runtime.sendMessage({ type: 'glaze:seen', ...m }).catch(() => {}); } catch { /* extension reloaded under the tab */ } };
   const record = () => snap().then((s) => Promise.all([canvasCourses(), s ? s.colors : capi('/users/self/colors').catch(() => null), profile().catch(() => null)])).then(([list, colors, me]) => {
     // Failed reads must not turn into a fresh, empty snapshot.
-    if (coursesRead && colors && /^\d+$/.test(me?.id)) try { sessionStorage.setItem(COURSE_CACHE, JSON.stringify({ at: Date.now(), uid: String(me.id), list, colors })); } catch { /* blocked or full */ }
+    if (coursesRead && list.complete && colors && /^\d+$/.test(me?.id)) try { sessionStorage.setItem(COURSE_CACHE, JSON.stringify({ at: Date.now(), uid: String(me.id), list, colors })); } catch { /* blocked or full */ }
     const seen = Object.fromEntries(list.filter((c) => /^\d+$/.test(c.id) && c.name).map((c) => [canvasCourseKey(c.id), {
       name: c.name, code: c.course_code, canvas: true, color: /^#[0-9a-f]{6}$/i.test(colors?.custom_colors?.[`course_${c.id}`]) ? colors.custom_colors[`course_${c.id}`] : null,
     }]));
-    // Blackboard's and other schools' stay; Canvas ids alone are only unique within their own host.
-    seenPut({ key: 'seenCourses', set: seen });
+    // Blackboard's and other schools' stay; Canvas ids alone are only unique within their own host. This host's are the
+    // signed-in student's whole list: another account's on this browser leave (an empty or cut-short one drops nothing).
+    seenPut({ key: 'seenCourses', set: seen, drop: list.complete !== false });
   });
 
   // ---- code on demand ------------------------------------------------------------------------------

@@ -306,7 +306,7 @@ test("Canvas's Dashboard never draws another student's course cards on a shared 
   assert.deepEqual(courses(store.widgetLayout), ['5', '6', '7'], "A's cards stay in the layout for A");
   assert.ok(store.widgetLayout.filled.includes(`cdash ${HOST}/4`), "B's own fill mark");
   // The Course cards dialog lists only B's courses.
-  assert.deepEqual(b.c.GZ_COURSE_CARDS.list().map((x) => x.id), ['7']);
+  assert.deepEqual(JSON.parse(JSON.stringify(b.c.GZ_COURSE_CARDS.list().map((x) => x.id))), ['7']);
   // A comes back: A's cards, never B's.
   const again = page({ store, student: { uid: '3', native: ['5', '6'], rows: [row('5', 'Art A'), row('6', 'Bio A')] } });
   await settle(); again.ui.sync(true); await settle();
