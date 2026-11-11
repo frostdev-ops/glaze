@@ -343,6 +343,26 @@ test("a planner answer asked for before a tick to Canvas, landing after it, does
   assert.equal(marks(f.store.todoCache.items), '[["3",true]]', 'and stored so for the popup');
 });
 
+test("a recent Canvas tick is not applied to another account's reused planner answer", async () => {
+  const f = feature({ profile: async () => ({ id: '4', time_zone: 'America/New_York' }) });
+  const at = Date.now() - 1000;
+  const answer = (key, teach) => ({ key, at, ...T.fetchRange(O, at, 'America/New_York'), teach, progress: true, items: [item()], grading: [], sums: {} });
+  f.p.seed({ prefs: { ...O, sync: true }, cache: answer(KEY(3), true) });
+  f.p.render(true);
+  f.p.onChange({ target: tick(), isTrusted: true });
+  await settled();
+  assert.equal(f.p.get().cache.items[0].ov.done, true);
+  f.c.GZ_TODO_UI.sync(false);
+  // The next account's cards have already read the same assignment, without an override.
+  f.store.todoCache = answer(KEY(4), null);
+  f.c.GZ_TODO_UI.sync(true);
+  await settled();
+  assert.equal(f.p.get().who.uid, '4');
+  assert.equal(planner(f.calls), 0, 'the fresh card answer was reused');
+  assert.equal(f.p.get().cache.items[0].ov, null, "the previous account's override is not shown");
+  assert.equal(f.store.todoCache.items[0].ov, null, "or stored under the next account");
+});
+
 test("two tabs adding tasks at once both keep theirs (the worker's one queue)", async () => {
   const shared = { store: {}, waiting: [], turn: { last: Promise.resolve() } };
   const one = feature({ defer: true, shared }), two = feature({ defer: true, shared });
