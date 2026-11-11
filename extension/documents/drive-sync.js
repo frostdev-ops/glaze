@@ -355,12 +355,13 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     // Its revision is Glaze's only while the file holds these very bytes: an answer asked again later (the worker stopped
     // before writing it) names the file as it is then, perhaps edited outside Glaze since, which is then no revision of
     // Glaze's (none recorded: the next meeting tells the edit as one).
-    const commit = async (slot, t, file) => {
+    // bytes: what was sent, for a record's link (its value as both sides agree), when the stage still holds them.
+    const commit = async (slot, t, file, bytes = null) => {
       const c = t.commit, sum = String(file.sha256Checksum || '').toLowerCase(), rev = !sum || !t.b || sum === t.b ? file.headRevisionId || null : null;
       if (c.doc) {
         await putDoc(c.doc, { ...c.link, ...(c.set === 'file' ? { file: file.id, fh: rev } : { json: file.id, jh: rev }) }, await docOf(c.doc));
         if (c.set === 'file') await unwait(`up:${c.doc}`);
-      } else if (c.rec) await more.commit(c.rec, c.link, file);
+      } else if (c.rec) await more.commit(c.rec, c.link, file, bytes);
       await owe(slot);
     };
     // One upload sent: its session kept on its record between requests and workers, and Drive's answer written down. A
@@ -371,7 +372,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (!bytes) throw new Fail('missing');
       const keep = { get: async () => (await moveOf(slot))?.session || null, set: (session) => patchMove(slot, { session }), drop: () => patchMove(slot, { session: null }) };
       const file = await send(t, bytes, keep, t.owner?.doc ? null : () => patchMove(slot, { id: null, aim: null }));
-      if (t.commit) await commit(slot, t, file);
+      if (t.commit) await commit(slot, t, file, bytes);
       else await patchMove(slot, { file, session: null });
     };
     // An upload's target as Drive holds it now, before any of its bytes go in this run. → 'send'; 'landed' (it holds these
@@ -486,7 +487,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
                 await meet(slot, (await moveOf(slot)) || t);
                 continue;
               }
-              if (a.as === 'landed' && t.commit) await commit(slot, t, a.F);
+              if (a.as === 'landed' && t.commit) await commit(slot, t, a.F, t.commit.rec ? await unstaged(slot, t.size) : null);
               else await sendMove(slot, t);
             } else if (t.dir === 'down' && !t.done) await bringMove(slot, t);
           } catch (e) {

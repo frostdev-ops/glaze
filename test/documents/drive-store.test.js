@@ -345,10 +345,12 @@ test('a local edit arriving during a record download survives and syncs on retry
     return r;
   };
   const r = await b.run();
-  assert.equal((await b.local.get(NOTE))[NOTE].text, 'New local edit');
+  assert.match((await b.local.get(NOTE))[NOTE].text, /^New local edit/);
   if (!r.ok) b.clock.t = (await b.local.get(S.STATE))[S.STATE].wait + 1;
   assert.ok((await b.run()).ok);
-  assert.equal(body(recFile(drive, 'local', NOTE)).value.text, 'New local edit');
+  // Both changed the note's one line since they agreed: both lines stay, the later edit's first.
+  assert.equal(body(recFile(drive, 'local', NOTE)).value.text, 'New local edit\nRemote edit');
+  assert.equal((await b.local.get(NOTE))[NOTE].text, 'New local edit\nRemote edit');
 });
 
 test('every category Back up… covers goes up, one file a record, in Glaze/Data; what never syncs stays here', async () => {

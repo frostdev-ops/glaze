@@ -1001,14 +1001,14 @@ const KNOWN = {
   },
   // Records merged item by item (the owner's call, 2026-11-11), found by the record invariants on their first run.
   'record-lww': {
-    fixed: false,
+    fixed: true,
     about: 'a To Do list changed on two devices after it synced: the later device\'s list went up whole over the other\'s, and the other device\'s new task was gone from both',
     skips: (op) => ['task', 'class', 'gpa'].includes(op.t),
     repro: [{ t: 'task', k: 'add', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'run', d: 1, how: 'run', s: 3 },
       { t: 'task', k: 'add', d: 0, pick: 0, pick2: 0, s: 4 }, { t: 'task', k: 'add', d: 1, pick: 0, pick2: 0, s: 5 }],
   },
   'record-retold': {
-    fixed: false,
+    fixed: true,
     about: 'a To Do list changed and changed back on one device (a task added and deleted) after another device\'s change reached Drive: the change back went up over it as a later change, and the other device\'s new task was gone from both',
     skips: (op) => ['task', 'class', 'gpa'].includes(op.t) && op.k === 'del',
     repro: [{ t: 'task', k: 'add', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'run', d: 1, how: 'run', s: 3 },

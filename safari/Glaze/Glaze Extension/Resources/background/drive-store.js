@@ -14,24 +14,30 @@
 // SHA-256 of { area, key, value | deleted }, as with documents: each side's change is told by content, Glaze's own uploads
 // come back as no news. at: when it changed on the device that wrote it (this device's stamps: storage.local
 // driveSyncStamps, set by the worker as each key changes, on or off while bound to an account, and let go once synced).
-// The rules: changed on one side, that side's goes to the other. Changed on both: the later change wins (last writer, by
-// at), per key, Settings key by key; a note and an account's folders field by field (mergeNote, mergeFolders). First
-// meeting (a second device connecting, or Sync turned on again): a key on one side only is taken by the other; on both, the
-// same is linked, Settings take the later change, Notes merge field by field, and every other record is joined by
-// Restore's own rules (background/backup.js apply: newer dashboard note, each class and term by its time, words and
-// favorites together, every task either Better To Do list has…), so a device's own data is never wiped by connecting; the
-// join goes up at the time of the latest change it holds.
+// The rules: changed on one side, that side's goes to the other. Changed on both: Better To Do's lists, dashboard notes, Looks
+// history and favorites, the dictionary and saved sources merge item by item against the value both sides last agreed
+// (three: tasks by id and field, a note by line, the dictionary as a set…; an item deleted on one side and changed on the
+// other keeps the change), class schedules and GPA terms by each course's and term's time (Restore's join); a note and an
+// account's folders field by field (mergeNote, mergeFolders); the rest (Settings key by key, the pet, widgets, Gradescope)
+// the later change wins (last writer, by at). First meeting (a second device connecting, or Sync turned on again): a key on
+// one side only is taken by the other; on both, the same is linked, Settings take the later change, Notes merge field by
+// field, and every other record is joined by Restore's own rules (background/backup.js apply: newer dashboard note, each
+// class and term by its time, words and favorites together, every task either Better To Do list has…), so a device's own
+// data is never wiped by connecting (a deletion may come back once); the join goes up at the time of the latest change it
+// holds.
 // Two files for one record (first syncs that overlapped): every device keeps the lowest id, met as a first meeting. A
 // deleted key is a tombstone that deletes it on the other side; a tombstone never deletes a record met for the first time.
 // State: driveSyncRec:<h> { area, key, cat, id, lsum, rsum, at, seen } (or, for a picture a note here uses that Drive doesn't
-// have yet, { area, key, cat, id: null, want: the note's key }) and driveSyncFile:<id> 'r:<h>'; the folders and the
-// last snapshot on driveSync (data, backups, snap); a record file or the day's zip larger than one request on its way in
-// documents/drive-sync.js's transfers (driveSyncMoves 'R:<h>', 'r:<h>', 'snap'). A record file past MAX is never sent or
-// brought ('large'), the record marked too large while this device holds it (documents/drive-sync.js driveSyncLarge); with
+// have yet, { area, key, cat, id: null, want: the note's key }) and driveSyncFile:<id> 'r:<h>'; for a record merged item by
+// item, driveSyncBase:<h> { sum, value }: Drive's value as this device last agreed with it, used while sum is the link's
+// rsum; the folders and the last snapshot on driveSync (data, backups, snap; based once agreed values are kept); a record
+// file or the day's zip larger than one request on its way in documents/drive-sync.js's transfers (driveSyncMoves 'R:<h>',
+// 'r:<h>', 'snap'). A record file past MAX is never sent or brought ('large'), the record marked too large while this
+// device holds it (documents/drive-sync.js driveSyncLarge); with
 // transfers off (env.staged unset, as 4.0.1's builds ran), the same past one request, and the day's zip skipped (snapSkip 'large').
 // Classic script for the worker; module.exports for node.
 var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
-  const REC = 'driveSyncRec:', FILE = 'driveSyncFile:', STAMPS = 'driveSyncStamps', STATE = 'driveSync', LARGE = 'driveSyncLarge';
+  const REC = 'driveSyncRec:', FILE = 'driveSyncFile:', STAMPS = 'driveSyncStamps', STATE = 'driveSync', LARGE = 'driveSyncLarge', BASE = 'driveSyncBase:';
   const FOLDER = 'application/vnd.google-apps.folder', JSON_TYPE = 'application/json', ZIP = 'application/zip';
   const HASH = /^[0-9a-f]{32}$/, SUM = /^[0-9a-f]{64}$/;
   const SNAP = { every: 864e5, keep: 5 };
@@ -166,6 +172,109 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     return { folders, ...(Object.keys(gone).length && { gone }) };
   };
   const MERGE = { notes: mergeNote, noteFolders: (a, b, rt) => mergeFolders(a, b, rt) };
+
+  // Records merged item by item when both sides changed them (the owner's call, 2026-11-11): To Do's lists, dashboard notes,
+  // Looks history and favorites, the dictionary and saved sources against the value both sides last agreed (based, kept at
+  // driveSyncBase:<h>); class schedules and GPA terms by their own times and deletions, as Restore joins them. The pet,
+  // widgets, Gradescope and Settings stay a whole value, the later change winning.
+  const BASED = new Set(['dashNotes', 'looks', 'writerWords', 'sources']);
+  const based = (cat, key) => (cat === 'tasks' ? key.startsWith('todo:') : BASED.has(cat));
+  const joins = (cat, key) => based(cat, key) || cat === 'classes' || cat === 'gpa';
+  // b: the value both last agreed; h: this device's; t: Drive's; win: this device's change is the later, so its side keeps a
+  // field both changed. A field changed on one side takes that side's; an item deleted on one side stays deleted unless the
+  // other changed it (then the change stays); one added on either stays.
+  const same = (a, b) => canon(a) === canon(b);
+  const fields = (b, h, t, win) => {
+    const out = {};
+    for (const k of new Set([...Object.keys(b || {}), ...Object.keys(h), ...Object.keys(t)])) {
+      const v = same(h[k], b?.[k]) ? t[k] : same(t[k], b?.[k]) ? h[k] : win ? h[k] : t[k];
+      if (v !== undefined) out[k] = v;
+    }
+    return out;
+  };
+  // A list by id: this device's order, then what only Drive's has; item(was, here, there) for one on both.
+  const byId = (b, h, t, idOf, item) => {
+    const B = new Map(b.map((x) => [idOf(x), x])), H = new Map(h.map((x) => [idOf(x), x])), T = new Map(t.map((x) => [idOf(x), x])), out = [];
+    for (const [id, x] of [...H, ...[...T].filter(([k]) => !H.has(k))]) {
+      const was = B.get(id);
+      if (H.has(id) && T.has(id)) out.push(item(was, H.get(id), T.get(id)));
+      else if (!was || !same(x, was)) out.push(x);
+    }
+    return out;
+  };
+  const set3 = (b, h, t) => { const B = new Set(b), H = new Set(h), T = new Set(t); return [...new Set([...h.filter((w) => T.has(w) || !B.has(w)), ...t.filter((w) => !H.has(w) && !B.has(w))])]; };
+  // Lines both sides kept, matched against the agreed text (the longest common run of lines, past what all three share at
+  // either end); a stretch changed on one side takes that side's, one changed on both keeps both (the later side's first).
+  const matched = (x, y) => {
+    const m = new Map();
+    let s = 0, e = 0;
+    while (s < x.length && s < y.length && x[s] === y[s]) { m.set(s, s); s++; }
+    while (e < x.length - s && e < y.length - s && x[x.length - 1 - e] === y[y.length - 1 - e]) { m.set(x.length - 1 - e, y.length - 1 - e); e++; }
+    const xs = x.slice(s, x.length - e), ys = y.slice(s, y.length - e), n = xs.length, k = ys.length;
+    if (n && k && (n + 1) * (k + 1) <= 1 << 20) {
+      const L = new Uint32Array((n + 1) * (k + 1)), at = (i, j) => i * (k + 1) + j;
+      for (let i = n - 1; i >= 0; i--) for (let j = k - 1; j >= 0; j--) L[at(i, j)] = xs[i] === ys[j] ? L[at(i + 1, j + 1)] + 1 : Math.max(L[at(i + 1, j)], L[at(i, j + 1)]);
+      for (let i = 0, j = 0; i < n && j < k;) { if (xs[i] === ys[j]) { m.set(s + i, s + j); i++; j++; } else if (L[at(i + 1, j)] >= L[at(i, j + 1)]) i++; else j++; }
+    }
+    return m;
+  };
+  const lines = (o, a, b, win) => {
+    const O = o.split('\n'), A = a.split('\n'), B = b.split('\n'), ma = matched(O, A), mb = matched(O, B), out = [];
+    let i = 0, x = 0, y = 0;
+    for (let k = 0; k <= O.length; k++) {
+      if (k < O.length && !(ma.has(k) && mb.has(k))) continue;
+      const ea = k < O.length ? ma.get(k) : A.length, eb = k < O.length ? mb.get(k) : B.length;
+      const oc = O.slice(i, k), ac = A.slice(x, ea), bc = B.slice(y, eb);
+      out.push(...(same(ac, oc) ? bc : same(bc, oc) || same(ac, bc) ? ac : win ? [...ac, ...bc] : [...bc, ...ac]));
+      if (k < O.length) { out.push(O[k]); i = k + 1; x = ea + 1; y = eb + 1; }
+    }
+    return out.join('\n');
+  };
+  // → the merged value, each as its store keeps it. More than a store keeps (planner/todo.js MAX, a note's length): refused
+  // ('bad'), each device keeping its own, as a join Restore refuses is.
+  const three = (cat, key, b, h, t, win) => {
+    const [B, H, X] = [b, h, t].map((v) => clean(cat, key, v));
+    if ([B, H, X].includes(undefined)) throw new Fail('bad');
+    const merged = (x = {}, y, z) => fields(x, y, z, win);
+    if (cat === 'tasks') {
+      const item = (x = {}, y, z) => {
+        const o = fields(x, y, z, win), subs = byId(x.subs || [], y.subs || [], z.subs || [], (v) => v.id, merged);
+        const sessions = byId(x.sessions || [], y.sessions || [], z.sessions || [], (v) => `${v.at}:${v.min}`, (_, v) => v).sort((p, q) => p.at - q.at);
+        delete o.subs; delete o.sessions;
+        if (subs.length > 50 || sessions.length > 20) throw new Fail('bad');
+        return { ...o, ...(subs.length && { subs }), ...(sessions.length && { sessions }) };
+      };
+      const tasks = byId(B.tasks, H.tasks, X.tasks, (v) => v.id, merged), ids = new Set(tasks.map((v) => `task:${v.id}`));
+      const items = Object.fromEntries(byId(Object.entries(B.items), Object.entries(H.items), Object.entries(X.items), ([k]) => k, (x, [k, y], [, z]) => [k, item(x?.[1], y, z)])
+        .filter(([k]) => !k.startsWith('task:') || ids.has(k)));
+      if (tasks.length > 500 || Object.keys(items).length > 2000) throw new Fail('bad');
+      return L.todo().clean({ tasks, items });
+    }
+    if (cat === 'dashNotes') {
+      if (H.text === B.text) return X;
+      if (X.text === B.text) return H;
+      if (H.text === X.text) return H.at >= X.at ? H : X;
+      const text = lines(B.text, H.text, X.text, win);
+      if (text.length > L.widgets().NOTES_MAX) throw new Fail('bad');
+      // Later than either side's, so a tile open on either takes it (core/widgets.js saveNote keeps the later).
+      return { text, at: Math.max(H.at, X.at) + 1 };
+    }
+    if (key === 'lookFavorites') {
+      return byId(B, H, X, (f) => f.code, merged).sort((p, q) => (q.at || 0) - (p.at || 0)).slice(0, L.history().MAX_FAVORITES);
+    }
+    if (key === 'lookHistory') {
+      const id = (e) => JSON.stringify(L.history().theme(e.theme));
+      return byId(B, H, X, id, (_, y, z) => ((z.at || 0) > (y.at || 0) ? z : y)).sort((p, q) => (q.at || 0) - (p.at || 0)).slice(0, L.history().MAX);
+    }
+    if (cat === 'writerWords') return set3(B, H, X).slice(-5000);
+    if (cat === 'sources') {
+      const sources = byId(B.sources, H.sources, X.sources, (v) => v.id, merged), list = (v) => (Array.isArray(v.removed) ? v.removed.filter((r) => typeof r === 'string') : []);
+      const removed = set3(list(B), list(H), list(X));
+      if (sources.length > 2000) throw new Fail('bad');
+      return { sources, ...(removed.length && { removed }), at: Math.max(H.at, X.at) };
+    }
+    throw new Fail('bad');
+  };
 
   // Drive's value joined into what is here as Restore joins a backup's (background/backup.js apply); the Looks history and a
   // record with no such rule keep this device's. local: storage.local. rt: each side's record time (Notes' merge). own: the
@@ -336,8 +445,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         owned.set(`notes:${k}`, transition(k, old, next)); mine.push(`notes:${k}`);
       }
     };
-    const put = async (h, r, was) => {
-      await S.set({ [REC + h]: r, ...(r.id && { [FILE + r.id]: `r:${h}` }) });
+    // base: Drive's value as r.rsum sums it (a record merged item by item keeps it, driveSyncBase), written with the link.
+    const put = async (h, r, was, base) => {
+      await S.set({ [REC + h]: r, ...(r.id && { [FILE + r.id]: `r:${h}` }), ...(base !== undefined && r.rsum && based(r.cat, r.key) && { [BASE + h]: { sum: r.rsum, value: base } }) });
       if (was?.id && was.id !== r.id) await S.remove(FILE + was.id);
     };
 
@@ -370,7 +480,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     // one (documents/drive-sync.js converge), the other's records or snapshots moving into it and the emptied one put away
     // in Data.
     const sub = async (ctx, tag, name) => {
-      const st = (await S.get(STATE))[STATE] || {};
+      const st = (await S.get(STATE))[STATE] || {}, seeded = tag === 'data' && !st.based;
+      // Before any record is met: agreed values for records synced before they were kept (none with no Data yet).
+      if (seeded && st.data) await seed();
       const id = await L.sync().converge(ctx.D, { parent: ctx.folder, tag, name, mine: st[tag] || null, hide: tag === 'data' ? null : () => sub(ctx, 'data', 'Data') });
       // Another Data than the one this device had (that one in Drive's trash, gone, or merged into another): every record goes
       // over to it, unchanged ones too, before it is the Data on driveSync. moving: such a pass under way, so a run stopped
@@ -378,8 +490,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (tag === 'data' && (st.moving || (st.data && id !== st.data))) {
         await ctx.state({ moving: id });
         ctx.data = id; await all(ctx); ctx.whole = true;
-        await ctx.state({ data: id, moving: null });
-      } else if (id !== st[tag]) await ctx.state({ [tag]: id });
+        await ctx.state({ data: id, moving: null, ...(seeded && { based: true }) });
+      } else if (id !== st[tag] || seeded) await ctx.state({ [tag]: id, ...(seeded && { based: true }) });
       return id;
     };
 
@@ -397,7 +509,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       return { area: j.area, key: j.key, cat: j.cat, at: j.at, value, sum: await sumOf(j.area, j.key, j.deleted === true ? undefined : j.value) };
     };
     // Drive's value here: written (or removed, for a tombstone) as this layer's own, at its time. o.pending: a merge of both
-    // sides on its way up (meet), kept dirty here until it lands.
+    // sides on its way up (meet, mix), kept dirty here until it lands; o.base: then, Drive's value as it came.
     const take = async (h, got, R, was, expected, o = {}) => {
       const a = env.area(got.area), id = `${got.area}:${got.key}`, d = defOf(got.area, got.key);
       if (d?.immutable && got.value === undefined) return; // a file is never taken away: Notes' own clean-up does that
@@ -434,7 +546,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // A later local write is still dirty even if it lands before the sync bookkeeping finishes. lsum: what this device holds
       // now, as it is compared (a view's own merge may keep this device's, Gradescope's account).
       const held = d?.merge && got.value !== undefined ? d.view(write) : got.value;
-      await put(h, { area: got.area, key: got.key, cat: got.cat, id: R.id, lsum: o.pending ? null : await sumOf(got.area, got.key, held), rsum: got.sum, at: got.at, seen: got.at }, was);
+      await put(h, { area: got.area, key: got.key, cat: got.cat, id: R.id, lsum: o.pending ? null : await sumOf(got.area, got.key, held), rsum: got.sum, at: got.at, seen: got.at }, was, o.pending ? o.base : got.value);
     };
     // A note or an account's folders changed on both sides: each field's later change, here and in Drive (MERGE), the record at
     // the time of the latest change it holds.
@@ -494,7 +606,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
           sum: was?.id && SUM.test(expect || '') ? expect : null, meta, create: { ...meta, name: `${cat}-${h.slice(0, 12)}.json`, mimeType: JSON_TYPE, parents: [ctx.data],
             ...(cat === 'memories' && value.deleted && { appProperties: { ...meta.appProperties, forgotten: 'true' } }) }, mime: JSON_TYPE };
       }, { rec: h, area, key }, { rec: h, link });
-      await put(h, { ...link, id: r.file.id }, was);
+      await put(h, { ...link, id: r.file.id }, was, value);
     };
 
     // One record, both sides. key and area: when known here; R: its file's metadata (undefined: ask Drive when known).
@@ -505,7 +617,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       if (ctx.move?.hold && await ctx.move.hold(`R:${h}`, R, was?.id || null)) throw new Fail('pending');
       // This device's record let go for another device's file (below), met as a first meeting: what it holds as synced keeps
       // the time of that change as its stamp, so it weighs as the change it was, not as one with no time (which any other
-      // wins over), on this run and on any later one should this one stop first.
+      // wins over), on this run and on any later one should this one stop first. Its agreed value stays: should the other
+      // file hold that very value, this device's changes since are told from it (below).
       const leave = async () => {
         const id = `${was.area}:${was.key}`;
         if (was.at && await sumOf(was.area, was.key, await valueOf(was.area, was.key)) === was.lsum) await restamp({ [id]: was.at }, { [id]: undefined });
@@ -540,6 +653,24 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       const st = await stamps();
       // A push here goes over Drive's file as this run met it: a write another device makes before it lands sends it back.
       const over = (w, t) => push(ctx, h, area, key, cat, w, t, R && !R.removed ? R : null);
+      // Both sides' values joined as Restore joins them (join above), here: was, the link while there is one. The join's write
+      // is this layer's own: it stamps nothing, and carries the time of the latest change it holds, never the meeting's, here
+      // (so an upload that fails is sent again with it) and in Drive, so a later change another device hasn't pushed yet still
+      // wins over it. One that is Drive's own value is linked to it, not sent again.
+      const joinBoth = async (got, was, at) => {
+        const id = `${area}:${key}`, t = Math.max(at, got.at) || now(), mine = [];
+        applying.delete(id);
+        const own = { change: ownNotes(key, cat, mine), set: async (o) => {
+          if (area === 'local' && Object.hasOwn(o, key) && canon((await env.area('local').get(key))[key]) !== canon(o[key])) applying.set(id, canon(o[key]));
+        } };
+        try {
+          await (env.join || ((c, k, v, rt, w) => join(c, k, v, env.area('local'), env.area('notes'), rt, w)))(cat, key, got.value, { here: at, there: got.at }, own);
+        } catch (e) { applying.delete(id); for (const x of mine) owned.delete(x); throw e; }
+        const joined = await sumOf(area, key, await valueOf(area, key));
+        if (joined === got.sum) return put(h, { area, key, cat, id: R.id, lsum: joined, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, was, got.value);
+        await restamp({ [id]: t }, { [id]: st[id] });
+        return over(was || { id: R.id }, t);
+      };
       if (!key) { // a record only Drive has, met for the first time
         if (!R || R.removed) return;
         // A picture or attachment comes with a note here that uses it (each below, x.need), never by itself: one whose note
@@ -553,11 +684,24 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       }
       const def = defOf(area, key), cat = def?.cat, owner = { rec: h, area, key, ...(x.need && { need: x.need }) };
       if (!cat) return;
+      const merges = joins(cat, key);
       const value = await valueOf(area, key), lsum = await sumOf(area, key, value);
       // The time of the change here, read again once Drive's side has come (stamp): one made while this run read it, already
       // in the value weighed here, is weighed by its own time, never by none.
       let at = st[`${area}:${key}`] || 0;
       const stamp = async () => { at = (await stamps())[`${area}:${key}`] || 0; };
+      // Changed on both sides since they last agreed, a record merged item by item: each side's changes against the value they
+      // agreed (its base, while it is the one Drive's link was agreed with), the merge here and in Drive at the time of the
+      // later change; without one, joined (nothing lost; a deletion may come back once). Class schedules and GPA terms always
+      // join: their own times and deletions are what a base would tell.
+      const mix = async (got) => {
+        const b = based(cat, key) ? (await S.get(BASE + h))[BASE + h] : null;
+        if (!b || b.sum !== was.rsum) return joinBoth(got, was, at);
+        const next = three(cat, key, b.value, value, got.value, at > got.at), t = Math.max(at, got.at) || now();
+        if (canon(next) === canon(got.value)) return take(h, got, R, was, value);
+        if (canon(next) !== canon(value)) await take(h, { ...got, value: next, at: t }, R, was, value, { pending: true, base: got.value });
+        return push(ctx, h, area, key, cat, (await recOf(h)) || was, t, R);
+      };
       if (def.immutable) {
         // The bytes never change, but Notes may have cleaned up this device's copy since it last used them: fetched again
         // only for a note that uses it again (x.need), never for one deleted with its note.
@@ -606,26 +750,15 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
           return;
         }
         if (got.value === undefined) return over({ id: R.id }, Math.max(at, got.at + 1) || now());
-        // First meeting, both hold it: Settings by time; the rest joined as Restore joins.
+        // First meeting, both hold it: Settings by time; the rest joined as Restore joins. A record merged item by item whose
+        // file holds the very value this device last agreed through another (its own let go for this one, or left in a
+        // Glaze/Data put in Drive's trash): this device's changes since go up as they are, its deletions too.
         if (cat === 'settings') { if (got.at > at) return take(h, got, R, null, value); return over({ id: R.id }, at || now()); }
-        const id = `${area}:${key}`, t = Math.max(at, got.at) || now(), mine = [];
-        applying.delete(id);
-        // The join's write is this layer's own: it stamps nothing, and carries the time of the latest change it holds, never
-        // the meeting's, here (so an upload that fails is sent again with it) and in Drive, so a later change another device
-        // hasn't pushed yet still wins over it. One that is Drive's own value is linked to it, not sent again.
-        const own = { change: ownNotes(key, cat, mine), set: async (o) => {
-          if (area === 'local' && Object.hasOwn(o, key) && canon((await env.area('local').get(key))[key]) !== canon(o[key])) applying.set(id, canon(o[key]));
-        } };
-        try {
-          await (env.join || ((c, k, v, rt, w) => join(c, k, v, env.area('local'), env.area('notes'), rt, w)))(cat, key, got.value, { here: at, there: got.at }, own);
-        } catch (e) { applying.delete(id); for (const x of mine) owned.delete(x); throw e; }
-        const joined = await sumOf(area, key, await valueOf(area, key));
-        if (joined === got.sum) return put(h, { area, key, cat, id: R.id, lsum: joined, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null);
-        await restamp({ [id]: t }, { [id]: st[id] });
-        return over({ id: R.id }, t);
+        if (based(cat, key) && (await S.get(BASE + h))[BASE + h]?.sum === got.sum) return over({ id: R.id }, at || now());
+        return joinBoth(got, null, at);
       }
       // Its file gone or in Drive's trash: put back from here, unchanged since it last synced with the time of that change.
-      if (!R || R.removed) { if (value !== undefined) await over({ ...was, id: null }, at || (lsum === was.lsum && was.at) || now()); else await S.remove([REC + h, ...(was.id ? [FILE + was.id] : [])]); return; }
+      if (!R || R.removed) { if (value !== undefined) await over({ ...was, id: null }, at || (lsum === was.lsum && was.at) || now()); else await S.remove([REC + h, BASE + h, ...(was.id ? [FILE + was.id] : [])]); return; }
       const ldirty = lsum !== was.lsum, rdirty = R.appProperties?.sum !== was.rsum;
       // The value as it was, sent again later by another device (a change back to it): retold, Drive's time for it, is weighed
       // against a change here as a change of its own. Content alone tells neither side of it.
@@ -634,7 +767,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         // A change back to the value already synced, made here later than it: sent again with its time, so an earlier change
         // another device hasn't pushed yet doesn't go up over it unseen. Only where the whole value is the record: a view
         // (the pet, Gradescope) keeps fields of this device's own, and Notes merge field by field.
-        if (at > (was.seen || 0) && at > Math.max(was.at || 0, retold) && !def.view && !MERGE[cat]) return over(was, at);
+        if (at > (was.seen || 0) && at > Math.max(was.at || 0, retold) && !def.view && !MERGE[cat] && !merges) return over(was, at);
         if (at > (was.seen || 0) || retold) await put(h, { ...was, seen: Math.max(was.seen || 0, at), ...(retold && { at: retold }) }, was);
         return;
       }
@@ -642,12 +775,15 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         const got = await fetchRec(ctx, R, h, owner);
         await stamp();
         // Unchanged here by content, but changed and back since it synced (where the whole value is the record): weighed by
-        // time like any other change made here.
-        if (!ldirty) return at > (was.seen || 0) && at > got.at && !def.view && !MERGE[cat] ? over(was, at) : take(h, got, R, was, value);
+        // time like any other change made here. A record merged item by item has nothing here to weigh: Drive's change comes.
+        if (!ldirty) return at > (was.seen || 0) && at > got.at && !def.view && !MERGE[cat] && !merges ? over(was, at) : take(h, got, R, was, value);
         if (MERGE[cat] && got.value !== undefined && value !== undefined) return meet(ctx, h, got, R, was, value, at);
+        if (merges && got.value !== undefined && value !== undefined) return mix(got);
         if (got.at >= (at || 0)) return take(h, got, R, was, value);
       }
-      if (at && retold > at) return take(h, await fetchRec(ctx, R, h, owner), R, was, value);
+      // Drive's value sent again unchanged (retold) weighs as a change, except for a record merged item by item, whose
+      // change here goes up over it.
+      if (at && retold > at && !merges) return take(h, await fetchRec(ctx, R, h, owner), R, was, value);
       return over(was, at || now());
     };
     // Whether a note here still shows this picture. A conflict copy may share its id, so losing the note that first wanted
@@ -728,6 +864,18 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         for (const key of keys) out.push({ area, key });
       }
       return out.sort((a, b) => ORDER[catOf(a.area, a.key)] - ORDER[catOf(b.area, b.key)]);
+    };
+
+    // Records synced before agreed values were kept (Glaze 4.0.7): each one linked and unchanged here gets its value as the one
+    // both sides agree, once (sub marks it done: based).
+    const seed = async () => {
+      const recs = await S.get((await S.keys()).filter((k) => k.startsWith(REC))), out = {};
+      for (const [k, r] of Object.entries(recs)) {
+        if (!r?.id || !r.rsum || r.lsum !== r.rsum || !based(r.cat, r.key) || defOf(r.area, r.key)?.cat !== r.cat) continue;
+        const v = await valueOf(r.area, r.key).catch(() => undefined);
+        if (v !== undefined && await sumOf(r.area, r.key, v) === r.rsum) out[BASE + k.slice(REC.length)] = { sum: r.rsum, value: v };
+      }
+      if (Object.keys(out).length) await S.set(out);
     };
 
     // ---- the hooks documents/drive-sync.js calls. ctx: { D, folder, state(patch) }
@@ -888,10 +1036,17 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     const failed = async (owner, why, ctx) => { if (owner.snap) await ctx.state({ snapSkip: ['quota', 'large'].includes(why) ? why : null }); };
     // A staged upload may outlive a local edit or deletion before the first record link exists.
     const current = async (owner, tag) => tag === await sumOf(owner.area, owner.key, await valueOf(owner.area, owner.key));
-    // A staged upload's answer (documents/drive-sync.js commit): written into the record's link as its push writes it.
-    const commit = async (h, link, file) => put(h, { ...link, id: file.id }, await recOf(h));
+    // A staged upload's answer (documents/drive-sync.js commit): written into the record's link as its push writes it, with the
+    // value it sent (bytes: the staged upload's) as the one both sides agree.
+    const commit = async (h, link, file, bytes) => {
+      let value;
+      if (bytes && based(link.cat, link.key)) {
+        try { const j = JSON.parse(new TextDecoder().decode(bytes)); if (j?.glaze === 'record' && j.area === link.area && j.key === link.key && j.deleted !== true) value = j.value; } catch { /* none kept: the next meeting joins */ }
+      }
+      return put(h, { ...link, id: file.id }, await recOf(h), value);
+    };
     const forget = async () => {
-      const keys = (await S.keys()).filter((k) => k.startsWith(REC) || k === STAMPS);
+      const keys = (await S.keys()).filter((k) => k.startsWith(REC) || k.startsWith(BASE) || k === STAMPS);
       if (keys.length) await S.remove(keys);
     };
     // Whether a change to this key is one this layer listens for.
