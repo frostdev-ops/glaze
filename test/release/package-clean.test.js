@@ -17,7 +17,7 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-package-clean-'));
 test.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
 const tree = path.join(scratch, 'glaze');
 execFileSync('sh', ['-c', `. "${path.join(repo, 'tools/release/clean-source.sh')}"; glaze_checkout_head "${repo}" "${tree}"`], { env, stdio: 'pipe' });
-execFileSync('git', ['-C', tree, 'checkout', '-q', '-b', 'dev/firefox'], { env, stdio: 'pipe' });
+execFileSync('git', ['-C', tree, 'checkout', '-q', '-B', 'dev/firefox'], { env, stdio: 'pipe' });
 // A stand-in xcodebuild: the App Store scripts reach it only after packaging, and it fails.
 const bin = path.join(scratch, 'bin'), marker = path.join(scratch, 'xcodebuild-called');
 fs.mkdirSync(bin);
