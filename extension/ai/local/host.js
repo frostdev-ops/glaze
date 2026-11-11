@@ -434,7 +434,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         try {
           for (const s of slots) {
             let r;
-            try { r = await job.vision.encode(s.pic, { signal }); } catch (e) { if (signal.aborted) throw aborted(signal); throw fail('provider-unavailable', ENGINE[e?.reason] === 'assets' ? 'pictures' : DEAD.includes(e?.reason) ? e.reason : ENGINE[e?.reason] || 'engine'); }
+            try { r = await job.vision.encode(s.pic, { signal }); } catch (e) { if (signal.aborted && !DEAD.includes(e?.reason)) throw aborted(signal); throw fail('provider-unavailable', ENGINE[e?.reason] === 'assets' ? 'pictures' : DEAD.includes(e?.reason) ? e.reason : ENGINE[e?.reason] || 'engine'); }
             encoded.push(r);
             if (r.tokens !== s.pic.tokens) throw fail('provider-unavailable', 'engine');
             s.pic.data = null;
