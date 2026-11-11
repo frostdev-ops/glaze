@@ -807,7 +807,7 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
     // The site's queue (courses/lmsq.js), passing each request straight on.
     GZ_LMSQ: { fetch: (url, o) => fetch(url, o) },
     MutationObserver: class { observe() {} disconnect() {} },
-    GZ_PAGE: require('../../extension/core/page.js'), GZ_COURSES: require('../../extension/content/defaults.js').GZ_COURSES, setTimeout: (f, ms) => { const timer = [f, ms]; state.timers.push(timer); return timer; },
+    GZ_PAGE: require('../../extension/core/page.js'), GZ_COURSES: require('../../extension/content/defaults.js').GZ_COURSES, GZ_SPEC: require('../../extension/content/defaults.js').GZ_SPEC, setTimeout: (f, ms) => { const timer = [f, ms]; state.timers.push(timer); return timer; },
     clearTimeout: (timer) => { const i = state.timers.indexOf(timer); if (i >= 0) state.timers.splice(i, 1); },
     GZ_CTX: {
       site: 'ultra', t: (k, v) => I.t(k, v, lang), locale: () => lang, need, settings: () => state.settings, on: () => true,

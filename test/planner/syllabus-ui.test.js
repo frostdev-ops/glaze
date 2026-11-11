@@ -139,6 +139,7 @@ const page = (extra = {}) => {
     location: { origin: ORIGIN, pathname: '/courses/25/modules' },
     chrome: undefined,
     GZ_I18N: require('../../extension/core/i18n.js'),
+    GZ_SPEC: require('../../extension/content/defaults.js').GZ_SPEC,
     GZ_CTX: {
       t: (k) => k, locale: () => 'en', settings: () => state.settings, on: () => state.on, canvasCourseId: () => state.cid,
       profile: () => Promise.resolve({ id: 3 }), canvasCourses: () => Promise.resolve([{ id: '25' }]),

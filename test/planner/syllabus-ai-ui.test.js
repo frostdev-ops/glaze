@@ -68,6 +68,7 @@ const page = ({ ai, broker = () => {}, file = { name: 'syllabus.pdf' }, syllabus
     location: { origin: ORIGIN, pathname: '/courses/25/modules' },
     chrome,
     GZ_I18N: require('../../extension/core/i18n.js'),
+    GZ_SPEC: require('../../extension/content/defaults.js').GZ_SPEC,
     GZ_IMPORT: { read: async () => ({ text: TEXT, ocr: null }), note: () => '', doubt: () => false },
     GZ_CTX: {
       t: (k, v) => (v ? k.replace(/\{(\w+)\}/g, (_, n) => v[n]) : k), locale: () => 'en', settings: () => ({ enabled: true, enhance: { syllabus: true } }), on: () => true, canvasCourseId: () => '25',
