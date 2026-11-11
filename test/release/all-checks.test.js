@@ -492,3 +492,32 @@ test('killTree stops a child and the grandchild it detached into its own group',
   assert.ok(!alive(child.pid), 'the child is gone');
   assert.ok(!alive(grand), 'so is the grandchild in its own group');
 });
+
+test('runner dispatches are spaced apart: glaze-remote names a job by the second it starts, so two in one second collide', async (t) => {
+  const f = fake(() => ({}));
+  const waits = [], release = [];
+  const sleep = (ms) => new Promise((r) => { waits.push(ms); release.push(r); });
+  const tick = () => new Promise((r) => setTimeout(r, 30));
+  const cs = ['c1', 'c2', 'c3'].map((n) => check(`a/${n}-check.js`));
+  const p = A.runAll(cs, 'runner', opts(t, { spawn: f.spawn, jobs: 3, staggerMs: 1500, sleep }));
+  await tick();
+  assert.deepEqual(f.calls.map(nameOf), ['c1-check'], 'the second waits its turn');
+  assert.deepEqual(waits, [1500]);
+  release.shift()();
+  await tick();
+  assert.deepEqual(f.calls.map(nameOf), ['c1-check', 'c2-check']);
+  release.shift()();
+  const r = await p;
+  assert.deepEqual(r.map((x) => x.status), ['pass', 'pass', 'pass']);
+  assert.deepEqual(f.calls.map(nameOf), ['c1-check', 'c2-check', 'c3-check']);
+});
+
+test('the Mac sweep and a sweep with no spacing dispatch at once', async (t) => {
+  const f = fake(() => ({}));
+  let slept = 0;
+  const sleep = () => { slept++; return Promise.resolve(); };
+  await A.runAll([check('a/x-check.js'), check('a/y-check.js')], 'mac', opts(t, { spawn: f.spawn, staggerMs: 1500, sleep }));
+  await A.runAll([check('a/x-check.js'), check('a/y-check.js')], 'runner', opts(t, { spawn: f.spawn, jobs: 2, sleep }));
+  assert.equal(slept, 0);
+  assert.equal(f.calls.length, 4);
+});
