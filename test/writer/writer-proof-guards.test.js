@@ -61,3 +61,8 @@ test('with Smart quotes off a contraction gets a straight apostrophe, on a curly
   assert.equal(typed('Take thats '), 'Take that’s ');
   assert.equal(typed('It doesnt ', { allow: (c) => c !== 'smart' }), "It doesn't ");
 });
+
+test('two spaces still become one in another language or a quotation', () => {
+  assert.equal(typed('Mais nous  nous'), 'Mais nous nous');
+  assert.equal(typed('"I saw  it'), '“I saw it');
+});
