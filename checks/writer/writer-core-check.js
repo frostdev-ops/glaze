@@ -1,11 +1,15 @@
-// Headless EditorView regressions: node checks/writer/writer-core-check.js [name pattern].
-// Run under the shared heavy-browser lock; NODE_PATH may supply Playwright and CHROME may select Chromium.
+// Headless EditorView regressions: node checks/writer/writer-core-check.js [out dir] [--grep <name pattern>].
+// Run under the shared heavy-browser lock; NODE_PATH may supply Playwright and CHROME may select Chromium. The out dir gets
+// writer-core.json (each check's name and result).
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const root = path.resolve(__dirname, '../../extension'), filter = new RegExp(process.argv[2] || '.');
+const args = process.argv.slice(2), at = args.indexOf('--grep');
+const grep = at >= 0 ? args.splice(at, 2)[1] : undefined, out = args[0];
+const root = path.resolve(__dirname, '../../extension'), filter = new RegExp(grep ?? '.');
+const results = [];
 
 (async () => {
   await require('../../tools/dev/wait-for-browser.js')();
@@ -29,7 +33,8 @@ const root = path.resolve(__dirname, '../../extension'), filter = new RegExp(pro
         await page.evaluate(() => { if (typeof window.ed?.destroy === 'function') window.ed.destroy(); window.ed = GZ_WRITER_EDITOR.create({ mount: document.getElementById('ed') }); ed.focus(); });
         await fn();
         console.log(`ok ${name}`);
-      } catch (e) { failures++; console.error(`FAIL ${name}\n${e.message}`); }
+        results.push({ name, ok: true });
+      } catch (e) { failures++; console.error(`FAIL ${name}\n${e.message}`); results.push({ name, ok: false, error: e.message }); }
     };
     await check('setHTML is isolated from typing on both sides of history', async () => {
       const result = await page.evaluate(() => {
@@ -78,9 +83,8 @@ const root = path.resolve(__dirname, '../../extension'), filter = new RegExp(pro
       assert.ok(start >= 0 && end > start);
       await page.addScriptTag({ content: `{ ${source.slice(start, end)} window.writerSameText = sameText; }` });
       const result = await page.evaluate(() => {
-        const exact = document.createElement('div'), missing = document.createElement('div');
-        exact.textContent = '  Draft'; missing.textContent = 'Draft';
-        const style = document.createElement('div'); style.textContent = '.a{}Draft';
+        // The native editor as page/writer.js reads it (the adapter's read): its text.
+        const exact = { text: '  Draft' }, missing = { text: 'Draft' }, style = { text: '.a{}Draft' };
         return [writerSameText(exact, '  Draft'), writerSameText(missing, '  Draft'),
           writerSameText(style, '<style>.a{}</style><p>Draft</p>'), writerSameText(missing, '<style>.a{}</style><p>Draft</p>')];
       });
@@ -221,8 +225,9 @@ const root = path.resolve(__dirname, '../../extension'), filter = new RegExp(pro
       assert.equal(await page.evaluate(() => document.activeElement.id), 'before');
     });
     assert.deepEqual(errors, [], 'no page errors');
-    await page.evaluate(() => ed.destroy());
+    await page.evaluate(() => window.ed?.destroy?.());
   } finally { await browser.close(); }
   console.log(`${checks - failures}/${checks} passed`);
-  process.exitCode = failures ? 1 : 0;
+  if (out) { fs.mkdirSync(out, { recursive: true }); fs.writeFileSync(path.join(out, 'writer-core.json'), `${JSON.stringify({ checks, failures, results }, null, 2)}\n`); }
+  process.exitCode = failures || !checks ? 1 : 0;
 })().catch((e) => { console.error(e); process.exitCode = 1; });
