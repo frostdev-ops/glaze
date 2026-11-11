@@ -26,6 +26,12 @@ const I = 'fedcba9876543210fedc', HELLO = { t: 'hello', v: 1, glaze: '4.0.0', in
 const nonce = (n) => String(n).repeat(32).slice(0, 32);
 const B = (s, seq, frames) => ({ type: 'agent.frames', i: I, s: nonce(s), seq, frames });
 const FROM_HOST = { t: 'hello', v: 1, host: '9.9.9', os: 'darwin', browser: 'safari', node: '' };
+// What an app sends before its agent has a host: a ping then is answered by the agent itself (mcp/lib/session.js), so a
+// line meant to reach the host is a notification.
+const NOTE = (n) => `{"jsonrpc":"2.0","method":"notifications/test","params":{"n":${n}}}`;
+// Every agent a test starts ends with this process, even when a test times out before its finally.
+const children = new Set();
+process.on('exit', () => { for (const c of children) try { c.kill('SIGKILL'); } catch { /* gone */ } });
 
 const HARNESS = `
 nonisolated func json(_ o: Any) -> String { String(data: try! JSONSerialization.data(withJSONObject: o, options: [.sortedKeys, .withoutEscapingSlashes]), encoding: .utf8)! }
@@ -95,7 +101,8 @@ const agent = (HOME, npx = false) => {
   child.stdout.setEncoding('utf8').on('data', (d) => { const parts = (partial + d).split('\n'); partial = parts.pop(); out.push(...parts); });
   child.stderr.on('data', (d) => { err += d; });
   child.stdin.on('error', () => {});
-  const exit = new Promise((r) => child.on('close', (c) => r(c)));
+  children.add(child);
+  const exit = new Promise((r) => child.on('close', (c) => { children.delete(child); r(c); }));
   const line = async (ms = 20000) => {
     for (const until = Date.now() + ms; !out.length; await sleep(10)) if (Date.now() > until) throw new Error(`no line from the agent: ${err}`);
     return out.shift();
@@ -163,7 +170,7 @@ test('the Swift host serves the real glaze-mcp agent and a stand-in worker acros
     const sock = path.join(GROUP, 'agent.sock');
     let cA, rec;
     const A = start();
-    A.write(`${PING(1)}\n`);
+    A.write(`${NOTE(1)}\n`);
 
     await t.test('a hello starts a session: the host answers it, then publishes its socket and run file', async () => {
       assert.ok(fs.lstatSync(sock).isSocket());
@@ -189,14 +196,14 @@ test('the Swift host serves the real glaze-mcp agent and a stand-in worker acros
       cA = open.c;
       assert.ok(Number.isSafeInteger(cA) && cA > 0);
       assert.deepEqual(open, { t: 'open', c: cA, peer }, 'its parent, this test, as the kernel says');
-      assert.deepEqual(await frame((x) => x.f.t === 'line', 'its line'), { t: 'line', c: cA, d: PING(1) });
+      assert.deepEqual(await frame((x) => x.f.t === 'line', 'its line'), { t: 'line', c: cA, d: NOTE(1) });
       assert.match(A.err(), new RegExp(`connected to Glaze in safari \\(instance ${I}\\)`));
     });
 
     await t.test('an npx-started agent is verified as npm\'s Node program, never its inherited bundle self-report', async () => {
       const a = agent(HOME, true);
       agents.push(a);
-      a.write(`${PING(100)}\n`);
+      a.write(`${NOTE(100)}\n`);
       const open = await frame((x) => x.f.t === 'open', 'npx open');
       assert.equal(open.peer.verified, true);
       assert.equal(open.peer.exe, fs.realpathSync(process.execPath));
@@ -269,8 +276,17 @@ test('the Swift host serves the real glaze-mcp agent and a stand-in worker acros
     await t.test('closes, as mux.js says them: bad-line, eof, the worker\'s close, too-long both ways, overflow', async () => {
       assert.deepEqual(await send(B(5, ++seq, [{ t: 'line', c: cA, d: 'a\nb' }])), OK);
       assert.deepEqual(await frame((x) => x.f.t === 'close', 'bad-line'), { t: 'close', c: cA, why: 'bad-line' });
-      assert.equal(await A.exit, 1);
-      const opened = async (a) => { a.write(`${PING(9)}\n`); const o = await frame((x) => x.f.t === 'open', 'an open'); await frame((x) => x.f.t === 'line' && x.f.c === o.c, 'its line'); return o.c; };
+      // An agent whose connection closes stays, and takes the same host again; its app ending it then exits 0.
+      const rejoined = async (a, was) => {
+        const o = await frame((x) => x.f.t === 'open', 'the agent\'s new connection');
+        assert.ok(o.c > was, 'a new connection');
+        await a.stop();
+        assert.equal(await a.exit, 0);
+        assert.deepEqual(await frame((x) => x.f.t === 'close' && x.f.c === o.c, 'its eof'), { t: 'close', c: o.c, why: 'eof' });
+        assert.match(a.err(), new RegExp(`connected to Glaze in safari \\(instance ${I}\\) again`));
+      };
+      await rejoined(A, cA);
+      const opened = async (a) => { a.write(`${NOTE(9)}\n`); const o = await frame((x) => x.f.t === 'open', 'an open'); await frame((x) => x.f.t === 'line' && x.f.c === o.c, 'its line'); return o.c; };
 
       const Bee = start(), cB = await opened(Bee);
       assert.ok(cB > cA, 'numbers are never reused');
@@ -280,7 +296,7 @@ test('the Swift host serves the real glaze-mcp agent and a stand-in worker acros
 
       const C = start(), cC = await opened(C);
       assert.deepEqual(await send(B(5, ++seq, [{ t: 'close', c: cC, why: 'off' }])), OK);
-      assert.equal(await C.exit, 1);
+      await rejoined(C, cC);
       assert.match(C.err(), /Glaze closed the connection/);
 
       const D = start(), cD = await opened(D);
@@ -288,12 +304,13 @@ test('the Swift host serves the real glaze-mcp agent and a stand-in worker acros
       assert.deepEqual(await send(B(5, ++seq, Array(6).fill(piece))), OK);
       assert.deepEqual(await send(B(5, ++seq, [piece])), OK);
       assert.deepEqual(await frame((x) => x.f.t === 'close', 'too-long to the agent'), { t: 'close', c: cD, why: 'too-long' });
-      assert.equal(await D.exit, 1);
+      await rejoined(D, cD);
 
       const E = start(), cE = await opened(E);
-      E.write('y'.repeat(LINE + 1));
+      // The agent passes whole lines (it reads each to carry the session over a reconnect), so the app ends this one.
+      E.write(`${'y'.repeat(LINE + 1)}\n`);
       assert.deepEqual(await frame((x) => x.f.t === 'close', 'too-long from the agent'), { t: 'close', c: cE, why: 'too-long' });
-      assert.equal(await E.exit, 1);
+      await rejoined(E, cE);
 
       const raw = R.connect(rec.path);
       raw.on('error', () => {});
@@ -307,8 +324,8 @@ test('the Swift host serves the real glaze-mcp agent and a stand-in worker acros
 
     await t.test('bye closes every connection once the worker\'s last lines have gone, and takes the socket and run file away', async () => {
       const G = start();
-      G.write(`${PING(7)}\n`);
-      await frame((x) => x.f.t === 'line' && x.f.d === PING(7), 'the last agent\'s line');
+      G.write(`${NOTE(7)}\n`);
+      await frame((x) => x.f.t === 'line' && x.f.d === NOTE(7), 'the last agent\'s line');
       await frame((x) => x.f.t === 'open', 'the last agent\'s open');
       // An agent slow to read still gets the line the worker sent just before its bye (agent access off).
       const late = R.connect(rec.path);
@@ -326,7 +343,12 @@ test('the Swift host serves the real glaze-mcp agent and a stand-in worker acros
       assert.equal(await Promise.race([gone, new Promise((r) => setTimeout(r, 15000, false))]), true, `the late reader is let go (${got.length} characters read)`);
       assert.equal(got.length, last.length + 1);
       assert.equal(got, `${last}\n`);
-      assert.equal(await G.exit, 1);
+      // Agent access off: the agent waits for Glaze to come back, and leaves with 0 when its app ends it.
+      await sleep(600);
+      assert.equal(G.child.exitCode, null, 'the agent stays');
+      assert.match(G.err(), /Glaze closed the connection/);
+      await G.stop();
+      assert.equal(await G.exit, 0);
       assert.deepEqual(R.list(RUN, { platform: 'darwin' }), []);
       assert.equal(fs.existsSync(rec.path), false);
       assert.equal(fs.existsSync(path.join(RUN, `safari.${I}.json`)), false);
@@ -497,7 +519,14 @@ test('a prepared update waits for a long call and its split reply, then quits th
     assert.equal(await a.line(), '{"jsonrpc":"2.0","id":"long-call","result":{}}');
     await take((m) => m.ev === 'quit', 'prepared update termination after the completed call', 9000);
     assert.equal(await swift.done, 0, swift.stderr());
-    assert.equal(await a.exit, 1, 'idle agent reconnects after the update');
+    // The app quit while idle: the agent waits for it to come back, and its app's EOF ends it at once.
+    await sleep(600);
+    assert.equal(a.child.exitCode, null, 'the agent stays through the quit');
+    assert.match(a.err(), /Glaze closed the connection/);
+    const at = Date.now();
+    a.child.stdin.end();
+    assert.equal(await a.exit, 0);
+    assert.ok(Date.now() - at < 1000, 'EOF while waiting exits at once');
     assert.equal(fs.existsSync(path.join(group, 'agent.sock')), false);
   } finally {
     await a?.stop();
