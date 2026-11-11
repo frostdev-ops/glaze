@@ -1135,7 +1135,7 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
 function GZ_NAVBAR_ULTRA(X) {
   const ROOT = '[data-gz-nav-root], nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]';
   // Who is signed in (Ultra's word), once asked; until then nothing is read or kept. The per-site key before it goes.
-  let who = '', held = null;
+  let who = '', held = null, identity = 0, retired = false;
   const USUAL = [['institution-page', 'Institution page'], ['stream', 'Activity'], ['course', 'Courses'], ['organization', 'Organizations'], ['calendar', 'Calendar'], ['messages', 'Messages'], ['grades', 'Grades'], ['tools', 'Tools'], ['profile', 'Profile']];
   let mo = null, swap = null, watched = null, notify = null, seen = null, saved = '', last = null, lastAt = '', stale = true;
   const rootOf = () => document.querySelector(ROOT);
@@ -1166,14 +1166,32 @@ function GZ_NAVBAR_ULTRA(X) {
     // Ultra redraws the drawer whole: its parent sees the new one come in.
     if (scope?.parentElement) swap.observe(scope.parentElement, { childList: true });
   };
-  Promise.resolve().then(() => X.account()).then((u) => {
-    if (!/^_\d+_\d+$/.test(String(u))) return;
-    who = String(u);
-    const k = `navbarSeen:${location.origin}:${who}`;
-    try { chrome.storage.local.get(k, (r) => { const list = r?.[k]; if (Array.isArray(list) && !seen) { seen = list.slice(0, 20); notify?.(); } if (held) keep(held); }); } catch { /* reloaded */ }
-  }, () => {});
+  const identify = () => {
+    const n = ++identity;
+    Promise.resolve().then(() => X.account()).then((u) => {
+      if (n !== identity || retired || !/^_\d+_\d+$/.test(String(u))) return;
+      who = String(u);
+      const k = `navbarSeen:${location.origin}:${who}`;
+      try { chrome.storage.local.get(k, (r) => {
+        if (n !== identity || retired) return;
+        const list = r?.[k];
+        if (Array.isArray(list) && !seen) { seen = list.slice(0, 20); notify?.(); }
+        if (held) keep(held);
+      }); } catch { /* reloaded */ }
+    }, () => {});
+  };
+  identify();
+  document.addEventListener?.('glaze:ultra-refresh', (e) => {
+    if (!(e.detail?.identity || e.detail?.retire)) return;
+    identity++;
+    retired ||= !!e.detail?.retire;
+    who = saved = ''; held = seen = last = null; stale = true;
+    if (!retired) identify();
+    notify?.();
+  });
   // What the drawer had, kept for the pages without one: ids, names and same-site paths only.
   const keep = (items) => {
+    if (retired) return;
     if (!who) { held = items; return; }
     held = null;
     const list = items.filter((i) => i.id !== 'logout').map((i) => { try { const u = new URL(i.href); return u.origin === location.origin ? { id: i.id, label: i.label.slice(0, 80), path: u.pathname } : null; } catch { return null; } }).filter(Boolean);
