@@ -114,3 +114,9 @@ test('the MLA heading-date suggestion keeps the typed date in any time zone and 
     }
   } finally { if (was === undefined) delete process.env.TZ; else process.env.TZ = was; }
 });
+test('MLA heading dates with a two-digit year do not guess a century', () => {
+  for (const date of ['11/25/99', '25/11/99', '11/11/99']) {
+    const json = FX.papers.mla9(); json.content[3].content[0].text = date;
+    assert.deepEqual(cards(S.paper.nodeFromJSON(json), 'mla9', 'heading-date'), [], date);
+  }
+});
