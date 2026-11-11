@@ -12,7 +12,10 @@ const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setI
 const only = (...ids) => ({ tiles: W.TILES.map((id) => ({ id, on: ids.includes(id) })) });
 const px = (s) => parseFloat(s) || 0;
 
-const page = ({ raw = only('notes', 'timer'), width = 1280, where = '/', enhance = {}, sidebar = null } = {}) => {
+// student: a Canvas student's own course cards, for the board's course tiles read for real (courses/page/coursecards.js):
+// { uid, native (the card ids Canvas's Dashboard draws), rows (its course list, or a promise of it), list (seenCourses) }.
+// store: storage.local, shared by the pages of two students on one browser profile.
+const page = ({ raw = only('notes', 'timer'), width = 1280, where = '/', enhance = {}, sidebar = null, student = null, store: shared = null } = {}) => {
   const doc = { activeElement: null }, make = (tag) => new El(tag, doc);
   doc.root = make('html'); doc.body = make('body'); doc.root.append(doc.body);
   const header = make('header'); header.id = 'dashboard_header_container';
@@ -20,7 +23,7 @@ const page = ({ raw = only('notes', 'timer'), width = 1280, where = '/', enhance
   const cards = make('div'); cards.id = 'DashboardCard_Container';
   const todo = make('aside'); todo.id = 'gz-todo';
   doc.body.append(header, gpa, cards, todo);
-  const sent = [], loads = [], store = { widgetLayout: structuredClone(raw) };
+  const sent = [], loads = [], store = shared || { widgetLayout: structuredClone(raw) };
   let queue = Promise.resolve();
   const area = { get: async (ks) => Object.fromEntries([ks].flat().filter((k) => k in store).map((k) => [k, structuredClone(store[k])])), set: async (v) => { Object.assign(store, structuredClone(v)); return true; } };
   const c = {
@@ -30,7 +33,9 @@ const page = ({ raw = only('notes', 'timer'), width = 1280, where = '/', enhance
     document: doc, ResizeObserver: class { observe() {} unobserve() {} disconnect() {} }, requestAnimationFrame: () => 0, cancelAnimationFrame() {},
     GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_WIDGETS: W,
     GZ_CTX: { site: 'canvas', t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v[n]), locale: () => 'en', settings: () => D.GZ_SANITIZE({ enhance: { notes: true, widgets: true, ...enhance } }),
-      profile: async () => ({ id: '3', time_zone: 'UTC' }), need: async (f) => { loads.push(f); } },
+      profile: async () => ({ id: student?.uid || '3', time_zone: 'UTC' }),
+      need: async (f) => { loads.push(f); if (student && f === 'courses/page/coursecards.js' && !c.GZ_COURSE_CARDS) vm.runInContext(read(f), c); },
+      ...(student && { on: () => true, nickOf: () => '', courseList: () => student.list || {}, canvasCourses: () => Promise.resolve(student.rows) }) },
     chrome: {
       runtime: { id: 'glaze', lastError: undefined, sendMessage: (m, cb) => { sent.push(m); queue = queue.then(() => m.type === 'glaze:widgetLayout' ? W.change(m, area) : { ok: true, timer: W.IDLE }); queue.then(cb); } },
       storage: { local: { get: (ks, cb) => area.get(ks).then(cb) }, sync: { get: (k, cb) => cb({}) }, onChanged: { addListener() {}, removeListener() {} } },
@@ -49,6 +54,14 @@ const page = ({ raw = only('notes', 'timer'), width = 1280, where = '/', enhance
   Object.assign(doc, { documentElement: doc.root, visibilityState: 'visible', createElement: make, createTextNode: (textContent) => ({ textContent }),
     querySelector: (s) => doc.root.querySelector(s), querySelectorAll: (s) => doc.root.querySelectorAll(s), getElementById: (id) => doc.root.all().find((e) => e.id === id), addEventListener() {}, removeEventListener() {} });
   if (sidebar) c.GZ_SIDEBAR_UI = sidebar;
+  if (student) {
+    // Canvas's own cards on its Dashboard, each a link to its course (what coursecards.js reads of them).
+    const natives = (student.native || []).map((id) => { const e = make('div'); e.className = 'ic-DashboardCard'; const a = make('a'); a.setAttribute('href', `/courses/${id}`); e.append(a); return e; });
+    cards.append(...natives);
+    const all = doc.querySelectorAll;
+    doc.querySelectorAll = (s) => (s === '.ic-DashboardCard:not([data-gz-tile-card])' ? natives : all(s));
+    Object.assign(c, { GZ_COURSE_VARS: D.GZ_COURSE_VARS, GZ_CARD_UI: { paint() {} }, GZ_TODO: require('../../extension/planner/todo.js') });
+  }
   c.globalThis = c; vm.createContext(c);
   const ui = vm.runInContext(read('core/page/widgets.js'), c);
   const tile = (id) => doc.querySelector(`section[data-tile="${id}"]`);
@@ -269,4 +282,46 @@ test('with the sidebar switched off, the Dashboard board is as it was, even with
   assert.ok(p.tool('notes', 'Float Notes over every page') && p.tool('notes', 'Remove Notes'), 'the board\'s own Float and Remove');
   assert.equal(p.tile('notes').querySelector('.gz-w-dest'), null, 'no destination menu');
   assert.equal(p.doc.root.hasAttribute('data-gz-sidebar-todo'), false);
+});
+
+// ---- two students on one browser profile (audit 2026-11-11 N1) ----
+const HOST = 'https://board.instructure.com', key = (id) => `course:${HOST}/${id}`;
+const courses = (lay) => W.layout(lay).boards.cdash.filter((x) => W.course(x.id)).map((x) => W.course(x.id).id);
+const row = (id, name) => ({ id, name, course_code: name.slice(0, 4) });
+
+test("Canvas's Dashboard never draws another student's course cards on a shared profile, and the next student gets their own first cards once", async () => {
+  const store = { widgetLayout: W.fresh() };
+  // Student A fills the Dashboard first.
+  const a = page({ store, student: { uid: '3', native: ['5', '6'], rows: [row('5', 'Art A'), row('6', 'Bio A')] } });
+  await settle(); a.ui.sync(true); await settle();
+  assert.deepEqual(courses(store.widgetLayout), ['5', '6']);
+  assert.ok(store.widgetLayout.filled.includes(`cdash ${HOST}/3`), "A's own fill mark");
+  // Student B signs in on the same profile: A's courses are still in the device's course list.
+  const list = { [`canvas:${HOST}/5`]: { name: 'Art A', canvas: true }, [`canvas:${HOST}/6`]: { name: 'Bio A', canvas: true } };
+  const b = page({ store, student: { uid: '4', native: ['7'], rows: [row('7', 'Chem B')], list } });
+  await settle(); b.ui.sync(true); await settle(); b.ui.sync(true); await settle();
+  assert.equal(b.tile(key('5')), null, "A's card is not drawn for B");
+  assert.equal(b.tile(key('6')), null);
+  assert.ok(b.tile(key('7')), "B's first card");
+  assert.deepEqual(courses(store.widgetLayout), ['5', '6', '7'], "A's cards stay in the layout for A");
+  assert.ok(store.widgetLayout.filled.includes(`cdash ${HOST}/4`), "B's own fill mark");
+  // The Course cards dialog lists only B's courses.
+  assert.deepEqual(b.c.GZ_COURSE_CARDS.list().map((x) => x.id), ['7']);
+  // A comes back: A's cards, never B's.
+  const again = page({ store, student: { uid: '3', native: ['5', '6'], rows: [row('5', 'Art A'), row('6', 'Bio A')] } });
+  await settle(); again.ui.sync(true); await settle();
+  assert.ok(again.tile(key('5')) && again.tile(key('6')));
+  assert.equal(again.tile(key('7')), null);
+});
+
+test("while a Canvas student's course list is on its way, their own cards draw at once; a failed list hides nothing", async () => {
+  const store = { widgetLayout: { todo: true, canvasTodo: true, filled: ['cdash'], boards: { cdash: [{ id: key('5'), on: true }, { id: key('7'), on: true }] } } };
+  const list = { [`canvas:${HOST}/5`]: { name: 'Art', canvas: true }, [`canvas:${HOST}/7`]: { name: 'Chem', canvas: true } };
+  let answer;
+  const p = page({ store, student: { uid: '4', native: [], rows: new Promise((r) => { answer = r; }), list } });
+  await settle(); p.ui.sync(true); await settle();
+  assert.ok(p.tile(key('5')) && p.tile(key('7')), 'no wait for the list');
+  assert.equal(p.c.GZ_COURSE_CARDS.own(key('7')), undefined);
+  answer(Object.assign([], { complete: false })); await settle(); p.ui.sync(true); await settle();
+  assert.ok(p.tile(key('5')) && p.tile(key('7')), 'a failed read says nothing about whose a course is');
 });
