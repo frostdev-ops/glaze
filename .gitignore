@@ -1,6 +1,7 @@
 dist/
 .DS_Store
-release/
+# The root folder only: tools/release/ and test/release/ hold tracked code and tests.
+/release/
 safari/**/xcuserdata/
 *.xcuserstate
 extension/assets/ads/
