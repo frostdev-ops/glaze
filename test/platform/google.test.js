@@ -1091,6 +1091,7 @@ const settings = async ({ email = 'student@school.edu', sync = {}, connect = { o
   if (email) local.google = { email };
   vm.runInNewContext(block, {
     $: (s) => els[s], chrome, t: (s, v = {}) => s.replace(/\{(\w+)\}/g, (m, k) => (k in v ? String(v[k]) : m)), hint: (text, bad = false) => hints.push([text, bad]), GZ_SITE: {}, GZ_I18N: { locale: () => 'en', ui: () => 'en' }, Intl, Date,
+    ownTabAt: null, // the top frame: Settings' own tab (framed Settings' is test/settings/drive-framed.test.js)
     MutationObserver: class { constructor(f) { this.f = f; } observe(e) { e.observers.push(this.f); } },
   });
   const settle = () => new Promise((r) => setTimeout(r, 20));
