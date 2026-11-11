@@ -64,12 +64,12 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
   // The course whose page this is ('' elsewhere), and whether ticks go to the site: only Canvas has a planner for them.
   const here = () => (mounted ? (mounted.scope === 'all' ? '' : mounted.courseId || '') : (ultra ? ctx.courseId() : ctx.canvasCourseId()) || '');
   const toSite = () => !ultra && o().sync;
-  // The student's ticks to Canvas, by item key: { ov, at } (when Canvas confirmed it). A planner answer asked for before
+  // The student's ticks to Canvas, by account and item key: { ov, at } (when Canvas confirmed it). A planner answer asked for before
   // that tick carries the item as it stood then, so it gets the tick put back as it lands (retick).
   const ticked = new Map();
   const retick = (c) => {
     for (const [k, x] of ticked) if (Date.now() - x.at > FRESH * 5) ticked.delete(k);
-    for (const i of c.items) { const x = ticked.get(`${i.type}:${i.id}`); if (x && c.at <= x.at) i.ov = x.ov; }
+    for (const i of c.items) { const x = ticked.get(`${c.key}/${i.type}:${i.id}`); if (x && c.at <= x.at) i.ov = x.ov; }
   };
 
   // ---- Canvas ------------------------------------------------------------------------------------------------
@@ -521,10 +521,11 @@ var GZ_TODO_UI = globalThis.GZ_TODO_UI || (() => {
     }
     // Ticks go to Canvas: nothing of the student's own changes.
     el.disabled = true;
+    const account = key;
     try {
       const ov = await write(r, want);
       const it = cache?.items.find((i) => `${i.type}:${i.id}` === r.key);
-      ticked.set(r.key, { ov, at: Date.now() });
+      ticked.set(`${account}/${r.key}`, { ov, at: Date.now() });
       if (it) { it.ov = ov; keep(cache); }
     } catch {
       // Refused, or no answer to read: Canvas may or may not have it, so the list asks Canvas again.
