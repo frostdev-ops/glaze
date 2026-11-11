@@ -18,7 +18,11 @@ var GZ_WRITER_ISSUES = globalThis.GZ_WRITER_ISSUES || (() => {
   const key = new PluginKey('gzIssues');
   const look = (kind) => (kind === 'spelling' ? 'sp' : kind === 'format' || kind === 'citation' ? 'fm' : 'gr');
   const deco = (i) => Decoration.inline(i.from, i.to, { class: `gz-iss gz-iss-${look(i.kind)}`, 'data-issue': i.id }, { id: i.id });
-  const textOf = (doc, from, to) => doc.textBetween(from, to, '\n', ' ');
+  // A footnote mark or picture reads as U+FFFC, so one put in place of a space changes the text an issue covers.
+  const leaf = (n) => (n.type.name === 'hard_break' ? ' ' : '\ufffc');
+  const textOf = (doc, from, to) => doc.textBetween(from, to, '\n', leaf);
+  // Whether a footnote mark or picture lies in from–to (a suggestion put there would delete it).
+  const holdsLeaf = (doc, from, to) => { let hit = false; doc.nodesBetween(from, to, (n) => { if (n.isInline && !n.isText && n.type.name !== 'hard_break') hit = true; return !hit; }); return hit; };
   const likeKey = (i) => `${i.source}\u0000${i.kind}\u0000${i.text}\u0000${i.message}`;
   const wordy = (c) => /[\p{L}\p{M}\p{N}'’]/u.test(c);
   let seq = 0;
@@ -127,8 +131,10 @@ var GZ_WRITER_ISSUES = globalThis.GZ_WRITER_ISSUES || (() => {
       list,
       on: (fn) => { if (typeof fn !== 'function') return () => {}; fns.add(fn); return () => fns.delete(fn); },
       apply: (issue, n = 0) => {
+        // The card's range as the plugin has mapped it to now; refused (the card stays) when its text changed or a footnote
+        // mark or picture has come under it since the check.
         const v = ready(), i = find(issue), s = i?.suggestions[n];
-        if (!v || typeof s !== 'string' || textOf(v.state.doc, i.from, i.to) !== i.text) return false;
+        if (!v || typeof s !== 'string' || i.to > v.state.doc.content.size || textOf(v.state.doc, i.from, i.to) !== i.text || holdsLeaf(v.state.doc, i.from, i.to)) return false;
         v.dispatch(s ? v.state.tr.insertText(s, i.from, i.to) : v.state.tr.delete(i.from, i.to));
         if (!v.dom) notify();
         return true;
