@@ -107,6 +107,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .menu[data-below] { transform-origin: top right; }
 .menu button { display: flex; width: 100%; justify-content: space-between; gap: 16px; padding: 7px 10px; border-radius: 7px; font-size: 13px; text-align: start; color: var(--gz-ink); }
 .menu button:hover, .menu button:focus { background: var(--gz-accent-soft); outline: none; }
+.menu button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
 /* ⋯ → Insert from Canvas: Canvas's tools under one line, after Canvas editor. */
 .menu .menu-head { margin: 6px 10px 2px; padding-top: 8px; border-top: 1px solid var(--edge); font-size: 12px; color: var(--gz-ink-muted); }
 /* A copy Glaze kept of this box, offered back above the editor. */

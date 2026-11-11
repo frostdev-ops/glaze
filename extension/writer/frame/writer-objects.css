@@ -138,5 +138,6 @@
 .gp .gp-flow .ProseMirror ul > li.ql-indent-8::before { content: var(--gzb8, "\25aa"); }
 .gzo-mrow > button { display: flex; align-items: center; padding: 7px 6px; border-radius: 7px; color: var(--gz-ink); }
 .gzo-mrow > button:hover, .gzo-mrow > button:focus { background: var(--gz-accent-soft); outline: none; }
+.gzo-mrow > button:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
 .gzo-mrow > button[aria-checked="true"] { background: var(--gz-accent-soft); color: var(--gz-accent-hi); font-weight: 700; }
 :root:not([data-dark]) .gzo-mrow > button[aria-checked="true"] { color: var(--gz-accent); }

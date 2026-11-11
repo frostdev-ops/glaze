@@ -991,6 +991,7 @@ body > :is(.ui-dialog, .ui-menu, .ui-datepicker, span:not([class])) :where(*) { 
 .ui-menu, .ui-datepicker, .ui-autocomplete { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); box-shadow: var(--gz-shadow); }
 .ui-menu .ui-menu-item a, .ui-menu .ui-menu-item .ui-menu-item-wrapper { color: var(--gz-ink); background: transparent; border: 0; }
 .ui-menu .ui-menu-item :is(.ui-state-focus, .ui-state-active, .ui-state-hover), .ui-menu .ui-menu-item a:is(:hover, :focus) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 0; }
+.ui-menu .ui-menu-item a:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
 .ui-menu .ui-menu-item :is(.ui-state-focus, .ui-state-active) * { color: inherit !important; }
 .ui-datepicker :is(.ui-datepicker-header, .ui-datepicker-title, th, td a, td span) { background: transparent; color: var(--gz-ink); border-color: transparent; }
 .ui-datepicker td a:hover { background: var(--gz-accent-soft); color: var(--gz-accent); }
@@ -1091,6 +1092,7 @@ html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) 
 .tox.tox-tinymce .tox-tbtn svg g[fill="#2B3B46"] { fill: currentColor; }
 .tox.tox-tinymce .tox-tbtn[data-gz-light] { background: transparent !important; }
 .tox.tox-tinymce :is(.tox-tbtn, .tox-mbtn):is(:hover, :focus, :focus-visible, [aria-expanded="true"]) { background: var(--gz-accent-soft) !important; color: var(--gz-accent); }
+.tox.tox-tinymce :is(.tox-tbtn, .tox-mbtn):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
 /* A split button (text colour, highlight, lists) lights #f2f2f2 whole, and white round its arrow: one wash, its halves clear. */
 .tox.tox-tinymce .tox-split-button { border-radius: var(--gz-radius-sm); transition: background var(--gz-t) var(--gz-ease); }
 .tox.tox-tinymce .tox-split-button:is(:hover, :focus, :focus-within) { background: var(--gz-accent-soft) !important; box-shadow: none; }
@@ -1113,6 +1115,7 @@ html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) 
 .tox.tox-tinymce-aux .tox-collection__item { color: var(--gz-ink); background: transparent !important; border-radius: calc(var(--gz-radius-sm) - calc(var(--gz-radius, 12px) * 1 / 6)); }
 .tox.tox-tinymce-aux .tox-collection__item :is(.tox-collection__item-label, .tox-collection__item-label *) { color: inherit !important; }
 .tox.tox-tinymce-aux .tox-collection__item:is(.tox-collection__item--active, :hover) { background: var(--gz-accent-soft) !important; color: var(--gz-accent); }
+.tox.tox-tinymce-aux .tox-collection__item:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
 .tox.tox-tinymce-aux .tox-collection__item :is(svg, .tox-collection__item-icon, .tox-collection__item-checkmark, .tox-collection__item-caret) { fill: currentColor !important; color: inherit; }
 .tox.tox-tinymce-aux .tox-collection__item--state-disabled { opacity: 0.5; }
 .tox.tox-tinymce-aux .tox-collection__item-accessory { color: var(--gz-ink-faint); }
