@@ -13,7 +13,7 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 
 const ROOT = path.resolve(__dirname, '../..');
 const ALLOWED = { runner: ['runner', 'linux', 'network', 'headed'], mac: ['runner', 'mac', 'network'] };
-const SLOTS = 8, DEFAULT_LIMIT = 300, GRACE = 600, KILL_AFTER = 10000, TAIL = 25;
+const SLOTS = 8, DEFAULT_LIMIT = 300, GRACE = 600, KILL_AFTER = 10000, EXIT_WAIT = 3000, TAIL = 25;
 const nameOf = (key) => path.basename(key).replace(/\.[^.]+$/, '');
 
 // ---- checks/checks.json ------------------------------------------------------------------------------------------------------
@@ -114,14 +114,14 @@ const skippedResult = (check, reason) => result(check, 'skipped', { detail: reas
 
 // → the check's result; it resolves once the child is gone and its log is written.
 function runCheck(check, where, opts) {
-  const { spawn = nodeSpawn, timers = { setTimeout, clearTimeout }, kill = killTree, graceMs = GRACE * 1000, killAfterMs = KILL_AFTER, tailLines = TAIL, signal, evidence } = opts;
+  const { spawn = nodeSpawn, timers = { setTimeout, clearTimeout }, kill = killTree, graceMs = GRACE * 1000, killAfterMs = KILL_AFTER, exitWaitMs = EXIT_WAIT, tailLines = TAIL, signal, evidence } = opts;
   const cmd = commandFor(check, where, opts);
   if (where === 'mac') fs.mkdirSync(cmd.outDir, { recursive: true });
   const log = fs.createWriteStream(path.join(evidence, `${check.name}.log`));
   log.write(`$ ${[cmd.command, ...cmd.args].join(' ')}\n`);
   return new Promise((resolve) => {
     const started = Date.now(), tail = [];
-    let partial = '', timedOut = false, interrupted = false, finished = false, limitTimer, killTimer;
+    let partial = '', timedOut = false, interrupted = false, finished = false, limitTimer, killTimer, exitTimer;
     const take = (buf) => {
       log.write(buf);
       const lines = (partial + buf).split('\n');
@@ -132,7 +132,7 @@ function runCheck(check, where, opts) {
     const finish = (status, extra) => {
       if (finished) return;
       finished = true;
-      timers.clearTimeout(limitTimer); timers.clearTimeout(killTimer);
+      timers.clearTimeout(limitTimer); timers.clearTimeout(killTimer); timers.clearTimeout(exitTimer);
       signal?.removeEventListener('abort', onAbort);
       if (partial) { tail.push(partial); if (tail.length > tailLines) tail.shift(); }
       log.end(() => resolve(result(check, status, { ms: Date.now() - started, tail: [...tail], ...extra })));
@@ -143,16 +143,20 @@ function runCheck(check, where, opts) {
     };
     const onAbort = () => { interrupted = true; stop(); };
     const child = spawn(cmd.command, cmd.args, { cwd: cmd.cwd, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
     child.stdout.on('data', take);
     child.stderr.on('data', take);
     child.on('error', (e) => (where === 'runner' && e.code === 'ENOENT' ? finish('runner-failed', { detail: e.message }) : finish('fail', { detail: e.message })));
-    child.on('close', (code, sig) => {
+    const settle = (code, sig) => {
       if (interrupted) return finish('skipped', { code, detail: 'interrupted' });
       if (timedOut || (where === 'runner' && code === 124)) return finish('timed out', { code, detail: `limit ${check.limit}s` });
       if (where === 'runner' && code === 255) return finish('runner-failed', { code, detail: 'exit 255: the runner failed, not the check' });
       if (code === 0) return finish('pass', { code });
       finish('fail', { code, detail: code === null ? `signal ${sig}` : `exit ${code}` });
-    });
+    };
+    // 'close' waits for the pipes, and a grandchild that kept them open would hold it back: settle shortly after the exit anyway.
+    child.on('exit', (code, sig) => { exitTimer = timers.setTimeout(() => settle(code, sig), exitWaitMs); });
+    child.on('close', settle);
     limitTimer = timers.setTimeout(() => { timedOut = true; stop(); }, check.limit * 1000 + graceMs);
     if (signal?.aborted) onAbort(); else signal?.addEventListener('abort', onAbort, { once: true });
   });
