@@ -41,6 +41,12 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     out.more = more;
     return out;
   };
+  // An Ultra site's lease, as the page takes it (courses/ultra.js begin): a sign-out or site reset after it changes it, and
+  // the worker refuses what was read under it. → the epoch, or undefined.
+  const lease = async () => {
+    const fences = ['ultraCopyFence', `ultraCopyFence:${location.origin}`], f = await get(fences);
+    return (await send({ type: 'glaze:ultraMine', op: 'begin', fence: fences.map((k) => f?.[k]?.epoch || '').join('/') }))?.epoch;
+  };
   const libs = (...files) => Promise.all(files.map(([f, g]) => X().need(f, () => globalThis[g])));
 
   // ---- the planner, as courses/page/cardtasks.js load reads it, kept in the list's shape ----
@@ -53,10 +59,7 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     const key = L.storeKey(location.origin, String(p.id)), now = Date.now(), { start, end } = L.fetchRange(o, now, L.zone(p.time_zone));
     let cache, due;
     if (ultra) {
-      // The site's lease before the read, as the page takes it (courses/ultra.js begin): a sign-out or site reset before
-      // the publish changes it, and the worker refuses the read.
-      const fences = ['ultraCopyFence', `ultraCopyFence:${location.origin}`], f = await get(fences);
-      const epoch = (await send({ type: 'glaze:ultraMine', op: 'begin', fence: fences.map((k) => f?.[k]?.epoch || '').join('/') }))?.epoch;
+      const { epoch } = go;
       if (typeof epoch !== 'string') return no('stale');
       await libs(['courses/ultra.js', 'GZ_ULTRA']);
       const reader = GZ_ULTRA.read({ origin: go.origin, signal: go.signal, live: go });
@@ -488,6 +491,8 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     const stopped = new Promise((res) => ac.signal.addEventListener('abort', () => res(no('timeout')), { once: true }));
     const work = async () => {
       if (String(await x.account()) !== a.uid || !go()) return no('profile');
+      // Ultra's planner publish is fenced from before the identity is confirmed.
+      if (x.site === 'ultra' && op === 'todo') go.epoch = await lease();
       // GZ_CTX caches identity for a document. Cookies can change in another tab without replacing this document.
       const { j: me } = await req(x.site === 'ultra' ? '/learn/api/v1/users/me' : '/api/v1/users/self/profile', go);
       if (String(me?.id) !== a.uid || !go()) return no('profile');
