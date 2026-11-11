@@ -2733,8 +2733,9 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     }
     return shell;
   };
-  // Whitespace as Quill's clipboard reads it: a run inside one text node collapses to its no-break spaces (or one
-  // space), and a text node that is the block's own first or last child loses its plain edge spaces. Then no-break
+  // Whitespace as Quill's clipboard reads it, among the characters CSS collapses (an ideographic or typographic space is
+  // text): a run inside one text node collapses to its no-break spaces (or one space), and a text node that is the
+  // block's own first or last child loses its plain edge spaces. Then no-break
   // spaces become plain ones; serialize writes back as no-break the spaces Quill would collapse, so text holds only plain.
   // A paper keeps as written a run that holds a tab and no line break: its own HTML writes its tabs as they are, and
   // writer-paste.js makes a page's collapsible tabs spaces first.
@@ -2742,7 +2743,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     items.forEach((it, i) => {
       if (it.n.nodeType !== 3) return;
       const s = it.n.nodeValue, head = !it.chain.length && i === 0, tail = !it.chain.length && i === items.length - 1;
-      const v = s.replace(/\s+/g, (run, at) => {
+      const v = s.replace(/[ \t\n\r\f\u00a0]+/g, (run, at) => {
         if (paper && run.includes('\t') && !/[\n\r]/.test(run)) return run;
         const nb = run.replace(/[^\u00a0]/g, '');
         if ((head && at === 0) || (tail && at + run.length === s.length)) return nb;
