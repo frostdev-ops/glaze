@@ -93,8 +93,9 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
   // What the page itself draws there, for the side a rule leaves alone: Glaze's item's text, and the first solid background
   // from the element up ('' when a picture is behind it, or nothing is).
   const ink = (el) => css(el.matches(GLAZE_ITEM) ? el : el.querySelector(GLAZE_ITEM) || el)?.color || '';
-  const behind = (el) => {
+  const behind = (el, painted, bg) => {
     for (let e = el; e; e = e.parentElement) {
+      if (e === painted && bg) return drawn(bg);
       const s = css(e);
       if (!s || (s.backgroundImage && s.backgroundImage !== 'none')) return '';
       if ((GZ_COLOR.parse(s.backgroundColor)?.a ?? 0) >= 0.5) return s.backgroundColor;
@@ -107,19 +108,11 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
     const fg = vars['--gz-r-fg'], bg = vars['--gz-r-bg'];
     if (!fg && !bg) return false;
     if (fg === bg) return true;
-    // A side left to the LMS must be measured without this element's previous Look paints. Otherwise a new rule can be
-    // rejected against the colour it replaces, then accepted on the next pass, over and over.
-    const st = el.getAttribute('data-gz-r-st');
-    const natural = st?.split(' ').filter((k) => k !== 'fg' && k !== 'bg').join(' ');
-    const reset = (!fg || !bg) && st !== null && natural !== st;
-    if (reset) { if (natural) el.setAttribute('data-gz-r-st', natural); else el.removeAttribute('data-gz-r-st'); }
-    try {
-      const inks = fg ? [drawn(fg)] : [ink(el), ...[...el.querySelectorAll(CONTROL)].map((node) => css(node)?.color || '')];
-      const b = bg ? drawn(bg) : behind(el);
-      return !!GZ_COLOR.parse(b) && inks.some((a) => !!GZ_COLOR.parse(a) && GZ_COLOR.contrast(a, b) < 3);
-    } finally {
-      if (reset) el.setAttribute('data-gz-r-st', st);
-    }
+    return [el, ...el.querySelectorAll(CONTROL)].some((node) => {
+      const a = fg ? drawn(fg) : node === el ? ink(el) : css(node)?.color || '';
+      const b = bg && node === el ? drawn(bg) : behind(node, el, bg);
+      return !!GZ_COLOR.parse(a) && !!GZ_COLOR.parse(b) && GZ_COLOR.contrast(a, b) < 3;
+    });
   };
   // Each part's elements on the page now, with what its end state asks of them; an element two parts name takes both.
   const want = (plan) => {
@@ -138,6 +131,14 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
       for (const el of document.querySelectorAll(part.s)) if (!el.closest(OWN)) add(el, s, part, false);
       if (part.b) for (const el of document.querySelectorAll(part.b)) if (!ownIn(el, el.closest(card))) add(el, s, part, el.matches(card));
       for (const f of s.fonts) GZ_FONTS.load(f);
+    }
+    // Remove paints the next rule leaves to the LMS before measuring that side. Doing this only when a paint is abandoned
+    // avoids both stale contrast readings and mutations on every pass over an unchanged rule.
+    for (const [el, w] of els) {
+      const st = el.getAttribute('data-gz-r-st');
+      if (st === null) continue;
+      const next = st.split(' ').filter((k) => !['fg', 'bg'].includes(k) || w.vars[`--gz-r-${k}`]).join(' ');
+      if (next !== st) { if (next) el.setAttribute('data-gz-r-st', next); else el.removeAttribute('data-gz-r-st'); }
     }
     for (const [el, w] of els) {
       // A board's card itself stays: hidden or faded, its tile would be left on the board, empty.

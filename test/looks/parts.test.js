@@ -500,6 +500,9 @@ test('navigation contrast uses native link colours without paints left by the pr
         const key = Object.keys(second)[0];
         assert.equal(nav.style.getPropertyValue(`--gz-r-${key}`), second[key], `${part}: the prior paint cannot reject or toggle a readable replacement`);
       }
+      const writes = nav.doc.writes;
+      R.sync();
+      assert.equal(nav.doc.writes, writes, 'an unchanged colour rule causes no new mutations');
     }
   }
 });
