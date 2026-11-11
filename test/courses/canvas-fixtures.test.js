@@ -118,6 +118,14 @@ test('a fixture is scrubbed whole, its provenance note included', () => {
   assert.doesNotMatch(out, /SECRET/);
 });
 
+test('the scrubber removes complete JSON strings even when the identity contains escaped quotes', () => {
+  const { redact } = require('../../tools/dev/redact.js');
+  const raw = JSON.stringify({ current_user: { email: '"sam.private"@school.edu', login_id: 'sam"private', sis_user_id: 'id\\"private' } });
+  const want = JSON.stringify({ current_user: { email: 'REDACTED', login_id: 'REDACTED', sis_user_id: 'REDACTED' } });
+  assert.equal(redact(raw), want);
+  assert.equal(redact(want), want);
+});
+
 // Addresses outside the local Canvas named in a fixture's provenance note, each on purpose: where it came from.
 const PROVENANCE = new Set(['https://canvas.mit.edu/courses/10076/files/1691040', 'https://canvadocs.instructure.com/1/sessions/<session>/view']);
 
