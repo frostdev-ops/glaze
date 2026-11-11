@@ -52,6 +52,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   // (ready), an answer for a course the page has left is dropped, and every action keeps the course it began in.
   const start = async (cid) => {
     // W14's day and time reader first: the extractor reads class times with it.
+    await need('planner/todo.js', () => globalThis.GZ_TODO);
     await need('planner/classes.js', () => globalThis.GZ_CLASSES);
     await need('planner/syllabus.js', () => globalThis.GZ_SYLLABUS);
     L = globalThis.GZ_SYLLABUS;
@@ -66,7 +67,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
     // The course's own dates (own: { known, start }), for week 1: Canvas's when they override the term; Ultra's kind from
     // the course list, a date range's start asked when needed (ownStart).
     const own = ultra ? GZ_ULTRA.ownDates(m?.course) : { known: true, start: course?.restrict_enrollments_to_course_dates ? Date.parse(course.start_at || '') : undefined };
-    const w = { uid: String(p.id), cid, key: L.key(location.origin, String(p.id), cid), course, own };
+    const w = { uid: String(p.id), cid, key: L.key(location.origin, String(p.id), cid), course, own, tz: GZ_TODO.zone(p.time_zone) };
     const kept = L.tidy(await get('local', w.key));
     if (cid !== cidHere()) throw new Error('another course now');
     [who, rec] = [w, kept];
@@ -154,8 +155,9 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
 
   // ---- reading ----------------------------------------------------------------------------------------------------
   const fromPage = () => open(null, true);
-  // An instant → UTC midnight of its day here (planner/syllabus.js week1), or undefined.
-  const dayOf = (ms) => { if (!Number.isFinite(ms)) return undefined; const d = new Date(ms); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); };
+  // An instant → UTC midnight of its day at the school (tz, the Canvas profile's zone; this device's where none is known),
+  // for planner/syllabus.js week1, or undefined.
+  const dayOf = (ms, tz) => (Number.isFinite(ms) ? GZ_TODO.dayOf(ms, tz) * GZ_TODO.DAY : undefined);
   const options = (week1) => {
     const c = opened.course;
     const startAt = Date.parse(c?.term?.start_at || c?.start_at || '');
@@ -164,7 +166,7 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   };
   // ocr: what came from a picture (planner/page/import.js); a field from a line the OCR engine wasn't sure of is a guess too.
   // week1: the course's own first day, for dates by course week.
-  const extract = (text, ocr, week1 = dayOf(opened.own.start)) => {
+  const extract = (text, ocr, week1 = dayOf(opened.own.start, opened.tz)) => {
     const o = options(week1);
     const r = { ...L.extract(text, o), opts: o };
     if (!ocr) return r;
@@ -189,9 +191,9 @@ var GZ_SYL_UI = globalThis.GZ_SYL_UI || (() => {
   const reviewed = async (text, ocr, signal) => {
     const w = opened, r = extract(text, ocr);
     if (w.own.known || r.week1.from === 'text') return r;
-    const weekly = r.week1.value || (!Number.isFinite(options().start) && L.extract(text, options(dayOf(Date.now()))).week1.from === 'course');
+    const weekly = r.week1.value || (!Number.isFinite(options().start) && L.extract(text, options(dayOf(Date.now(), w.tz))).week1.from === 'course');
     if (!weekly) return r;
-    const start = dayOf(await until(ownStart(w), signal));
+    const start = dayOf(await until(ownStart(w), signal), w.tz);
     return Number.isFinite(start) ? extract(text, ocr, start) : r;
   };
 
