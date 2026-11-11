@@ -260,6 +260,35 @@ test('arrays: at most 64 elements, with a size the checker can read, priced wher
   ok('the same loops without the array', body('for (int a = 0; a < 64; a++) for (int b = 0; b < 8; b++) { float w; x += w; }'));
 });
 
+test('array bounds cannot borrow a smaller constant from another scope or declarator', () => {
+  for (const declaration of ['const int unused = 0, N = 65535;', 'const highp int N = 65535;']) {
+    bad(declaration, `const int N = 1;\nfloat helper() { ${declaration} float a[N]; return a[0]; }\n${MIN}`, /unique name|array of|Can't tell how big/);
+  }
+  ok('a precision-qualified constant', `const highp int N = 8;\n${body('float a[N]; x = a[0];')}`);
+  ok('constants in one declaration', `const int A = 4, N = A;\n${body('float a[N]; x = a[0];')}`);
+});
+
+test('inline struct instance arrays are sized and priced like named-type arrays', () => {
+  for (const declaration of ['struct S { float v; } a[65535];', 'struct { float v; } a[65535];', 'struct S { float v; } a, b[65535];']) {
+    bad(declaration, body(declaration), /array of 65,535 elements/);
+  }
+  bad('an unreadable inline struct array', body('struct S { float v; } a[int(1e5)];'), /Can't tell how big this array is/);
+  const array = body('for (int k = 0; k < 256; k++) { struct S { float v; } a[64]; x += a[0].v; }');
+  bad('inline struct arrays count on every pass', array, /Too heavy/);
+  ok('a small inline struct array', body('struct S { float v; } a[4]; a[0].v = 1.; x = a[0].v;'));
+  ok('a struct member index is not a declaration', body('struct S { float a[4]; }; S s; x = s.a[int(x)];'));
+});
+
+test('global arrays and array parameters contribute their elements to the first frame cost', () => {
+  const global = (n) => `float a${n ? `[${n}]` : ''};\n${MIN}`;
+  assert.equal(G.estimate(global(10)) - G.estimate(global(0)), 10);
+  const parameter = (n) => `float f(float a${n ? `[${n}]` : ''}) { return 1.; }\nvec4 scene(vec2 uv) { float a${n ? `[${n}]` : ''}; return vec4(f(a)); }`;
+  assert.equal(G.estimate(parameter(10)) - G.estimate(parameter(0)), 20, 'the local declaration and the called parameter each count');
+  const globals = Array.from({ length: 65 }, (_, i) => `float a${i}[64];`).join('\n');
+  bad('many global arrays', `${globals}\n${MIN}`, /Too heavy/);
+  ok('a small global array', global(4));
+});
+
 test('the checker stays fast on hostile 8 KiB inputs, and never throws', () => {
   const cases = {
     spaces: ' '.repeat(8192), semis: ';'.repeat(8192), braces: '{;'.repeat(4096), open_braces: '{'.repeat(8192), floats: 'float '.repeat(1365),
