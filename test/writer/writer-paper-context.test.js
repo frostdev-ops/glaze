@@ -184,3 +184,17 @@ test('unscored and hidden rubric definitions never acquire row or rating point s
   assert.equal(hiddenRubric.total, null);
   assert.ok(hiddenRubric.criteria.every((row) => row.points === null && row.weight === null && row.cells.every((cell) => cell.value === null && cell.percentage === undefined)));
 });
+
+test('a description full of unclosed < is cleaned in linear time (ten times the text, far less than a hundred times the time)', async () => {
+  const withDescription = (n) => base({ get: async (u) => (u.endsWith('/contents/_7_1') ? { ...item, description: 'a < b '.repeat(n) } : column) });
+  const time = async (n) => {
+    let best = Infinity;
+    for (let i = 0; i < 3; i++) { const at = process.hrtime.bigint(); await C.build(withDescription(n)); best = Math.min(best, Number(process.hrtime.bigint() - at) / 1e6); }
+    return Math.max(best, 0.5);
+  };
+  await C.build(withDescription(2000)); // warm
+  const small = await time(2000), big = await time(20000);
+  assert.ok(big < small * 30, `2,000 took ${small.toFixed(1)} ms, 20,000 took ${big.toFixed(1)} ms`);
+  const c = await C.build(base({ get: async (u) => (u.endsWith('/contents/_7_1') ? { ...item, description: 'x < y <b>bold</b><br>next < end' } : column) }));
+  assert.match(JSON.stringify(c), /x bold\\nnext < end|x bold next < end/, 'a tag still runs from a < to the next >');
+});
