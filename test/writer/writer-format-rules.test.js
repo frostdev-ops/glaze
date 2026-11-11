@@ -120,3 +120,14 @@ test('MLA heading dates with a two-digit year do not guess a century', () => {
     assert.deepEqual(cards(S.paper.nodeFromJSON(json), 'mla9', 'heading-date'), [], date);
   }
 });
+
+// The outline's source blocks carry their footnotes' text, so the AI outline and the checks built on it see a Chicago
+// paper's notes (CMOS 14.19: notes carry the citations).
+test('outline source blocks include the text of their footnotes', () => {
+  const doc = withHTML('mla9', '<p>Time swings<sup class="gz-footnote" data-footnote="Zadie Smith, <em>Swing Time</em> (New York: Penguin, 2016), 320."></sup> and pays.</p>');
+  const block = F.outlineSource(doc, ST.FORMATS.mla9).blocks.find((b) => b.text.startsWith('Time swings'));
+  assert.ok(block, 'the paragraph is a block');
+  assert.match(block.text, /^Time swings and pays\.\n\nFootnotes:\n- Zadie Smith, Swing Time \(New York: Penguin, 2016\), 320\.$/);
+  const plain = F.outlineSource(withHTML('mla9', '<p>No notes here.</p>'), ST.FORMATS.mla9).blocks.find((b) => b.text.startsWith('No notes'));
+  assert.equal(plain.text, 'No notes here.');
+});
