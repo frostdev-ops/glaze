@@ -137,6 +137,7 @@ export const start = (host, live = () => true, onFail = () => {}) => {
   const freeze = () => {
     if (stopped || frozen) return;
     frozen = true;
+    clearTimeout(redo);
     view?.mode('hold');
     removeEventListener('resize', onResize);
     clearTimeout(resizing);
@@ -310,9 +311,9 @@ export const start = (host, live = () => true, onFail = () => {}) => {
       tell({ gzMediaState: { state: 'ready' } });
       apply();
     } catch (e) {
-      if (mine !== turn) return;
+      if (mine !== turn || stopped || failed || frozen) return;
       if (e?.again && tries < WAITS.length && !stopped && !failed && !frozen) {
-        redo = setTimeout(() => { if (mine === turn && !stopped && !failed) { if (live()) build(s); else freeze(); } }, WAITS[tries++]);
+        redo = setTimeout(() => { if (mine === turn && !stopped && !failed && !frozen) { if (live()) build(s); else freeze(); } }, WAITS[tries++]);
         return;
       }
       fail(e?.why || 'load');
