@@ -740,7 +740,10 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     const html = !files.length && e.dataTransfer?.getData('text/html');
     if (!files.length && !html) return;
     e.preventDefault();
-    const at = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+    // Chrome and Safari give a range; Firefox, a position to make one from.
+    let at = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+    const pos = !at && document.caretPositionFromPoint?.(e.clientX, e.clientY);
+    if (pos?.offsetNode) { at = document.createRange(); at.setStart(pos.offsetNode, pos.offset); at.collapse(true); }
     if (at) { const s = getSelection(); s.removeAllRanges(); s.addRange(at); }
     keepRange();
     if (files.length) addFiles(files); else { putRange(); insertPasted(html); }
