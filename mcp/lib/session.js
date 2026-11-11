@@ -36,7 +36,7 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
   let init = null, ready = false;
   const flight = new Map(); // requests sent to Glaze and not answered: key → { id, method, text, tools }
   let held = []; // while down: { text, id?, method, at, n }
-  const acks = new Set(); // subscriptions sent again, whose next acknowledgement the app has had already
+  const acks = new Map(); // subscriptions being restored, and whether the app already had their acknowledgement
 
   const out = () => ({ app: [], glaze: [] });
   const fail = (id, code, message) => line({ id, error: { code, message } });
@@ -52,7 +52,10 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
   };
   // A line on its way to a live Glaze, noting the requests.
   const send = (r, h) => {
-    if (h.id !== undefined && h.method) flight.set(key(h.id), { id: h.id, method: h.method, text: h.text, tools: h.tools });
+    if (h.id !== undefined && h.method) {
+      flight.set(key(h.id), { id: h.id, method: h.method, text: h.text, tools: h.tools, acked: h.acked });
+      if (h.again && h.method === 'subscriptions/listen') acks.set(key(h.id), h);
+    }
     r.glaze.push(h.text);
   };
   const flush = (r) => {
@@ -84,7 +87,6 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
   const resume = (r) => {
     const known = !!(init && init.version && ready);
     if (known) r.glaze.push(line({ method: 'notifications/initialized' }));
-    for (const h of held) if (h.again && h.tools) r.app.push(line({ method: 'notifications/tools/list_changed', params: { _meta: { [SUB]: h.id } } }));
     flush(r);
     if (known) r.app.push(line({ method: 'notifications/tools/list_changed' }));
   };
@@ -102,6 +104,7 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
     }
     if (method === 'notifications/cancelled' && isId(p.requestId)) {
       flight.delete(key(p.requestId));
+      acks.delete(key(p.requestId));
       const i = held.findIndex((x) => x.id !== undefined && key(x.id) === key(p.requestId));
       if (i >= 0) { size -= held[i].n; held.splice(i, 1); return r; }
     }
@@ -130,11 +133,19 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
       }
       const k = key(m.id), f = flight.get(k);
       flight.delete(k);
+      acks.delete(k);
       if (f && f.method === 'initialize' && init && !init.version && isObj(m.result) && typeof m.result.protocolVersion === 'string') init.version = m.result.protocolVersion;
     }
     if (m && m.method === 'notifications/subscriptions/acknowledged' && isObj(m.params) && isObj(m.params._meta)) {
       const k = key(m.params._meta[SUB]);
-      if (acks.delete(k)) return r;
+      const f = flight.get(k), restored = acks.get(k);
+      if (f && f.method === 'subscriptions/listen') f.acked = true;
+      if (restored) {
+        acks.delete(k);
+        if (!restored.acked) r.app.push(text);
+        if (restored.tools) r.app.push(line({ method: 'notifications/tools/list_changed', params: { _meta: { [SUB]: restored.id } } }));
+        return r;
+      }
     }
     r.app.push(text);
     return r;
@@ -152,7 +163,7 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
     const again = [];
     for (const f of flight.values()) {
       if (f.method === 'ping') r.app.push(line({ id: f.id, result: {} }));
-      else if (AGAIN.has(f.method)) again.push({ text: f.text, id: f.id, method: f.method, tools: f.tools, at: now, n: bytes(f.text), again: true });
+      else if (AGAIN.has(f.method)) again.push({ ...f, at: now, n: bytes(f.text), again: true });
       else r.app.push(fail(f.id, CUT, CUT_SAYS));
     }
     flight.clear();
@@ -168,7 +179,6 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
     live = true;
     ever = true;
     since = now;
-    for (const h of held) if (h.again && h.method === 'subscriptions/listen') acks.add(key(h.id));
     if (init && init.version) {
       replaying = true;
       r.glaze.push(line({ id: REPLAY, method: 'initialize', params: init.params }));
