@@ -6,9 +6,8 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 // usable, and its worker installed, while Settings' news or preview write is still in flight.
 const source = fs.readFileSync(path.join(__dirname, '../../checks/settings/backup-check.js'), 'utf8');
 const origin = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop', version = '4.0.0';
-const navKey = `navbarSeen:${origin}`;
 const ready = () => ({ freshDefaults: { fresh: true, pending: false }, migrated: ['tabs-auto'], channelKeysMoved: true,
-  newsSeen: version, [navKey]: [{ id: 'course', label: 'Courses', path: '/ultra/course' }] });
+  newsSeen: version });
 const harness = (local, expired = false) => {
   const pageContext = vm.createContext({ location: { origin }, chrome: {
     storage: { local: { get: async (keys) => structuredClone(Object.fromEntries(keys.filter((k) => k in local).map((k) => [k, local[k]]))) } },
@@ -31,7 +30,7 @@ test('backup launch accepts a completed install and completed Settings startup',
   await harness(ready())('/unused-profile');
 });
 
-for (const delayed of ['newsSeen', navKey]) test(`backup launch waits for Settings' ${delayed} write after install finishes`, async () => {
+for (const delayed of ['newsSeen']) test(`backup launch waits for Settings' ${delayed} write after install finishes`, async () => {
   const local = ready(), value = local[delayed];
   delete local[delayed];
   let returned = false;

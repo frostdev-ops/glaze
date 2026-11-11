@@ -1166,7 +1166,9 @@ function GZ_NAVBAR_ULTRA(X) {
     // Ultra redraws the drawer whole: its parent sees the new one come in.
     if (scope?.parentElement) swap.observe(scope.parentElement, { childList: true });
   };
+  // Settings' preview is an extension page: nobody is signed in there, so nothing is asked of it and nothing kept.
   const identify = () => {
+    if (/-extension:$/.test(location.protocol)) return;
     const n = ++identity;
     Promise.resolve().then(() => X.account()).then((u) => {
       if (n !== identity || retired || !/^_\d+_\d+$/.test(String(u))) return;
