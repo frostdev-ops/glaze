@@ -399,6 +399,27 @@ test('a retry waiting is dropped when the Look changes its file, or the scene st
   assert.deepEqual([r.e.messages.length, r.fails], [before, []], 'stopped: nothing is asked again, and nothing is told');
 });
 
+test('freezing a scene cancels a retry and ignores a transient answer arriving after freeze', async () => {
+  for (const pending of [false, true]) {
+    let answer;
+    const c = RETRY[2][1]();
+    const r = rig({ ask: pending ? () => new Promise((resolve) => { answer = resolve; }) : flaky(c.type, c.bad, Infinity, null) });
+    r.scene.update(o(c.media));
+    await settle();
+    if (!pending) assert.deepEqual(waits(r), [1000]);
+    r.e.live = false;
+    r.scene.draw();
+    if (pending) answer(c.bad);
+    await settle();
+    assert.deepEqual([r.fails, waits(r)], [[], []], `pending answer: ${pending}`);
+    r.e.live = true;
+    r.e.tick();
+    await settle();
+    assert.equal(r.e.messages.length, 1, 'a frozen scene never resumes its retry');
+    r.scene.stop();
+  }
+});
+
 test('the editor\'s preview is told when an address broke a limit', async () => {
   const r = rig({ preview: true, ask: remote({ ok: false, error: 'big' }) });
   r.scene.update(o({ type: 'video', src: URL1 }));
