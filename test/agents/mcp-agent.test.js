@@ -163,27 +163,69 @@ test('lines go through untouched both ways, and stdout carries only the worker\'
   assert.equal((await a.exited).code, 0);
 });
 
-test('the agent exits 1 when its connection closes or the host goes, and 0 when stdin ends', async (t) => {
+const J = (o) => JSON.stringify({ jsonrpc: '2.0', ...o });
+const INIT = { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'test app', version: '1.0' } };
+const RESULT = { protocolVersion: '2025-11-25', capabilities: { tools: { listChanged: true } }, serverInfo: { name: 'glaze', title: 'Glaze', version: '4.0.6' } };
+const answer = (b, c, o) => { for (const f of F.split(c, J(o))) b.send(f); };
+const outLines = (a) => a.out().toString().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+// An app that has initialized through the worker on connection c.
+const initialized = async (b, a) => {
+  const o = await opened(b);
+  a.write(`${J({ id: 0, method: 'initialize', params: INIT })}\n`);
+  assert.deepEqual(JSON.parse(await lineFrom(b, o.c)).params, INIT);
+  answer(b, o.c, { id: 0, result: RESULT });
+  await until('the answer reaches the app', () => outLines(a).some((m) => m.id === 0));
+  a.write(`${J({ method: 'notifications/initialized' })}\n`);
+  assert.equal(JSON.parse(await lineFrom(b, o.c)).method, 'notifications/initialized');
+  return o;
+};
+// The agent's replay on a new connection, answered as the worker would: then the app's initialized, and one list_changed.
+const replayed = async (b, a) => {
+  const o = await opened(b);
+  const m = JSON.parse(await lineFrom(b, o.c));
+  assert.equal(m.method, 'initialize');
+  assert.match(String(m.id), /^glaze-mcp:/);
+  assert.deepEqual(m.params, INIT);
+  const before = outLines(a).length;
+  answer(b, o.c, { id: m.id, result: RESULT });
+  assert.equal(JSON.parse(await lineFrom(b, o.c)).method, 'notifications/initialized');
+  await until('list_changed reaches the app', () => outLines(a).slice(before).some((x) => x.method === 'notifications/tools/list_changed'));
+  assert.ok(!outLines(a).some((x) => x.id === m.id), 'the replay\'s answer never reaches the app');
+  return o;
+};
+
+test('the agent stays when its connection closes or the host goes, reconnects and replays initialize; 0 when stdin ends', async (t) => {
   const home = scratch(t);
   const b = browser(t, home);
   await b.start();
   const one = app(t, home);
-  const o1 = await opened(b);
+  const o1 = await initialized(b, one);
+  // The worker closes the connection: the same host takes the agent back.
   b.send({ t: 'close', c: o1.c, why: 'off' });
-  assert.equal((await one.exited).code, 1);
+  const o2 = await replayed(b, one);
+  assert.notEqual(o2.c, o1.c);
+  assert.equal(one.p.exitCode, null);
   assert.match(one.err(), /closed/i);
+  one.write(`${J({ id: 1, method: 'tools/list' })}\n`);
+  assert.deepEqual(JSON.parse(await lineFrom(b, o2.c)), { jsonrpc: '2.0', id: 1, method: 'tools/list' });
+  // The host goes (agent access off): the agent waits for the next one of that browser and instance.
+  b.send({ t: 'bye' });
+  await b.exited;
+  await new Promise((r) => setTimeout(r, 600));
+  assert.equal(one.p.exitCode, null, 'still there with no host');
+  const again = browser(t, home);
+  await again.start();
+  await replayed(again, one);
   // What the app sent just before closing stdin still arrives, and the worker hears the close.
   const two = app(t, home);
-  const o2 = await opened(b);
+  const o3 = await opened(again);
   two.write('{"id":"last"}\n');
   two.end();
   assert.equal((await two.exited).code, 0);
-  assert.equal(await lineFrom(b, o2.c), '{"id":"last"}');
-  assert.deepEqual(await b.take('close', (f) => f.t === 'close' && f.c === o2.c), { t: 'close', c: o2.c, why: 'eof' });
-  const three = app(t, home);
-  await opened(b);
-  b.send({ t: 'bye' });
-  assert.equal((await three.exited).code, 1);
+  assert.equal(await lineFrom(again, o3.c), '{"id":"last"}');
+  assert.deepEqual(await again.take('close', (f) => f.t === 'close' && f.c === o3.c), { t: 'close', c: o3.c, why: 'eof' });
+  one.end();
+  assert.equal((await one.exited).code, 0);
   // Before there is any host.
   const four = app(t, scratch(t));
   await until('it waits', () => /waiting/i.test(four.err()));
@@ -192,6 +234,130 @@ test('the agent exits 1 when its connection closes or the host goes, and 0 when 
   const { code, at: done } = await four.exited;
   assert.equal(code, 0);
   assert.ok(done - at < 1000, `exited after ${done - at} ms`);
+});
+
+test('a call in flight when Glaze goes is answered -31002 and never sent again; ping is answered while down', async (t) => {
+  const home = scratch(t);
+  const b = browser(t, home);
+  await b.start();
+  const a = app(t, home);
+  const o1 = await initialized(b, a);
+  a.write(`${J({ id: 5, method: 'tools/call', params: { name: 'todo_mark_done', arguments: {} } })}\n`);
+  assert.equal(JSON.parse(await lineFrom(b, o1.c)).method, 'tools/call');
+  b.send({ t: 'bye' });
+  await until('-31002 for the call', () => outLines(a).find((m) => m.id === 5));
+  assert.equal(outLines(a).find((m) => m.id === 5).error.code, -31002);
+  a.write(`${J({ id: 6, method: 'ping' })}\n`);
+  await until('ping answered without Glaze', () => outLines(a).find((m) => m.id === 6));
+  assert.deepEqual(outLines(a).find((m) => m.id === 6), { jsonrpc: '2.0', id: 6, result: {} });
+  const again = browser(t, home);
+  await again.start();
+  const o2 = await replayed(again, a);
+  a.write(`${J({ id: 7, method: 'tools/list' })}\n`);
+  assert.equal(JSON.parse(await lineFrom(again, o2.c)).id, 7, 'the next line is the app\'s, not the call again');
+  a.end();
+  assert.equal((await a.exited).code, 0);
+});
+
+test('stdin EOF while Glaze is away exits 0', async (t) => {
+  const home = scratch(t);
+  const b = browser(t, home);
+  await b.start();
+  const a = app(t, home);
+  await opened(b);
+  b.send({ t: 'bye' });
+  await until('the agent says Glaze closed it', () => /closed/i.test(a.err()));
+  const at = Date.now();
+  a.end();
+  const { code, at: done } = await a.exited;
+  assert.equal(code, 0);
+  assert.ok(done - at < 1000, `exited after ${done - at} ms`);
+});
+
+test('the agent never moves to another browser or instance after its first', async (t) => {
+  const home = scratch(t);
+  const chrome = browser(t, home);
+  await chrome.start('chromeinst');
+  const a = app(t, home, ['--browser', 'chrome']);
+  await opened(chrome);
+  const other = browser(t, home);
+  await other.start('otherinst');
+  const fox = browser(t, home, FIREFOX);
+  await fox.start('foxinst');
+  chrome.send({ t: 'bye' });
+  await chrome.exited;
+  await new Promise((r) => setTimeout(r, 1500));
+  assert.deepEqual([...other.left((f) => f.t === 'open'), ...fox.left((f) => f.t === 'open')], [], 'not another instance, not another browser');
+  assert.equal(a.p.exitCode, null);
+  const back = browser(t, home);
+  await back.start('chromeinst');
+  await opened(back);
+  a.end();
+  assert.equal((await a.exited).code, 0);
+  // Unpinned, the first connection still decides: the newest host then, that one only afterwards.
+  const b = app(t, home);
+  await opened(back);
+  back.send({ t: 'bye' });
+  await back.exited;
+  await new Promise((r) => setTimeout(r, 1000));
+  assert.deepEqual([...other.left((f) => f.t === 'open'), ...fox.left((f) => f.t === 'open')], []);
+  b.end();
+  assert.equal((await b.exited).code, 0);
+});
+
+test('a host that closes the handshake while its run file stands is tried again for 3 s before it counts as refused', async (t) => {
+  const home = scratch(t), dir = R.ready(runDir(home)), sockets = new Set();
+  const server = net.createServer((s) => { sockets.add(s); s.on('error', () => {}); s.destroy(); });
+  const sock = R.socketPath(dir, 'chrome', 'going');
+  await R.listen(server, sock);
+  t.after(() => { for (const s of sockets) s.destroy(); server.close(); });
+  R.write(dir, { v: 1, pid: process.pid, path: sock, token: R.token(), browser: 'chrome', instance: 'going', at: Date.now() });
+  const a = app(t, home);
+  const at = Date.now();
+  const { code, at: done } = await a.exited;
+  assert.equal(code, 1);
+  assert.match(a.err(), /refused/i);
+  assert.ok(done - at >= 2800, `gave up after ${done - at} ms`);
+  // Replaced within the 3 s, as a host that was shutting down is: the agent takes the new one.
+  const home2 = scratch(t), dir2 = R.ready(runDir(home2));
+  const server2 = net.createServer((s) => { sockets.add(s); s.on('error', () => {}); s.destroy(); });
+  const sock2 = R.socketPath(dir2, 'chrome', 'inst1');
+  await R.listen(server2, sock2);
+  t.after(() => server2.close());
+  R.write(dir2, { v: 1, pid: process.pid, path: sock2, token: R.token(), browser: 'chrome', instance: 'inst1', at: Date.now() });
+  const c = app(t, home2);
+  await until('it tried the going host', () => sockets.size >= 2);
+  const b = browser(t, home2);
+  await b.start();
+  await opened(b);
+  c.end();
+  assert.equal((await c.exited).code, 0);
+});
+
+test('a busy run folder is tried again, and the agent says what the lock is', { skip: posixOnly('the lock sits in a POSIX run folder the test makes; Windows takes the same path') }, async (t) => {
+  const home = scratch(t), dir = R.ready(runDir(home)), lock = path.join(dir, '.rendezvous.lock');
+  fs.writeFileSync(lock, '12345', { mode: 0o600 });
+  const a = app(t, home);
+  a.write('{"id":"held"}\n');
+  await until('it names the lock', () => a.err().includes('.rendezvous.lock'));
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(a.p.exitCode, null);
+  fs.rmSync(lock);
+  const b = browser(t, home);
+  await b.start();
+  await opened(b);
+  assert.equal(await lineFrom(b, 1), '{"id":"held"}');
+  a.end();
+  assert.equal((await a.exited).code, 0);
+});
+
+test('doctor says what a leftover .rendezvous.lock is and that deleting it is safe with no helper running', { skip: posixOnly('POSIX run folder') }, async (t) => {
+  const home = scratch(t), dir = R.ready(runDir(home));
+  fs.writeFileSync(path.join(dir, '.rendezvous.lock'), '12345', { mode: 0o600 });
+  const rows = await A.doctor({ platform: process.platform, env: envFor(home) });
+  const row = rows.find((r) => r.detail.includes('.rendezvous.lock'));
+  assert.ok(row && row.level === 'warn', JSON.stringify(rows));
+  assert.match(row.detail, /safe to delete/i);
 });
 
 test('the agent takes the newest host unless told which, and names the others', async (t) => {
