@@ -129,6 +129,19 @@ test('APA: same author, same year: a and b by title order in the entry and the c
   assert.deepEqual(issues.map((i) => i.message), []);
   assert.deepEqual(C.cites('One (Smith, 2020a).', all, 'apa7').map((c) => c.ids), [['s-alpha']]);
 });
+test('APA year letters follow specific publication dates before titles (APA 9.47)', () => {
+  const all = [
+    book({ id: 's-later', type: 'webpage', title: 'Alpha update', issued: d(2020, 4, 2) }),
+    book({ id: 's-earlier', type: 'webpage', title: 'Zebra update', issued: d(2020, 3, 26) }),
+    book({ id: 's-year', title: 'Yearly overview', issued: d(2020) }),
+    book({ id: 's-same', type: 'webpage', title: 'The beta update', issued: d(2020, 4, 2) }),
+  ];
+  const list = C.list(all, 'apa7').entries;
+  assert.deepEqual(list.map((e) => e.id), ['s-year', 's-earlier', 's-later', 's-same']);
+  assert.deepEqual(list.map((e) => e.html.match(/\(2020[^)]*\)/)[0]), ['(2020a)', '(2020b, March 26)', '(2020c, April 2)', '(2020d, April 2)']);
+  assert.equal(C.format(all[1], 'apa7', { sources: all }).inText(), '(Lee, 2020b)');
+  assert.deepEqual(C.cites('Earlier (Lee, 2020b).', all, 'apa7').map((c) => c.ids), [['s-earlier']]);
+});
 
 // Each work is its own entry (APA 9.43, MLA 5.124, CMOS 14.63): two pages at different addresses, or two chapters of one
 // title in different books, stay two sources; the same work found twice stays one.
