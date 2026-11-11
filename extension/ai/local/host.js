@@ -417,7 +417,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         if (think) think.budget = Math.min(think.budget, room - input - answer - think.close.length);
         if (m.tools !== undefined && !m.schema) throw fail('request-rejected', 'unsupported');
         const grammar = m.schema ? matcher(job, m.schema, m.tools, m.sources) : null;
-        if (grows) await model.reserve(input + (close?.length || 0) + (think?.budget || 0) + answer, room).catch((e) => { throw e?.reason === 'memory' ? fail('provider-unavailable', 'hardware') : e; });
+        if (grows) await model.reserve(input + (close?.length || 0) + (think?.budget || 0) + answer, room);
         // Low priority: start small, then learn linear or launch-floor pacing; wait and yield after every GPU step.
         const low = m.priority === 'low' || head.includes(tok.id('<|gz_task:writer.complete|>'));
         const yieldNow = pause;
@@ -558,7 +558,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         const head = encode(job, m.parts.slice(0, stable)), ids = [...head, ...encode(job, m.parts.slice(stable))], pacing = paced();
         const room = typeof job.model.reserve === 'function' ? job.context : Math.min(job.model.context || job.context, job.context);
         if (ids.length > room) throw fail('request-rejected', 'context', { tokens: ids.length, context: room });
-        if (typeof job.model.reserve === 'function') await job.model.reserve(ids.length, room).catch((e) => { throw e?.reason === 'memory' ? fail('provider-unavailable', 'hardware') : e; });
+        if (typeof job.model.reserve === 'function') await job.model.reserve(ids.length, room);
         await prefix(job, head, signal, pacing);
         if (stable < m.parts.length && typeof job.model.extend === 'function') {
           await job.model.extend(ids, { at: stops(job, ids, head.length), signal, ...pacing });
