@@ -632,3 +632,30 @@ test('a deck\'s pictures are read through one archive: 8 times the pictures take
   assert.deepEqual([...await P.pictures(small)('ppt/media/i0.png')], [...png], 'the picture\'s bytes');
   assert.equal(await P.pictures(small)('ppt/slides/slide1.xml'), null, 'never a part that isn\'t a picture');
 });
+
+const heavy = (part, k) => fixture(part).replace('</p:spTree>', `${'<p:sp/>'.repeat(k)}</p:spTree>`);
+const bigMaster = (k) => ({ 'ppt/slideMasters/slideMaster1.xml': heavy('ppt/slideMasters/slideMaster1.xml', k) });
+const bigLayout = (k) => heavy('ppt/slideLayouts/slideLayout2.xml', k);
+const counted = (d) => ({ cut: d.cut, shapes: d.slides.map((s) => s.shapes.length), master: d.slides.map((s) => s.shapes.filter((x) => x.from === 'master').length), layout: d.slides.map((s) => s.shapes.filter((x) => x.from === 'layout').length) });
+
+test('a huge master or layout shared by many slides is indexed once: 12 times the slides take well under 1.6 times as long', async () => {
+  for (const [part, deckOf] of [['master', (n) => made({ n, files: bigMaster(300000) })], ['layout', (n) => made({ n, layout: bigLayout(300000) })]]) {
+    const small = deckOf(4), big = deckOf(48);
+    const a = await best(() => P.read(small)), b = await best(() => P.read(big));
+    assert.deepEqual([a.out.cut, b.out.cut], [{ shapes: 1150012 }, { shapes: 14350144 }], `${part}: what the walk leaves out is counted for every slide`);
+    assert.deepEqual(b.out.slides.slice(0, 4).map((s) => s.shapes.length), [50000, 0, 0, 0], `${part}: the first slide takes the deck's whole shape budget`);
+    assert.ok(b.ms < 1.6 * a.ms, `${part}: 4 slides ${a.ms.toFixed(0)} ms, 48 slides ${b.ms.toFixed(0)} ms`);
+  }
+});
+
+test('the shapes and counts of a deck whose shape budget runs out inside a master, a layout, or after both are what the walk per slide gave', async () => {
+  const run = async (deck) => { const d = await P.read(deck); return counted(d); };
+  assert.deepEqual(await run(made({ n: 4, files: bigMaster(30000) })),
+    { cut: { shapes: 70012 }, shapes: [30003, 19997, 0, 0], master: [30002, 19997, 0, 0], layout: [1, 0, 0, 0] });
+  assert.deepEqual(await run(made({ n: 4, layout: bigLayout(30000) })),
+    { cut: { shapes: 70012 }, shapes: [30003, 19997, 0, 0], master: [2, 2, 0, 0], layout: [30001, 19995, 0, 0] });
+  assert.deepEqual(await run(made({ n: 5, files: bigMaster(30000), layout: bigLayout(30000) })),
+    { cut: { shapes: 250015 }, shapes: [50000, 0, 0, 0, 0], master: [30002, 0, 0, 0, 0], layout: [19998, 0, 0, 0, 0] });
+  assert.deepEqual(await run(made({ n: 3, files: bigMaster(60000), layout: bigLayout(60000) })),
+    { cut: { shapes: 310009 }, shapes: [50000, 0, 0], master: [50000, 0, 0], layout: [0, 0, 0] });
+});
