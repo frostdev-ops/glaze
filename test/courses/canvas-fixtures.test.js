@@ -126,6 +126,22 @@ test('the scrubber removes complete JSON strings even when the identity contains
   assert.equal(redact(want), want);
 });
 
+test('CSRF redaction reads the real HTML attributes and preserves unrelated attributes', () => {
+  const { redact } = require('../../tools/dev/redact.js');
+  const cases = [
+    ['<meta name="csrf-token" data-content="metadata" content="SECRET">', '<meta name="csrf-token" data-content="metadata" content="REDACTED">'],
+    ['<input name="authenticity_token" data-value="metadata" value="SECRET">', '<input name="authenticity_token" data-value="metadata" value="REDACTED">'],
+    ['<meta name = "csrf-token" content = "SECRET">', '<meta name = "csrf-token" content = "REDACTED">'],
+    ['<input value="secret\'tail" name="authenticity_token">', '<input value="REDACTED" name="authenticity_token">'],
+    ['<meta data-name="csrf-token" name="description" content="ordinary text">', '<meta data-name="csrf-token" name="description" content="ordinary text">'],
+    ['<meta name="csrf-token-label" content="ordinary text">', '<meta name="csrf-token-label" content="ordinary text">'],
+  ];
+  for (const [raw, want] of cases) {
+    assert.equal(redact(raw), want, raw);
+    assert.equal(redact(want), want, `idempotent: ${want}`);
+  }
+});
+
 // Addresses outside the local Canvas named in a fixture's provenance note, each on purpose: where it came from.
 const PROVENANCE = new Set(['https://canvas.mit.edu/courses/10076/files/1691040', 'https://canvadocs.instructure.com/1/sessions/<session>/view']);
 
