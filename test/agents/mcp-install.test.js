@@ -337,6 +337,26 @@ test('launchers never name fnm\'s per-shell alias or a Linux session\'s runtime 
   assert.equal(I.stableNode(node, 'darwin', env), path.join(session, 'node'));
 });
 
+test('setup resolves session aliases for discovered and fallback nodes too', { skip: posixOnly('POSIX symlinks') }, async (t) => {
+  for (const platform of ['darwin', 'linux']) for (const primary of [true, false]) await t.test(`${platform} ${primary ? 'discovered' : 'fallback'}`, async (t) => {
+    const home = scratch(t), durable = nodeIn(path.join(home, 'installed', 'bin'));
+    const runtime = mk(home, 'run');
+    const bin = platform === 'darwin' ? mk(home, 'fnm_multishells', '4242_1700000000', 'bin') : mk(runtime, 'tools', 'bin');
+    const alias = path.join(bin, 'node');
+    fs.symlinkSync(durable, alias);
+    const current = nodeIn(path.join(home, 'current'), primary ? (f) => fs.chmodSync(f, 0o775) : undefined);
+    const env = { HOME: home, PATH: bin, XDG_RUNTIME_DIR: runtime };
+    mk(B.table(platform, env).find((b) => b.id === 'chrome').data);
+    const opts = { platform, env, node: undefined, execPath: current, versions: { node: '22.11.0' }, src: PKG, list: [alias, durable], run: async () => ({ stdout: 'v22.11.0\n' }) };
+    await I.setup(opts);
+    const launcher = L.parse(fs.readFileSync(path.join(B.folder(platform, env).hosts, 'chrome'), 'utf8'));
+    assert.equal(launcher.node, primary ? durable : current, 'discovery names the installed node behind the alias');
+    assert.deepEqual(launcher.also, primary ? [] : [durable], 'fallbacks keep one durable path, without the session alias');
+    fs.rmSync(bin, { recursive: true }); // logout removes the alias; every named node must still exist
+    for (const n of [launcher.node, ...launcher.also]) assert.ok(fs.existsSync(n), n);
+  });
+});
+
 test('the .bat launcher setup writes runs node on the copied script through cmd, as Chromium starts it', { skip: windowsOnly('cmd.exe is Windows only; the sh launcher test covers POSIX') }, async (t) => {
   // %, ! and parentheses, which cmd would expand or split on outside quotes, and an apostrophe.
   const base = path.join(scratch(t), "Jo's (100%) !x!");
