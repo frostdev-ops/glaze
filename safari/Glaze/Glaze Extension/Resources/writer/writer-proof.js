@@ -127,10 +127,16 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     return other <= en;
   };
   // An open quotation before the end of text in its paragraph: straight double quotes by parity, curly and angle ones by
-  // more openers than closers.
+  // more openers than closers. A ’ before a letter or digit (don’t, ’90s) is an apostrophe; a straight single quote opens
+  // before a letter, closes after a word, and is otherwise an apostrophe (as frame/writer-ai.js reads quotations).
   const quoting = (text) => {
-    const n = (c) => text.split(c).length - 1;
-    return n('"') % 2 === 1 || n('“') > n('”') || n('«') > n('»');
+    const n = (c) => text.split(c).length - 1, ink = /[\p{L}\p{N}\p{M}]/u;
+    let single = false;
+    for (let i = text.indexOf("'"); i >= 0; i = text.indexOf("'", i + 1)) {
+      if (!ink.test(text[i - 1] || '') && /\p{L}/u.test(text[i + 1] || '')) single = true;
+      else if (single && !ink.test(text[i + 1] || '')) single = false;
+    }
+    return single || n('"') % 2 === 1 || n('“') > n('”') || n('«') > n('»') || n('‘') > (text.match(/’(?![\p{L}\p{N}])/gu) || []).length;
   };
   // Where a fix never goes: code, a block quote, an address or identifier, a range that carries a link and, for a fix to
   // words (words), a quotation or a paragraph in another language.
