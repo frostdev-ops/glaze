@@ -278,6 +278,21 @@ test('a child that ignores SIGTERM gets SIGKILL after killAfterMs', async (t) =>
   assert.equal(r[0].status, 'timed out');
 });
 
+test('a child that has exited but whose pipes a grandchild holds open is settled after exitWaitMs, not waited on forever', async (t) => {
+  const timers = [];
+  const fakeTimers = { setTimeout: (fn, ms) => { const h = { fn, ms, cleared: false }; timers.push(h); return h; }, clearTimeout: (h) => { if (h) h.cleared = true; } };
+  const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), kill() {} });
+  const spawn = () => { setImmediate(() => { child.stdout.write('done\n'); child.emit('exit', 0, null); }); return child; };
+  const p = A.runAll([check('a/held-check.js')], 'mac', opts(t, { spawn, timers: fakeTimers, exitWaitMs: 3000 }));
+  await new Promise((r) => setTimeout(r, 20));
+  const wait = timers.find((h) => h.ms === 3000 && !h.cleared);
+  assert.ok(wait, `a timer after exit (${timers.map((h) => h.ms)})`);
+  wait.fn();
+  const r = await p;
+  assert.deepEqual([r[0].status, r[0].code], ['pass', 0]);
+  assert.ok(r[0].tail.includes('done'));
+});
+
 test('the runner takes at most --jobs at once, the Mac one', async (t) => {
   for (const [where, jobs, want] of [['runner', 3, 3], ['mac', 8, 1]]) {
     let live = 0, peak = 0;
