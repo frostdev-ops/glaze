@@ -67,6 +67,22 @@ test('Canvas: its restore dialog appearing after Writer opened hands the box bac
   assert.equal(native.textContent, 'Restored by Canvas.');
 });
 
+// The field a dead frame leaves (recover): TinyMCE's parser collapses runs of spaces, so a run goes in as no-break spaces.
+test('Canvas: the recovery field\'s lines with double spaces go into Canvas\'s editor as typed, and Submit isn\'t held', async () => {
+  const c = await page({ fixture: 'assignment', strict: true });
+  c.emit({ type: 'change', html: '<p>First words.</p>', text: 'First words.' });
+  c.ctx.chrome.runtime.getURL = () => { throw new Error('Extension context invalidated.'); };
+  c.doc.querySelector('iframe.gz-writer').dispatchEvent({ type: 'load' }); // the frame went, and no other can open
+  const field = c.doc.querySelector('[data-gz-writer-recovery]');
+  field.value = 'Two  spaces,  twice.\n  Indented line.';
+  field.dispatchEvent({ type: 'input' });
+  const native = c.doc.querySelector('#submission_body_ifr').contentDocument.body;
+  assert.equal(native.textContent.replace(/ /g, ' '), 'Two  spaces,  twice.  Indented line.');
+  const submit = c.doc.querySelector('#submit_online_text_entry_form button[type="submit"]');
+  c.press(submit);
+  assert.ok(c.clicks.length === 1 && c.clicks[0] === submit, 'Submit goes on');
+});
+
 test('Canvas: a shortcut can retry after the frame flush times out', async () => {
   const c = await page();
   c.emit({ type: 'change', html: '<p>Send this reply once.</p>', text: 'Send this reply once.' });
