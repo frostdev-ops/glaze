@@ -745,7 +745,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (got.sum === lsum) {
           // The same value on both sides, changed here later than Drive's: sent again with this device's time (retold below).
           if (at > got.at && !def.view && !MERGE[cat]) return over({ id: R.id }, at);
-          return put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null);
+          return put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null, got.value);
         }
         // Gone here: Drive's value taken, unless this device deleted it later than that value's change (its time stamped while
         // bound, so it had the key): the deletion goes up, as a later change would.
