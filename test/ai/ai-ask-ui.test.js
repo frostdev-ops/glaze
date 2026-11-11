@@ -383,12 +383,12 @@ test('the empty panel offers starters: one fills the question for the student\'s
   assert.equal(asked(P).at(-1).history, undefined, 'a new chat carries nothing over');
 });
 
-test('answers are drawn from their markdown as elements, never markup; only https links, opened apart from the page', async () => {
+test('answers are drawn from their markdown as elements, never markup; only allowed https links, opened apart from the page', async () => {
   const P = page({ reply: ready });
   await P.ui.open({ event: { isTrusted: true } });
   P.ask('Explain mitosis');
   await settle();
-  answer(P, study('**Bold** and `code` <img src=x onerror=alert(1)>\n\n- one\n- two\n\n[bad](javascript:alert(1)) [ok](https://example.com/a) [near](//evil.example)\n\n```\nlet x = 1;\n```'));
+  answer(P, { ...study('**Bold** and `code` <img src=x onerror=alert(1)>\n\n- one\n- two\n\n[bad](javascript:alert(1)) [ok](https://example.com/a) [near](//evil.example) [unlisted](https://other.example/b)\n\n```\nlet x = 1;\n```'), links: ['javascript:alert(1)', 'https://example.com/a', '//evil.example'] });
   await settle();
   const a = P.box().querySelector('.gz-ask-a');
   assert.equal(a.querySelector('strong').textContent, 'Bold');

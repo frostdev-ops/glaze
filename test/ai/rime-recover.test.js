@@ -275,6 +275,6 @@ test('the worker\'s error to the panel carries the code, the step count and the 
 
 test('a built answer reaches the panel with the last failed answer\'s code and raw; Activity never gets the raw', () => {
   const src = require('fs').readFileSync(require('path').join(__dirname, '../../extension/ai/ask.js'), 'utf8');
-  assert.match(src, /type: 'end', task: r\.task, answer: \{ text: res\.answer\.text, \.\.\.\(res\.built && \{ built: true \}\) \}[^;]*why: res\.why[^;]*raw: res\.raw/);
+  assert.match(src, /type: 'end', task: r\.task, answer: \{ text, \.\.\.\(res\.built && \{ built: true \}\) \}[^;]*why: res\.why[^;]*raw: res\.raw/);
   assert.ok(!require('../../extension/ai/failure.js').diagnostic({ raw: 'x' }).raw);
 });
