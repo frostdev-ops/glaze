@@ -27,6 +27,10 @@ test('a correctly ordered list page is never "Entries go in alphabetical order" 
     assert.ok(rules(withEntries(id, ['Smith, A. Four.', 'Adams, J. One.']), id).includes('list-order'), `${id}: misordered`);
   }
 });
+test('the list format check keeps commas inside unsigned titles (MLA 5.125)', () => {
+  const entries = ['“War and Peace.” Journal of Literature, 2020.', '“War, Memory, and History.” Journal of Literature, 2021.'];
+  assert.ok(!rules(withEntries('mla9', entries), 'mla9').includes('list-order'));
+});
 
 const withBody = (id, text) => {
   const json = FX.papers[id](), at = F.read(S.paper.nodeFromJSON(json), ST.FORMATS[id]).end;

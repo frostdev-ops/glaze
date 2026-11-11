@@ -68,6 +68,12 @@ test('reference-list order: one comparison for the check and the sort, articles 
   assert.deepEqual(SRC.order(['Smith, Zadie. Swing Time.', '———. White Teeth.', 'The Pew Research Center.', 'Adams, J.']).map((i) => i), [3, 2, 0, 1]);
   assert.deepEqual(SRC.order(['Browning, K.', 'Brown, J.']), [1, 0]);
 });
+test('a comma inside an unsigned title does not end its alphabetization key (MLA 5.125)', () => {
+  const entries = ['“War and Peace.” Journal of Literature, 2020.', '“War, Memory, and History.” Journal of Literature, 2021.'];
+  assert.deepEqual(C.check(typed(entries, 'Works Cited'), [], 'mla9').filter((i) => /out of order/.test(i.message)), []);
+  assert.equal(SRC.disorder(entries), -1);
+  assert.deepEqual(SRC.order([...entries].reverse()), [1, 0]);
+});
 test('the generated list files Æ, Ø and Ł under A, O and L (APA 9.44, MLA 5.125, CMOS 16.62)', () => {
   const s = (family, id) => ({ id, type: 'book', author: [{ family, given: 'A.' }], title: 'T', issued: d(2020) });
   const ids = (st) => C.list([s('Zimmer', 'zzzz'), s('Łoś', 'llll'), s('Ødegaard', 'oooo'), s('Ærø', 'aaaa'), s('Nilsen', 'nnnn')], st).entries.map((e) => e.id);
