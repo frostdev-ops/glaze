@@ -546,6 +546,33 @@ test('in the dock: reorder by its menu and handle keys, fold, height and Auto he
   assert.equal(t('quotes').querySelector('.gz-w-body').hidden, true, 'still folded');
 });
 
+// Audit 2026-11-11 N2: a widget whose switch is off stays docked in the record but isn't drawn; a move counted it.
+test('a move in the dock counts the widgets it shows: one docked with its switch off is stepped past, and the move said is the one made', async () => {
+  const dock = ['timer', 'pet', 'quotes', 'notes'];
+  const stored = { widgetLayout: lay0(), ...record({ dock: dock.map((id) => ({ id })), dest: Object.fromEntries(dock.map((id) => [id, 'dock'])) }) };
+  const p = page({ stored, widgets: true, enhance: { pet: false } });
+  await p.pass();
+  const order = () => p.$('.gz-sb-dock').children.map((e) => e.dataset.tile);
+  const said = () => p.$('#gz-sb-title').parentNode.querySelector('.gz-sr').textContent;
+  assert.deepEqual(order(), ['timer', 'quotes', 'notes'], 'the pet is off: not drawn');
+  menuItem(p, 'timer', 'Move down'); await settle();
+  assert.deepEqual(order(), ['quotes', 'timer', 'notes']);
+  assert.match(said(), /moved to 2 of 3/);
+  p.fire(p.$('section[data-tile="notes"] .gz-w-handle'), 'keydown', { key: 'ArrowUp' }); await settle();
+  assert.deepEqual(order(), ['quotes', 'notes', 'timer']);
+  // A drag to the end, past the hidden one: where it was dropped.
+  const doc = new Map(), add = p.doc.addEventListener, boxOf = p.doc.boxOf;
+  p.doc.addEventListener = (type, f) => { if (type.startsWith('pointer')) doc.set(type, f); else add(type, f); };
+  p.doc.removeEventListener = (type) => doc.delete(type);
+  p.doc.boxOf = (e) => (e.parentNode === p.$('.gz-sb-dock') && e.dataset?.tile ? { left: 1100, top: 100 * e.parentNode.children.indexOf(e), width: 300, height: 100 } : boxOf(e));
+  p.fire(p.$('section[data-tile="quotes"] .gz-w-handle'), 'pointerdown', { clientY: 20 });
+  doc.get('pointermove')({ type: 'pointermove', clientY: 900 });
+  doc.get('pointerup')({ type: 'pointerup', clientY: 900 }); await settle();
+  assert.deepEqual(order(), ['notes', 'timer', 'quotes']);
+  assert.match(said(), /moved to 3 of 3/);
+  assert.deepEqual(S.docked(p.store[KEY]).map((x) => x.id).filter((id) => id !== 'pet'), ['notes', 'timer', 'quotes'], 'as stored');
+});
+
 test('resizing a removed widget never brings it back; course cards never dock', async () => {
   const p = page({ stored: { widgetLayout: lay0(), ...record({ dock: [{ id: 'notes' }], dest: { notes: 'dock' } }) }, widgets: true });
   await p.pass();

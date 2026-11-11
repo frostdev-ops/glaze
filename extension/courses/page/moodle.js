@@ -66,11 +66,10 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
       if (Date.now() - (r[at] || 0) < 600000 && Object.keys(r.seenCourses || {}).some((k) => k.startsWith(pre) && /^\d+$/.test(k.slice(pre.length)))) return;
       return service('core_course_get_enrolled_courses_by_timeline_classification', { classification: 'all', limit: 0, offset: 0, sort: 'fullname' })
         .then((d) => {
-          const seen = M.seen(d, GZ_CTX.canvasCourseKey);
           // This root's courses are what Moodle lists now: one it dropped leaves, as an Ultra site's do (content-ultra.js record).
-          // Other sites', other roots' (a folder's keys also start with this root's) stay, and an empty answer drops nothing.
-          const mine = ([k]) => k.startsWith(pre) && /^\d+$/.test(k.slice(pre.length));
-          return get('seenCourses').then((now) => GZ_CTX.local((l) => l.set({ seenCourses: { ...Object.fromEntries(Object.entries(now.seenCourses || {}).filter((e) => !Object.keys(seen).length || !mine(e))), ...seen }, [at]: Date.now() })));
+          // Other sites', other roots' (a folder's keys also start with this root's) stay, and an empty answer drops nothing:
+          // the worker merges it with what the other sites' tabs write (courses/seen.js).
+          return chrome.runtime.sendMessage({ type: 'glaze:seen', key: 'seenCourses', root: pre, set: M.seen(d, GZ_CTX.canvasCourseKey), drop: true, stamp: true });
         });
     }).catch((e) => { recording = null; throw e; }));
   };

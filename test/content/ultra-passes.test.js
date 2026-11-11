@@ -23,7 +23,7 @@ test('a failed startup read still completes consumers when the direct fallback t
   assert.equal(answered, true, 'settings readiness must settle even after extension reload');
 });
 
-const boot = async ({ pathname = '/ultra/stream', localGet, byId = false, store, locks } = {}) => {
+const boot = async ({ pathname = '/ultra/stream', localGet, byId = false, store, seen } = {}) => {
   let now = 0;
   const timers = [], styleReads = [], radiusReads = [], loads = [], localGets = [], syncGets = [], changed = [], listeners = {}, observers = [];
   class El {
@@ -59,7 +59,7 @@ const boot = async ({ pathname = '/ultra/stream', localGet, byId = false, store,
     set: (o, cb) => { if (store) return store.set(o, cb); cb?.(); return Promise.resolve(); }, remove: (k, cb) => { cb?.(); return Promise.resolve(); } };
   const location = { protocol: 'https:', origin: 'https://school.test', pathname, href: `https://school.test${pathname}`, search: '', hash: '' };
   const c = vm.createContext({ document, console, Intl, URL, URLSearchParams, TextEncoder, structuredClone, crypto: require('node:crypto').webcrypto, location,
-    navigator: { language: 'en', ...(locks && { locks }) }, Element: El, HTMLElement: El, SVGElement: class {}, Node: El, NodeFilter: { SHOW_TEXT: 4 },
+    navigator: { language: 'en' }, Element: El, HTMLElement: El, SVGElement: class {}, Node: El, NodeFilter: { SHOW_TEXT: 4 },
     getComputedStyle: (e) => { styleReads.push(e); return { getPropertyValue: () => '', color: 'rgb(0, 0, 0)', backgroundColor: 'rgba(0, 0, 0, 0)', backgroundImage: 'none', position: 'static', transitionDuration: '0s' }; },
     CSS: { supports: () => false, escape: (s) => s }, matchMedia: () => ({ matches: false, addEventListener() {} }), Image: class {},
     MutationObserver: class { constructor(f) { this.f = f; } observe(target, o) { observers.push({ f: this.f, target, o }); } disconnect() {} takeRecords() { return []; } },
@@ -69,7 +69,7 @@ const boot = async ({ pathname = '/ultra/stream', localGet, byId = false, store,
     performance: { now: () => now }, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} }, innerHeight: 900, innerWidth: 1400,
     fetch: () => Promise.reject(new Error('offline')),
     chrome: { runtime: { id: 'glaze', getURL: (p) => `chrome-extension://glaze/${p}`, lastError: undefined, getManifest: () => ({}),
-      sendMessage: (m) => { if (m?.type === 'glaze:load') { loads.push(m.files); return Promise.resolve({ ok: false, error: 'not loadable' }); } return Promise.resolve({ ok: false }); } },
+      sendMessage: (m) => { if (m?.type === 'glaze:seen' && seen) return seen(m); if (m?.type === 'glaze:load') { loads.push(m.files); return Promise.resolve({ ok: false, error: 'not loadable' }); } return Promise.resolve({ ok: false }); } },
       storage: { sync: { get: (k, cb) => { syncGets.push(k); cb({}); } }, local, onChanged: { addListener: (f) => changed.push(f) } } } });
   c.window = c; c.top = c; c.globalThis = c;
   for (const f of ['core/color.js', 'core/i18n.js', 'core/page.js', 'planner/grades.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'navigation/nav.js', 'content/content-ultra.js']) vm.runInContext(read(f).replace('  const shown = new Map();', '  globalThis.__seen = () => ({ seen, seenItems }); globalThis.__loadSeen = () => loadSeen();\n  globalThis.__site = { keepSeen: (...a) => keepSeen(...a), record: () => record(), openNew: (e) => openNew(e), renderNew: () => renderNew(), books: () => books, contents: () => contents };\n  const shown = new Map();').replace('  const myCourses = () => {', '  const myCourses = () => { if (globalThis.__courses) return Promise.resolve(globalThis.__courses);'), c, { filename: f });
@@ -320,50 +320,44 @@ test('every pass on Ultra tells the Look animations and stickers to look at the 
   assert.deepEqual(heard, ['motionx', 'motionx', 'lookx'], 'both, each pass');
 });
 
-// ---- storage that several tabs share (audit 2026-11-11 A4) ----
-// Every get and set answers a turn later, as chrome.storage does, so two tabs' read-modify-writes can interleave. Web Locks as
-// one origin's tabs share them: one holder at a time per name, until the callback's promise settles.
+// ---- storage that several tabs share (audit 2026-11-11 A4, N5) ----
+// The page sends each patch to the worker, which merges it over what is stored (courses/seen.js), one a turn later.
+const SEEN = require('../../extension/courses/seen.js');
 const sharedStorage = () => {
-  const data = { ultra: ['https://school.test'] };
-  return { data,
+  const data = { ultra: ['https://school.test'] }, sent = [];
+  return { data, sent,
     get: (k, cb) => setImmediate(() => cb(Object.fromEntries([].concat(k).filter((x) => x in data).map((x) => [x, structuredClone(data[x])])))),
-    set: (o, cb) => setImmediate(() => { Object.assign(data, structuredClone(o)); cb?.(); }) };
-};
-const originLocks = () => {
-  const tails = new Map(), asked = [];
-  return { asked, request: (name, cb) => { asked.push(name); const run = (tails.get(name) || Promise.resolve()).then(() => cb()); tails.set(name, run.catch(() => {})); return run; } };
+    set: (o, cb) => setImmediate(() => { Object.assign(data, structuredClone(o)); cb?.(); }),
+    seen: (m) => new Promise((res) => setImmediate(() => {
+      sent.push(m);
+      const patch = SEEN.merge(data[m.key], m, { kind: 'ultra', origin: 'https://school.test' });
+      if (patch) Object.assign(data, structuredClone(patch));
+      res({ ok: !!patch });
+    })) };
 };
 
 test('two tabs of a school recording seen grades and content at the same instant both keep their entries', async () => {
-  const store = sharedStorage(), locks = originLocks();
-  const a = await boot({ store, locks }), b = await boot({ store, locks });
+  const store = sharedStorage();
+  const a = await boot({ store, seen: store.seen }), b = await boot({ store, seen: store.seen });
   a.c.__site.keepSeen('seenGrades', '_1_1', { _9_1: 'A' }); b.c.__site.keepSeen('seenGrades', '_2_1', { _8_1: 'B' });
   a.c.__site.keepSeen('seenContent', '_1_1', ['_3_1', '+']); b.c.__site.keepSeen('seenContent', '_2_1', ['_4_1', '+']);
   await settle(30);
   assert.deepEqual(JSON.parse(JSON.stringify(store.data.seenGrades)), { _1_1: { _9_1: 'A' }, _2_1: { _8_1: 'B' } });
   assert.deepEqual(JSON.parse(JSON.stringify(store.data.seenContent)), { _1_1: ['_3_1', '+'], _2_1: ['_4_1', '+'] });
-  assert.deepEqual([...new Set(locks.asked)].sort(), ['glaze:seenContent', 'glaze:seenGrades']);
+  assert.deepEqual([...new Set(store.sent.map((m) => m.key))].sort(), ['seenContent', 'seenGrades']);
 });
 
-test('without Web Locks a tab still orders its own writes to a shared key', async () => {
+test("an Ultra site's course list goes to the worker too, keeping other sites' courses and replacing its own", async () => {
   const store = sharedStorage();
-  const a = await boot({ store });
-  assert.equal(a.c.navigator.locks, undefined);
-  a.c.__site.keepSeen('seenGrades', '_1_1', { _9_1: 'A' }); a.c.__site.keepSeen('seenGrades', '_2_1', { _8_1: 'B' });
-  await settle(30);
-  assert.deepEqual(JSON.parse(JSON.stringify(store.data.seenGrades)), { _1_1: { _9_1: 'A' }, _2_1: { _8_1: 'B' } });
-});
-
-test("an Ultra site's course list is written under the lock too, keeping other sites' courses and replacing its own", async () => {
-  const store = sharedStorage(), locks = originLocks();
   store.data.seenCourses = { 'canvas:https://c.example/1': { name: 'Canvas' }, _5_1: { name: 'Gone', site: 'https://school.test' }, _6_1: { name: 'Other school', site: 'https://other.test' } };
-  const p = await boot({ store, locks });
+  const p = await boot({ store, seen: store.seen });
   vm.runInContext('globalThis.__courses = [{ courseId: "_1_1", courseCardColorIndex: 2, course: { name: "Biology", displayId: "BIO" } }]', p.c);
   delete store.data.seenCoursesAt;
   await p.c.__site.record();
   await settle(30);
   assert.deepEqual(Object.keys(store.data.seenCourses).sort(), ['_1_1', '_6_1', 'canvas:https://c.example/1']);
-  assert.ok(locks.asked.includes('glaze:seenCourses'));
+  assert.equal(store.data.courseSlots._1_1, '3');
+  assert.ok(store.data['seenCoursesAt https://school.test'] > 0);
 });
 
 // Audit 2026-11-11 A5: sessionStorage throws when storage is off, in a sandboxed or partitioned frame, or full.

@@ -236,9 +236,10 @@ ones described below as on this device only or never synced.
   site's own navigation, which stays in the page, hidden. Its settings sync in `navbar` (placement, style, rail state,
   course behavior, logo choice) and the capped `navbarItems` item (names, icons, groups, hidden items, phone tabs, up to
   eight links, Glaze's own items and widgets). To draw the bar before a site's menu arrives, the last items read on that
-  site (their ids, names up to 80 characters and paths, at most 20) are kept per site and user as
-  `navbarSeen:<site-root>:<user-id-or-name>` in local
-  storage, on this device only. Opening one of the site's own menus as a Glaze panel asks your own school site, with
+  site (their ids, names up to 80 characters and paths, at most 20) are kept in local storage, on this device only: per
+  site and user on Blackboard Ultra (`navbarSeen:<site>:<user-id>`, whose menu names you) and Moodle
+  (`navbarSeen:<site-root>:<user-id-or-name>`), and per site on Canvas (`navbarSeen:canvas:<site>`, which holds only the
+  menu's own names). Opening one of the site's own menus as a Glaze panel asks your own school site, with
   your existing session, for what that menu itself shows: on Canvas your favorite or active courses, groups, account
   links, recent history, admin accounts or the school's help links (`/api/v1/users/self/favorites/courses`,
   `/api/v1/courses`, `/api/v1/users/self/groups`, `/api/v1/users/self/tabs`, `/api/v1/users/self/history`,

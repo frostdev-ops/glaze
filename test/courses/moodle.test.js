@@ -206,6 +206,7 @@ test('a total\'s chip: Moodle\'s own text, and its share where it says a percent
 
 // ---- courses/page/moodle.js, in a stand-in page ---------------------------------------------------------------------------
 const D = require('../../extension/content/defaults.js');
+const SEEN = require('../../extension/courses/seen.js');
 const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = [], settings = { enabled: true, enhance: { overall: true } }, overview = '', courses = [], stored = {}, root = ORIGIN, list = {}, dark = true, live = { on: true }, status = { overview: 200 } } = {}) => {
   const asked = [];
   // storage.local, as GZ_CTX.local hands it over.
@@ -217,7 +218,13 @@ const page = ({ logout = `${ORIGIN}/login/logout.php?sesskey=abc123`, cards = []
     querySelector: (sel) => (sel.includes('logout.php') && logout ? { href: logout } : null),
     querySelectorAll: (sel) => (sel.includes('course-content') ? cardEls : []),
   };
-  const context = vm.createContext({ solo: false, tabFrame: '',
+  // The worker's merge of the page's course list (courses/seen.js), as background/background.js runs it for this site's page.
+  const sendMessage = async (m) => {
+    const patch = m?.type === 'glaze:seen' && SEEN.merge(stored[m.key], m, { kind: 'moodle', origin: new URL(root).origin });
+    if (patch) Object.assign(stored, structuredClone(patch));
+    return { ok: !!patch };
+  };
+  const context = vm.createContext({ solo: false, tabFrame: '', chrome: { runtime: { sendMessage } },
     URL, Promise, JSON, Date, document, location: { origin: ORIGIN }, matchMedia: () => ({ matches: dark }),
     GZ_COURSE_COLOR: D.GZ_COURSE_COLOR, GZ_SURFACE_VARS: D.GZ_SURFACE_VARS, GZ_ACTIVE_COLORS: D.GZ_ACTIVE_COLORS, GZ_COURSE_LOOK: D.GZ_COURSE_LOOK, GZ_TINT: D.GZ_TINT, GZ_COLORS: D.GZ_COLORS, GZ_COLOR: require('../../extension/core/color.js'),
     GZ_MOODLE: M, GZ_PAGE: { score },

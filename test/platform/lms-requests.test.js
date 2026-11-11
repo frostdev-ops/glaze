@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const SEEN = require('../../extension/courses/seen.js');
 
 const root = process.env.GZ_A1_ROOT || path.join(__dirname, '../../extension');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -57,7 +58,7 @@ const ultra = ({ answer, pathname = '/ultra/courses/_1_1/outline', local = {}, c
     URL, URLSearchParams, Response, fetch: s.fetch, structuredClone,
     IntersectionObserver: class { observe() {} unobserve() {} disconnect() {} }, MutationObserver: class { observe() {} disconnect() {} },
     addEventListener() {}, sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
-    chrome: { runtime: { id: 'x', sendMessage: (m, cb) => { if (m.op === 'save') local[m.key] = m.value; const r = m.op === 'begin' ? { epoch: 'test' } : null; cb?.(r); return Promise.resolve(r); } }, storage: { local: { get: (k, cb) => cb(structuredClone(local)), set: (o) => Object.assign(local, o) }, onChanged: { addListener() {} } } },
+    chrome: { runtime: { id: 'x', sendMessage: (m, cb) => { if (m.op === 'save') local[m.key] = m.value; if (m.type === 'glaze:seen') Object.assign(local, SEEN.merge(local[m.key], m, { kind: 'ultra', origin: location.origin }) || {}); const r = m.op === 'begin' ? { epoch: 'test' } : null; cb?.(r); return Promise.resolve(r); } }, storage: { local: { get: (k, cb) => cb(structuredClone(local)), set: (o) => Object.assign(local, o) }, onChanged: { addListener() {} } } },
     GZ_GRADES: require(path.join(root, 'planner/grades.js')), GZ_PAGE: require(path.join(root, 'core/page.js')), GZ_COURSES: require(path.join(root, 'content/defaults.js')).GZ_COURSES,
   });
   ctx.globalThis = ctx; ctx.window = ctx; ctx.top = ctx;

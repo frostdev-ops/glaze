@@ -32,6 +32,16 @@ test('Moodle navigation retention names the actual site and user cache dimension
   assert.doesNotMatch(policy, /navbarSeen:<origin>`/);
 });
 
+// Audit 2026-11-11 N4: the sentence named all three sites' caches per site and user; Canvas's is per site, and holds only its
+// menu's own names.
+test("each site's last-seen navigation is described by the key it is kept under", () => {
+  assert.ok(read('navigation/page/navbar.js').includes('`navbarSeen:${location.origin}:${who}`'), "Ultra's per student");
+  assert.ok(read('navigation/page/navbar-canvas.js').includes('`navbarSeen:canvas:${location.origin}`'), "Canvas's per site");
+  assert.match(policy, /Blackboard Ultra[^.]*`navbarSeen:<site>:<user-id>`/);
+  assert.match(policy, /Moodle[^.]*`navbarSeen:<site-root>:<user-id-or-name>`/);
+  assert.match(policy, /Canvas[^.]*`navbarSeen:canvas:<site>`[^.]*menu's own names/);
+});
+
 test('LMS request limits describe the document-local bulk queue and header boundary', () => {
   assert.match(read('courses/lmsq.js'), /const sites = new Map\(\)/);
   const paragraph = policy.slice(policy.indexOf('**How often Glaze asks'), policy.indexOf("The extension's own links"));

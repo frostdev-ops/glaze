@@ -1130,11 +1130,12 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
 
 // Blackboard Ultra: its own nav (the drawer's list) read for items, labels, badges and which is current; its links clicked
 // for the bar's, so Ultra's router opens them as its own would. A course opened at its own address has no drawer: the
-// items last read on this site (storage.local navbarSeen:<origin>, this device only) stand in, else Ultra's usual ones,
-// and open as plain links.
+// items last read on this site by this student (storage.local navbarSeen:<origin>:<user id>, this device only: the drawer
+// names the student) stand in, else Ultra's usual ones, and open as plain links.
 function GZ_NAVBAR_ULTRA(X) {
   const ROOT = '[data-gz-nav-root], nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]';
-  const SEEN = `navbarSeen:${location.origin}`;
+  // Who is signed in (Ultra's word), once asked; until then nothing is read or kept. The per-site key before it goes.
+  let who = '', held = null, identity = 0, retired = false;
   const USUAL = [['institution-page', 'Institution page'], ['stream', 'Activity'], ['course', 'Courses'], ['organization', 'Organizations'], ['calendar', 'Calendar'], ['messages', 'Messages'], ['grades', 'Grades'], ['tools', 'Tools'], ['profile', 'Profile']];
   let mo = null, swap = null, watched = null, notify = null, seen = null, saved = '', last = null, lastAt = '', stale = true;
   const rootOf = () => document.querySelector(ROOT);
@@ -1152,7 +1153,10 @@ function GZ_NAVBAR_ULTRA(X) {
     const path = location.pathname.replace(/\/$/, ''), own = href.replace(/\/$/, '');
     return path === own || path.startsWith(`${own}/`) || (id === 'course' && path.startsWith('/ultra/courses/'));
   };
-  const current = (a, id) => a.matches('.Mui-selected, .active, [aria-current]:not([aria-current="false"])') || here(new URL(a.href).pathname, id);
+  // A link's address on the site: Ultra's <base href> is its CDN, so a.href would be the CDN's. Its own attribute, against the
+  // page's address; Sign Out's '#' is no page: one address on every page, so a route doesn't change the item.
+  const addr = (a) => { const h = a.getAttribute('href'); try { return h === '#' ? `${location.origin}/ultra/#` : new URL(h, location.href).href; } catch { return ''; } };
+  const current = (a, id) => a.matches('.Mui-selected, .active, [aria-current]:not([aria-current="false"])') || (!!addr(a) && here(new URL(addr(a)).pathname, id));
   const watch = () => {
     const root = rootOf();
     const scope = root?.closest('.MuiDrawer-paper') || root;
@@ -1162,14 +1166,39 @@ function GZ_NAVBAR_ULTRA(X) {
     // Ultra redraws the drawer whole: its parent sees the new one come in.
     if (scope?.parentElement) swap.observe(scope.parentElement, { childList: true });
   };
-  try { chrome.storage.local.get(SEEN, (r) => { const list = r?.[SEEN]; if (Array.isArray(list)) { seen = list.slice(0, 20); notify?.(); } }); } catch { /* reloaded */ }
+  const identify = () => {
+    const n = ++identity;
+    Promise.resolve().then(() => X.account()).then((u) => {
+      if (n !== identity || retired || !/^_\d+_\d+$/.test(String(u))) return;
+      who = String(u);
+      const k = `navbarSeen:${location.origin}:${who}`;
+      try { chrome.storage.local.get(k, (r) => {
+        if (n !== identity || retired) return;
+        const list = r?.[k];
+        if (Array.isArray(list) && !seen) { seen = list.slice(0, 20); notify?.(); }
+        if (held) keep(held);
+      }); } catch { /* reloaded */ }
+    }, () => {});
+  };
+  identify();
+  document.addEventListener?.('glaze:ultra-refresh', (e) => {
+    if (!(e.detail?.identity || e.detail?.retire)) return;
+    identity++;
+    retired ||= !!e.detail?.retire;
+    who = saved = ''; held = seen = last = null; stale = true;
+    if (!retired) identify();
+    notify?.();
+  });
   // What the drawer had, kept for the pages without one: ids, names and same-site paths only.
   const keep = (items) => {
+    if (retired) return;
+    if (!who) { held = items; return; }
+    held = null;
     const list = items.filter((i) => i.id !== 'logout').map((i) => { try { const u = new URL(i.href); return u.origin === location.origin ? { id: i.id, label: i.label.slice(0, 80), path: u.pathname } : null; } catch { return null; } }).filter(Boolean);
     const json = JSON.stringify(list);
     if (!list.length || json === saved || json === JSON.stringify(seen)) { saved = json; return; }
     saved = json; seen = list;
-    try { chrome.storage.local.set({ [SEEN]: list }); } catch { /* reloaded */ }
+    try { chrome.storage.local.set({ [`navbarSeen:${location.origin}:${who}`]: list }); chrome.storage.local.remove(`navbarSeen:${location.origin}`); } catch { /* reloaded */ }
   };
   return {
     read: () => {
@@ -1183,8 +1212,7 @@ function GZ_NAVBAR_ULTRA(X) {
         if (!id || ids.has(id)) return null;
         ids.add(id);
         const b = a.querySelector('.MuiBadge-badge:not(.MuiBadge-invisible)');
-        // Sign Out's '#' is no page: one address on every page, so a route doesn't change the item.
-        return { id, label: labelOf(a), href: a.getAttribute('href') === '#' ? `${location.origin}/ultra/#` : a.href, active: current(a, id), badge: b?.textContent.trim() || '' };
+        return { id, label: labelOf(a), href: addr(a), active: current(a, id), badge: b?.textContent.trim() || '' };
       }).filter(Boolean);
       if (live.length) { keep(live); return (last = live); }
       const list = seen?.length ? seen : USUAL.map(([id, label]) => ({ id, label: X.t(label), path: `/ultra/${id}` }));
