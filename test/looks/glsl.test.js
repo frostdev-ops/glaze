@@ -260,6 +260,14 @@ test('arrays: at most 64 elements, with a size the checker can read, priced wher
   ok('the same loops without the array', body('for (int a = 0; a < 64; a++) for (int b = 0; b < 8; b++) { float w; x += w; }'));
 });
 
+test('array bounds cannot borrow a smaller constant from another scope or declarator', () => {
+  for (const declaration of ['const int unused = 0, N = 65535;', 'const highp int N = 65535;']) {
+    bad(declaration, `const int N = 1;\nfloat helper() { ${declaration} float a[N]; return a[0]; }\n${MIN}`, /unique name|array of|Can't tell how big/);
+  }
+  ok('a precision-qualified constant', `const highp int N = 8;\n${body('float a[N]; x = a[0];')}`);
+  ok('constants in one declaration', `const int A = 4, N = A;\n${body('float a[N]; x = a[0];')}`);
+});
+
 test('the checker stays fast on hostile 8 KiB inputs, and never throws', () => {
   const cases = {
     spaces: ' '.repeat(8192), semis: ';'.repeat(8192), braces: '{;'.repeat(4096), open_braces: '{'.repeat(8192), floats: 'float '.repeat(1365),
