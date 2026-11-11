@@ -44,13 +44,27 @@ state=$(printf '%s' "$reply" | field uploadState)
 # Large or busy uploads finish asynchronously; the store gets CWS_STATUS_TIMEOUT seconds (ten minutes) to finish one.
 limit=${CWS_STATUS_TIMEOUT:-600}
 deadline=$(( $(date +%s) + limit ))
+status_timeout() {
+  echo "publish-chrome: the upload is still $state after $limit seconds. Check the item in the Developer Dashboard, then submit it there or run this again." >&2
+  exit 1
+}
 while [ "$state" = IN_PROGRESS ] || [ "$state" = UPLOAD_IN_PROGRESS ]; do
-  if [ "$(date +%s)" -ge "$deadline" ]; then
-    echo "publish-chrome: the upload is still $state after $limit seconds. Check the item in the Developer Dashboard, then submit it there or run this again." >&2
+  remaining=$(( deadline - $(date +%s) ))
+  [ "$remaining" -gt 0 ] || status_timeout
+  pause=5
+  [ "$remaining" -ge "$pause" ] || pause=$remaining
+  sleep "$pause"
+  remaining=$(( deadline - $(date +%s) ))
+  [ "$remaining" -gt 0 ] || status_timeout
+  poll_timeout=$remaining
+  [ "$poll_timeout" -le 120 ] || poll_timeout=120
+  status_reply=$(call --max-time "$poll_timeout" "$api/v2/$path:fetchStatus") || {
+    [ "$(date +%s)" -lt "$deadline" ] || status_timeout
+    printf '%s\n' "$status_reply" >&2
     exit 1
-  fi
-  sleep 5
-  state=$(call --max-time 120 "$api/v2/$path:fetchStatus" | field lastAsyncUploadState)
+  }
+  [ "$(date +%s)" -lt "$deadline" ] || status_timeout
+  state=$(printf '%s' "$status_reply" | field lastAsyncUploadState)
 done
 if [ "$state" != SUCCEEDED ]; then
   echo "publish-chrome: upload $state" >&2
