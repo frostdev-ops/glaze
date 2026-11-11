@@ -434,3 +434,25 @@ test('the bookmark-icons switch writes nothing when the card settings cannot be 
   assert.equal(store.sync.card.icons, false, 'a refused write changes nothing');
   assert.equal(box.checked, false, 'and the box goes back');
 });
+
+test('overlapping bookmark-icon changes return to the saved value when both fail', async () => {
+  for (const failure of ['failSyncGet', 'failSyncSet']) {
+    const { env, store, ui, find } = load();
+    store.sync.card = { icons: true };
+    await ui.open(A);
+    const box = find((e) => e.className === 'gz-ce-check').children[0];
+    env[failure] = true;
+    box.checked = false;
+    const first = box.fire('change');
+    box.checked = true;
+    const second = box.fire('change');
+    await Promise.all([first, second]);
+    assert.equal(store.sync.card.icons, true);
+    assert.equal(box.checked, true, `${failure}: the box shows the saved value`);
+    env[failure] = false;
+    box.checked = false;
+    await box.fire('change');
+    assert.equal(store.sync.card.icons, false, 'a later change still saves');
+    assert.equal(box.checked, false);
+  }
+});
