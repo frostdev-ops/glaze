@@ -244,7 +244,14 @@ var GZ_DRIVE = globalThis.GZ_DRIVE || (() => {
       return { id: j.id, fresh: !!id && !to, rev: mark(j.headRevisionId), mod: mark(j.modifiedTime) };
     };
     // ---- Sync to Google Drive's calls (documents/drive-sync.js): each → Drive's JSON answer, or bytes; Drive's errors as reasons (WHY).
-    const json = async (r) => { const j = await r.json().catch(() => null); if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Fail('bad'); return j; };
+    // An answer cut off while it is read is the network's ('network': tried again), not Drive's ('bad': a lost page token).
+    const json = async (r) => {
+      let s, j = null;
+      try { s = await r.text(); } catch { throw new Fail('network'); }
+      try { j = JSON.parse(s); } catch { /* not JSON */ }
+      if (!j || typeof j !== 'object' || Array.isArray(j)) throw new Fail('bad');
+      return j;
+    };
     const idOf = (id) => { if (typeof id !== 'string' || !ID.test(id)) throw new Fail('bad'); return id; };
     const JSON_TYPE = 'application/json; charset=UTF-8';
     // files.get: the fields sync reads.
