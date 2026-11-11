@@ -142,6 +142,14 @@ test('CSRF redaction reads the real HTML attributes and preserves unrelated attr
   }
 });
 
+test('a pretty-printed Authorization header cannot expose its bearer token', () => {
+  const { redact } = require('../../tools/dev/redact.js');
+  const raw = '{\n  "Authorization":\n        "Bearer SECRET-bearer-token"\n}';
+  const want = raw.replace('SECRET-bearer-token', 'REDACTED');
+  assert.equal(redact(raw), want);
+  assert.equal(redact(want), want);
+});
+
 // Addresses outside the local Canvas named in a fixture's provenance note, each on purpose: where it came from.
 const PROVENANCE = new Set(['https://canvas.mit.edu/courses/10076/files/1691040', 'https://canvadocs.instructure.com/1/sessions/<session>/view']);
 
