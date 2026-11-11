@@ -65,9 +65,8 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
   const snap = () => (canvasSnapshot ? profile().then((p) => (String(p?.id) === canvasSnapshot.uid ? canvasSnapshot : null), () => null) : Promise.resolve(null));
   const canvasCourses = () => (canvasList ||= snap().then((s) => s ? s.list : readCourses()
     .then((j) => { coursesRead = Array.isArray(j); return coursesRead ? j : []; }, () => { setTimeout(() => { canvasList = null; }, 60000); return []; }))); // asked again after a minute
-  // A key several tabs write (read, merge, set): one writer at a time. Web Locks hold the other tabs of this origin until the set
-  // lands (another site's tab is another origin and isn't held back); a queue orders this tab's own, which is all there is
-  // without Web Locks (as canvasNews in content-canvas.js).
+  // A key several tabs write: one writer at a time. Web Locks hold this origin's other tabs until the set lands (not another site's),
+  // a queue this tab's own, all there is without them (as canvasNews, content-canvas.js).
   const writing = new Map();
   const update = (key, merge, more) => {
     const write = () => new Promise((done) => {
