@@ -1,9 +1,9 @@
-// llama.cpp's next-token logits for scripts/local-reference-check.js: for each prompt, the logits at every prompt position
+// llama.cpp's next-token logits for checks/ai/local-reference-check.js: for each prompt, the logits at every prompt position
 // (one batch) and over greedy decode steps (one token each), from llama.cpp on the CPU only. Not part of the suite.
 // Numerics kept plain: only the CPU backend is loaded (no Metal, no BLAS), f32 K and V cache, flash attention off, no
 // op offload, no weight repacking. The CPU still quantizes each matmul's activations (Q8_K for K-quants, Q8_0 for
 // Q8_0/Q4_0 weights) before its integer dot products.
-//   clang++ -std=c++17 -O2 scripts/local-reference-logits.cpp -I/opt/homebrew/opt/llama.cpp/include \
+//   clang++ -std=c++17 -O2 checks/ai/local-reference-logits.cpp -I/opt/homebrew/opt/llama.cpp/include \
 //     -I/opt/homebrew/opt/ggml/include -L/opt/homebrew/opt/llama.cpp/lib -L/opt/homebrew/opt/ggml/lib -lllama -lggml \
 //     -lggml-base -Wl,-rpath,/opt/homebrew/opt/llama.cpp/lib -Wl,-rpath,/opt/homebrew/opt/ggml/lib -o llama-logits
 //   (or with a CPU-only llama.cpp build of the same commit: -I<src>/include -I<src>/ggml/include, its libllama and libggml*)
