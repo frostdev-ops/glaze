@@ -79,9 +79,9 @@ var GZ_AI_TASK_WRITER_REVIEW = globalThis.GZ_AI_TASK_WRITER_REVIEW || (() => {
   const check = (out, inp) => {
     if (S.validate(out, OUTPUT).length) return null;
     const X = typeof GZ_AI_TEXT !== 'undefined' ? GZ_AI_TEXT : require('../text.js');
-    const text = inp.whole || inp.text, seen = new Set(), issues = [];
+    const text = inp.whole || inp.text, folded = X.fold(text), seen = new Set(), issues = [];
     for (const i of out.issues) {
-      const at = X.anchor(text, i.quote, { before: i.before, after: i.after, min: 1 });
+      const at = X.anchor(folded, i.quote, { before: i.before, after: i.after, min: 1 });
       if (!at || seen.has(`${at[0]}:${at[1]}`) || !i.message.trim()) continue;
       seen.add(`${at[0]}:${at[1]}`);
       const quote = text.slice(at[0], at[1]);

@@ -113,14 +113,17 @@ var GZ_AI_TEXT = globalThis.GZ_AI_TEXT || (() => {
     if (text.endsWith(' ')) { text = text.slice(0, -1); from.pop(); to.pop(); }
     return { text, from, to };
   };
-  // Where a quote is in a text, as source().has finds it: → [start, end] (UTF-16 offsets in the original text, end
-  // exclusive), or null when it isn't there, is shorter than `min`, or is there more than once and `before` and `after`
-  // (the words just before and after it, as the model gave them) don't tell which.
+  // A text folded once for many anchor() calls (a check placing each of its quotes).
+  const prepared = new WeakSet();
+  const fold = (s) => { const f = folded(s); prepared.add(f); return f; };
+  // Where a quote is in a text (a string, or fold(text)), as source().has finds it: → [start, end] (UTF-16 offsets in the
+  // original text, end exclusive), or null when it isn't there, is shorter than `min`, or is there more than once and
+  // `before` and `after` (the words just before and after it, as the model gave them) don't tell which.
   const anchor = (text, quote, { before = '', after = '', min = 3 } = {}) => {
-    if (typeof quote !== 'string' || typeof text !== 'string') return null;
+    if (typeof quote !== 'string' || (typeof text !== 'string' && !prepared.has(text))) return null;
     const q = folded(quote).text;
     if ([...q].length < min) return null;
-    const src = folded(text), n = src.text;
+    const src = typeof text === 'string' ? folded(text) : text, n = src.text;
     const at = [];
     for (let i = n.indexOf(q); i !== -1 && at.length <= 1000; i = n.indexOf(q, i + 1)) at.push(i);
     const b = typeof before === 'string' ? folded(before).text : '', c = typeof after === 'string' ? folded(after).text : '';
@@ -184,6 +187,6 @@ var GZ_AI_TEXT = globalThis.GZ_AI_TEXT || (() => {
     return hits;
   };
 
-  return { TRUST, KEEP, plain, fence, request, norm, source, ground, anchor, estimateTokens, tokens: estimateTokens, chunks, PAGE_MARK, paginateText, searchPages, _reset: () => kept.clear() };
+  return { TRUST, KEEP, plain, fence, request, norm, source, ground, fold, anchor, estimateTokens, tokens: estimateTokens, chunks, PAGE_MARK, paginateText, searchPages, _reset: () => kept.clear() };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TEXT; else GZ_AI_TEXT;
