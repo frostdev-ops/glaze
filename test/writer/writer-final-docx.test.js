@@ -100,6 +100,19 @@ test('no exported part holds a character XML forbids, a picture\'s caption inclu
   assert.match(out.parts['word/document.xml'], /Cap abcdeg</);
 });
 
+test('a form feed exports as a space, in a paragraph and in a caption, and reads back as the same two words', async () => {
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const doc = S.paper.nodeFromJSON({ type: 'doc', content: [
+    { type: 'paragraph', content: [{ type: 'text', text: 'page one\fpage two' }] },
+    { type: 'paragraph', content: [{ type: 'image', attrs: { src: png, alt: 'Alt a\fb', display: 'block', caption: 'Cap c\fd' } }] },
+  ] });
+  const out = X.exportDocx(doc);
+  for (const [name, text] of Object.entries(out.parts)) assert.doesNotMatch(text, /[\u0000-\u0008\u000b\u000c\u000e-\u001f￾￿]/, name);
+  assert.match(out.parts['word/document.xml'], /<w:t xml:space="preserve">page one page two<\/w:t>/);
+  assert.match(out.parts['word/document.xml'], /Cap c d</);
+  assert.equal((await imp(out.bytes)).node.firstChild.textContent, 'page one page two');
+});
+
 // ECMA-376 Part 1's sequences: CT_PPr (CT_PPrBase, then rPr, sectPr, pPrChange) and CT_RPr (EG_RPrBase).
 const PPR = ['pStyle', 'keepNext', 'keepLines', 'pageBreakBefore', 'framePr', 'widowControl', 'numPr', 'suppressLineNumbers', 'pBdr', 'shd', 'tabs', 'suppressAutoHyphens', 'kinsoku', 'wordWrap', 'overflowPunct', 'topLinePunct', 'autoSpaceDE', 'autoSpaceDN', 'bidi', 'adjustRightInd', 'snapToGrid', 'spacing', 'ind', 'contextualSpacing', 'mirrorIndents', 'suppressOverlap', 'jc', 'textDirection', 'textAlignment', 'textboxTightWrap', 'outlineLvl', 'divId', 'cnfStyle', 'rPr', 'sectPr', 'pPrChange'];
 const RPR = ['rStyle', 'rFonts', 'b', 'bCs', 'i', 'iCs', 'caps', 'smallCaps', 'strike', 'dstrike', 'outline', 'shadow', 'emboss', 'imprint', 'noProof', 'snapToGrid', 'vanish', 'webHidden', 'color', 'spacing', 'w', 'kern', 'position', 'sz', 'szCs', 'highlight', 'u', 'effect', 'bdr', 'shd', 'fitText', 'vertAlign', 'rtl', 'cs', 'em', 'lang', 'eastAsianLayout', 'specVanish', 'oMath'];
