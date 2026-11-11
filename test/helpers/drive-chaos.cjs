@@ -472,6 +472,8 @@ const S = require('../../extension/documents/drive-sync.js');
 const ST = require('../../extension/background/drive-store.js');
 const N = require('../../extension/planner/notes.js');
 const T = require('../../extension/planner/todo.js');
+const CL = require('../../extension/planner/classes.js');
+const G = require('../../extension/planner/gpa.js');
 const SD = require('../../extension/documents/sheets/sheet-data.js');
 const M = require('../../extension/documents/sheets/sheet-model.js');
 const D0 = require('../../extension/content/defaults.js').GZ_SANITIZE({});
@@ -482,7 +484,7 @@ const FILE_TYPE = { pdf: 'application/pdf', slides: 'application/vnd.openxmlform
 const FILED = ['pdf', 'slides'];
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4a40000000049454e44ae426082', 'hex').toString('base64');
 const SITE = 'https://school.instructure.com/42';
-const TODO = `todo:${SITE}`, PET = `pet:${SITE}`, NOTES = `notesIdx:${SITE}`;
+const TODO = `todo:${SITE}`, PET = `pet:${SITE}`, NOTES = `notesIdx:${SITE}`, CLASSES = `classes:${SITE}`, GPA = 'gpaTerms:https://school.instructure.com:u42';
 const TOKEN = /ZQ(\d+)QZ/g;
 const tokensIn = (s) => [...String(s).matchAll(TOKEN)].map((m) => `ZQ${m[1]}QZ`);
 const docOf = (text) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] });
@@ -491,11 +493,26 @@ const uuidOf = (r) => { const h = [...Array(16)].map(() => r.int(256)); h[6] = (
 const short = (k) => (typeof k === 'string' ? k.replace(/^doc:0*-?0*-?4000-8000-0*/, 'doc:').replace(/^doc:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-([0-9a-f]{4})[0-9a-f]{8}$/, 'doc:…$1') : k);
 const json = (s) => (s === undefined ? undefined : JSON.parse(s));
 
+// Records merged item by item: each one's key, cleaner, its items, a new one, an edit, and the record with a list and a deletion.
+const ITEMS = {
+  tasks: { key: TODO, clean: (v) => T.clean(v), list: (v) => v.tasks, of: (v, id) => T.clean(v).tasks.find((x) => x.id === id),
+    make: (n, t) => ({ id: `t${n}`, title: `Task ${n}`, done: 0, at: t }), edit: (n) => ({ title: `Task ${n}` }), with: (v, list) => ({ tasks: list, items: v.items }) },
+  classes: { key: CLASSES, clean: (v) => CL.clean(v), list: (v) => v.courses, of: (v, id) => CL.clean(v).courses.find((x) => x.id === id),
+    make: (n, t) => ({ id: String(n), name: `Class ${n}`, at: t, periods: [{ days: [1 + (n % 5)], start: 540, end: 600 }] }), edit: (n, t) => ({ name: `Class ${n}`, at: t }),
+    with: (v, list, gone, t) => ({ ...v, courses: list, gone: { ...v.gone, ...(gone && { [gone]: t }) } }) },
+  gpa: { key: GPA, clean: (v) => G.clean(v), list: (v) => v.t, of: (v, id) => G.clean(v).t.find((x) => x.id === id),
+    make: (n, t) => ({ id: `g${n}`, n: `Term ${n}`, c: [{ n: 'Course', cr: 3, g: 'A' }], at: t }), edit: (n, t) => ({ n: `Term ${n}`, at: t }),
+    with: (v, list, gone, t) => ({ ...v, t: list, ...((gone || v.d) && { d: { ...v.d, ...(gone && { [gone]: t }) } }) }) },
+};
+
 // ---- the operations: plain data made from a seed, each with its own seed for what it decides as it runs, so any subset of
 // a list still runs (picks are fractions of what the device has then). shrink() removes and simplifies them.
-const USER = ['paper', 'sheet', 'pdf', 'slides', 'setting', 'task', 'note', 'folder', 'look', 'gradescope', 'pet', 'words', 'dash'];
+const USER = ['paper', 'sheet', 'pdf', 'slides', 'setting', 'task', 'note', 'folder', 'look', 'gradescope', 'pet', 'words', 'dash', 'class', 'gpa'];
 const generate = (seed, { ops = 40, devices = 2 } = {}) => {
   const r = rng(seed);
+  // Records merged item by item (tasks with their ticks, class schedules, GPA terms) from a stream of their own, in place of
+  // some of the other user operations, so the rest of a seed's list stays as it was.
+  const r2 = rng(seed ^ 0x2b1e5);
   const out = [];
   const userOp = (d) => {
     const t = r.weighted([['paper', 14], ['sheet', 4], ['pdf', 4], ['slides', 2], ['setting', 7], ['task', 4], ['note', 9], ['folder', 3], ['look', 2], ['gradescope', 1], ['pet', 1], ['words', 1], ['dash', 1]]);
@@ -508,7 +525,10 @@ const generate = (seed, { ops = 40, devices = 2 } = {}) => {
       folder: () => r.weighted([['new', 4], ['rename', 2], ['del', 2], ['restore', 1]]), look: () => r.pick(['history', 'favorite']),
       gradescope: () => r.pick(['place', 'hide']), pet: () => r.pick(['wear', 'habitat', 'timer', 'sprite']),
     }[t]();
-    return { t, k, d, pick: r(), pick2: r(), s: r.int(2 ** 31) };
+    const op = { t, k, d, pick: r(), pick2: r(), s: r.int(2 ** 31) };
+    const item = r2.weighted([[null, 88], ['task', 6], ['class', 3], ['gpa', 3]]);
+    if (!item) return op;
+    return { t: item, k: item === 'task' ? r2.weighted([['add', 4], ['edit', 2], ['tick', 2], ['del', 3]]) : r2.weighted([['add', 4], ['edit', 3], ['del', 2]]), d, pick: r2(), pick2: r2(), s: r2.int(2 ** 31) };
   };
   for (let i = 0; i < ops; i++) {
     const d = r.int(devices);
@@ -979,6 +999,22 @@ const KNOWN = {
     skips: () => false,
     repro: [{ t: 'paper', k: 'new', d: 1, pick: 0.5534558244980872, pick2: 0.6365561860147864, s: 546893804 }, { t: 'task', k: 'edit', d: 1, pick: 0.36794293369166553, pick2: 0.542712225811556, s: 1931422005 }, { t: 'task', k: 'add', d: 0, pick: 0.5595889138057828, pick2: 0.6078463774174452, s: 1529591901 }, { t: 'faults', d: 1, p: 0.3, quota: false, refuse: 0 }, { t: 'run', d: 0, how: 'timers', s: 1384711997 }, { t: 'run', d: 1, how: 'timers', s: 575414169 }, { t: 'run', d: 1, how: 'startup', s: 948841068 }, { t: 'drive', k: 'trashData', pick: 0.288371964590624, s: 52449897 }],
   },
+  // Records merged item by item (the owner's call, 2026-11-11), found by the record invariants on their first run.
+  'record-lww': {
+    fixed: false,
+    about: 'a To Do list changed on two devices after it synced: the later device\'s list went up whole over the other\'s, and the other device\'s new task was gone from both',
+    skips: (op) => ['task', 'class', 'gpa'].includes(op.t),
+    repro: [{ t: 'task', k: 'add', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'run', d: 1, how: 'run', s: 3 },
+      { t: 'task', k: 'add', d: 0, pick: 0, pick2: 0, s: 4 }, { t: 'task', k: 'add', d: 1, pick: 0, pick2: 0, s: 5 }],
+  },
+  'record-retold': {
+    fixed: false,
+    about: 'a To Do list changed and changed back on one device (a task added and deleted) after another device\'s change reached Drive: the change back went up over it as a later change, and the other device\'s new task was gone from both',
+    skips: (op) => ['task', 'class', 'gpa'].includes(op.t) && op.k === 'del',
+    repro: [{ t: 'task', k: 'add', d: 0, pick: 0, pick2: 0, s: 1 }, { t: 'run', d: 0, how: 'run', s: 2 }, { t: 'run', d: 1, how: 'run', s: 3 },
+      { t: 'task', k: 'add', d: 1, pick: 0, pick2: 0, s: 4 }, { t: 'run', d: 1, how: 'run', s: 5 },
+      { t: 'task', k: 'add', d: 0, pick: 0, pick2: 0, s: 6 }, { t: 'task', k: 'del', d: 0, pick: 0.99, pick2: 0, s: 7 }],
+  },
   // Open, accepted by the owner: Settings written straight to storage.sync between the worker's compare and its write (a few
   // milliseconds) are written over by Drive's value. Found 2026-10-31 (seed 300933, 80 operations, 3 devices).
   'settings-cas': {
@@ -1015,6 +1051,7 @@ class World {
     this.outside = new Map(); // Drive file id → its bytes, as an outside edit left them
     this.notes = new Map(); // note id → [{ step, dev, kind, text, rec }]
     this.settings = new Map(); // Settings key → the last change made to it { v (JSON), step, dev, before, ok }
+    this.items = new Map(); // 'tasks:t5', 'classes:12', 'gpa:g7' → each change that landed [{ step, dev, kind, copy (a deletion's: the item as its device held it) }]
     this.bound = new Set(); // devices Sync has been bound to an account on (driveSync.account), ever
     this.met = false; // a first meeting happened (an account switched, a device joining late)
     this.offEdited = new Set(); // documents saved while their device had Sync off
@@ -1032,6 +1069,14 @@ class World {
   // A token's first landing on a disk: its parent is what it replaced there.
   observe(dev, name, c) {
     if (name !== 'local') return;
+    // An item's change, once its write lands as it was made (another write to the key meanwhile is not it).
+    const x = dev.intent;
+    if (x && Object.hasOwn(c, x.key) && x.landed(ITEMS[x.kind].of(c[x.key].newValue, x.id))) {
+      dev.intent = null;
+      const list = this.items.get(`${x.kind}:${x.id}`) || [];
+      list.push({ step: x.step, dev: dev.name, kind: x.op, copy: x.copy });
+      this.items.set(`${x.kind}:${x.id}`, list);
+    }
     for (const [k, ch] of Object.entries(c)) {
       if (!k.startsWith('writerPaper:') && !k.startsWith('writerSheet:')) continue;
       const tokensOf = (v) => {
@@ -1137,14 +1182,21 @@ class World {
         this.settings.set(op.k, { v: now, step, dev: dev.name, before, ok: before ? [...(prev ? (prev.before ? prev.ok : [prev.v]) : []), now] : [now] });
       }, (e) => note(`  refused: ${e.message}`));
     }
-    if (op.t === 'task') {
+    if (op.t === 'task' || op.t === 'class' || op.t === 'gpa') {
+      const kind = { task: 'tasks', class: 'classes', gpa: 'gpa' }[op.t], I = ITEMS[kind];
       return api.turn(async () => {
-        const cur = api.lib('GZ_TODO').clean((await ctx.chrome.storage.local.get(TODO))[TODO]);
-        const tasks = cur.tasks.map((x) => ({ ...x }));
-        if (op.k === 'add' || !tasks.length) { tasks.push({ id: `t${++this.n}`, title: `Task ${this.n}`, done: 0, at: this.clock }); note(`task.add t${this.n}`); }
-        else if (op.k === 'edit') { const x = at(tasks); x.title = `Task ${++this.n}`; note(`task.edit ${x.id}`); }
-        else { const x = at(tasks); tasks.splice(tasks.indexOf(x), 1); note(`task.del ${x.id}`); }
-        await ctx.chrome.storage.local.set({ [TODO]: api.lib('GZ_TODO').clean({ tasks, items: cur.items }) });
+        const cur = I.clean((await ctx.chrome.storage.local.get(I.key))[I.key]), list = I.list(cur).map((x) => ({ ...x })), t = this.clock;
+        let x, change = op.k;
+        if (op.k === 'add' || !list.length) { change = 'add'; x = I.make(++this.n, t); list.push(x); }
+        else x = at(list);
+        const copy = canon(x);
+        if (change === 'edit') Object.assign(x, I.edit(++this.n, t));
+        else if (change === 'tick') x.done = t;
+        else if (change === 'del') list.splice(list.indexOf(x), 1);
+        note(`${op.t}.${change} ${x.id}`);
+        const next = I.clean(I.with(cur, list, change === 'del' ? x.id : null, t)), want = change === 'del' ? null : canon(I.of(next, x.id));
+        dev.intent = { key: I.key, kind, id: x.id, op: change, step, copy: change === 'del' ? copy : null, landed: (v) => (want === null ? !v : canon(v) === want) };
+        try { await ctx.chrome.storage.local.set({ [I.key]: next }); } finally { if (dev.intent?.id === x.id) dev.intent = null; }
       });
     }
     if (op.t === 'look') {
@@ -1483,6 +1535,22 @@ class World {
     for (const [k, x] of this.settings) {
       const got = this.devices[0].disk.sync.get(k);
       if (got !== x.v && !this.accounts && !(x.before && x.ok.includes(got)) && !large.recs.has(`sync:${k}`)) F('lww:settings', `${k} is ${got ?? 'missing'} everywhere, its last change was ${x.v} (#${x.step} on ${x.dev})`);
+    }
+    // Records merged item by item (tasks, class schedules, GPA terms): an item whose last change wasn't its deletion is on
+    // every device, a task with every tick it was given; one deleted stays deleted. A task deleted on one device and changed
+    // on another that hadn't heard of the deletion keeps the change, so a task comes back only as some change made it, never
+    // as the deleting device held it; class schedules and GPA terms go by when each changed. Switching accounts A→B→A brings
+    // older data back (a known limit: a first meeting joins). One too large to sync stays on its device.
+    for (const [id, list] of this.items) {
+      const kind = id.slice(0, id.indexOf(':')), item = id.slice(kind.length + 1), I = ITEMS[kind], last = list[list.length - 1];
+      if (large.recs.has(`local:${I.key}`)) continue; // too large to sync: on its device alone
+      for (const dev of this.devices) {
+        const got = I.of(this.get(dev, I.key), item);
+        if (last.kind !== 'del') {
+          if (!got) F('no-loss:record', `${kind} ${item} missing on ${dev.name}, its last change ${last.kind} on ${last.dev} at #${last.step}`);
+          else if (kind === 'tasks' && !got.done && !this.accounts && list.some((x) => x.kind === 'tick')) F('no-loss:record', `task ${item} on ${dev.name} lost its tick (#${list.find((x) => x.kind === 'tick').step})`);
+        } else if (got && !this.accounts && (kind !== 'tasks' || canon(got) === last.copy)) F('no-return:record', `${kind} ${item} is back on ${dev.name} after its deletion on ${last.dev} at #${last.step}`);
+      }
     }
     // Every picture a note shows is on each device that holds the note.
     for (const dev of this.devices) {
