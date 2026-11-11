@@ -165,9 +165,14 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   };
 
   // ==== APA 7 =======================================================================================================
+  const APA_FULL_DATE = ['article-magazine', 'article-newspaper', 'webpage', 'motion_picture'];
+  const apaDateKey = (s) => {
+    const [y, m, day] = dp(s.issued), full = APA_FULL_DATE.includes(s.type);
+    return [y || 0, full && m || 0, full && day || 0].map((v, i) => String(v).padStart(i ? 2 : 4, '0')).join('-');
+  };
   const apa = (s, letter) => {
     const lead = who(s) || (s.type === 'motion_picture' && s.publisher ? { names: [{ literal: s.publisher }], role: '' } : null);
-    const full = ['article-magazine', 'article-newspaper', 'webpage', 'motion_picture'].includes(s.type);
+    const full = APA_FULL_DATE.includes(s.type);
     const date = `(${D.apa(s.issued, full, letter)}).`;
     const t = rich(s.title);
     const italicTitle = !['chapter', 'article-journal', 'article-magazine', 'article-newspaper'].includes(s.type);
@@ -211,8 +216,8 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   const apaPage = (page) => (page ? (/^(p{1,2}|para|chap|ch)\./i.test(String(page)) ? esc(page) : apaPages(String(page).replace(/\s*[-–—]+\s*/g, '–'))) : '');
   const apaIn = (s, page, letter) => `(${join([apaName(s, '&'), D.apa(s.issued, false, letter), apaPage(page)])})`;
   const apaNarr = (s, page, letter) => `${apaName(s, 'and')} (${join([D.apa(s.issued, false, letter), apaPage(page)])})`;
-  // APA 8.19, 9.47: works with the same authors, in the same order, and the same year take a, b, … by title (A, An, The
-  // skipped). sources (deduped) → Map id → letter, for those that share.
+  // APA 8.19, 9.47: works with the same authors, in the same order, and the same year take a, b, … by date, then title
+  // (A, An, The skipped). sources (deduped) → Map id → letter, for those that share.
   const letters = (all) => {
     const groups = new Map(), out = new Map();
     for (const s of all) {
@@ -222,7 +227,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
       if (!groups.has(k)) groups.set(k, []);
       groups.get(k).push(s);
     }
-    for (const g of groups.values()) if (g.length > 1 && g.length <= 26) g.map((s) => [fold(article(s.title)), s]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).forEach(([, s], i) => out.set(s.id, String.fromCharCode(97 + i)));
+    for (const g of groups.values()) if (g.length > 1 && g.length <= 26) [...g].sort((a, b) => cmp([apaDateKey(a), fold(article(a.title))], [apaDateKey(b), fold(article(b.title))])).forEach((s, i) => out.set(s.id, String.fromCharCode(97 + i)));
     return out;
   };
 
@@ -311,7 +316,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   const sortKey = (s, k) => {
     const lead = k === 'mla9' && groupPublisher(s) ? null : who(s);
     const first = lead ? lead.names.map((n) => `${fold(fam(n))} ${fold(n.given || '')}`).join(' ') : k === 'chicago17' && s.type === 'webpage' && s.publisher ? fold(s.publisher) : fold(article(s.title));
-    return k === 'apa7' ? [first, String(yearOf(s) || 0).padStart(4, '0'), fold(article(s.title))] : [first, fold(article(s.title))];
+    return k === 'apa7' ? [first, apaDateKey(s), fold(article(s.title))] : [first, fold(article(s.title))];
   };
   const cmp = (a, b) => { for (let i = 0; i < a.length; i++) { if (a[i] < b[i]) return -1; if (a[i] > b[i]) return 1; } return 0; };
   const list = (sources, st) => {
