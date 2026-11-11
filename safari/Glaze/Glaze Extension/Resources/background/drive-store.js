@@ -250,7 +250,10 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
   // → the merged value, each as its store keeps it. More than a store keeps (planner/todo.js MAX, a note's length): refused
   // ('bad'), each device keeping its own, as a join Restore refuses is.
   const three = (cat, key, b, h, t, win) => {
-    const [B, H, X] = [b, h, t].map((v) => clean(cat, key, v));
+    // Some stores remove their key when empty (saved sources, for example). That tombstone removes the old items;
+    // it must still meet additions or edits made to those items on another device.
+    const empty = cat === 'tasks' ? { tasks: [], items: {} } : cat === 'dashNotes' ? { text: '', at: 0 } : cat === 'sources' ? { sources: [], at: 0 } : [];
+    const [B, H, X] = [b, h, t].map((v) => clean(cat, key, v === undefined ? empty : v));
     if ([B, H, X].includes(undefined)) throw new Fail('bad');
     const merged = (x = {}, y, z) => fields(x, y, z, win);
     if (cat === 'tasks') {
@@ -728,7 +731,10 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       // join: their own times and deletions are what a base would tell.
       const mix = async (got) => {
         const b = based(cat, key) ? (await S.get(BASE + h))[BASE + h] : null;
-        if (!b || b.sum !== was.rsum) return joinBoth(got, was, at);
+        if (!b || b.sum !== was.rsum) {
+          if (value !== undefined && got.value !== undefined) return joinBoth(got, was, at);
+          return got.at >= at ? take(h, got, R, was, value) : over(was, at || now());
+        }
         const next = three(cat, key, b.value, value, got.value, at > got.at), t = Math.max(at, got.at) || now();
         if (canon(next) === canon(got.value)) return take(h, got, R, was, value);
         if (canon(next) !== canon(value)) await take(h, { ...got, value: next, at: t }, R, was, value, { pending: true, base: got.value });
@@ -810,7 +816,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         // time like any other change made here. A record merged item by item has nothing here to weigh: Drive's change comes.
         if (!ldirty) return at > (was.seen || 0) && at > got.at && !def.view && !MERGE[cat] && !merges ? over(was, at) : take(h, got, R, was, value);
         if (MERGE[cat] && got.value !== undefined && value !== undefined) return meet(ctx, h, got, R, was, value, at);
-        if (merges && got.value !== undefined && value !== undefined) return mix(got);
+        if (merges && ((got.value !== undefined && value !== undefined) || (based(cat, key) && (got.value !== undefined || value !== undefined)))) return mix(got);
         if (got.at >= (at || 0)) return take(h, got, R, was, value);
       }
       // Drive's value sent again unchanged (retold) weighs as a change, except for a record merged item by item, whose
