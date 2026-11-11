@@ -447,6 +447,32 @@ test('main refuses a sweep when a check file has no entry', async (t) => {
   await assert.rejects(A.main(['--where', 'runner', '--evidence', scratch(t)], { root, spawn: () => assert.fail('nothing spawns'), log() {} }), /a\/new-check\.js has no entry in checks\/checks\.json/);
 });
 
+// ---- the real Mac command line ------------------------------------------------------------------------------------------------
+
+test('on the Mac the real nice, lockf and env run a check: pass, fail, and a hung check killed at its limit', { skip: process.platform !== 'darwin' || !fs.existsSync('/usr/bin/lockf') }, async (t) => {
+  const root = scratch(t), sweep = scratch(t), token = `hung-${process.pid}-${Date.now()}`;
+  const checks = { 'a/pass-check.js': 'require("fs").writeFileSync(process.argv[2] + "/seen.json", JSON.stringify({ tz: process.env.TZ, np: process.env.NODE_PATH, cwd: process.cwd() })); console.log("fine");',
+    'a/fail-check.js': 'console.error("it broke"); process.exit(3);',
+    'a/hang-check.js': 'console.log("started"); setInterval(() => {}, 1000);' };
+  fs.mkdirSync(path.join(root, 'checks/a'), { recursive: true });
+  for (const [k, src] of Object.entries(checks)) fs.writeFileSync(path.join(root, 'checks', k), src);
+  fs.writeFileSync(path.join(root, 'checks/checks.json'), JSON.stringify({ tags: { runner: '' }, checks: {
+    'a/pass-check.js': { needs: ['runner'], limit: 30, args: ['{out}'] }, 'a/fail-check.js': { needs: ['runner'], limit: 30 }, 'a/hang-check.js': { needs: ['runner'], limit: 1, args: [token] } } }));
+  const lock = path.join(sweep, 'locks/glaze-heavy.lock');
+  const code = await A.main(['--where', 'mac', '--lock', lock, '--node-path', '/nm', '--evidence', path.join(sweep, 'ev'), '--grace', '0'], { root, log() {}, commit: 'test', killAfterMs: 5000 });
+  assert.equal(code, 1);
+  const md = fs.readFileSync(path.join(sweep, 'ev/summary.md'), 'utf8');
+  assert.match(md, /\| a\/pass-check\.js \| pass \|/);
+  assert.match(md, /\| a\/fail-check\.js \| fail \| \d+s \| exit 3 \|/);
+  assert.match(md, /\| a\/hang-check\.js \| timed out \| \d+s \| limit 1s \|/);
+  assert.ok(md.includes('it broke') && md.includes('started'));
+  const seen = JSON.parse(fs.readFileSync(path.join(sweep, 'ev/pass-check/seen.json'), 'utf8'));
+  assert.deepEqual([seen.tz, seen.np, fs.realpathSync(seen.cwd)], ['UTC', '/nm', fs.realpathSync(root)]);
+  assert.ok(fs.existsSync(lock), 'lockf -k leaves its file');
+  const left = require('node:child_process').execFileSync('ps', ['-axo', 'command='], { encoding: 'utf8' }).split('\n').filter((l) => l.includes(token));
+  assert.deepEqual(left, [], 'the hung check and its nice and lockf wrappers are gone');
+});
+
 // ---- stopping a process tree --------------------------------------------------------------------------------------------------
 
 test('killTree stops a child and the grandchild it detached into its own group', { skip: process.platform === 'win32' }, async (t) => {

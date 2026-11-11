@@ -268,7 +268,7 @@ const treeState = () => {
 };
 
 async function main(argv = process.argv.slice(2), deps = {}) {
-  const { root = ROOT, log = console.log, spawn, timers, kill } = deps;
+  const { root = ROOT, log = console.log, spawn, timers, kill, killAfterMs, exitWaitMs } = deps;
   const a = parseArgs(argv, deps.env);
   verify(root);
   const { checks, tags } = loadManifest(root);
@@ -290,7 +290,7 @@ async function main(argv = process.argv.slice(2), deps = {}) {
   const started = new Date();
   let ran;
   try {
-    ran = await runAll(chosen.run, a.where, { ...ctx, jobs: a.jobs, spawn, timers, kill, graceMs: a.grace === undefined ? undefined : a.grace * 1000, signal: ac.signal,
+    ran = await runAll(chosen.run, a.where, { ...ctx, jobs: a.jobs, spawn, timers, kill, killAfterMs, exitWaitMs, graceMs: a.grace === undefined ? undefined : a.grace * 1000, signal: ac.signal,
       onResult: (r) => log(`${label(r, known).padEnd(14)} ${r.key}${r.ms == null ? '' : `  ${duration(r.ms)}`}`) });
   } finally { for (const s of ['SIGINT', 'SIGTERM']) process.off(s, onSignal); }
   const results = [...ran, ...chosen.skipped.map((s) => skippedResult(s.check, s.reason))].sort((x, y) => (x.key < y.key ? -1 : 1));
