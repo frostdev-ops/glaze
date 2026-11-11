@@ -79,7 +79,7 @@ const kept = async (h, type) => {
   return f;
 };
 const modFile = (src) => src.startsWith('mod:');
-const ask = (src) => (modFile(src) ? send({ type: 'glaze:modpage', op: 'media', src }).then((r) => (r?.ok && r.kind === 'lottie' ? r : { ok: false, error: 'missing' }))
+const ask = (src) => (modFile(src) ? send({ type: 'glaze:modpage', op: 'media', src }).then((r) => (!r?.ok || r.kind === 'lottie' ? r : { ok: false, error: 'missing' }))
   : send({ type: 'glaze:lottie', src }));
 // A mod's file, as bytes, of the kind the Look part says.
 const carried = async (src, type) => {
