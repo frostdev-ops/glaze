@@ -1021,7 +1021,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
             if (c.name === 'memory_forget' && receipt.operation === 'unchanged' && receipt.id === c.arguments.id && receipt.revision === c.arguments.revision && receipt.text === undefined) {
               receipt = { ...receipt, operation: 'forgotten' }; out.result = { ...result, receipt };
             }
-            if (memory.recall) memory.recall.records = memory.recall.records.filter((r) => r.id !== receipt.id);
+            for (const recall of [memory.recall, memory.saveRecall]) if (recall) recall.records = recall.records.filter((r) => r.id !== receipt.id);
             if (receipt.operation === 'forgotten') memory.used.delete(receipt.id); else refs([receipt]);
             post({ id, type: 'memory', receipt });
           }
@@ -1104,6 +1104,10 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         const wide = level >= 3 && !explicitMemory && !record;
         const optionalSave = async () => {
           if (!memory?.enabled) return;
+          // Saved memories only: a course excerpt (teacher-written) never sits beside a save it could steer.
+          const saved = memory.recall?.records.filter((r) => r.kind === 'memory');
+          memory.saveRecall = saved?.length ? { ...memory.recall, records: saved } : undefined;
+          const inRecall = memory.saveRecall ? { recall: memory.saveRecall } : {};
           const input = { question, tools: ['memory_save'], steps: [], now: env.now(), zone, locale, ...inRecall };
           const fit = await fitInput('agent.tools', input);
           if (fit && fit.used + fit.reserve > fit.window) return;

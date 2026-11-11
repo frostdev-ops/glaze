@@ -67,6 +67,30 @@ var GZ_AI_RIME_MEMORY = globalThis.GZ_AI_RIME_MEMORY || (() => {
     out = out.replace(/"[^"]*(?:"|$)|“[^”]*(?:”|$)|«[^»]*(?:»|$)|‘[^’]*(?:’|$)|„[^“]*(?:“|$)|(?<![\p{L}\p{N}])'(?:[^']|'(?=[\p{L}\p{N}]))*(?:'(?![\p{L}\p{N}])|$)/gu, blank);
     return out;
   };
+  // A save restates the student. Its evidence is whole words of their message holding a word that means something, and
+  // every such word of its text is theirs (plain endings aside), one of them in the evidence. Framing ("the student
+  // prefers") and function words are free, negations never: course text can't plant a fact on evidence like "the".
+  const FREE = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'these', 'those', 'from', 'about', 'into', 'also', 'what', 'when', 'which', 'who',
+    'they', 'them', 'their', 'she', 'her', 'his', 'him', 'has', 'have', 'had', 'was', 'were', 'are', 'will', 'would', 'should',
+    'student', 'students', 'user', 'prefer', 'prefers', 'preferred', 'estudiante', 'aluno', 'aluna', 'élève', 'étudiant', 'étudiante',
+    'utilisateur', 'usuario', 'usuário', 'schüler', 'schülerin', 'nutzer', 'gebruiker', 'prefiere', 'prefere', 'préfère', 'bevorzugt', 'verkiest']);
+  const NEGATION = /^(?:no|not|never|nor|ne|pas|jamais|nunca|nada|não|nao|nem|nicht|nie|kein\p{L}*|niet|nooit|geen)$/u;
+  const words = (v) => v.normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}\p{M}]*/gu) || [];
+  const meant = (w) => NEGATION.test(w) || !FREE.has(w) && (w.length > 2 || /\p{N}/u.test(w));
+  const bases = (w) => [w, ...[['ies', 'y'], ['ing', ''], ['es', ''], ['ed', ''], ['s', ''], ['d', ''], ['e', '']]
+    .filter(([end, add]) => w.endsWith(end) && w.length - end.length + add.length >= 4).map(([end, add]) => w.slice(0, -end.length) + add)];
+  const pool = (v) => new Set(words(v).flatMap(bases));
+  const whole = (text, part) => {
+    for (let at = text.indexOf(part); at >= 0; at = text.indexOf(part, at + 1)) {
+      if (!/[\p{L}\p{N}\p{M}]/u.test(text[at - 1] || '') && !/[\p{L}\p{N}\p{M}]/u.test(text[at + part.length] || '')) return true;
+    }
+    return false;
+  };
+  const supported = (text, evidence, question) => {
+    if (!whole(question, evidence) || !words(evidence).some(meant)) return false;
+    const said = pool(question), proof = pool(evidence), own = words(text).filter(meant);
+    return own.every((w) => bases(w).some((b) => said.has(b))) && own.some((w) => bases(w).some((b) => proof.has(b)));
+  };
   // Saving is automatic; deleting needs a new affirmative request. This shared pure check is deliberately about
   // current user intent, not model-selected ids. A request to disregard a question/instruction does not delete records.
   const FORGET_TARGET = /^(?:that\s+i\b|what\s+you\s+(?:know|remember)\s+about\s+me\b|everything\s+you\s+(?:know|remember)\s+about\s+me\b|(?:my|the|this|that|these|those|all(?:\s+(?:my|the))?)\s+(?:(?:saved|stored|remembered|personal|indexed)\s+)*(?:memor(?:y|ies)|preferences?|facts?|(?:course\s+)?sources?)\b|(?:mi|mis|el|la|los|las|ese|esa|esos|esas|este|esta|estos|estas)\s+(?:recuerdos?|memorias?|preferencias?|datos?)\b|que\s+yo\b|(?:minha|minhas|meu|meus|essa|esse|essas|esses|esta|este|a|o|as|os)\s+(?:mem[óo]rias?|prefer[êe]ncias?|fatos?|fontes?)\b|que\s+eu\b|(?:ma|mon|mes|ce|cet|cette|ces|le|la|les)\s+(?:souvenirs?|m[ée]moires?|pr[ée]f[ée]rences?|faits?|sources?)\b|que\s+je\b|(?:meine?n?|diese[nmrs]?|die|den|das|alle(?:\s+meine)?)\s+(?:(?:gespeicherte[nmrs]?|pers[öo]nliche[nmrs]?|indexierte[nmrs]?)\s+)*(?:erinnerung(?:en)?|pr[äa]ferenz(?:en)?|vorliebe(?:n)?|fakten|quellen?)\b|dass\s+ich\b|(?:mijn|de|het|deze|dit|die|dat|alle(?:\s+mijn)?)\s+(?:(?:opgeslagen|bewaarde|persoonlijke|ge[ïi]ndexeerde)\s+)*(?:herinnering(?:en)?|voorkeur(?:en)?|feiten|bronnen?)\b|dat\s+ik\b)/iu;
@@ -113,7 +137,7 @@ var GZ_AI_RIME_MEMORY = globalThis.GZ_AI_RIME_MEMORY || (() => {
         if (spec.name === 'memory_read') return await env.store.read(account, args.id, { page: args.page || 1 });
         if (spec.name === 'memory_forget') return forgetRequested(current.question) ? await env.store.forget(account, { ...args }, { guard: mutationGuard(env, ctx, current) }) : fail('evidence');
         const question = userText(current.question);
-        if (!question.includes(args.evidence) || !String(current.question || '').includes(args.evidence)) return fail('evidence');
+        if (!question.includes(args.evidence) || !String(current.question || '').includes(args.evidence) || !supported(args.text, args.evidence, question)) return fail('evidence');
         return await env.store.save(account, { ...args }, { question, explicitCorrection: current.explicitCorrection === true,
           guard: mutationGuard(env, ctx, current), ...(current.lease !== undefined && { lease: current.lease }) });
       } catch { return fail('write'); }
