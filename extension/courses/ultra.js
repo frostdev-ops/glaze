@@ -226,13 +226,15 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
   const GRADABLE = /\.(GradableItem|Engagement)$/;
   const due = ({ todo = [], calendar = [], rows = {}, names = {}, now, excepted = () => false }) => {
     const found = new Map();
-    const add = (id, cid, title, at, handle, engagement) => {
+    const add = (id, cid, title, at, handle, engagement, column) => {
       if (!ID.test(id) || !ID.test(cid)) return;
       const had = found.get(id);
-      found.set(id, { id, cid, title: had?.title || str(title), at: had?.at ?? at, discussion: !!had?.discussion || engagement || /forumlink/.test(handle || '') });
+      found.set(id, { id, cid, title: had?.title || str(title), at: had?.at ?? at, discussion: !!had?.discussion || engagement || /forumlink/.test(handle || ''), column: had?.column || column });
     };
+    // To Do's column is the gradebook column itself ([M] contentId, scoreProviderHandle), so an item whose course's rows
+    // weren't read still names its content item.
     for (const t of arr(todo)) {
-      for (const i of [...arr(t?.overdueItems), ...arr(t?.dueTodayItems), ...arr(t?.futureDueItems)]) add(i?.column?.id, i?.column?.courseId, i?.title, ms(i?.dueDate), i?.column?.scoreProviderHandle, false);
+      for (const i of [...arr(t?.overdueItems), ...arr(t?.dueTodayItems), ...arr(t?.futureDueItems)]) add(i?.column?.id, i?.column?.courseId, i?.title, ms(i?.dueDate), i?.column?.scoreProviderHandle, false, i?.column);
     }
     for (const i of arr(calendar)) {
       if (!GRADABLE.test(i?.itemSourceType || '')) continue;
@@ -240,7 +242,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     }
     return [...found.values()].map((f) => {
       const row = arr(rows[f.cid]).find((r) => r?.columnId === f.id);
-      const col = row?.column || {};
+      const col = row?.column || f.column || {};
       const st = row ? standing(row, now, excepted(f.cid, f.id)) : null;
       const known = st && (st.state !== 'unknown' || st.submitted || st.graded);
       const content = ID.test(col.contentId) ? col.contentId : '';

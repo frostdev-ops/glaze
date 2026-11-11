@@ -25,7 +25,8 @@ var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
   const cut = (s, n) => { const t = s.slice(0, n); return /[\ud800-\udbff]$/.test(t) ? t.slice(0, -1) : t; };
 
   // A planner item that is graded work, with the id assignment_read takes: Canvas's assignment (a quiz's or a graded
-  // discussion's is its assignment's), Ultra's content item (courses/ultra.js due: its column's content).
+  // discussion's is its assignment's), Ultra's content item (courses/ultra.js due: its column's content), else its
+  // gradebook column, which the reader resolves to the content item (ultra below).
   const TYPES = ['assignment', 'quiz', 'discussion_topic', 'sub_assignment'];
   const link = (u, origin) => {
     if (typeof u !== 'string' || !u) return '';
@@ -34,11 +35,23 @@ var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
   };
   const work = (i, who) => {
     if (!isObj(i) || !TYPES.includes(i.type)) return null;
-    const id = who.lms === 'ultra' ? i.content : i.type === 'assignment' ? i.id : i.aid;
+    const id = who.lms === 'ultra' ? i.content || i.id : i.type === 'assignment' ? i.id : i.aid;
     if (typeof id !== 'string' || !ID[who.lms].test(id) || typeof i.cid !== 'string' || !ID[who.lms].test(i.cid)) return null;
     const s = isObj(i.sub) ? i.sub : {};
     return { assignment: id, type: i.type, courseId: i.cid, course: str(i.course, 120), title: str(i.title, 300), due: when(i.at) || null, url: link(i.url, who.origin),
       submitted: !!s.submitted, graded: !!s.graded, late: !!s.late, missing: !!s.missing };
+  };
+
+  // What the Ultra tab reads for an id the lists gave: a content item as itself; a planner item's gradebook column
+  // (todo_list's id, or assignments_list's for an item with no content id) as the content its planner item names, else
+  // as a column the tab resolves. An id the planner doesn't name is a content item.
+  const ultra = async (ctx, who, course, item) => {
+    const c = (await ctx.local.get('todoCache')).todoCache;
+    const items = isObj(c) && c.key === `todo:${who.account}` && Array.isArray(c.items) ? c.items.filter((i) => isObj(i) && i.cid === course) : [];
+    if (items.some((i) => i.content === item)) return { assignment: item };
+    const i = items.find((x) => x.id === item || x.aid === item);
+    if (!i) return { assignment: item };
+    return typeof i.content === 'string' && ID.ultra.test(i.content) ? { assignment: i.content } : { assignment: item, column: item };
   };
 
   // ---- a read, fitted and kept ----
@@ -160,7 +173,9 @@ var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
         await turn;
         ctx.signal?.throwIfAborted();
         if (gen !== generation) return fail('The assignment cache was cleared during this read. Try again.');
-        const r = deps?.tabs ? await deps.tabs.run(who.account, 'assignment', { course, assignment: item }, { signal: ctx.signal }) : null;
+        const which = who.lms === 'ultra' ? await ultra(ctx, who, course, item) : { assignment: item };
+        ctx.signal?.throwIfAborted();
+        const r = deps?.tabs ? await deps.tabs.run(who.account, 'assignment', { course, ...which }, { signal: ctx.signal }) : null;
         ctx.signal?.throwIfAborted();
         if (gen !== generation) return fail('The assignment cache was cleared during this read. Try again.');
         if (r?.ok === true) {
