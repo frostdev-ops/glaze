@@ -1170,6 +1170,8 @@ html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) 
 /* The submission form under an assignment: the open tab's box with the panels' corners, and a comments field a few lines tall. */
 #application #submit_assignment .ui-tabs-panel { border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); border-start-start-radius: 0; }
 #application #submit_assignment textarea.submission_comment_textarea { box-sizing: border-box; width: min(100%, 40rem); min-height: 4.5rem; resize: vertical; }
+/* A comment's signature (author and date): Canvas draws it in #888 (3.25:1 on Paper's ground), inline on one just posted; the muted ink holds 4.5:1. */
+#application :is(.comment_author_and_date, .comment > div[style*="color: #888"]) { color: var(--gz-ink-muted) !important; }
 /* Assignments 2 draws the line above its submission box and its footer bar's edge inline, #e8eaec on every Look (AttemptTab.jsx, StudentFooter.jsx): white on a dark one. */
 #application [data-testid="attempt-tab"] > div[style*="border-top"] { border-top-color: var(--gz-border-line, var(--gz-line)) !important; }
 #application #assignments-student-footer[style*="border-color"] { border-color: var(--gz-border-line, var(--gz-line)) !important; }
