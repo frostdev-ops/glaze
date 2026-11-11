@@ -106,16 +106,22 @@ var GZ_GLSL = globalThis.GZ_GLSL || (() => {
 
     // `while` and `do` anywhere in the author's tokens, and every array declaration: its elements are read here, priced in run().
     const looped = new Set(), sized = new Map(); // lines already refused; `[` token -> elements of the array it declares
-    const declares = (k, depth, start) => {
+    const structEnds = new Set();
+    for (let k = P.length; k < T.length; k++) if (T[k] === 'struct') {
+      const brace = k + (isId(T[k + 1]) ? 2 : 1);
+      if (T[brace] === '{') structEnds.add(close(brace, '{', '}') - 1);
+    }
+    const declares = (k, depth, start, inline) => {
       if (!isId(T[k - 1])) return false; // not `name[`: a constructor, a second dimension or an index into something else
       if (isId(T[k - 2])) return T[k - 2] !== 'return' && T[k - 2] !== 'else'; // `float a[`, `highp vec2 a[`; not `return a[i]`
+      if (structEnds.has(k - 2)) return true; // `struct S { ... } a[3]` (the name S is optional)
       // `float b = 1., a[3];`: a later declarator, when its statement starts with a type and a name (and is not inside a call).
-      return T[k - 2] === ',' && !depth && isId(T[start]) && isId(T[start + 1]) && T[start] !== 'return' && T[start] !== 'else';
+      return T[k - 2] === ',' && !depth && (inline || (isId(T[start]) && isId(T[start + 1]) && T[start] !== 'return' && T[start] !== 'else'));
     };
-    for (let k = P.length, depth = 0, start = k; k < T.length; k++) {
+    for (let k = P.length, depth = 0, start = k, inline = false; k < T.length; k++) {
       const t = T[k];
       if ((t === 'while' || t === 'do') && !looped.has(L[k])) { looped.add(L[k]); uncountable(L[k]); }
-      else if (t === '[' && declares(k, depth, start)) {
+      else if (t === '[' && declares(k, depth, start, inline)) {
         let n = 1, readable = true;
         for (let j = k; T[j] === '['; ) { // `a[4]`, and a second dimension `a[4][4]` where the compiler has one
           const end = close(j, '[', ']'), inner = T.slice(j + 1, end - 1);
@@ -129,7 +135,7 @@ var GZ_GLSL = globalThis.GZ_GLSL || (() => {
       }
       if (t === '(' || t === '[') depth++;
       else if (t === ')' || t === ']') depth = Math.max(0, depth - 1);
-      else if (!depth && (t === ';' || t === '{' || t === '}')) start = k + 1;
+      else if (!depth && (t === ';' || t === '{' || t === '}')) { start = k + 1; inline = structEnds.has(k); }
     }
 
     const memo = new Map(), open = new Set();
