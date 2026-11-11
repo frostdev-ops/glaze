@@ -1510,6 +1510,7 @@
   "Read this document": "Dieses Dokument lesen",
   "Shown beside the what-if calculator. Blackboard's own weights are the ones that count.": "Wird neben dem Was-wäre-wenn-Rechner gezeigt. Es zählen die Gewichtungen von Blackboard.",
   "its recipe doesn't come out at Blackboard's own figure": "ihre Berechnung ergibt nicht den Wert, den Blackboard zeigt",
+  "Blackboard shows no overall number to check it against": "Blackboard zeigt keine Gesamtzahl zum Abgleichen",
   "Courses page": "Kursseite",
   "Blackboard link": "Blackboard-Link",
   "Link to something in Blackboard": "Link zu etwas in Blackboard",

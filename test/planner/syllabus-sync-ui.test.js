@@ -42,6 +42,7 @@ const stage = async (local = {}) => {
       storage: { local: { get: (k, cb) => cb(Object.fromEntries([].concat(k).filter((x) => x in w.store.local).map((x) => [x, structuredClone(w.store.local[x])]))) }, onChanged: { addListener() {} } },
     },
     GZ_I18N: require('../../extension/core/i18n.js'),
+    GZ_SPEC: require('../../extension/content/defaults.js').GZ_SPEC,
     GZ_CTX: {
       t: (k, v) => String(k).replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? ''), locale: () => 'en', settings: () => ({ enabled: true, enhance: { syllabus: true, todo: true } }), on: () => true, canvasCourseId: () => '25',
       profile: () => Promise.resolve({ id: 3 }), canvasCourses: () => Promise.resolve([{ id: '25' }]),

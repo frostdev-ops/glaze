@@ -362,7 +362,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
       if (n && n.rev !== cur.rev && !cur.busy && clean()) openNote(cur.id, true);
       else if (n && !cur.ro) {
         Object.assign(cur, { folder: n.folder, course: n.course, cn: n.cn });
-        if (document.activeElement !== el.title && el.title && el.title.value !== n.title) { cur.title = n.title; el.title.value = n.title; }
+        if (!cur.titleDirty && document.activeElement !== el.title && el.title && el.title.value !== n.title) { cur.title = n.title; el.title.value = n.title; }
         syncMeta(n);
       }
     });
@@ -393,7 +393,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
   const revoke = () => { for (const u of cur?.urls?.values() || []) URL.revokeObjectURL(u); };
   // Leaving a note: what's typed goes now (kept with the note, in case a save of it is still on its way).
   const flush = () => { if (cur && !cur.ro && cur.saved != null && el.body?.isConnected) { cur.pending = serialize(); save(cur); } };
-  const clean = () => !el.body?.isConnected || serialize() === cur.saved;
+  const clean = () => !cur?.titleDirty && (!el.body?.isConnected || serialize() === cur.saved);
   const snapshot = (c) => (c === cur && el.body?.isConnected && c.saved != null ? serialize() : c.pending);
   // The editor's HTML as it is stored: sanitized, pictures by their id only. CUT instead when the sanitizer would have to
   // leave part of it out (planner/notes.js parse): never a shortened copy to save, compare with what is stored, duplicate or export.
@@ -481,7 +481,8 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     cur.title = el.title.value;
     clearTimeout(titleWait);
     const c = cur;
-    titleWait = setTimeout(() => (c.rev ? metaChange({ title: c.title }, c) : save(c)), 500);
+    c.titleDirty = true; // typed and not yet sent: a change to the library meanwhile is not the title to show
+    titleWait = setTimeout(() => { c.titleDirty = false; return c.rev ? metaChange({ title: c.title }, c) : save(c); }, 500);
   };
 
   const newNote = (course = '') => {
@@ -600,6 +601,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     const c = cur;
     if (!c || c.ro || c.saved == null) return true;
     clearTimeout(titleWait);
+    c.titleDirty = false;
     if (c.rev && c.title !== idx.notes[c.id]?.title && !(await metaChange({ title: c.title }, c))) return false;
     if (el.body?.isConnected && cur === c) c.pending = serialize();
     for (let i = 0; i < 5; i++) {
@@ -740,7 +742,10 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     const html = !files.length && e.dataTransfer?.getData('text/html');
     if (!files.length && !html) return;
     e.preventDefault();
-    const at = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+    // Chrome and Safari give a range; Firefox, a position to make one from.
+    let at = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+    const pos = !at && document.caretPositionFromPoint?.(e.clientX, e.clientY);
+    if (pos?.offsetNode) { at = document.createRange(); at.setStart(pos.offsetNode, pos.offset); at.collapse(true); }
     if (at) { const s = getSelection(); s.removeAllRanges(); s.addRange(at); }
     keepRange();
     if (files.length) addFiles(files); else { putRange(); insertPasted(html); }

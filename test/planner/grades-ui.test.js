@@ -313,6 +313,17 @@ test('a pretend assignment added while a grading period is shown belongs to that
   assert.ok(find(p.box(), (e) => e.dataset.f === `n:${saved[0].id}`), 'and is shown in it');
 });
 
+test('Aim for a whole percent: "You\'d need about" shows that percent, not a tenth more', async () => {
+  const groups = [{ id: '1', name: 'All', group_weight: 0, assignments: [{ id: 'a', name: 'Final', points_possible: 100, submission: {} }] }];
+  const p = gradesPage({ groups, list: [row({ apply_assignment_group_weights: false })] });
+  await ready(p);
+  const target = find(p.box(), (e) => e.dataset.f === 'target');
+  const said = () => find(p.box(), (e) => e.className === 'gz-calc-out').textContent;
+  const seen = [];
+  for (const goal of ['60', '70', '90', '95']) { target.value = goal; target.fire('input'); await settle(); seen.push(said()); }
+  assert.deepEqual(seen, ['60', '70', '90', '95'].map((n) => `You'd need about ${n}% on the item left.`));
+});
+
 // ---- the GPA on the Dashboard ----
 const gpaPage = ({ store = shared(), list, capi }) => {
   const doc = page();
@@ -346,6 +357,15 @@ test('GPA: a course answer without a grading scheme says the what-if needs a sca
   p.UI.render();
   await settle(10);
   assert.equal(asked.length, 1, 'and not again');
+});
+
+test('GPA: a figure exactly on a half cent shows rounded up, as the percents do (3 A and a B+ at equal credits is 3.825)', async () => {
+  const course = (id, grade) => ({ id, name: `Course ${id}`, enrollments: [{ type: 'student', user_id: '3', computed_current_score: 95, computed_current_grade: grade }], term: { id: '1', name: 'Fall 2026', start_at: '2026-08-01T00:00:00Z' } });
+  const p = gpaPage({ list: [course('21', 'A'), course('22', 'A'), course('23', 'A'), course('24', 'B+')], capi: () => Promise.resolve(null) });
+  p.UI.render();
+  await settle(10);
+  assert.match(p.box().textContent, /3\.83Fall 2026/);
+  assert.doesNotMatch(p.box().textContent, /3\.82/);
 });
 
 // ACA-1 and ACA-2 at the Scale field: a syllabus's own wording counts the course, text that is no scale says so and changes nothing.
@@ -787,7 +807,7 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
     // The site's queue (courses/lmsq.js), passing each request straight on.
     GZ_LMSQ: { fetch: (url, o) => fetch(url, o) },
     MutationObserver: class { observe() {} disconnect() {} },
-    GZ_PAGE: require('../../extension/core/page.js'), GZ_COURSES: require('../../extension/content/defaults.js').GZ_COURSES, setTimeout: (f, ms) => { const timer = [f, ms]; state.timers.push(timer); return timer; },
+    GZ_PAGE: require('../../extension/core/page.js'), GZ_COURSES: require('../../extension/content/defaults.js').GZ_COURSES, GZ_SPEC: require('../../extension/content/defaults.js').GZ_SPEC, setTimeout: (f, ms) => { const timer = [f, ms]; state.timers.push(timer); return timer; },
     clearTimeout: (timer) => { const i = state.timers.indexOf(timer); if (i >= 0) state.timers.splice(i, 1); },
     GZ_CTX: {
       site: 'ultra', t: (k, v) => I.t(k, v, lang), locale: () => lang, need, settings: () => state.settings, on: () => true,
@@ -1098,6 +1118,20 @@ test('Ultra what-if: a course with no overall grade is an estimate from the shar
   assert.match(text, /Estimate now85%/);
   assert.ok(find(p.box(), (e) => e.className === 'gz-calc-tag' && e.textContent === 'Estimate'), 'marked in its heading');
   assert.doesNotMatch(text, /Blackboard now/, "no figure of Blackboard's to show");
+});
+
+test("Ultra what-if: an overall grade written only as a letter can't check the recipe, so the figures are an estimate and say why", async () => {
+  const letter = ufix('grades').results.map((r) => (r.column.externalGrade ? { ...r, displayGrade: { isOverride: false, requiresSchemaKnowledgeToDisplay: true, text: 'B+' } } : r));
+  const p = ultraPage({ books: { _101_1: letter } });
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  await settle(10);
+  const text = p.box().textContent;
+  assert.match(text, /Glaze can't work out this course's overall grade: Blackboard shows no overall number to check it against\./);
+  assert.doesNotMatch(text, /Blackboard now/, 'the recipe\'s figure is not shown as Blackboard\'s');
+  assert.match(text, /These figures are an estimate/);
+  assert.ok(find(p.box(), (e) => e.className === 'gz-calc-tag' && e.textContent === 'Estimate'), 'marked in its heading');
 });
 
 test("Ultra GPA: on Grades, above the terms, this term's courses with Blackboard's grade or an estimate, schemas asked once", async () => {

@@ -312,6 +312,15 @@ test('an older change to a term, arriving after a newer one, does not undo it', 
   assert.deepEqual(G.change(rec, { op: 'drop', id: 'one', at: 25 }).t, []);
 });
 
+test('a term with no string id is not kept, however its id reads as text, and a null entry is skipped', () => {
+  const ok = { id: 'ok', n: 'Fall 2025', c: [{ n: 'Bio', cr: 3, g: 'A' }] };
+  const raw = { t: [{ n: 'no id', c: [] }, { id: null, n: 'null id', c: [] }, { id: 7, n: 'number id', c: [] }, { id: ['a'], n: 'array id', c: [] }, null, undefined, 'junk', ok] };
+  assert.deepEqual(G.clean(raw).t.map((t) => t.id), ['ok']);
+  assert.equal(G.cleanTerm({ n: 'no id', c: [] }), null);
+  assert.deepEqual(G.change({ t: [] }, { op: 'term', term: { n: 'no id', c: [] }, at: 5, base: 0 }).t, [], 'a change with no id adds nothing');
+  assert.deepEqual(G.change({ t: [] }, { op: 'add', terms: [{ n: 'no id', c: [] }, null, ok], at: 5, base: 0 }).t.map((t) => t.id), ['ok']);
+});
+
 test('what is kept is cleaned, and changes go in one at a time', () => {
   const t1 = { id: 'one', n: '  Fall   2024 ', c: [{ n: 'Bio', cr: 4, g: 'A' }, { n: 'x', cr: -1, g: 'B', l: 2, x: 0 }, 'junk'], p: 1, extra: 1 };
   let rec = G.change(undefined, { op: 'term', term: t1, at: 10 });

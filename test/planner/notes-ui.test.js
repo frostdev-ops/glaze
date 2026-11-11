@@ -460,6 +460,33 @@ test('pasting or dropping more than the sanitizer can keep inserts none of it, a
   assert.deepEqual(inserted(), ['<p>a few rows</p>'.length]);
 });
 
+test('a paste dropped into a note goes in at the pointer where only caretPositionFromPoint exists (Firefox)', async () => {
+  const P = page();
+  await P.openView();
+  P.fire(P.button('New note'), 'click');
+  await settle();
+  const body = P.box().querySelector('.gz-nt-body');
+  const spot = P.doc.createElement('p');
+  body.append(spot);
+  // A selection that holds the ranges it is given, and a Range that remembers where it was set.
+  const held = [];
+  const sel = { get rangeCount() { return held.length; }, get anchorNode() { return held[0]?.startContainer ?? null; }, removeAllRanges() { held.length = 0; }, addRange(r) { held.push(r); }, getRangeAt: (i) => held[i] };
+  P.run('globalThis').getSelection = () => sel;
+  const range = () => ({ startContainer: null, startOffset: 0, setStart(node, offset) { this.startContainer = node; this.startOffset = offset; }, collapse() {}, cloneRange() { return { ...this }; } });
+  Object.assign(P.doc, { createRange: range, caretPositionFromPoint: (x, y) => (x === 40 && y === 50 ? { offsetNode: spot, offset: 2 } : null) });
+  assert.equal(P.doc.caretRangeFromPoint, undefined, 'no caretRangeFromPoint, as in Firefox');
+  const where = [];
+  P.doc.execCommand = (cmd) => { if (cmd === 'insertHTML') where.push([sel.getRangeAt(0)?.startContainer === spot, sel.getRangeAt(0)?.startOffset]); return true; };
+  const clip = (html) => ({ files: [], getData: (type) => (type === 'text/html' ? html : '') });
+  const dropped = P.fire(body, 'drop', { dataTransfer: clip('<p>dropped</p>'), clientX: 40, clientY: 50 });
+  assert.equal(dropped.defaultPrevented, true);
+  assert.deepEqual(where, [[true, 2]], 'inserted at the pointer');
+  // Pointer over nothing it can place: where the caret was, as before.
+  held.length = 0;
+  P.fire(body, 'drop', { dataTransfer: clip('<p>again</p>'), clientX: 1, clientY: 1 });
+  assert.equal(where.length, 2);
+});
+
 test('Share on a note saves it, then frames the extension share panel with a one-use ticket, out of the page\'s reach', async () => {
   const P = page();
   await P.openView();
@@ -601,6 +628,51 @@ test('Duplicate makes "<title> (copy)" and opens it', async () => {
   const copy = P.sent.find((m) => m.op === 'save' && m.base === 0);
   assert.equal(copy.title, 'Week 3 (copy)');
   assert.equal(P.box().querySelector('.gz-nt-title').value, 'Week 3 (copy)', 'the copy is what opens');
+});
+
+test('a title typed, then left, is saved as typed when the library changes elsewhere inside its half second', async () => {
+  const P = page();
+  await P.seed([{ id: id(1), title: 'Note A', course: '7', html: '<p>A text</p>' }]);
+  await P.openView();
+  P.fire(P.items().find((e) => /Note A/.test(e.textContent)), 'click');
+  await settle();
+  const title = P.box().querySelector('.gz-nt-title');
+  assert.equal(title.value, 'Note A');
+  // Typed, and focus has gone to the body (the field is not the active element).
+  title.value = 'Renamed A';
+  P.fire(title, 'input');
+  // Another tab saves a different note: the library's index changes before the title's own save.
+  await P.seed([{ id: id(2), title: 'Note B', course: '7', html: '<p>B text</p>' }]);
+  assert.equal(title.value, 'Renamed A', 'the field keeps what was typed');
+  await wait(700);
+  const titles = P.sent.filter((m) => m.op === 'meta' && 'title' in m && m.id === id(1)).map((m) => m.title);
+  assert.deepEqual(titles, ['Renamed A'], 'and so does what is saved');
+});
+
+test('a remote body revision during the title debounce keeps the typed title and then loads the new body', async () => {
+  const P = page();
+  await P.seed([{ id: id(1), title: 'Note A', course: '7', html: '<p>A text</p>' }]);
+  await P.openView();
+  P.fire(P.items().find((e) => /Note A/.test(e.textContent)), 'click');
+  await settle();
+  const timers = [];
+  const globals = P.run('globalThis');
+  const nativeTimeout = globals.setTimeout;
+  globals.setTimeout = (f, ms, ...args) => ms === 500 ? timers.push(f) : nativeTimeout(f, ms, ...args);
+  const title = P.box().querySelector('.gz-nt-title');
+  title.value = 'Renamed A';
+  P.fire(title, 'input');
+  P.box().querySelector('.gz-nt-body').focus();
+  await P.seed([{ id: id(1), base: 1, sid: 'remote-revision', title: 'Note A', course: '7', html: '<p>Updated elsewhere</p>' }]);
+  await settle();
+  assert.equal(P.box().querySelector('.gz-nt-title').value, 'Renamed A', 'a body refresh cannot discard the unsent title');
+  assert.equal(timers.length, 1);
+  await timers[0]();
+  await wait(10);
+  await settle();
+  assert.deepEqual(P.sent.filter((m) => m.op === 'meta' && 'title' in m).map((m) => m.title), ['Renamed A']);
+  assert.equal(P.box().querySelector('.gz-nt-title').value, 'Renamed A');
+  assert.match(P.box().querySelector('.gz-nt-body').textContent, /Updated elsewhere/, 'the remote body is loaded after the title is saved');
 });
 
 test('the Course notes button costs the first script nothing: the worker registers it only while Notes is on', async () => {

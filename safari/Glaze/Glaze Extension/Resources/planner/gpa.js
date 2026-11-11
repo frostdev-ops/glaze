@@ -249,7 +249,7 @@ var GZ_GPA = globalThis.GZ_GPA || (() => {
     return o;
   };
   const cleanTerm = (t) => {
-    if (!t || typeof t !== 'object' || !ID.test(t.id)) return null;
+    if (!t || typeof t !== 'object' || typeof t.id !== 'string' || !ID.test(t.id)) return null;
     const o = { id: t.id, n: text(t.n, 60), c: (Array.isArray(t.c) ? t.c : []).map(cleanRow).filter(Boolean).slice(0, MAX_ROWS) };
     if (t.p === 0) o.p = 0;
     if (okNum(t.at, 1e15)) o.at = t.at;

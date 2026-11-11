@@ -63,6 +63,8 @@ var GZ_GRADESCOPE = globalThis.GZ_GRADESCOPE || (() => {
   // null: unreadable (no title). A due date that isn't one is left out and the row kept. id '': a row with no
   // assignment to open or tick (an exam not yet graded, a placeholder); it isn't kept, and isn't counted either.
   // Gradescope's own words are English only: "No Submission", "Submitted", "Graded", a score "8.0 / 10.0", maybe "Late".
+  // A status that is none of those (reworded, translated, empty because the cell moved, "Unsubmitted") says nothing of
+  // whether work was handed in: the row is kept with `unknown: true`, counted among the unreadable ones, and never Missing.
   const row = (x, gid) => {
     const title = text(x?.title, 300);
     // An empty row (a spacer, "no assignments yet" drawn elsewhere) is nothing; a row with parts but no title is unreadable.
@@ -76,8 +78,8 @@ var GZ_GRADESCOPE = globalThis.GZ_GRADESCOPE || (() => {
     // No word boundaries: a cell's parts run together in textContent ("SubmittedLate").
     const none = /no\s*submission|not\s*submitted/i.test(st);
     const graded = !!pts || (!none && /graded/i.test(st) && !/ungraded/i.test(st));
-    const sub = graded || (!none && /submitted/i.test(st)) || /\bsubmissionStatus-complete\b/.test(x.cls || '');
-    return { id, title, due, late, sub, graded, score: pts ? +pts[1] : null, points: pts ? +pts[2] : null, lateSub: sub && /late/i.test(st) };
+    const sub = graded || (!none && /(?<!un)submitted/i.test(st)) || /\bsubmissionStatus-complete\b/.test(x.cls || '');
+    return { id, title, due, late, sub, graded, score: pts ? +pts[1] : null, points: pts ? +pts[2] : null, lateSub: sub && /late/i.test(st), ...(sub || none ? {} : { unknown: true }) };
   };
   // A course page's assignments: { rows, bad } (bad: rows skipped as unreadable), or null when the page has no student
   // assignments table at all (signed out, a course taught rather than taken): then what's kept stays.
@@ -91,7 +93,7 @@ var GZ_GRADESCOPE = globalThis.GZ_GRADESCOPE || (() => {
       try {
         const r = row(read(tr), gid);
         if (!r) out.bad++;
-        else if (r.id && !seen.has(r.id) && out.rows.length < 300) { seen.add(r.id); out.rows.push(r); }
+        else if (r.id && !seen.has(r.id) && out.rows.length < 300) { seen.add(r.id); out.rows.push(r); if (r.unknown) out.bad++; }
       } catch { out.bad++; }
     }
     return out;
@@ -172,7 +174,7 @@ var GZ_GRADESCOPE = globalThis.GZ_GRADESCOPE || (() => {
   // With no account known, nothing but the answers is kept.
   const cleanRow = (x) => (isObj(x) && ID.test(x.id) && text(x.title, 300) ? {
     id: x.id, title: text(x.title, 300), due: ms(x.due), late: ms(x.late), sub: !!x.sub, graded: !!x.graded,
-    score: num(x.score), points: num(x.points), lateSub: !!x.lateSub,
+    score: num(x.score), points: num(x.points), lateSub: !!x.lateSub, ...(x.unknown === true ? { unknown: true } : {}),
   } : null);
   const clean = (raw) => {
     const r = isObj(raw) ? raw : {};
@@ -249,7 +251,7 @@ var GZ_GRADESCOPE = globalThis.GZ_GRADESCOPE || (() => {
         const end = r.late ?? r.due;
         out.push({
           type: 'gradescope', id: r.id, cid, course: '', title: r.title, at: r.due, url: `${HOST}/courses/${gid}/assignments/${r.id}`,
-          sub: { submitted: r.sub, excused: false, graded: r.graded, late: r.lateSub, missing: !r.sub && end !== null && end < now, redo: false },
+          sub: { submitted: r.sub, excused: false, graded: r.graded, late: r.lateSub, missing: !r.sub && !r.unknown && end !== null && end < now, redo: false },
           ov: null, aid: '', read: false, note: '', ws: '', allDay: false, gs: { score: r.score, points: r.points },
         });
       }

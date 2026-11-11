@@ -317,6 +317,26 @@ test("what's stored and imported is cleaned", () => {
   assert.ok(!T.STORE_KEY.test('todo:https://a.b/3/x'));
 });
 
+test('a task or step with no string id, and a null entry, never reach the kept data or throw', async () => {
+  const bad = [{ title: 'no id' }, { id: null, title: 'null id' }, { id: 12, title: 'number id' }, { id: ['a'], title: 'array id' }, { id: {}, title: 'object id' }, null, undefined, 7];
+  const raw = { tasks: [...bad, { id: 'ok', title: 'kept' }], items: { 'assignment:1': { subs: [...bad, { id: 's', title: 'kept' }] } } };
+  const cleaned = T.clean(raw);
+  assert.deepEqual(cleaned.tasks.map((x) => x.id), ['ok']);
+  assert.deepEqual(cleaned.items['assignment:1'].subs, [{ id: 's', title: 'kept', done: false }]);
+  // A backup holding them restores what is whole, rather than failing as a whole; and a message from a page does nothing.
+  const store = {};
+  const local = { get: async (keys) => Object.fromEntries(keys.filter((k) => k in store).map((k) => [k, store[k]])), set: async (v) => { Object.assign(store, v); return true; }, remove: async () => true };
+  const sync = { set: async () => true };
+  const key = 'todo:https://x.test/3';
+  assert.deepEqual(await T.change({ restore: { tasks: { [key]: raw }, settings: { version: 2 } } }, { local, sync }), { ok: true });
+  assert.deepEqual(store[key].tasks.map((x) => x.id), ['ok']);
+  const msg = (...edits) => T.change({ key, edits }, { local, sync });
+  const odd = { toString: 1 };
+  const r = await msg(['task', null], ['importTask', null], ['task', { title: 'no id' }], ['taskDone', odd, 5], ['dropTask', odd], ['dropTask', ['ok']], ['dropTask', 12]);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.data.tasks.map((x) => x.id), ['ok'], 'nothing added, nothing dropped');
+});
+
 test('planner items are kept small and on their own site', () => {
   const s = T.slim({ plannable_type: 'planner_note', plannable_id: '7', course_id: null, plannable_date: '2026-10-16T16:00:00Z', html_url: 'https://x.test/api/v1/planner_notes/7', plannable: { title: 'Note', details: 'Bring goggles' } });
   assert.deepEqual(s, { type: 'planner_note', id: '7', cid: '', course: '', title: 'Note', at: at('2026-10-16T16:00:00Z'), url: '', sub: null, ov: null, aid: '', read: false, note: 'Bring goggles', ws: '', allDay: false });

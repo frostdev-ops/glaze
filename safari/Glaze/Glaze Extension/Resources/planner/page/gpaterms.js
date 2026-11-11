@@ -111,7 +111,7 @@ var GZ_GPA_TERMS = globalThis.GZ_GPA_TERMS || (() => {
     : !r.left ? t('Nothing left to change: {pct}.', { pct: r.best == null ? '–' : api.pct(r.best) })
       : r.reachable === false ? t('Out of reach: full marks on the {n} items left would make {pct}.', { n: r.left, pct: api.pct(r.best) })
         : r.share === 0 ? t("You'd stay at {pct} or above even with zeros on what's left.", { pct: api.pct(min) })
-          : t("You'd need about {pct} on each of the {n} items left.", { n: r.left, pct: GZ_I18N.pct(Math.ceil(r.share * 1000) / 10, locale()) }));
+          : t("You'd need about {pct} on each of the {n} items left.", { n: r.left, pct: GZ_I18N.pct(r.pct, locale()) }));
   const goal = (past, rows, w, plus) => {
     const g = past.g;
     const kind = f(make('select', {}, ...[['cum', 'Cumulative GPA'], ['term', "This term's GPA"]].map(([v, n]) => make('option', { value: v, textContent: t(n) }))), 'goal:k');

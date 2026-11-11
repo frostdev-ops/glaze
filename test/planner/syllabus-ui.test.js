@@ -139,6 +139,7 @@ const page = (extra = {}) => {
     location: { origin: ORIGIN, pathname: '/courses/25/modules' },
     chrome: undefined,
     GZ_I18N: require('../../extension/core/i18n.js'),
+    GZ_SPEC: require('../../extension/content/defaults.js').GZ_SPEC,
     GZ_CTX: {
       t: (k) => k, locale: () => 'en', settings: () => state.settings, on: () => state.on, canvasCourseId: () => state.cid,
       profile: () => Promise.resolve({ id: 3 }), canvasCourses: () => Promise.resolve([{ id: '25' }]),
@@ -285,4 +286,42 @@ test("Canvas: a course's own dates give week 1 to the date reader; a term's don'
   assert.deepEqual(await run({ id: '25', start_at: '2026-11-02T12:00:00Z', restrict_enrollments_to_course_dates: false, term }),
     { week1: [undefined], value: '2026-08-24', marks: ['Check this'] }, "a course that follows its term: the term's start, to check");
   assert.deepEqual(await run({ id: '25', term }), { week1: [undefined], value: '2026-08-24', marks: ['Check this'] });
+});
+
+// "Week 1 starts" is the school's calendar day: a course starting at midnight in New York reads the same on a Los Angeles laptop.
+test("Canvas: a course's own start is the day in the Canvas time zone, whatever zone this device is in", async () => {
+  const device = process.env.TZ;
+  const TEXT = 'Instructor: Dr. Amara Okafor\nWeek 2 - Friday: Essay 1 due';
+  const run = async (profile, course) => {
+    const p = page({ GZ_IMPORT: { read: async () => ({ text: TEXT, ocr: null }), note: () => '', doubt: () => false } });
+    p.ctx.GZ_CTX.profile = () => Promise.resolve(profile);
+    p.ctx.GZ_CTX.canvasCourses = () => Promise.resolve([course]);
+    const opening = p.UI.open();
+    await settle();
+    p.release();
+    await opening;
+    await settle();
+    const seen = [];
+    const extract = p.ctx.GZ_SYLLABUS.extract;
+    p.ctx.GZ_SYLLABUS.extract = (text, opts) => { seen.push(opts); return extract(text, opts); };
+    const dlg = p.body.children[0];
+    dlg.all.find((e) => e.id === 'gz-syl-file').files = [{ name: 'syllabus.pdf' }];
+    dlg.all.find((e) => e.tagName === 'BUTTON' && e.text === 'Read it').fire('click');
+    await settle();
+    const label = dlg.all.find((e) => e.tagName === 'LABEL' && e.text === 'Week 1 starts');
+    return { week1: seen.map((o) => o.week1), value: dlg.all.find((e) => e.id === label?.htmlFor)?.value };
+  };
+  // Midnight Monday 24 August in New York.
+  const course = { id: '25', start_at: '2026-08-24T04:00:00Z', restrict_enrollments_to_course_dates: true, term: { start_at: '2026-06-01T04:00:00Z' } };
+  try {
+    for (const tz of ['America/Los_Angeles', 'Asia/Tokyo', 'UTC']) {
+      process.env.TZ = tz;
+      assert.deepEqual(await run({ id: 3, time_zone: 'America/New_York' }, course), { week1: [Date.UTC(2026, 7, 24)], value: '2026-08-24' }, `device in ${tz}`);
+    }
+    process.env.TZ = 'America/Los_Angeles';
+    assert.deepEqual(await run({ id: 3, time_zone: 'Asia/Tokyo' }, { ...course, start_at: '2026-08-23T15:00:00Z' }), { week1: [Date.UTC(2026, 7, 24)], value: '2026-08-24' }, 'a course east of the device');
+    assert.deepEqual(await run({ id: 3 }, course), { week1: [Date.UTC(2026, 7, 23)], value: '2026-08-23' }, 'no zone known: this device\'s');
+  } finally {
+    if (device === undefined) delete process.env.TZ; else process.env.TZ = device;
+  }
 });

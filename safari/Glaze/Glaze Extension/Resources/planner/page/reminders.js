@@ -16,6 +16,7 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   const t = (k, v) => ctx.t(k, v);
   const CACHE = 'todoCache';
   const OLD = 6e5;
+  const RECHECK = 12e4; // a toast says "Due in 1 hour": from an answer older than this the site is asked once before it
   const H = 36e5;
   const ACCEPT = 'application/json+canvas-string-ids, application/json';
   const ultra = ctx.site === 'ultra';
@@ -111,8 +112,11 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
   const refresh = () => {
     const now = Date.now();
     if (!on || !T || asking || !planner() || now - failed < 6e4 || (cache && now - cache.at < OLD) || theyAsk()) return;
-    asking = load().catch(() => { failed = Date.now(); }).finally(() => { asking = null; });
+    asking = load().catch(() => { failed = Date.now(); }).finally(() => { asking = null; if (on) arm(); });
   };
+  // Work handed in since the kept answer was asked for is not in it: a toast from an answer over RECHECK old asks first (the
+  // same ask as refresh's, held to the same limits), and comes from what was kept only when the site can't answer.
+  const stale = (now) => !!cache && now - cache.at > RECHECK && !!planner() && !theyAsk() && now - failed >= 6e4;
 
   // ---- what's due when ----------------------------------------------------------------------------------------
   // The list over the next eight days and the past month, as Better To Do counts it (planner/todo.js build).
@@ -139,7 +143,9 @@ var GZ_REMIND_UI = globalThis.GZ_REMIND_UI || (() => {
     // A toast drawn but not yet acknowledged: only the acknowledgement is sent again, never the toast. Nothing this page
     // has drawn is drawn here again, acknowledged or not.
     const fresh = p.show.filter((e) => !drawn.has(e.id));
-    if (unacked) { if (!busy && now >= wait) retry(); } else if (fresh.length && !quiet() && !busy && now >= wait) fire({ ...p, show: fresh, ids: p.ids.filter((id) => !drawn.has(id)) });
+    if (unacked) { if (!busy && now >= wait) retry(); } else if (fresh.length && !quiet() && !busy && now >= wait) {
+      if (stale(now)) { if (!asking) asking = load().catch(() => { failed = Date.now(); }).finally(() => { asking = null; if (on) arm(); }); } else if (!asking) fire({ ...p, show: fresh, ids: p.ids.filter((id) => !drawn.has(id)) });
+    }
     const next = Math.min(p.next, wait > now ? wait : Infinity, en().streak ? T.midnight(T.dayOf(now, who.tz) + 1, who.tz) : Infinity);
     if (next < Infinity) timer = setTimeout(arm, Math.max(1000, Math.min(next - now, OLD)));
   };

@@ -224,7 +224,8 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
       && !(i.id in scores) && i.possible > 0 && (!opts.period || i.period === opts.period));
   };
   // The even share f of every remaining item's points that brings the final grade to `target` (%), found by
-  // bisection (drops and weights make it no simple formula). { left, best (full marks on the rest), share? or
+  // bisection (drops and weights make it no simple formula). { left, best (full marks on the rest), share? and pct
+  // (the percent to show: the smallest tenth that calc still takes to the target, so a whole target reads as itself) or
   // reachable: false }.
   const need = (base, what = {}, target, opts = {}) => {
     const left = remaining(base, what, opts);
@@ -236,7 +237,11 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     let lo = 0;
     let hi = 1;
     for (let n = 0; n < 40; n++) { const mid = (lo + hi) / 2; if (at(mid) >= target) hi = mid; else lo = mid; }
-    return { left: left.length, best, share: hi };
+    // `hi` sits up to 1e-12 above the true share, so rounding it up would show a whole target a tenth high: take the
+    // first tenth, from the one under it, that calc says reaches the target (as `reaches` does, to a billionth).
+    let k = Math.floor(hi * 1000);
+    while (k < Math.ceil(hi * 1000) && at(k / 1000) < target - 1e-9) k++;
+    return { left: left.length, best, share: hi, pct: k / 10 };
   };
 
   // ---- what-if scores kept on this device ---------------------------------------------------------------------
@@ -319,8 +324,8 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
   // exempt work excused. Work not graded yet is left out of a running total and counts as zero otherwise (zeros: the
   // overall grade is then calc's final). kind: 'weighted' (the course's own recipe, which reproduces Blackboard's figure),
   // 'points' (no overall grade in Blackboard: every item in one share of points, grouped by category, said to be just
-  // that) or 'unsupported' (a recipe Glaze can't read, or one that doesn't come out at Blackboard's figure: no course,
-  // note saying why and the reason alone as `why`, for translating). names: category id → category record or title, for a category no item
+  // that) or 'unsupported' (a recipe Glaze can't read, one that doesn't come out at Blackboard's figure, or no number from
+  // Blackboard to check it against: no course, note saying why and the reason alone as `why`, for translating). names: category id → category record or title, for a category no item
   // names (an empty one).
   // Ultra's own categories (Assignment, Test, …) are titled with a language key its pages translate (DISCUSSION.NAME): the
   // English name for it, which the calculator says in the student's language (sys). A key not listed reads as its words; a
@@ -336,6 +341,7 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
   };
   const NO_DROPS = { lo: 0, hi: 0, never: [] };
   const MISMATCH = "its recipe doesn't come out at Blackboard's own figure";
+  const UNCHECKED = 'Blackboard shows no overall number to check it against';
   const model = (results, names = {}) => {
     const rows = (Array.isArray(results) ? results : []).filter((g) => g?.column);
     const overallRow = rows.find((g) => g.column.externalGrade);
@@ -349,7 +355,10 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
       excused: !!g.isExempt, pending: false, counts: true, anon: false, period: null,
     }));
     const items = all.filter((i) => !i.excused);
-    const overall = overallRow?.displayGrade?.score != null ? Number(overallRow.displayGrade.score) : null;
+    // Blackboard's figure where it is a number: not a letter or other text, not blank, not hidden or missing.
+    const shown = overallRow?.displayGrade?.score;
+    const figure = typeof shown === 'string' && !shown.trim() ? NaN : Number(shown);
+    const overall = shown != null && Number.isFinite(figure) ? figure : null;
     const no = (why) => ({ kind: 'unsupported', note: `Glaze can't work out this course's overall grade: ${why}.`, why, items, overall });
     const recipe = overallRow ? parse(overallRow.column) : { cats: null, running: true };
     if (recipe.error) return no(recipe.error);
@@ -367,9 +376,11 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     const m = { items: groups.flatMap((g) => g.items.filter((i) => !i.excused)), overall, course, zeros: course.zeros, percent,
       need: (target, o) => need(course, what(o), target), remaining: (o) => remaining(course, what(o)) };
     if (!overallRow) return { ...m, kind: 'points', note: 'This course has no overall grade in Blackboard. These figures are your share of the points in graded work, which may not be how the course is graded.' };
-    // Blackboard's figure is the check: a recipe that doesn't reproduce it isn't trusted.
+    // Blackboard's figure is the check: a recipe that doesn't reproduce it isn't trusted, and with no figure to compare
+    // (the overall grade is a letter, hidden or not graded yet) it isn't trusted either.
+    if (overall == null) return no(UNCHECKED);
     const mine = percent();
-    if (overall != null && (mine == null || Math.abs(mine - overall) > 0.01)) return no(MISMATCH);
+    if (mine == null || Math.abs(mine - overall) > 0.01) return no(MISMATCH);
     return { ...m, kind: 'weighted', note: '' };
   };
 
