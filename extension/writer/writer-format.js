@@ -6,6 +6,7 @@
 // Classic script; module.exports for node.
 var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
   const ST = () => (typeof GZ_WRITER_STYLES !== 'undefined' ? GZ_WRITER_STYLES : require('./writer-styles.js'));
+  const SRC = () => (typeof GZ_WRITER_SOURCES !== 'undefined' ? GZ_WRITER_SOURCES : require('./writer-sources.js'));
 
   // ---- making a paper
   const BLOCK = { align: null, indent: 0, line: null, first: null };
@@ -34,6 +35,24 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
   const text = (n) => (typeof n?.textContent === 'string' ? n.textContent : (n?.content || []).map((c) => c.text || text(c)).join(''));
   const attrs = (n) => n?.attrs || {};
   const DATE = /^(\d{1,2}\s+[A-Z][a-z]+\.?\s+\d{4}|[A-Z][a-z]+\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{4}-\d{2}-\d{2})$/;
+  // A heading's date (DATE's forms) → that day as a local Date, or null. Built from its parts, never through Date.parse
+  // (which reads 2026-11-10 as UTC midnight, the 9th in the Americas); 10/11/2026 could be either month: null.
+  const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+  const dayOf = (s) => {
+    const mon = (w) => MONTH_NAMES.indexOf(w.toLowerCase().slice(0, 3)) + 1;
+    let y, m, d, x;
+    if ((x = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s))) [y, m, d] = [+x[1], +x[2], +x[3]];
+    else if ((x = /^(\d{1,2})\s+([A-Za-z]+)\.?\s+(\d{4})$/.exec(s))) [y, m, d] = [+x[3], mon(x[2]), +x[1]];
+    else if ((x = /^([A-Za-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})$/.exec(s))) [y, m, d] = [+x[3], mon(x[1]), +x[2]];
+    else if ((x = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(s))) {
+      const a = +x[1], b = +x[2];
+      if (x[3].length === 2 || a <= 12 && b <= 12 && a !== b) return null;
+      [m, d] = a > 12 ? [b, a] : [a, b];
+      y = +x[3];
+    } else return null;
+    const date = new Date(y, m - 1, d);
+    return m >= 1 && date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d ? date : null;
+  };
   // The opening as the format makes it, if the paper still has that shape: { end (first body index), lines: { name,
   // instructor, course, date, title }, at: { line → top-level index } }. null when it doesn't. Blank's is always there, empty.
   const read = (doc, f) => {
@@ -140,9 +159,9 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
       if (roles.some((r, i) => r && r !== ['name', 'instructor', 'course', 'date'][i])) {
         add('heading', 'heading-order', tops[0].pos + 1, tops[3].pos + tops[3].node.nodeSize - 1, 'Heading lines go in this order: your name, instructor, course, date', { fix: { op: 'heading-order', roles } });
       }
-      const date = open.lines.date || '', d = Date.parse(date.replace(/(\d)(st|nd|rd|th)\b/, '$1'));
-      if (date && DATE.test(date) && Number.isFinite(d)) {
-        const want = ST().dateText(f, new Date(d));
+      const date = open.lines.date || '', d = DATE.test(date) ? dayOf(date) : null;
+      if (d) {
+        const want = ST().dateText(f, d);
         if (want !== date) { const t = span(tops[3]); add('heading', 'heading-date', t.from, t.to, 'MLA dates go day, month, year', { suggestions: [want] }); }
       }
     }
@@ -216,27 +235,34 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     const lines = o.lines || ((from, to) => estimate(doc.textBetween(from, to, ' ')));
     for (const t of tops) {
       if (t.node.type.name !== 'paragraph' || (list && t.index >= list.title) || (open && t.index < open.end)) continue;
-      const s = t.node.textContent, base = t.pos + 1;
+      // One character per position: a footnote mark or picture is U+FFFC, a line break \n (textContent skips them).
+      const s = t.node.textBetween(0, t.node.content.size, '', leaf), base = t.pos + 1;
       for (const m of quotes(s)) {
         const from = base + m.index, to = from + m.length, inner = m.inner;
         const byWords = f.quote.words && words(inner) >= f.quote.words;
         const long = (f.quote.lines && lines(from, to) >= f.quote.lines + (cite === 'mla' ? 1 : 0)) || byWords;
-        if (long) add('citations', 'block-quote', from, to, cite === 'chicago' && !byWords ? 'Quotes of five lines or more go in a block quote' : f.quote.words && cite !== 'mla' ? 'Quotes of {n} words or more go in a block quote' : 'Quotes over four lines go in a block quote', { vars: { n: f.quote.words }, fix: { op: 'block-quote', from, to } });
+        if (long) add('citations', 'block-quote', from, to, cite === 'chicago' && !byWords ? 'Quotes of five lines or more go in a block quote' : f.quote.words && cite !== 'mla' ? 'Quotes of {n} words or more go in a block quote' : 'Quotes over four lines go in a block quote', { vars: { n: f.quote.words }, text: s.slice(m.index, m.index + m.length), fix: { op: 'block-quote', from, to } });
       }
+      // A label ("(Figure 3)", "(Table 2)"), a date, or a name the sentence runs on through ("The mission (Apollo 11)
+      // landed") is no citation.
+      const cited = (m) => !SRC().INSIDE.test(m[1]) && (cite === 'mla' || !/^\s*[\p{L}\d]/u.test(s.slice(m.index + m[0].length)));
       if (cite === 'mla') {
         for (const m of s.matchAll(/\(([A-Z][\p{L}\p{M}'’.-]+(?:\s+(?:and|&)\s+[A-Z][\p{L}\p{M}'’.-]+|\s+et al\.)?),\s*(?:p{1,2}\.\s*)?(\d+(?:\s*[-–]\s*\d+)?)\)/gu)) {
+          if (!cited(m)) continue;
           const from = base + m.index;
-          add('citations', 'cite-shape', from, from + m[0].length, 'MLA citation', { suggestions: [`(${m[1]} ${m[2].replace(/\s+/g, '')})`] });
+          add('citations', 'cite-shape', from, from + m[0].length, 'MLA citation', { text: m[0], suggestions: [`(${m[1]} ${m[2].replace(/\s+/g, '')})`] });
         }
       } else if (cite === 'apa') {
         for (const m of s.matchAll(/\(([A-Z][\p{L}\p{M}'’.-]+(?:\s+(?:and|&)\s+[A-Z][\p{L}\p{M}'’.-]+|\s+et al\.)?)\s+((?:19|20)\d{2}[a-z]?)\)/gu)) {
+          if (!cited(m)) continue;
           const from = base + m.index;
-          add('citations', 'cite-shape', from, from + m[0].length, 'APA citation', { suggestions: [`(${m[1]}, ${m[2]})`] });
+          add('citations', 'cite-shape', from, from + m[0].length, 'APA citation', { text: m[0], suggestions: [`(${m[1]}, ${m[2]})`] });
         }
       } else if (cite === 'chicago') {
         for (const m of s.matchAll(/\(([A-Z][\p{L}\p{M}'’.-]+(?:\s+et al\.)?),?\s+(\d+(?:\s*[-–]\s*\d+)?)\)/gu)) {
+          if (!cited(m)) continue;
           const from = base + m.index;
-          add('citations', 'cite-note', from, from + m[0].length, 'Chicago cites in footnotes', { fix: { op: 'to-note', from, to: from + m[0].length, note: `${m[1]}, ${m[2]}.` } });
+          add('citations', 'cite-note', from, from + m[0].length, 'Chicago cites in footnotes', { text: m[0], fix: { op: 'to-note', from, to: from + m[0].length, note: `${m[1]}, ${m[2]}.` } });
         }
       }
     }
@@ -276,8 +302,7 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
       const entries = tops.slice(list.from, list.to).filter((x) => x.node.textContent.trim());
       const flat = entries.filter((x) => x.node.attrs.first != null && x.node.attrs.first >= 0);
       if (flat.length) add('list', 'list-hanging', flat[0].pos + 1, flat.at(-1).pos + flat.at(-1).node.nodeSize - 1, 'Entries take a hanging indent', { fix: { op: 'hanging', at: flat.map((x) => x.pos) } });
-      const keys = entries.map((x) => x.node.textContent.trim().replace(/^[^\p{L}\p{N}]+/u, '').toLowerCase());
-      if (keys.some((k, i) => i && k.localeCompare(keys[i - 1]) < 0)) add('list', 'list-order', entries[0].pos + 1, entries.at(-1).pos + entries.at(-1).node.nodeSize - 1, 'Entries go in alphabetical order', { fix: { op: 'sort', from: list.from, to: list.to } });
+      if (SRC().disorder(entries.map((x) => x.node.textContent.trim())) > 0) add('list', 'list-order', entries[0].pos + 1, entries.at(-1).pos + entries.at(-1).node.nodeSize - 1, 'Entries go in alphabetical order', { fix: { op: 'sort', from: list.from, to: list.to } });
       const bold = t.node.content.content.some((c) => c.isText) && t.node.content.content.every((c) => !c.isText || c.marks.some((m) => m.type.name === 'bold'));
       if (f.list.bold && !bold) add('list', 'list-bold', s.from, s.to, '{title} is bold', { vars: { title: f.list.title }, fix: { op: 'mark', mark: 'bold' } });
       if (!f.list.bold && bold) add('list', 'list-plain', s.from, s.to, "{title} isn't bold", { vars: { title: f.list.title }, fix: { op: 'unmark', mark: 'bold' } });
@@ -287,6 +312,23 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     if (o.keep) for (let k = issues.length - 1; k >= 0; k--) if (KEPT.has(issues[k].rule) && issues[k].fix?.op !== 'format') issues.splice(k, 1);
     const rows = ROWS[cite].map(([id, label]) => ({ id, label, count: issues.filter((x) => x.row === id).length }));
     return { issues, rows };
+  };
+
+  const leaf = (n) => (n.type.name === 'hard_break' ? '\n' : '\ufffc');
+  // Whether a card that rewrites text still matches the paper (a card carries the text it was found on as `text`).
+  const current = (doc, i) => i.text == null || (i.from >= 0 && i.to <= doc.content.size && doc.textBetween(i.from, i.to, '', leaf) === i.text);
+  // The block-quote Fix: the paragraph around a quotation [from, to) (its marks included) split into the text before, a
+  // block quote of what is inside the quotation marks, and the text after, each keeping its marks, links and notes.
+  // → { from, to, nodes } to replace, or null when the range isn't one quotation in one paragraph.
+  const quoteBlock = (doc, from, to) => {
+    const $f = doc.resolve(from), n = doc.type.schema.nodes;
+    if (!$f.parent.isTextblock || doc.resolve(to).parent !== $f.parent || to - from < 2) return null;
+    const start = $f.start(), end = $f.end(), has = (a, b) => doc.textBetween(a, b, '', leaf).trim() !== '';
+    const out = [];
+    if (has(start, from)) out.push(n.paragraph.create($f.parent.attrs, doc.slice(start, from).content));
+    out.push(n.blockquote.create(null, n.paragraph.create(null, doc.slice(from + 1, to - 1).content)));
+    if (has(to, end)) out.push(n.paragraph.create({ ...$f.parent.attrs, first: 0 }, doc.slice(to, end).content));
+    return { from: $f.before(), to: $f.after(), nodes: out };
   };
 
   // The Outline: authored headings take precedence. With paragraphs:true an unheaded essay gets an inferred reverse
@@ -380,7 +422,7 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     return { ...json, attrs: { ...json.attrs, setup: null } };
   };
 
-  return { template, opening, closing, read, surname, restyle, check, name, outline, outlineSource, apply, KEPT, DATE };
+  return { template, opening, closing, read, surname, restyle, check, current, quoteBlock, name, outline, outlineSource, apply, KEPT, DATE };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_FORMAT; else GZ_WRITER_FORMAT;
