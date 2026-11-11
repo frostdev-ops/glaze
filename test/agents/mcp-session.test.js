@@ -147,6 +147,18 @@ test('a replay that errors or answers another protocolVersion is fatal', () => {
   assert.deepEqual(x.app, []);
 });
 
+test('reconnect replays the initialize that succeeded after an earlier initialize was rejected', () => {
+  const s = make();
+  s.up(0, 'chrome');
+  s.fromApp(J({ id: 1, method: 'initialize', params: { protocolVersion: INIT.protocolVersion } }), 0);
+  s.fromGlaze(J({ id: 1, error: { code: -32602, message: 'Invalid params.' } }), 1);
+  s.fromApp(J({ id: 2, method: 'initialize', params: INIT }), 2);
+  s.fromGlaze(J({ id: 2, result: ANSWER }), 3);
+  s.fromApp(J({ method: 'notifications/initialized' }), 4);
+  s.down(5);
+  assert.deepEqual(P(s.up(6, 'chrome').glaze), [{ jsonrpc: '2.0', id: REPLAY, method: 'initialize', params: INIT }]);
+});
+
 test('an app started before the browser gets its initialize answered, and the first connection replays it', () => {
   const s = make();
   assert.deepEqual(s.fromApp(J({ id: 0, method: 'initialize', params: INIT }), 0), { app: [], glaze: [] });
