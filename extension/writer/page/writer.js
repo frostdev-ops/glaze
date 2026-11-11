@@ -417,7 +417,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   // a render (Reply off while it submits, the Inbox's spinner over its dialog), and one it refused (no recipient, a failed
   // request) leaves the box as it was, to be sent again.
   const SENT_WAIT = 1000;
-  const inFlight = (box) => !!box.sending && (!A().HOLD || Date.now() - (box.sentAt || 0) < SENT_WAIT);
+  const inFlight = (box) => !!A().busy?.(box.editor) || !!box.sending && (!A().HOLD || Date.now() - (box.sentAt || 0) < SENT_WAIT);
   // Ctrl/Cmd+Enter: Post, Reply or Send, once, when Ultra allows it (its Angular may enable the button a moment after
   // the edit that fills the box).
   const send = (box, until = Date.now() + 1000) => {
@@ -469,6 +469,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     // they are (nothing to write back). A frame opening again after that still owns its buffered copy.
     const syncCurrent = (box) => (box.owns || box.snapshot ? sync(box, box.latest, null) : adopt(box));
     const press = () => {
+      if (group.some(inFlight)) return;
       for (const x of group) { remember(x); globalThis.GZ_DRAFT_UI?.sent?.(x.editor); if (SENDS.has(x.kind)) { x.sending = true; x.sentAt = Date.now(); } }
       try { passing = b; b.click(); } finally { passing = null; }
     };

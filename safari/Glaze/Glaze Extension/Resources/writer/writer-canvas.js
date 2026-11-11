@@ -54,6 +54,8 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
   // submit buttons with an action: Submit Quiz, and one question at a time Next and Previous; the times-up dialog's has none).
   const sends = (ed, kind) => kind === 'test' ? [...(ed.closest('form#submit_quiz_form')?.querySelectorAll('button[type="submit"][data-action]') || [])] : [sendOf(ed, kind)].filter(Boolean);
   const enabled = (b) => !!b && !b.disabled && !b.hasAttribute('disabled') && b.getAttribute('aria-disabled') !== 'true';
+  // The Inbox keeps Send enabled under its sending modal. Canvas's modal stack hides the underlying compose dialog.
+  const busy = (ed) => plain(ed) && !!ed.closest('[aria-hidden="true"], [inert]');
 
   // What the box answers: for now, whether a reply is to an announcement (its breadcrumb goes to the course's Announcements).
   const contextOf = (ed, kind) => {
@@ -172,7 +174,7 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     return { editor, container: containerOf(editor), root: rootOf(editor), kind, mode: modeOf(kind), send: sendOf(editor, kind), context: contextOf(editor, kind), identity: identity(editor) };
   }).filter(Boolean);
 
-  return { EDITOR, INBOX, KINDS, NATIVE, HOLD, TOOLS, drafts, kept, restoring, focus, focuses, errorsOf, boxes, kindOf, rootOf, containerOf, identity, sendOf, sends, enabled, contextOf, canEdit, editable, read, write, watch, attemptAt, paragraphs, linesOf };
+  return { EDITOR, INBOX, KINDS, NATIVE, HOLD, TOOLS, drafts, kept, restoring, busy, focus, focuses, errorsOf, boxes, kindOf, rootOf, containerOf, identity, sendOf, sends, enabled, contextOf, canEdit, editable, read, write, watch, attemptAt, paragraphs, linesOf };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_CANVAS;
 GZ_WRITER_CANVAS;
