@@ -3845,6 +3845,8 @@
   "This computer’s graphics can’t run Glaze’s on-device model.": "Die Grafik dieses Computers kann die lokale KI von Glaze nicht ausführen.",
   "Glaze’s on-device model could not start.": "Die lokale KI von Glaze konnte nicht starten.",
   "Glaze’s on-device model stopped. Try again.": "Die lokale KI von Glaze wurde beendet. Versuche es erneut.",
+  "The graphics card reset while Glaze’s on-device model ran. Try again.": "Die Grafikkarte wurde zurückgesetzt, während die lokale KI von Glaze lief. Versuche es erneut.",
+  "Glaze’s on-device model ran out of graphics memory. Try again with less text.": "Der lokalen KI von Glaze ist der Grafikspeicher ausgegangen. Versuche es mit weniger Text erneut.",
   "There isn’t enough free space for the model.": "Es ist nicht genug freier Speicher für das Modell da.",
   "The download lost its connection. Try again.": "Der Download hat die Verbindung verloren. Versuche es erneut.",
   "Picture reading": "Bilder lesen",

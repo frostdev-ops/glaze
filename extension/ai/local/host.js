@@ -366,7 +366,18 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
       if (m.memory !== undefined && (m.memory !== 1 || model?.memory !== 1)) throw Object.assign(new Error('This model does not support memory.'), { code: 'caps' });
       if (m.scale !== undefined && (m.scale !== 1 || model?.scale !== 1 || model.stock || model.role)) throw Object.assign(new Error('This model does not support size tokens.'), { code: 'caps' });
     };
-    const answer = async (m, signal) => {
+    // A device lost (engine.js keeps it lost) or memory run out mid-run leaves an engine no later run can use: it goes at
+    // once, so the next run loads afresh on a new device, and the failure says which. Called inside the model's turn.
+    const DEAD = ['lost', 'memory'];
+    const guarded = (f) => async (m, signal) => {
+      try { return await f(m, signal); } catch (e) {
+        const dead = !signal?.aborted && (DEAD.includes(e?.reason) && (!e.category || e.category === 'provider-unavailable'));
+        if (!dead) throw e;
+        await unload();
+        throw e.category ? e : fail('provider-unavailable', e.reason);
+      }
+    };
+    const answer = guarded(async (m, signal) => {
         await capabilitiesReady(m);
         const images = Array.isArray(m.images) ? m.images : [];
         if (images.length && typeof m.projector !== 'string') throw fail('request-rejected', 'unsupported');
@@ -423,7 +434,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
         try {
           for (const s of slots) {
             let r;
-            try { r = await job.vision.encode(s.pic, { signal }); } catch (e) { if (signal.aborted) throw aborted(signal); throw fail('provider-unavailable', ENGINE[e?.reason] === 'assets' ? 'pictures' : ENGINE[e?.reason] || 'engine'); }
+            try { r = await job.vision.encode(s.pic, { signal }); } catch (e) { if (signal.aborted) throw aborted(signal); throw fail('provider-unavailable', ENGINE[e?.reason] === 'assets' ? 'pictures' : DEAD.includes(e?.reason) ? e.reason : ENGINE[e?.reason] || 'engine'); }
             encoded.push(r);
             if (r.tokens !== s.pic.tokens) throw fail('provider-unavailable', 'engine');
             s.pic.data = null;
@@ -485,7 +496,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
           if (open >= 0) readAhead(job, [...ids.slice(0, open), ids[open], think.end, ...said], m.id);
         }
         return { text, finish, model: m.model, usage: { input, output: thought + n, thought, ...(keeps && { cached }) }, ...(rate && { rate }), ...(prefill && { prefill }) };
-    };
+    });
     // A run on the model in its trial (a swapped-in update): its first good answer keeps the new version; a load or engine
     // failure brings the old one back, and the run goes again on it unless part of its answer was already sent.
     const run = (m, signal) => queued(async () => {
@@ -539,7 +550,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
     };
     // The system turn (parts, or its first `stable`), kept; with stable the rest is read on after it in the live sequence.
     const warm = async (m, signal) => {
-      return queued(async () => {
+      return queued(() => guarded(async () => {
         await capabilitiesReady(m);
         if ((await env.store.status(m.model)).state !== 'ready') return { ok: false };
         const job = await wait(load(m.model, null, m.window), signal);
@@ -553,7 +564,7 @@ var GZ_AI_LOCAL_HOST = globalThis.GZ_AI_LOCAL_HOST || (() => {
           await job.model.extend(ids, { at: stops(job, ids, head.length), signal, ...pacing });
         }
         return { ok: true };
-      }, signal);
+      })(m, signal), signal);
     };
     const remove = async (m) => {
       if (m?.part === 'pictures') {

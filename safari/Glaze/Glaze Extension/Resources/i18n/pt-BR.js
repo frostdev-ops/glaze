@@ -3845,6 +3845,8 @@
   "This computer’s graphics can’t run Glaze’s on-device model.": "Os gráficos deste computador não conseguem executar a IA local do Glaze.",
   "Glaze’s on-device model could not start.": "A IA local do Glaze não conseguiu iniciar.",
   "Glaze’s on-device model stopped. Try again.": "A IA local do Glaze parou. Tente de novo.",
+  "The graphics card reset while Glaze’s on-device model ran. Try again.": "A placa de vídeo foi reiniciada enquanto a IA local do Glaze rodava. Tente de novo.",
+  "Glaze’s on-device model ran out of graphics memory. Try again with less text.": "A IA local do Glaze ficou sem memória de vídeo. Tente de novo com menos texto.",
   "There isn’t enough free space for the model.": "Não há espaço livre suficiente para o modelo.",
   "The download lost its connection. Try again.": "O download perdeu a conexão. Tente de novo.",
   "Picture reading": "Leitura de imagens",
