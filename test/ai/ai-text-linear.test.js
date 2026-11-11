@@ -56,3 +56,15 @@ test('quotedRanges is linear in quote marks, in both copies', () => {
   const src = (f) => { const s = fs.readFileSync(path.join(__dirname, '../../extension/ai/tasks', f), 'utf8'), at = s.indexOf('  const quotedRanges = '); return s.slice(at, s.indexOf('\n  };\n', at)); };
   assert.equal(src('writer-feedback.js'), src('wording.js'), 'writer-feedback.js keeps wording.js\'s copy');
 });
+
+test('writer.complete\'s check is linear in a reply with no space or punctuation (a provider that ignores maxTokens)', () => {
+  const C = require('../../extension/ai/tasks/writer-complete.js');
+  for (const before of ['The river keeps what the ', 'The river keeps what the tow']) {
+    const inp = C.task.input({ before });
+    linear(`letters after ${JSON.stringify(before.slice(-4))}`, (n) => C.finish('a'.repeat(n), inp, { truncated: true }), 2000);
+    linear(`CJK after ${JSON.stringify(before.slice(-4))}`, (n) => C.finish('漢'.repeat(n), inp, { truncated: true }), 1000);
+  }
+  const inp = C.task.input({ before: 'Read more at the ' });
+  assert.equal(C.finish('site example.com now.', inp), null, 'a link stays refused');
+  assert.equal(C.finish('river-bank.org today.', inp), null);
+});
