@@ -14,7 +14,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     const write = () => new Promise((done) => {
       try { chrome.storage.local.get(key, (r) => { try { chrome.storage.local.set({ [key]: merge(r?.[key]), ...more }, done); } catch { done(); } }); } catch { done(); } // extension reloaded under the tab
     });
-    const run = (writing.get(key) || Promise.resolve()).then(() => (navigator.locks?.request ? navigator.locks.request(`glaze:${key}`, write).catch(write) : write()));
+    const run = (writing.get(key) || Promise.resolve()).then(() => (globalThis.navigator?.locks?.request ? navigator.locks.request(`glaze:${key}`, write).catch(write) : write()));
     writing.set(key, run);
     return run;
   };
