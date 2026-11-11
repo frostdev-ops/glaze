@@ -2066,3 +2066,17 @@ test('a device joining while Drive\'s search doesn\'t show another device\'s rec
   await settled(b, a);
   for (const d of [a, b]) assert.deepEqual((await d.local.get('writerWords')).writerWords.sort(), ['Alpha', 'Beta']);
 });
+
+test('a device joining keeps the bibliography entries each side removed from its saved sources', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  const key = 'writer:sources:school|_1_1|_2_1|_3_1';
+  await a.local.set({ [key]: { sources: [{ id: 's-aa1', type: 'book', title: 'Alpha' }], removed: ['s-bib-a1'], at: 10 } });
+  assert.ok((await a.on()).ok);
+  await b.local.set({ [key]: { sources: [{ id: 's-bb2', type: 'book', title: 'Beta' }], removed: ['s-bib-b2'], at: 20 } });
+  assert.ok((await b.on()).ok); assert.ok((await a.run()).ok);
+  for (const d of [a, b]) {
+    const v = (await d.local.get(key))[key];
+    assert.deepEqual(v.sources.map((x) => x.id).sort(), ['s-aa1', 's-bb2']);
+    assert.deepEqual([...(v.removed || [])].sort(), ['s-bib-a1', 's-bib-b2'], `${d === a ? 'A' : 'B'} keeps both removals`);
+  }
+});

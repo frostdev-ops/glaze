@@ -1093,3 +1093,11 @@ test('Back up refuses a spreadsheet that cannot fit through the restore write fe
   const entries = () => B.pack({ settings: SETTINGS, local });
   assert.throws(entries, (e) => e.why === 'big');
 });
+
+test('restoring saved sources keeps the bibliography entries each side removed', async () => {
+  const key = 'writer:sources:school|_1_1|_2_1|_3_1', m = new Map([[key, { sources: [{ id: 's-aa1', type: 'book', title: 'Alpha' }], removed: ['s-bib-a1'], at: 10 }]]);
+  const local = { get: async (ks) => Object.fromEntries([].concat(ks).filter((k) => m.has(k)).map((k) => [k, structuredClone(m.get(k))])), set: async (o) => { for (const [k, v] of Object.entries(o)) m.set(k, v); return true; } };
+  assert.ok((await B.apply({ sources: { [key]: { sources: [{ id: 's-bb2', type: 'book', title: 'Beta' }], removed: ['s-bib-b2'], at: 20 } } }, { local })).ok);
+  assert.deepEqual(m.get(key).sources.map((x) => x.id), ['s-aa1', 's-bb2']);
+  assert.deepEqual([...m.get(key).removed].sort(), ['s-bib-a1', 's-bib-b2']);
+});
