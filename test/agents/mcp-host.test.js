@@ -448,7 +448,7 @@ test('the host refuses a terminal on stdin and arguments a browser doesn\'t pass
 
 // ---- what the pipe may use ----------------------------------------------------------------------------------------------
 test('the pipe files start no process, open no network port and run no code they are sent', () => {
-  const PIPE = ['native', 'agent-frames', 'lines', 'mux', 'host', 'agent', 'rendezvous', 'handshake', 'peer'];
+  const PIPE = ['native', 'agent-frames', 'lines', 'mux', 'host', 'agent', 'session', 'rendezvous', 'handshake', 'peer'];
   const LOCAL = new Set([...PIPE.map((n) => `./${n}.js`), '../package.json', '../bin/glaze-mcp.js']);
   for (const name of PIPE) {
     const file = path.join(PKG, 'lib', `${name}.js`);

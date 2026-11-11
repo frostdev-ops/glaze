@@ -320,13 +320,14 @@ test('a host that closes the handshake while its run file stands is tried again 
   assert.ok(done - at >= 2800, `gave up after ${done - at} ms`);
   // Replaced within the 3 s, as a host that was shutting down is: the agent takes the new one.
   const home2 = scratch(t), dir2 = R.ready(runDir(home2));
-  const server2 = net.createServer((s) => { sockets.add(s); s.on('error', () => {}); s.destroy(); });
+  let tried = 0;
+  const server2 = net.createServer((s) => { tried++; s.on('error', () => {}); s.destroy(); });
   const sock2 = R.socketPath(dir2, 'chrome', 'inst1');
   await R.listen(server2, sock2);
   t.after(() => server2.close());
   R.write(dir2, { v: 1, pid: process.pid, path: sock2, token: R.token(), browser: 'chrome', instance: 'inst1', at: Date.now() });
   const c = app(t, home2);
-  await until('it tried the going host', () => sockets.size >= 2);
+  await until('it tried the going host', () => tried >= 2);
   const b = browser(t, home2);
   await b.start();
   await opened(b);
