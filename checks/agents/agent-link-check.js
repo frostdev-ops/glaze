@@ -407,7 +407,8 @@ async function onAndAgents() {
   const set = ph.set = await config(opt, { op: 'set', on: true });
   ok('2', 'glaze:mcp-config set on, from the options page, is taken', set?.ok === true && ['connecting', 'connected'].includes(set.link?.state), set);
   const up = ph.link = await connected(opt);
-  const host = hosts(P1.home)[0], argv = host && cmdline(host.rec.pid);
+  // The link reads connected at the host's hello; the host publishes its run file only after the worker's hello back.
+  const host = await until(() => hosts(P1.home)[0], 10000, 20), argv = host && cmdline(host.rec.pid);
   ph.host = { rec: host && { ...host.rec, token: '…' }, argv, run: runFolder(P1.home) };
   ok('2', 'the link is connected to the helper setup installed, which Chromium started', up?.host === VERSION && up.browser === 'chromium' && hosts(P1.home).length === 1
     && !!argv && same(argv.slice(1), [L.parse(R.phases.setup.launcher)?.script, 'host', '--browser=chromium', IDS.origin(E1.id)]), { up, ...ph.host });
