@@ -160,22 +160,33 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     'long', 'far', 'many', 'much', 'more', 'come', 'go', 'hear', 'please', 'night', 'mahi', 'ylang', 'beri', 'pom', 'tom', 'tuk', 'cha', 'choo', 'boo',
     'aye', 'hip', 'la', 'ta', 'na', 'dum', 'oh', 'ah', 'uh', 'mm', 'hmm', 'ooh', 'wow', 'yeah', 'yay', 'hey', 'ho', 'hush', 'shh', 'tick', 'bang', 'boom', 'woof']);
   const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-  const WORD = /([\p{L}\p{M}'’]+)$/u;
+  // Where the run of characters like re that ends at end in s starts, found backward: a pattern anchored only at the end
+  // tries every start of a long run (a pasted DNA sequence before a full stop).
+  const LETTER = /[\p{L}\p{M}'’]/u, INK = /\S/;
+  const runStart = (s, re, end = s.length) => {
+    let i = end;
+    for (;;) {
+      const n = i > 1 && (s.charCodeAt(i - 1) & 0xfc00) === 0xdc00 && (s.charCodeAt(i - 2) & 0xfc00) === 0xd800 ? 2 : 1;
+      if (i <= 0 || !re.test(s.slice(i - n, i))) return i;
+      i -= n;
+    }
+  };
   // A lone i before '.', ',' or ')' may be i.e., a roman-numeral marker or a variable ("Let i, j"), not the pronoun.
   const notI = (word, next) => word === 'i' && /^[.,)]/.test(next || '');
   // before: the paragraph's text up to the caret, next the boundary about to follow it. → { from, to, was, now, rule }
   // (offsets into before) or null. kept: lower-cased words (and '  ') the student took back; they stay as typed.
   const fix = (before, kept = new Set(), next = ' ') => {
-    const m = WORD.exec(before);
-    if (!m) return null;
-    const word = m[1].replace(/^['’]+/, ''), to = before.length, from = to - word.length, ahead = before.slice(0, from);
-    const token = (/(\S*)$/.exec(ahead)?.[1] || '') + word;
+    const at = runStart(before, LETTER);
+    if (at === before.length) return null;
+    const word = before.slice(at).replace(/^['’]+/, ''), to = before.length, from = to - word.length, ahead = before.slice(0, from);
+    const token = ahead.slice(runStart(ahead, INK)) + word;
     if (!word || unsafe(token) || /[-'’“”]$/.test(ahead) || kept.has(word.toLowerCase())) return null;
     const lower = word.toLowerCase(), start = sentenceStart(ahead);
     // i, i'm, i'll, i'd, i've → I…
     if (/^i(['’](m|ll|d|ve))?$/.test(word)) return notI(word, next) ? null : { from, to, was: word, now: 'I' + word.slice(1), rule: 'i' };
     // A doubled word, the second dropped: "the the" → "the". A Capitalised pair is a name ("Bora Bora", "Walla Walla").
-    const prev = /([\p{L}\p{M}'’]+) $/u.exec(ahead), pre = prev ? ahead.slice(0, -prev[0].length) : '';
+    const p = ahead.endsWith(' ') ? runStart(ahead, LETTER, ahead.length - 1) : ahead.length - 1;
+    const prev = p < ahead.length - 1 ? [ahead.slice(p), ahead.slice(p, -1)] : null, pre = prev ? ahead.slice(0, p) : '';
     if (prev && prev[1].toLowerCase() === lower && !TWICE.has(lower) && !kept.has(`${lower} ${lower}`) && /\p{L}/u.test(lower) && (!pre || /\s$/.test(pre))
       && !/^\p{Lu}/u.test(word) && (!/^\p{Lu}/u.test(prev[1]) || sentenceStart(pre))) {
       return { from: from - prev[0].length, to, was: `${prev[1]} ${word}`, now: prev[1], rule: 'twice' };

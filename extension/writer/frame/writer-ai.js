@@ -11,7 +11,17 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   // The same place ai/tasks/writer-complete.js fits() takes: the caret right after a word or one space after it, in a
   // sentence of at least three words, with only white space after it in its line.
   const WORD = /[\p{L}\p{N}\p{M}]/u;
-  const TAIL = /[\p{L}\p{N}\p{M}]+(?:['’-][\p{L}\p{N}\p{M}]+)*['’-]?$/u;
+  // The word at the end of s: letters, digits, and an apostrophe or hyphen inside it (or one after it), found backward,
+  // since a pattern anchored only at the end tries every start of a long run of letters. → [word] or null.
+  const caretWord = (s) => {
+    const size = (j) => (j > 1 && (s.charCodeAt(j - 1) & 0xfc00) === 0xdc00 && (s.charCodeAt(j - 2) & 0xfc00) === 0xd800 ? 2 : 1);
+    const letter = (j) => j > 0 && WORD.test(s.slice(j - size(j), j)), mark = (j) => j > 0 && "'’-".includes(s[j - 1]);
+    let i = s.length;
+    if (mark(i)) i--;
+    if (!letter(i)) return null;
+    for (;;) { while (letter(i)) i -= size(i); if (mark(i) && letter(i - 1)) i--; else break; }
+    return [s.slice(i)];
+  };
   const sentence = (before) => {
     const s = before.split('\n').pop();
     let at = 0;
@@ -32,8 +42,6 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     return single || n(/"/g) % 2 === 1 || n(/“/g) > n(/”/g) || n(/«/g) > n(/»/g) || n(/‘/g) > n(/’(?![\p{L}\p{N}])/gu);
   };
   const word = (before) => (/[^ ] $/.test(before) ? before.slice(0, -1) : before);
-  // Find the final whitespace first: searching a long CJK word before a space with an unanchored suffix is quadratic.
-  const caretWord = (s) => { let at = s.length; while (at && !/\s/u.test(s[at - 1])) at--; return TAIL.exec(s.slice(at)); };
   const fits = (before, after = '') => typeof before === 'string' && !inQuote(before) && !!caretWord(word(before)) && !/^[^\S\n]*[^\s]/.test(after)
     && sentence(word(before)).split(/\s+/).filter((w) => WORD.test(w)).length >= 3;
   // Document and suggestion caps count UTF-16 units; discard a low surrogate exposed at their start.
