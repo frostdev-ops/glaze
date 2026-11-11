@@ -2093,3 +2093,19 @@ test('an equal first meeting keeps the agreed value for later task deletions and
   await settled(b, a);
   for (const d of [a, b]) assert.deepEqual(await titles(d), ['Four', 'One', 'Three']);
 });
+
+test('a task deletion keeps another device\'s edit to its steps or sessions', async () => {
+  for (const deletedFirst of [true, false]) {
+    const { clock, devs: [a, b] } = await linked({ [TODO]: BASE3 });
+    await retask(a, clock, drop('t1'));
+    const details = { subs: [{ id: 'step1', title: 'Read chapter', done: true }], sessions: [{ at: 5000, min: 25 }] };
+    await retask(b, clock, (v) => ({ ...v, items: { ...v.items, 'task:t1': details } }));
+    const [first, second] = deletedFirst ? [a, b] : [b, a];
+    assert.ok((await first.run({ push: true })).ok);
+    await settled(second, first);
+    for (const d of [a, b]) {
+      assert.deepEqual(await titles(d), ['One', 'Three', 'Two']);
+      assert.deepEqual((await d.local.get(TODO))[TODO].items['task:t1'], details);
+    }
+  }
+});
