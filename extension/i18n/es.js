@@ -372,6 +372,7 @@
   'Tint pages inside this course': 'Teñir las páginas de este curso',
   'Nickname': 'Apodo',
   'Not saved. Try again in a moment.': 'No se guardó. Inténtalo de nuevo en un momento.',
+  "Documents is full ({n}). Delete or export some to save a new one.": "La lista de documentos está llena ({n}). Elimina o exporta algunos para guardar uno nuevo.",
   'Too much to sync. Shorten a nickname or clear one.': 'Demasiado para sincronizar. Acorta un apodo o borra uno.',
   'Open Settings in its own tab.': 'Abre los ajustes en su propia pestaña.',
   'Purple': 'Morado',
