@@ -127,7 +127,12 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
         color: n.color || edited.color || (COLOR.test(l.color || '') ? l.color : ''), image: shown[id] ? n.image : cards.get(id)?.image || '' }); // retain the picture across native card replacement
     }
     // A failed read is asked again (content-canvas.js canvasCourses lets it go after a minute).
-    if (!canvasRows || canvasRows.complete === false) watch(ctx.canvasCourses(), (rows) => { canvasRows = Array.isArray(rows) ? rows : Object.assign([], { complete: false }); sync(); });
+    if (!canvasRows || canvasRows.complete === false) watch(ctx.canvasCourses(), (rows) => {
+      canvasRows = Array.isArray(rows) ? rows : Object.assign([], { complete: false });
+      sync();
+      // Ownership can change with identical metadata (including an empty list): the board must drop foreign cards now.
+      notify();
+    });
   };
   // Menu edits must also reach board cards when Canvas is in list view, where no native card can supply them.
   const canvasEdit = (id, patch) => {
