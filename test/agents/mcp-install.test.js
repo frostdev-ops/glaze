@@ -1124,3 +1124,94 @@ test('doctor accepts Homebrew admin and own-group folders and refuses unsafe own
     assert.deepEqual(calls.map(([f, a]) => [f, Array.from(a)]), ok ? [[link, ['--version']]] : [], D.text(report));
   });
 });
+
+// ---- setup run by a Node a browser can't safely start (C2) --------------------------------------------------------------
+// A stand-in node at dir/node (dir made private first, then loosened by `mode`); the runner answers its --version.
+const nodeIn = (dir, mode) => {
+  const f = path.join(mk(dir), 'node');
+  fs.writeFileSync(f, '#!/bin/sh\necho v22.11.0\n', { mode: 0o755 });
+  if (mode) mode(f);
+  return f;
+};
+// What setup is given in place of the computer's own: the Node running it, and the folders it searches (in nodes.js order).
+const refusedRun = (home, execPath, list, over = {}) => ({ ...mac(home), node: undefined, execPath, versions: { node: '22.11.0' }, list, ...over });
+const launcherOf = (home, b = 'chrome') => L.parse(fs.readFileSync(path.join(AS(home), 'glaze-mcp', 'hosts', b), 'utf8'));
+
+test('a user\'s own nvm-style folders are safe; a world-writable ancestor, another user\'s folder and a group-writable binary are not', { skip: posixOnly('POSIX owners and modes') }, (t) => {
+  const N = require('../../mcp/lib/nodes.js'), home = scratch(t), T = N.trust('darwin');
+  assert.equal(T.path(nodeIn(path.join(home, '.nvm', 'versions', 'node', 'v22.11.0', 'bin'))), null);
+  const open = path.join(home, 'open');
+  const loose = nodeIn(path.join(open, 'bin'));
+  fs.chmodSync(open, 0o777);
+  assert.match(T.path(loose), /open can be changed by other users \(mode 777\); chmod go-w it/);
+  const shared = nodeIn(path.join(home, 'shared'), (f) => fs.chmodSync(f, 0o775));
+  assert.match(T.path(shared), /node can be changed by other users \(mode 775\)/);
+  // Another user's folder, with its stat as the OS would give it.
+  const theirs = path.join(home, 'theirs', 'node');
+  const fake = { readlinkSync: fs.readlinkSync, lstatSync: (f) => Object.assign(fs.lstatSync(f.startsWith(path.join(home, 'theirs')) ? home : f), f === path.join(home, 'theirs') ? { uid: process.getuid() + 1 } : {}) };
+  assert.match(N.trust('darwin', '', { fs: fake }).path(theirs), /theirs belongs to another user/);
+});
+
+test('setup run by a Node a browser can\'t safely start names the first safe one it finds, says which and why, and exits 0', { skip: posixOnly('POSIX owners and modes') }, async (t) => {
+  for (const which of ['world-writable ancestor', 'group-writable binary', 'Claude\'s runtime']) await t.test(which, async (t) => {
+    const home = scratch(t);
+    mk(AS(home), 'Google', 'Chrome');
+    const open = path.join(home, 'open');
+    const running = which === 'group-writable binary' ? nodeIn(open, (f) => fs.chmodSync(f, 0o775)) : nodeIn(open);
+    if (which === 'world-writable ancestor') fs.chmodSync(open, 0o777);
+    const first = nodeIn(path.join(home, '.nvm', 'versions', 'node', 'v24.1.0', 'bin')), second = nodeIn(path.join(home, '.volta', 'bin'));
+    const over = which === 'Claude\'s runtime' ? { versions: { node: '22.11.0', electron: '38.1.0' } } : {};
+    const o = io(refusedRun(home, running, [running, path.join(home, 'none', 'node'), first, second], over));
+    assert.equal(await CLI.main(['setup'], o), 0, o.err());
+    assert.match(o.out(), /is set up for Google Chrome/);
+    assert.deepEqual(launcherOf(home), { node: first, also: [second], script: path.join(AS(home), 'glaze-mcp', VERSION, 'bin', 'glaze-mcp.js'), browser: 'chrome' });
+    assert.ok(o.err().includes(`browsers will start ${first}`), o.err());
+    assert.ok(o.err().includes(running), o.err());
+    assert.match(o.err(), which === 'Claude\'s runtime' ? /Claude's own runtime/ : /can be changed by other users/);
+  });
+});
+
+test('setup with no safe Node anywhere still writes its launchers, says it is not set up and why, and exits 1', { skip: posixOnly('POSIX owners and modes') }, async (t) => {
+  const home = scratch(t);
+  mk(AS(home), 'Google', 'Chrome');
+  const open = path.join(home, 'open'), running = nodeIn(open);
+  fs.chmodSync(open, 0o777);
+  const o = io(refusedRun(home, running, [running, path.join(home, 'none', 'node')]));
+  assert.equal(await CLI.main(['setup'], o), 1);
+  assert.doesNotMatch(o.out() + o.err(), /is set up/);
+  assert.match(o.err(), /^glaze-mcp: not set up: no Node\.js here is safe for a browser to start\.$/m);
+  assert.ok(o.err().includes(`${open} can be changed by other users (mode 777); chmod go-w it`), o.err());
+  assert.match(o.err(), /npx glaze-mcp setup/);
+  assert.equal(launcherOf(home).node, null, 'the launcher says no-node to the browser');
+  const doc = await D.run(refusedRun(home, running, []));
+  const row = doc.rows.find((r) => r.level === 'fail' && r.what === 'Google Chrome');
+  assert.ok(row && row.detail.includes(`${open} can be changed by other users`), D.text(doc));
+});
+
+test('setup run by a refused Node falls back on the Nodes its launchers already name, after the usual places', { skip: posixOnly('POSIX owners and modes') }, async (t) => {
+  const home = scratch(t);
+  mk(AS(home), 'Google', 'Chrome');
+  const kept = nodeIn(path.join(home, 'kept')), place = nodeIn(path.join(home, 'place'));
+  await I.setup(mac(home, { node: kept, also: [] }));
+  const open = path.join(home, 'open'), running = nodeIn(open);
+  fs.chmodSync(open, 0o777);
+  const o = io(refusedRun(home, running, []));
+  assert.equal(await CLI.main(['setup'], o), 0, o.err());
+  assert.equal(launcherOf(home).node, kept);
+  const p = io(refusedRun(home, running, [place]));
+  assert.equal(await CLI.main(['setup'], p), 0, p.err());
+  assert.deepEqual([launcherOf(home).node, launcherOf(home).also], [place, [kept]]);
+});
+
+test('an explicit node is never overridden by the search', { skip: posixOnly('POSIX owners and modes') }, async (t) => {
+  const home = scratch(t);
+  mk(AS(home), 'Google', 'Chrome');
+  const safe = nodeIn(path.join(home, 'safe'));
+  const open = path.join(home, 'open'), running = nodeIn(open);
+  fs.chmodSync(open, 0o777);
+  const r = await I.setup(refusedRun(home, running, [safe], { node: null }));
+  assert.equal(r.node, null);
+  assert.equal(launcherOf(home).node, null);
+  await I.setup(refusedRun(home, running, [safe], { node: '/opt/node/bin/node' }));
+  assert.equal(launcherOf(home).node, '/opt/node/bin/node');
+});
