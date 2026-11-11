@@ -51,7 +51,7 @@ const frame = (options = {}) => {
     addEventListener: (name, fn, opts) => { life[name] = fn; lives.push({ name, fn, opts }); } });
   vm.runInContext(source, ctx);
   const wb = options.wb || M.workbook();
-  const view = ctx.GZ_SHEET_GRID.mount({ key: KEY, wb, fresh: true, papers: P, sigs: new Map(), t: (k) => k,
+  const view = ctx.GZ_SHEET_GRID.mount({ key: KEY, wb, fresh: true, papers: P, sigs: new Map(), t: options.t || ((k) => k),
     show: () => (_, r, c, x) => String(x.v ?? ''), local: true, fileOf: async () => ({ name: 'book.csv', mime: 'text/csv', bytes: new Uint8Array() }),
     download() {}, exportLabel: () => 'Export .csv' });
   const el = (id) => doc.getElementById(id), key = (name, more = {}) => fire(doc.activeElement, 'keydown', { key: name, ...more });
@@ -613,4 +613,23 @@ test('pointing at the same cross-sheet reference still returns to the formula ce
     assert.equal(await f.view.save(), true);
     await f.view.dispose();
   }
+});
+
+// An .xlsx cell whose formula calls a function Glaze lacks (documents/sheets/sheet-calc.js keep): opened, it shows the file's
+// value and the status line says so; once its input is edited it is #NAME? and the status line names the function.
+test('a cell calling a function Glaze lacks shows the file\'s value until its input changes, and the status line says which', () => {
+  const wb = M.workbook(), sh = wb.sheets[0];
+  sh.rows.set(0, new Map([[0, { t: 'n', v: 0.8427, f: 'ERF(A2)' }], [1, { t: 'n', v: 0, f: 'A1*2' }]]));
+  sh.rows.set(1, new Map([[0, { t: 'n', v: 1 }]]));
+  const f = frame({ wb, t: (k, v) => k.replace(/\{(\w+)\}/g, (_, n) => v?.[n] ?? '') });
+  const note = () => f.el('gx-calc').textContent;
+  assert.deepEqual([sh.rows.get(0).get(0).v, sh.rows.get(0).get(1).v], [0.8427, 1.6854]);
+  assert.equal(note(), 'From the file: Glaze can’t calculate ERF');
+  f.key('ArrowRight');
+  assert.equal(note(), '', 'B1 calls nothing missing');
+  f.key('ArrowDown'); f.key('ArrowLeft');
+  f.type('2'); f.key('Enter');
+  assert.deepEqual([sh.rows.get(0).get(0).v, sh.rows.get(0).get(1).v], ['#NAME?', '#NAME?']);
+  f.key('ArrowUp'); f.key('ArrowUp');
+  assert.equal(note(), 'Glaze can’t calculate ERF');
 });
