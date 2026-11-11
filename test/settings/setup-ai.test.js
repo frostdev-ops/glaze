@@ -145,6 +145,14 @@ test('the cards\' words and the done step\'s row', () => {
   assert.deepEqual(G.summary(on({}), t), [['AI', 'Choose a model', false]], 'on with no model: nothing runs yet');
 });
 
+test('the done step asks for a model when a named provider has no selected model', () => {
+  const patch = G.keyed(on({}), 'openai', ['unknown-model']);
+  const selected = S.clean({ ...on({}), ...patch });
+  assert.equal(selected.on, true);
+  assert.equal(selected.model.model, '');
+  assert.deepEqual(G.summary(selected, t), [['AI', 'Choose a model', false]]);
+});
+
 test('the page loads what the step needs before it, fetches nothing itself, and asks for a host only from Connect', () => {
   const fs = require('node:fs'), path = require('node:path');
   const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension/settings', f), 'utf8');
