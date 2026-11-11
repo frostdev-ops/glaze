@@ -327,7 +327,8 @@ Wakes and monitors (`ai/agent/wakes.js`) live in storage.local `rimeWakes` with 
 `gz-rime:tick` every 30 minutes while a monitor waits). A monitor compares what Agents' own tool reads for its account
 (`todo_list`, `course_grades`) with what it read when it was made; no model runs until one fires. What fired waits until
 the student's next school page takes it (`take()`, which checks everything due first), shown inside Glaze, never as a
-notification. Safari unloads Glaze's background about 30 s after its last event, so an alarm can come late there; the
+notification. A record a page has shown stays in storage, tied to that page, until the student uses Ask Rime or Dismiss or an
+hour passes, so its Ask Rime still works after the worker restarts; no other page shows it again. Safari unloads Glaze's background about 30 s after its last event, so an alarm can come late there; the
 page's `take()` still finds it. A fired record runs agent.tools once with `fired: { what, watch?, say, at, fact? }` and
 the say as the question: a `fired` data block (its readable JSON) sits between `now` and `question`, grounds the answer as
 a result does, and is absent from every other turn. Monitor descriptions (`about`) and the approval sentences come in the
