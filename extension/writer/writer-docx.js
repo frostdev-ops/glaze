@@ -18,8 +18,9 @@ var GZ_WRITER_DOCX = globalThis.GZ_WRITER_DOCX || (() => {
   const NS = `xmlns:w="${W}" xmlns:r="${R}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"`;
   const DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
   const MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-  // Text for XML: what XML forbids dropped, markup escaped (writer/writer-objects-docx.js writes with it too).
-  const esc = (v) => String(v ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]);
+  // Text for XML: what XML forbids dropped, markup escaped (writer/writer-objects-docx.js writes with it too). A form feed
+  // is a space, not dropped: the paper draws no page break at one, so the words either side stay apart.
+  const esc = (v) => String(v ?? '').replace(/\u000c/g, ' ').replace(/[\u0000-\u0008\u000b\u000e-\u001f\ufffe\uffff]/g, '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]);
   const JC = { left: 'left', center: 'center', right: 'right', justify: 'both' };
   const LIMIT = { file: 15e6, entries: 2000, entry: 10e6, total: 35e6, part: 5e6, elements: 100000, depth: 80, images: 10e6, html: 16 * 1024 * 1024 };
   const b64 = (s) => (typeof atob === 'function' ? Uint8Array.from(atob(s), (c) => c.charCodeAt(0)) : new Uint8Array(Buffer.from(s, 'base64')));
