@@ -61,6 +61,7 @@ const main = async ({ args = [], io = {} } = {}) => {
 
   return new Promise((resolve) => {
     let sock = null, pending = null, ended = false, finished = false, timer = null, waiting = false, busy = false;
+    let appBlocked = false, hostBlocked = false;
     // The browser and instance of the first connection: the only one tried after it.
     let target = null;
     let parts = [], partial = 0;
@@ -80,10 +81,17 @@ const main = async ({ args = [], io = {} } = {}) => {
       stdout.once('drain', go);
       setTimeout(go, 500).unref();
     };
+    const flow = () => {
+      if (finished) return;
+      if (appBlocked || hostBlocked) stdin.pause();
+      else if (!ended) stdin.resume();
+      if (sock) { if (appBlocked) sock.pause(); else sock.resume(); }
+    };
     const apply = (r) => {
       if (finished) return;
-      for (const l of r.app) if (!stdout.write(`${l}\n`) && sock) sock.pause();
-      if (sock) for (const l of r.glaze) if (!sock.write(`${l}\n`)) stdin.pause();
+      for (const l of r.app) if (!stdout.write(`${l}\n`)) appBlocked = true;
+      if (sock) for (const l of r.glaze) if (!sock.write(`${l}\n`)) hostBlocked = true;
+      flow();
       if (r.fatal) { log(r.fatal); finish(1); }
     };
     const ticker = setInterval(() => apply(session.tick(now())), TICK);
@@ -127,7 +135,7 @@ const main = async ({ args = [], io = {} } = {}) => {
     stdin.on('close', eof);
     stdin.on('error', () => finish(0));
     stdout.on('error', () => finish(0));
-    stdout.on('drain', () => { if (sock) sock.resume(); });
+    stdout.on('drain', () => { appBlocked = false; flow(); });
 
     const schedule = () => {
       clearTimeout(timer);
@@ -149,19 +157,18 @@ const main = async ({ args = [], io = {} } = {}) => {
       apply(session.up(now(), chosen.rec.browser));
       if (rest.length) take(rest);
       s.on('data', take);
-      s.on('drain', () => { if (!ended) stdin.resume(); });
+      s.on('drain', () => { if (sock === s) { hostBlocked = false; flow(); } });
       s.on('error', () => {});
       s.on('close', () => {
         if (sock !== s) return;
         sock = null;
+        hostBlocked = false;
         if (ended || finished) return finish(0);
         log(`Glaze closed the connection; waiting for it in ${target.browser} (instance ${target.instance}) to come back`);
         apply(session.down(now()));
-        stdin.resume();
         schedule();
       });
-      s.resume();
-      stdin.resume();
+      flow();
     };
 
     // One try at a host: connected, not now (a socket no one listens on, a host replaced or going; try again), or refused (exit).
