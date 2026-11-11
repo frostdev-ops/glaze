@@ -616,7 +616,7 @@ ones described below as on this device only or never synced.
   type (when it is on), as Blackboard's own editor's does; Writer keeps no copy of its own. **Back up…** includes papers,
   documents (those in Trash too; a spreadsheet with its cells, a PDF or deck with its file), versions, presets, the
   dictionary and saved sources; uninstalling removes them. The thread, prompt, rubric, attached files and names Writer reads
-  from Blackboard for a box are held in that page's memory only.
+  from Blackboard for a box, and the assignment, topic and post it reads off a Canvas page, are held in that page's memory only.
 - **Course tabs** (Canvas and Blackboard Ultra, on by default), in `chrome.storage.local`, on this device only, per site and
   signed-in account (`ctabs:<origin>:<uid>`): for each tab (40 at most) the course's id, name and code, whether it is
   pinned, when it was last used, its own-course URL including query parameters, and scroll position. Any previously
@@ -994,7 +994,8 @@ you import) are bundled. It makes requests in these cases:
 - **Glaze Writer** (Blackboard Ultra, on by default). For a box's prompt, targets, thread and rubric it asks your own
   Blackboard site, read-only, signed in as you, for your profile (`users/me`) and course list, the course's discussion
   and its posts, and an assignment's gradebook column with its rubric; when you ask for Feedback, the files the assignment's
-  instructions and description attach (at most 6, 40 MB in all), read on this device as the syllabus import reads them. Proofing runs on this device (Harper, from the extension's own files)
+  instructions and description attach (at most 6, 40 MB in all), read on this device as the syllabus import reads them. On Canvas it asks the site nothing: it reads an assignment's title, due date and
+  description, and a reply's topic and the post it answers, off the page Canvas has drawn; nothing on a quiz or in the Inbox. Proofing runs on this device (Harper, from the extension's own files)
   and sends nothing. It sends nothing to Blackboard itself: what you write reaches Blackboard only through Blackboard's
   own buttons, when you post, reply, send or submit (Ctrl/⌘+Enter presses Post, Reply or Send; the submit sheet's
   Submit attaches the paper's .docx, or the PDF, deck or .xlsx open in its place, through Ultra's own upload, writes your
@@ -1011,7 +1012,7 @@ you import) are bundled. It makes requests in these cases:
     within a rolling window bounded by the model's context and a 60,000-token estimated run cap; earliest paragraphs
     are dropped first. It also sends up to 4,000 characters after the caret, the course name, citation style, the
     discussion's prompt or the assignment's title, instructions and rubric, and, in a discussion, the thread: your
-    classmates' posts with their names (24,000 characters at most) and the post you are answering. The newest 40
+    classmates' posts with their names (24,000 characters at most; on Canvas no thread) and the post you are answering, with its author's name. The newest 40
     suggestions shown in that editor may accompany the request to avoid repeating them. They stay in frame memory only,
     are cleared when another paper opens or the document is replaced, and are never saved. Device and small-window
     models receive a brief context, up to the newest 1,500 bytes of earlier document text and three suggestions, within

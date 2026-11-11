@@ -14,6 +14,7 @@ All notable changes to Glaze are documented here. The format follows
 - Writer on Canvas assignments' newer submission page (Assignments 2): your text goes into Canvas's saved draft as you type, and Submit waits until that draft holds exactly what you wrote.
 - Writer on a Canvas quiz's essay questions, with AI off and proofing on: each answer goes into Canvas as you type, so its autosave and its timer have it, and Submit Quiz, Next and Previous wait for every essay's last words.
 - Writer on Canvas keeps what you write on this device beside Canvas's own autosave. Canvas's restore question still comes first; a box that opens empty offers Glaze's copy back in Writer (Restore or Dismiss), unless Canvas already has that text as your submission or post.
+- Writer's AI on Canvas knows what you are answering: completion, Check with AI and Feedback read the assignment's instructions, or the discussion topic and the post you are replying to, off the page, and the word ring shows a reply's targets. Nothing is read on a quiz or in the Inbox.
 
 ### Changed
 
