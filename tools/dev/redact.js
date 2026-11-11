@@ -17,7 +17,7 @@ const INPUT = /<input\b[^>]*>/gi;
 const quoted = (attribute, tag) => tag.replace(new RegExp(`(\\b${attribute}=)(?:(["'])[^"']+\\2|[^\\s"'>]+)`, 'i'), (all, name, quote) => `${name}${quote || '"'}REDACTED${quote || '"'}`);
 // Moodle's M.cfg and Canvas's ENV.current_user, as JSON in a script: the session key, and who the student is.
 const SESSKEY = /("sesskey"\s*:\s*)"[^"]+"/g;
-const IDENTITY = /("(?:email|login_id|sis_user_id)"\s*:\s*)(?:"(?!REDACTED")[^"]+"|\d+)/g;
+const IDENTITY = /("(?:email|login_id|sis_user_id)"\s*:\s*)(?:"(?:\\.|[^"\\])+"|\d+)/g;
 const BEARER = /(Authorization[\s"':=,]{1,6}Bearer\s+)[^\s"'<&]+/gi;
 const JWT = /eyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]+/g;
 // Inlined pictures are bytes, not markup: dropped.
