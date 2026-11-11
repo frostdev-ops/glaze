@@ -17,7 +17,7 @@
 // Classic script; module.exports for node.
 var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
   const INDEX = 'writerPapers', PAPER = 'writerPaper:', VERSIONS = 'writerVersions:', PRESETS = 'writerPresets:', PART = 'writerSheet:';
-  const CAP = { versions: 40, bytes: 4e6, packed: 16e6, files: 200e6, every: 10 * 60e3, words: 100, share: 0.15, presets: 20, trash: 30 * 864e5 };
+  const CAP = { versions: 40, bytes: 4e6, packed: 16e6, files: 200e6, every: 10 * 60e3, words: 100, share: 0.15, presets: 20, trash: 30 * 864e5, rows: 2000 };
   // A part's name: a sheet's id and a band of its rows; a part's key is under its record's.
   const PART_NAME = /^\d{1,9}:\d{1,5}$/;
   const partsOf = (k, paper) => [...new Set([...Object.keys(paper?.parts || {}), ...(paper?.partDrops || [])])].filter((n) => PART_NAME.test(n)).map((n) => `${PART}${k}:${n}`);
@@ -171,11 +171,15 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       if (!o.files) return;
       try { await o.files.own(k, [...refs(paper === null ? await get(PAPER + k) : paper, list === null ? await versionsOf(k) : list)]); } catch (e) { console.warn(e); }
     };
+    // The index lists every document (Trash's too), at most CAP.rows. A new one past that is refused, never taken in by letting the
+    // oldest fall off the list: its record, versions and files would stay in storage with nothing able to list, clear or purge them.
+    const crowded = async (k) => { const list = (await get(INDEX)) || []; return list.length >= CAP.rows && !list.some((r) => r?.key === k); };
     const index = async (paper) => {
       const list = (await get(INDEX)) || [];
+      if (list.length >= CAP.rows && !list.some((r) => r?.key === paper.key)) throw new Error('too many documents');
       const row = { key: paper.key, kind: paper.kind || 'paper', named: paper.named === true, title: paper.title || '', course: paper.courseName || '', url: paper.url || '', words: paper.words || 0, format: paper.format, updated: paper.updated, submitted: paper.submitted || null,
         ...(trashed(paper) && { trashed: paper.trashed }), ...(glance(paper.grid) && { grid: paper.grid }), ...(paper.kind === 'sheet' && paper.ext === '.xlsm' && { ext: '.xlsm' }) };
-      return [row, ...list.filter((r) => r.key !== paper.key)].slice(0, 2000);
+      return [row, ...list.filter((r) => r.key !== paper.key)];
     };
 
     // Saves the paper under k, merging patch into what's stored; a record written before kinds is a paper, and its title
@@ -191,6 +195,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       const written = Object.keys(parts || {}), dropped = [...(drop || [])];
       if ([...written, ...dropped].some((n) => typeof n !== 'string' || !PART_NAME.test(n)) || (packed && typeof packed.gz !== 'string')) throw new Error('no such part');
       const prev = (await get(PAPER + k)) || null, t = now();
+      if (!prev && await crowded(k)) throw new Error('too many documents');
       if (expectedRevision !== undefined && (prev?.revision || 0) !== expectedRevision) throw new Error('document changed in another tab');
       if (expectedKind && (prev?.kind || 'paper') !== expectedKind) throw new Error('document kind changed');
       if (expectedFile !== undefined && !sameFile(prev?.file, expectedFile)) throw new Error('document changed in another tab');
@@ -455,6 +460,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
           const k = name.slice(PAPER.length), prev = await get(name), sheet = value.kind === 'sheet';
           // Backup replay of a missing record keeps its history intact: no synthetic start version displaces an old one.
           if (!prev) await serial(k, async () => {
+            if (await crowded(k)) throw new Error('too many documents');
             const vk = VERSIONS + k, history = (records[vk] || await get(vk)) && await mergedVersions(k, records[vk] || [], sheet);
             await claim(k, [value, ...(history || [])], []);
             await store.set({ [name]: value, [INDEX]: await index(value), ...(history ? { [vk]: history } : {}), ...(sheet ? bandsOf(k, bands) : {}) });
