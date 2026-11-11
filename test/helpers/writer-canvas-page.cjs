@@ -7,7 +7,10 @@ const { parse } = require('../fixture-dom.js');
 
 // The real Canvas adapter and page controller over the captured LMS boxes. Native clicks pass through the controller's
 // capture listener, including its replay; frame messages and the clock are driven explicitly by each test.
-const page = async ({ fixture = 'discussion', helper = 'ok', ready = () => true, draft = () => false } = {}) => {
+// strict: writes go through the real page-world script (writer/writer-main-canvas.js), which refuses what isn't Canvas's
+// dialect (TinyMCE's data-mce-* bookkeeping included), into a stand-in TinyMCE whose setContent collapses runs of
+// whitespace as TinyMCE's parser does. There, helper 'fail' (or a function answering it) is an RCE TinyMCE can't give.
+const page = async ({ fixture = 'discussion', helper = 'ok', ready = () => true, draft = () => false, strict = false } = {}) => {
   const doc = { activeElement: null }, ports = [], clicks = [], timers = new Map(), observers = [], kept = [];
   let seq = 0, now = 100000, mode = helper;
   doc.root = doc.documentElement = new El('html', doc);
@@ -59,7 +62,22 @@ const page = async ({ fixture = 'discussion', helper = 'ok', ready = () => true,
   ctx.window = ctx; ctx.top = ctx;
   const run = (f) => vm.runInContext(fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8'), ctx);
   run('writer/writer-canvas.js');
-  doc.addEventListener('gz-writer:canvas-set', (e) => {
+  if (strict) {
+    const handlers = new WeakMap();
+    class HTMLTextAreaElement {}
+    Object.defineProperty(HTMLTextAreaElement.prototype, 'value', Object.getOwnPropertyDescriptor(El.prototype, 'value'));
+    Object.assign(ctx, { HTMLTextAreaElement, Event: class { constructor(type, o = {}) { this.type = type; this.bubbles = !!o.bubbles; } } });
+    ctx.tinymce = { majorVersion: '5', get: (id) => {
+      const ta = doc.querySelector(`textarea#${id}`), body = ta && ctx.GZ_WRITER_CANVAS.rootOf(ta)?.querySelector(`#${id}_ifr`)?.contentDocument?.body;
+      if (!body || (typeof mode === 'function' ? mode(ta) : mode) === 'fail') return null;
+      if (!handlers.has(ta)) handlers.set(ta, []);
+      const on = handlers.get(ta), fire = (name) => { for (const [n, fn] of on) if (n === name.toLowerCase()) fn({}); };
+      return { initialized: true, removed: false, isHidden: () => false, getElement: () => ta, getBody: () => body, getContent: () => body.innerHTML,
+        setContent: (html) => { body.innerHTML = html.replace(/[ \t\r\n]+/g, ' '); fire('SetContent'); }, undoManager: { add() {} }, fire,
+        on: (names, fn) => { for (const n of names.split(' ')) on.push([n.toLowerCase(), fn]); }, focus() {}, selection: { select() {}, collapse() {} }, execCommand() {} };
+    } };
+    run('writer/writer-main-canvas.js');
+  } else doc.addEventListener('gz-writer:canvas-set', (e) => {
     const m = JSON.parse(e.detail), ed = doc.querySelector(`textarea[data-gz-writer-id="${m.id}"]`);
     const result = typeof mode === 'function' ? mode(ed) : mode;
     if (result === 'ok') {

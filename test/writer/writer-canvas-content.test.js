@@ -27,6 +27,29 @@ for (const fixture of ['discussion', 'inbox']) test(`Canvas: ${fixture}: after C
   assert.equal(c.clicks.length, 3, 'and Ctrl/Cmd+Enter');
 });
 
+// Until Writer's frame is up, Canvas's editor is the one on screen and holds the student's words, in TinyMCE's own markup
+// (its bogus <br>, data-mce-href), which the page-world script refuses to write as Writer's: there is nothing to write.
+test('Canvas: Reply pressed before Writer\'s frame is ready sends what Canvas\'s editor holds, TinyMCE markup and all', async () => {
+  const c = await page({ ready: () => false, strict: true });
+  const native = c.doc.querySelector('#message-body-root_ifr').contentDocument.body;
+  const typed = '<p>Typed in Canvas, see <a href="https://e.test/" data-mce-href="https://e.test/">this</a>.<br data-mce-bogus="1"></p>';
+  native.innerHTML = typed;
+  const reply = c.box().send;
+  c.press(reply);
+  assert.ok(c.clicks.length === 1 && c.clicks[0] === reply, 'the press goes on to Canvas');
+  assert.equal(native.innerHTML, typed);
+});
+test('Canvas quiz: an essay whose frame keeps failing neither holds Submit Quiz nor empties what Canvas holds', async () => {
+  const c = await page({ fixture: 'quiz', ready: () => false, strict: true });
+  c.tick(15000); // each frame didn't answer: opened again, still not up
+  const native = c.doc.querySelector('#question_input_0_ifr').contentDocument.body;
+  native.innerHTML = '<p>My answer, typed in Canvas.</p>';
+  const submit = c.doc.querySelector('#submit_quiz_button');
+  c.press(submit);
+  assert.equal(native.textContent, 'My answer, typed in Canvas.');
+  assert.ok(c.clicks.length === 1 && c.clicks[0] === submit, 'Submit Quiz goes on');
+});
+
 test('Canvas: a shortcut can retry after the frame flush times out', async () => {
   const c = await page();
   c.emit({ type: 'change', html: '<p>Send this reply once.</p>', text: 'Send this reply once.' });
