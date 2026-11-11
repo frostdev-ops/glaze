@@ -97,7 +97,7 @@ proofing rulings run as in an assignment's frame. Citation lookups serve `papers
 | `writer.outline` (4 a minute, supersede) | writing, with its own `ai.outline` switch | up to 600 existing body blocks / 120,000 characters, identified by snapshot ids, plus interface language; no heading block or bibliography | descriptive headings and levels over contiguous block-id ranges; every block covered once, no invented positions, no swallowed authored headings; stale replies discarded and labels never inserted into the draft |
 | `writer.requirements` | writing | the prompt | `{ minWords, maxWords, sources, replies }`, each number only if the prompt states it in digits or words |
 | `writer.cite` | writing | the first 30,000 characters of the page the student asked to cite, and its address | the source (CSL-JSON subset), every value found in that text; a date only from a quote holding its year; no title, no answer |
-| `writer.decide` | writing | the sentence around a flagged word (1,000 characters at most), the word, the candidate fixes, the course name, style, prompt and assignment | `apply`, `suggest` or `keep`, with a choice only among the candidates |
+| `writer.decide` | writing | the sentence around a flagged word (1,000 characters at most), the word and the candidate fixes; nothing of the assignment | `apply`, `suggest` or `keep`, with a choice only among the candidates |
 
 Completion measures the full bare request, including its system and trust instructions. The 64-token answer reserve is
 its requested output ceiling; another 96 estimated tokens cover two optional fenced blocks and cache-part metadata.

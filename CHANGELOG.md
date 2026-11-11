@@ -15,6 +15,7 @@ All notable changes to Glaze are documented here. The format follows
 - Writer on a Canvas quiz's essay questions, with AI off and proofing on: each answer goes into Canvas as you type, so its autosave and its timer have it, and Submit Quiz, Next and Previous wait for every essay's last words.
 - Writer on Canvas keeps what you write on this device beside Canvas's own autosave. Canvas's restore question still comes first; a box that opens empty offers Glaze's copy back in Writer (Restore or Dismiss), unless Canvas already has that text as your submission or post.
 - Writer's AI on Canvas knows what you are answering: completion, Check with AI and Feedback read the assignment's instructions, or the discussion topic and the post you are replying to, off the page, and the word ring shows a reply's targets. Nothing is read on a quiz or in the Inbox.
+- What's new has notes for 4.0.0 through 4.0.7.
 
 ### Changed
 
@@ -27,6 +28,8 @@ All notable changes to Glaze are documented here. The format follows
 - Look rotation changes the Look once each period across your signed-in devices.
 - A dark Look prints as dark ink on white, and Moodle prints without the bar's gutter. Instructors' text colours show in Blackboard. Settings, the popup and the hub are readable in Windows High Contrast.
 - AI no longer changes grammar or word choice while you type in Writer; it suggests instead.
+- Documents holds at most 2,000 documents and refuses a new one past that, where it used to lose track of the oldest.
+- Writer's autocorrect sends a cloud model only the sentence and its candidate fixes, nothing of the assignment.
 
 ### Fixed
 
@@ -57,6 +60,12 @@ All notable changes to Glaze are documented here. The format follows
 - Study help lists every Blackboard to-do item and reads it, even when its course's gradebook wasn't read, and no longer stalls on long pages of equations. A reminder card's Ask Rime still works after the browser unloads Glaze's background, and Dismiss clears it.
 - AI setup: a provider whose site access was refused no longer shows Connected, and Settings offers Allow; picking Your key turns AI on only once a key works; a slow model list no longer limits long documents for an hour. After a graphics reset or running out of graphics memory, the on-device model reloads on the next run and says what happened. The Sharing relay's Test asks for access correctly in Firefox.
 - Selected rows, chips, field edges, Writer's feedback chips, the course dots and the To Do count are easier to read in the light Looks; menus show where the keyboard is; the popup announces its status; Writer's citation edit button shows on touch screens.
+- Agents on Blackboard get a fresh planner again instead of an old saved copy.
+- Settings → Writer → Clear all papers and documents also removes spreadsheets, PDFs and slide decks, and their files.
+- Settings can no longer connect or disconnect Google Drive, or switch Sync, while shown inside a school's page.
+- Settings search no longer fails on "constructor" or on names with İ, and no longer freezes on "h:". Documents search finds İstanbul by "istanbul" in a Turkish or Azeri browser.
+- Writer's AI no longer stalls on assignment text full of unclosed `<`, on long dialogue-heavy drafts, or on very long replies with no spaces.
+- To Do chips on light Looks show their status colour again, and the spreadsheet's formula bar and Find fields have a visible edge there.
 
 ## [4.0.6] — 2026-11-09
 
