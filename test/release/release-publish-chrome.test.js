@@ -18,7 +18,8 @@ fs.writeFileSync(zip, 'zip bytes');
 const stub = (name, body) => fs.writeFileSync(path.join(bin, name), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
 stub('gcloud', `echo ${TOKEN}`);
 // A pause that is short whatever the script asks for.
-stub('sleep', 'exec /bin/sleep 0.2');
+stub('sleep', 'if [ -n "${CLOCK:-}" ]; then echo "$(( $(cat "$CLOCK") + $1 ))" > "$CLOCK"; else exec /bin/sleep 0.2; fi');
+stub('date', 'if [ -n "${CLOCK:-}" ] && [ "$1" = +%s ]; then cat "$CLOCK"; else exec /bin/date "$@"; fi');
 // Records each call's arguments and standard input, then answers by endpoint.
 stub('curl', `
 n=$(ls "$LOG" | grep -c args || true)
@@ -26,19 +27,32 @@ printf '%s\\n' "$@" > "$LOG/curl-$n.args"
 cat > "$LOG/curl-$n.stdin"
 case "$*" in
   *:upload*) echo '{"uploadState":"IN_PROGRESS"}' ;;
-  *:fetchStatus*) echo "{\\"lastAsyncUploadState\\":\\"$STATUS\\"}" ;;
+  *:fetchStatus*)
+    if [ -n "\${CLOCK:-}" ] && [ -n "\${POLL_SECONDS:-}" ]; then
+      max=0; previous=
+      for arg in "$@"; do [ "$previous" != --max-time ] || max=$arg; previous=$arg; done
+      elapsed=$POLL_SECONDS
+      [ "$max" -le 0 ] || [ "$elapsed" -le "$max" ] || elapsed=$max
+      echo "$(( $(cat "$CLOCK") + elapsed ))" > "$CLOCK"
+      [ "$elapsed" -ge "$POLL_SECONDS" ] || exit 28
+    fi
+    echo "{\\"lastAsyncUploadState\\":\\"$STATUS\\"}" ;;
   *) echo '{}' ;;
 esac`);
 
-const publish = (status, extra = {}) => {
+const publish = (status, extra = {}, shell = 'sh') => {
   const log = fs.mkdtempSync(path.join(scratch, 'log-'));
-  const result = spawnSync('sh', ['tools/release/publish-chrome.sh', zip], {
+  if (extra.CLOCK === 'virtual') {
+    extra = { ...extra, CLOCK: path.join(log, 'clock') };
+    fs.writeFileSync(extra.CLOCK, '1000\n');
+  }
+  const result = spawnSync(shell, ['tools/release/publish-chrome.sh', zip], {
     cwd: repo, encoding: 'utf8', timeout: 25000, input: '',
     env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, LOG: log, STATUS: status, CWS_NO_PUBLISH: '', ...extra },
   });
   const calls = fs.readdirSync(log).filter((f) => f.endsWith('.args')).sort((a, b) => parseInt(a.slice(5)) - parseInt(b.slice(5)))
     .map((f) => ({ args: fs.readFileSync(path.join(log, f), 'utf8'), stdin: fs.readFileSync(path.join(log, f.replace('.args', '.stdin')), 'utf8') }));
-  return { ...result, calls };
+  return { ...result, calls, clock: extra.CLOCK && Number(fs.readFileSync(extra.CLOCK, 'utf8')) };
 };
 
 test('the OAuth token is on no curl command line, and still authorizes every call', () => {
@@ -65,3 +79,16 @@ test('an upload that never leaves IN_PROGRESS ends with a clear message instead 
 test('the wait defaults to ten minutes', () => {
   assert.match(fs.readFileSync(path.join(repo, 'tools/release/publish-chrome.sh'), 'utf8'), /CWS_STATUS_TIMEOUT:-600/);
 });
+
+for (const shell of ['sh', 'bash']) {
+  for (const [limit, poll] of [[2, 0], [8, 10]]) {
+    test(`${shell}: the status deadline includes sleep and a slow status request (${limit}s)`, () => {
+      const result = publish('SUCCEEDED', { CLOCK: 'virtual', CWS_STATUS_TIMEOUT: String(limit), POLL_SECONDS: String(poll) }, shell);
+      assert.equal(result.status, 1, result.stderr || result.stdout);
+      assert.match(result.stderr, new RegExp(`still IN_PROGRESS after ${limit} seconds`));
+      assert.ok(result.clock <= 1000 + limit, `wait ran for ${result.clock - 1000} seconds`);
+      assert.ok(!result.calls.some((call) => /:publish/.test(call.args)), 'a late success cannot be submitted');
+      if (poll) assert.ok(result.calls.some((call) => /:fetchStatus/.test(call.args)), 'exercised a slow poll');
+    });
+  }
+}
