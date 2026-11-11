@@ -73,9 +73,37 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     let a = 0, b = 0;
     while (a < old.length && a < now.length && old[a].c === now[a]) a++;
     while (b < old.length - a && b < now.length - a && old[old.length - 1 - b].c === now[now.length - 1 - b]) b++;
-    const marked = (x) => x.c !== '\n' && x.marks;
-    const near = old.slice(a, old.length - b).find(marked) || old.slice(0, a).reverse().find(marked) || old.slice(old.length - b).find(marked);
-    const chars = [...old.slice(0, a), ...now.slice(a, now.length - b).map((c) => ({ c, marks: near?.marks || [] })), ...old.slice(old.length - b)];
+    // Match the unchanged characters between separate edits too. Divide the common-subsequence calculation in half
+    // at each step, keeping only score rows in memory; a popup accepts at most 4000 characters.
+    const scores = (lo, hi, from, to, reverse) => {
+      let row = new Uint16Array(to - from + 1), next = new Uint16Array(row.length);
+      for (let i = 0; i < hi - lo; i++) {
+        next[0] = 0;
+        for (let j = 1; j < row.length; j++) next[j] = old[reverse ? hi - i - 1 : lo + i].c === now[reverse ? to - j : from + j - 1] ? row[j - 1] + 1 : Math.max(row[j], next[j - 1]);
+        [row, next] = [next, row];
+      }
+      return row;
+    };
+    const matches = [];
+    const match = (lo, hi, from, to) => {
+      if (lo >= hi || from >= to) return;
+      if (hi - lo === 1) { for (let j = from; j < to; j++) if (old[lo].c === now[j]) { matches.push([lo, j]); break; } return; }
+      const mid = (lo + hi) >> 1, left = scores(lo, mid, from, to, false), right = scores(mid, hi, from, to, true);
+      let split = 0;
+      for (let j = 1; j <= to - from; j++) if (left[j] + right[to - from - j] > left[split] + right[to - from - split]) split = j;
+      match(lo, mid, from, from + split);
+      match(mid, hi, from + split, to);
+    };
+    match(a, old.length - b, a, now.length - b);
+    const chars = old.slice(0, a), marked = (x) => x.c !== '\n' && x.marks;
+    let before = a, after = a;
+    for (const [i, j] of [...matches, [old.length - b, now.length - b]]) {
+      const near = old.slice(before, i).find(marked) || old.slice(0, before).reverse().find(marked) || old.slice(i).find(marked);
+      for (const c of now.slice(after, j)) chars.push({ c, marks: near?.marks || [] });
+      if (i < old.length - b) chars.push(old[i]);
+      before = i + 1; after = j + 1;
+    }
+    chars.push(...old.slice(old.length - b));
     const schema = S.paper, paras = [[]];
     for (let i = 0; i < chars.length; i++) {
       if (chars[i].c === '\n' && chars[i + 1]?.c === '\n') { paras.push([]); i++; continue; }
