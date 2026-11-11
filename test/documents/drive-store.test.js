@@ -2237,3 +2237,14 @@ test('a fenced duplicate adoption merges a whole-key deletion with a concurrent 
   for (const d of [a, b]) assert.deepEqual((await d.local.get(TODO))[TODO]?.tasks.map((x) => x.title), ['Five']);
 });
 
+test('an equal first meeting does not retell a mergeable record with a newer local stamp', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  await a.local.set({ [TODO]: BASE3 }); assert.ok((await a.on()).ok);
+  const file = recFile(drive, 'local', TODO), rev = file.meta.headRevisionId;
+  await b.local.set({ [TODO]: BASE3 });
+  await b.store.stamp({ [TODO]: { newValue: BASE3 } }, 'local');
+  assert.ok((await b.on()).ok);
+  assert.equal(file.meta.headRevisionId, rev, 'an unchanged mergeable value is linked without an upload');
+  const h = sha(`local\n${TODO}`).slice(0, 32);
+  assert.equal((await b.local.get('driveSyncBase:' + h))['driveSyncBase:' + h]?.sum, file.meta.appProperties.sum);
+});
