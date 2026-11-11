@@ -401,10 +401,15 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (ok) { box.text = squash(native.text); box.nativeHTML = native.html; }
     return ok;
   };
+  // A send Writer pressed is in flight until the box changes. On Canvas only for a moment: Canvas shows its own sends within
+  // a render (Reply off while it submits, the Inbox's spinner over its dialog), and one it refused (no recipient, a failed
+  // request) leaves the box as it was, to be sent again.
+  const SENT_WAIT = 1000;
+  const inFlight = (box) => !!box.sending && (!A().HOLD || Date.now() - (box.sentAt || 0) < SENT_WAIT);
   // Ctrl/Cmd+Enter: Post, Reply or Send, once, when Ultra allows it (its Angular may enable the button a moment after
   // the edit that fills the box).
   const send = (box, until = Date.now() + 1000) => {
-    if (Date.now() >= until || box.sending || box.retry || box.path !== location.pathname || !SENDS.has(box.kind) || A().kindOf(box.editor, { path: location.pathname }) !== box.kind || !sync(box, box.latest)) return;
+    if (Date.now() >= until || inFlight(box) || box.retry || box.path !== location.pathname || !SENDS.has(box.kind) || A().kindOf(box.editor, { path: location.pathname }) !== box.kind || !sync(box, box.latest)) return;
     const b = A().sendOf(box.editor, box.kind);
     if (b?.isConnected && A().enabled(b)) {
       if (A().HOLD) { holdSend(box, b); return; }
@@ -445,13 +450,13 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
   const holds = (box, b) => (A().sends?.(box.editor, box.kind) || [A().sendOf(box.editor, box.kind)]).includes(b);
   const holdSend = (group, b) => {
     group = [].concat(group);
-    if (group.some((box) => box.flushWait || box.sending || box.keeping)) return; // pressed again: the first press goes on
+    if (group.some((box) => box.flushWait || inFlight(box) || box.keeping)) return; // pressed again: the first press goes on
     const pending = new Set(group), failed = new Set(), destinations = new Map(group.map((box) => [box, orphanKey(box, X.draftAt(box.editor))]));
     const still = (box) => boxes.get(box.editor) === box && sameBox(box) && holds(box, b) && orphanKey(box, X.draftAt(box.editor)) === destinations.get(box);
     // Until the first frame is ready, Canvas's visible editor owns edits. A recovering frame still owns its buffered copy.
     const syncCurrent = (box) => sync(box, !box.ready && !box.recovered && !box.snapshot ? A().read(box.editor).html : box.latest, null);
     const press = () => {
-      for (const x of group) { remember(x); globalThis.GZ_DRAFT_UI?.sent?.(x.editor); if (SENDS.has(x.kind)) x.sending = true; }
+      for (const x of group) { remember(x); globalThis.GZ_DRAFT_UI?.sent?.(x.editor); if (SENDS.has(x.kind)) { x.sending = true; x.sentAt = Date.now(); } }
       try { passing = b; b.click(); } finally { passing = null; }
     };
     let keepTimer = null;
