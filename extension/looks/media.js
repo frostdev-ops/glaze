@@ -985,8 +985,8 @@ var GZ_MEDIA = globalThis.GZ_MEDIA || (() => {
     return { now, saved };
   };
   // Files no Look names any more go: not the Look worn, nor history's or favorites' (env.decode reads their codes). A file just
-  // kept waits a minute for the Look that names it to be saved, and one only an offer named waits an hour (the editor's Cancel
-  // takes it at once). A record the index doesn't list (a write cut short) goes too, and so does an entry with no record.
+  // kept waits a minute for the Look that names it to be saved, and one only an offer named waits an hour from its last touch
+  // (the editor's Cancel takes it at once; its heartbeat while the offer is shown is `touch`). A record the index doesn't list (a write cut short) goes too, and so does an entry with no record.
   const collect = async (area, { decode, now = Date.now } = {}) => {
     const idx = await index(area.local);
     const named = await uses(area, decode), at = now(), records = new Set(await area.files.keys()), gone = [];
@@ -1082,7 +1082,7 @@ var GZ_MEDIA = globalThis.GZ_MEDIA || (() => {
   };
 
   // ops: put { kind, b64, expect?, pending? } → { ok, h (its name), type, mime, size, width?, height?, frames? }; list → { files:
-  // [{ h, t, size, pending?, saved? }] }; drop { h, pending? }; keep { h } (an offer's file, now used); reset; file { h } →
+  // [{ h, t, size, pending?, saved? }] }; drop { h, pending? }; keep { h } (an offer's file, now used); touch { h } (an offer's file, still shown); reset; file { h } →
   // { ok, mime, b64 } (as kept, for a page); lottie { src } → { ok, json }; remote { src, kind } → { ok, type, mime, b64 } (a video
   // or picture at an address, fetched and cleaned). area: { local, sync, files }.
   // env: { fetch, allow(src) → whether this page may have that address fetched } for lottie and remote; decode (sharing/share.js) for
@@ -1101,7 +1101,16 @@ var GZ_MEDIA = globalThis.GZ_MEDIA || (() => {
     }
     if (m.op === 'lottie') return lottieFrom(m.src, area, env);
     if (m.op === 'remote') return remoteFrom(m.src, m.kind, env);
-    if (['file', 'drop', 'keep'].includes(m.op) && !HASH.test(m.h)) return { ok: false, error: 'bad' };
+    if (['file', 'drop', 'keep', 'touch'].includes(m.op) && !HASH.test(m.h)) return { ok: false, error: 'bad' };
+    // The editor's heartbeat for an offer it is still showing: a pending file gets its hour again (collect), a kept one is left
+    // as it is, and a file that is gone says so, so the editor knows its preview has lost it.
+    if (m.op === 'touch') {
+      const idx = await index(local), e = idx[m.h];
+      if (!e || !(await files.keys()).includes(m.h)) return { ok: false, error: 'missing' };
+      if (!e.p) return { ok: true };
+      e.at = Date.now();
+      return { ok: await keepIndex(local, idx) };
+    }
     if (m.op === 'file') {
       const rec = await stored(area, m.h, env.queue);
       return rec ? { ok: true, mime: rec.t, b64: rec.b } : { ok: false, error: 'missing' };
