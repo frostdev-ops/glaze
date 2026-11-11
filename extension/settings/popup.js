@@ -4,7 +4,7 @@ const $ = (sel) => document.querySelector(sel);
 // In the browser's language (core/i18n.js).
 GZ_I18N.page();
 const t = (key, vars) => GZ_I18N.t(key, vars, GZ_I18N.ui());
-const hint = (msg) => { $('#hint').textContent = msg || ''; $('#hint').hidden = !msg; $('#hint').classList.toggle('err', !!msg); };
+const hint = (msg) => { $('#hint').textContent = msg || ''; $('#hint').classList.toggle('err', !!msg); };
 const LEVELS = ['off', 'subtle', 'expressive'];
 const level = (l) => t(l[0].toUpperCase() + l.slice(1));
 // Auto light and dark, cycled from its tile; the schedule's times are set in the editor.
