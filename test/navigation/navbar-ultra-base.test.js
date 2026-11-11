@@ -14,14 +14,14 @@ const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(setI
 
 // A drawer with Courses, Grades and Sign Out (none with drawer: false); `base`: the document's base address, as the browser
 // resolves a.href; `account`: who Ultra says is signed in; `kept`: storage.local, shared by two students' pages.
-const adapter = (base, { drawer = true, account = '_1_1', kept = {}, profile = null } = {}) => {
+const adapter = (base, { drawer = true, account = '_1_1', kept = {}, profile = null, origin = SITE } = {}) => {
   const link = (href, label) => ({ label, getAttribute: (k) => (k === 'href' ? href : null), get href() { return new URL(href, base).href; },
     querySelector: () => null, matches: () => false });
   const links = drawer ? [link('/ultra/course', 'Courses'), link('/ultra/grades', 'Grades'), ...(profile ? [link('/ultra/profile', profile)] : []), link('#', 'Sign Out')] : [];
   const root = { querySelectorAll: () => links, closest: () => null };
   const events = new Map();
   const document = { addEventListener: (type, fn) => events.set(type, fn), querySelector: () => (drawer ? root : null), createTreeWalker: (a) => { let n = 0; return { nextNode: () => (n++ ? null : { data: a.label, parentElement: { closest: () => null } }) }; } };
-  const location = { origin: SITE, href: `${SITE}/ultra/course`, pathname: '/ultra/course' };
+  const location = { origin, protocol: new URL(origin).protocol, href: `${origin}/ultra/course`, pathname: '/ultra/course' };
   const ctx = vm.createContext({ document, location, URL, NodeFilter: { SHOW_TEXT: 4, FILTER_ACCEPT: 1, FILTER_REJECT: 2 },
     chrome: { storage: { local: { get: (k, cb) => cb(structuredClone(Object.fromEntries([k].flat().filter((x) => x in kept).map((x) => [x, kept[x]])))), set: (o) => Object.assign(kept, structuredClone(o)), remove: (k) => { for (const x of [k].flat()) delete kept[x]; } } } }, MutationObserver: class { observe() {} disconnect() {} },
     GZ_NAV: require('../../extension/navigation/nav.js') });
@@ -97,4 +97,16 @@ test('an old Ultra account answer cannot load private navigation after identity 
   answer('_1_1');
   await settle();
   assert.ok(!plain(a.site.read()).some((i) => i.label === 'Ada Lovelace'));
+});
+
+// Settings' preview draws Ultra's bar on an extension page: nobody is signed in there, and asking would fetch /users/me from
+// the extension's own address (a failed request and a console error on every Settings open; the gate's sites check).
+test('in Settings\' preview the adapter asks for no account and keeps nothing', async () => {
+  let asked = 0;
+  const a = adapter('chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html', { origin: 'chrome-extension://abcdefghijklmnopabcdefghijklmnop', account: () => { asked++; return '_1_1'; } });
+  await settle();
+  assert.ok(plain(a.site.read()).length >= 2, 'the preview still reads its drawer');
+  await settle();
+  assert.equal(asked, 0);
+  assert.deepEqual(Object.keys(a.kept), []);
 });
