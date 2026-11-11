@@ -2178,3 +2178,22 @@ test('a tombstone agreement invalidates the older base before meeting a replacem
   assert.deepEqual(await titles(a), ['Four', 'One', 'Three', 'Two'], 'a different agreement cannot lend its old base to this first meeting');
   assert.deepEqual(body(replacement).value.tasks.map((x) => x.title).sort(), ['Four', 'One', 'Three', 'Two']);
 });
+
+test('a transient read failure does not permanently finish agreed-value seeding', async () => {
+  const { clock, devs: [a, b] } = await linked({ [TODO]: BASE3 });
+  await a.local.remove((await a.local.keys()).filter((k) => k.startsWith('driveSyncBase:')));
+  const { based, ...st } = (await a.local.get('driveSync')).driveSync;
+  await a.local.set({ driveSync: st });
+  const get = a.local.m.get.bind(a.local.m); let failed = false;
+  a.local.m.get = (key) => { if (key === TODO && !failed) { failed = true; throw new Error('temporary storage read failure'); } return get(key); };
+  assert.equal((await a.run()).ok, false, 'a failed seed remains retryable');
+  assert.notEqual((await a.local.get('driveSync')).driveSync.based, true);
+  a.local.m.get = get;
+  clock.t = Math.max(clock.t, ((await a.local.get('driveSync')).driveSync.wait || 0) + 1);
+  assert.ok((await a.run()).ok);
+  await retask(b, clock, drop('t2'));
+  await retask(a, clock, add(task(4, 'Four')));
+  assert.ok((await b.run({ push: true })).ok);
+  await settled(a, b);
+  for (const d of [a, b]) assert.deepEqual(await titles(d), ['Four', 'One', 'Three']);
+});
