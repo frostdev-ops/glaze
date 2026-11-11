@@ -229,3 +229,17 @@ test('NUMBERVALUE uses Excel numeric limits', () => {
 test('NUMBERVALUE rounds input to Excel precision before flushing subnormal values', () => {
   cases(book(), [['NUMBERVALUE("2.2250738585072014e-308")', 0], ['NUMBERVALUE("2.3e-308")>0', true]]);
 });
+
+// A result past the 32,767-character cap is #VALUE! before it is built, as Excel gives it, and no exception from inside
+// one function (a JavaScript RangeError past the engine's string limit, any other fault) keeps a workbook from opening.
+test('SUBSTITUTE past the cap is #VALUE! without building the string; a function\'s fault is that cell\'s #VALUE!, never recalc()\'s', () => {
+  const e = book({ A1: '=SUBSTITUTE(REPT("a",30000),"a",REPT("b",30000))', A2: '=1+1', A3: '=LEN(SUBSTITUTE(REPT("a",20000),"a",REPT("b",20000)))', A4: '=SUBSTITUTE(REPT("ab",3),"a","xyz")' });
+  const at = (ref) => { const [r, c] = M.cellPosition(ref); return M.cell(e.wb.sheets[0], r, c).v; };
+  assert.deepEqual([at('A1'), at('A2'), at('A3'), at('A4')], ['#VALUE!', 2, '#VALUE!', 'xyzbxyzbxyzb']);
+  assert.equal(calc(e, '=SUBSTITUTE(REPT("a",16383),"a","bb")'), 'b'.repeat(32766), 'at the cap');
+  assert.equal(calc(e, '=SUBSTITUTE(REPT("a",16384),"a","bb")'), '#VALUE!', 'one past it');
+  C.define('GZFAULTTEST', { min: 0, max: 0, fn: () => { throw new TypeError('a fault'); } });
+  const f = book({ A1: '=GZFAULTTEST()', A2: '=A1', B1: '=2*3' });
+  const fat = (ref) => { const [r, c] = M.cellPosition(ref); return M.cell(f.wb.sheets[0], r, c).v; };
+  assert.deepEqual([fat('A1'), fat('A2'), fat('B1')], ['#VALUE!', '#VALUE!', 6]);
+});
