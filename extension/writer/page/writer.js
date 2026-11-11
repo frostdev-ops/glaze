@@ -141,7 +141,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     // writes them in. Else an empty Rich Content Editor box gets the copy Glaze kept of it offered back in the frame.
     const key = orphanKey(b, box.destination), orphan = orphans.get(key);
     orphans.delete(key);
-    if (orphan && orphan.kind === b.kind && Date.now() - orphan.at < 10000 && !squash(native.text)) { box.latest = orphan.html; box.snapshot = orphan.snapshot; box.recovered = box.carried = true; }
+    if (orphan && orphan.kind === b.kind && Date.now() - orphan.at < 10000 && !squash(native.text)) { box.latest = orphan.html; box.snapshot = orphan.snapshot; box.recovered = box.carried = box.owns = true; }
     else if (A().HOLD && b.mode === 'compose' && !squash(native.text)) {
       box.offer = await Promise.resolve(globalThis.GZ_DRAFT_UI?.offer?.(b.editor)).catch(() => null);
       if (boxes.get(b.editor) !== box || !sameBox(box)) { drop(box); return; }
@@ -271,7 +271,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const native = A().read(ed);
     if (!box.recovered) { box.latest = native.html; box.delta = null; }
     box.nativeHTML = native.html;
-    box.ready = true;
+    box.ready = box.owns = true;
     const selection = typing && box.mode === 'compose' && !box.recovered ? A().selection?.(box, main) : null;
     if (box.mode === 'paper') box.context = { ...box.context, recovery: location.origin + location.pathname };
     const offer = box.offer && { html: box.offer.html, text: GZ_DRAFT_UI.offerText(box.offer) };
@@ -401,6 +401,16 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (ok) { box.text = squash(native.text); box.nativeHTML = native.html; }
     return ok;
   };
+  // The site's editor as it is, taken as the box's document.
+  const adopt = (box) => {
+    const native = A().read(box.editor);
+    if (native.html !== box.latest) { box.posted = false; box.sending = false; clearTimeout(box.retry); box.retry = null; }
+    box.latest = box.nativeHTML = native.html;
+    box.delta = null;
+    box.unsynced = false;
+    box.text = squash(native.text);
+    return true;
+  };
   // A send Writer pressed is in flight until the box changes. On Canvas only for a moment: Canvas shows its own sends within
   // a render (Reply off while it submits, the Inbox's spinner over its dialog), and one it refused (no recipient, a failed
   // request) leaves the box as it was, to be sent again.
@@ -453,8 +463,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (group.some((box) => box.flushWait || inFlight(box) || box.keeping)) return; // pressed again: the first press goes on
     const pending = new Set(group), failed = new Set(), destinations = new Map(group.map((box) => [box, orphanKey(box, X.draftAt(box.editor))]));
     const still = (box) => boxes.get(box.editor) === box && sameBox(box) && holds(box, b) && orphanKey(box, X.draftAt(box.editor)) === destinations.get(box);
-    // Until the first frame is ready, Canvas's visible editor owns edits. A recovering frame still owns its buffered copy.
-    const syncCurrent = (box) => sync(box, !box.ready && !box.recovered && !box.snapshot ? A().read(box.editor).html : box.latest, null);
+    // Until Writer's frame has first stood in for the box, Canvas's visible editor holds its words, and Writer takes them as
+    // they are (nothing to write back). A frame opening again after that still owns its buffered copy.
+    const syncCurrent = (box) => (box.owns || box.snapshot ? sync(box, box.latest, null) : adopt(box));
     const press = () => {
       for (const x of group) { remember(x); globalThis.GZ_DRAFT_UI?.sent?.(x.editor); if (SENDS.has(x.kind)) { x.sending = true; x.sentAt = Date.now(); } }
       try { passing = b; b.click(); } finally { passing = null; }
