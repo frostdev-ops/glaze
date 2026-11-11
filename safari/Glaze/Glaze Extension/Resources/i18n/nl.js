@@ -1510,6 +1510,7 @@
   "Read this document": "Dit document lezen",
   "Shown beside the what-if calculator. Blackboard's own weights are the ones that count.": "Getoond naast de wat-als-rekenhulp. De wegingen van Blackboard tellen.",
   "its recipe doesn't come out at Blackboard's own figure": "de berekening komt niet uit op het cijfer dat Blackboard toont",
+  "Blackboard shows no overall number to check it against": "Blackboard toont geen eindgetal om het mee te vergelijken",
   "Courses page": "Cursussenpagina",
   "Blackboard link": "Blackboard-link",
   "Link to something in Blackboard": "Link naar iets in Blackboard",

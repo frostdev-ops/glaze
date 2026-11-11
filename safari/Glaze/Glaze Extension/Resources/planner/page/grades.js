@@ -34,7 +34,8 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   });
   // Ultra writes a grade cut, not rounded, to two places (82.456 is 82.45%); Canvas rounds it.
   const pct = (x) => GZ_I18N.pct(ultra ? Math.floor(x * 100 + 1e-9) / 100 : C.round2(x), locale());
-  const two = (x) => (x == null ? '–' : new Intl.NumberFormat(GZ_I18N.locale(locale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x));
+  // A GPA to two places, a half up in decimal like the percents (3.825 is 3.83 though its float is 3.8249999999999997).
+  const two = (x) => (x == null ? '–' : new Intl.NumberFormat(GZ_I18N.locale(locale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(C.round2(x)));
   const studentIn = (c) => c?.enrollments?.find((e) => e.type === 'student');
   // Only while Glaze runs in this frame and is switched on: work that finishes after that draws nothing.
   const live = () => X.on() && S().enabled !== false;
@@ -435,7 +436,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       need.textContent = !r.left ? t('Nothing left to change: {pct}.', { pct: show(C.calc(course, st.what, opts).final) })
         : r.reachable === false ? t('Out of reach: full marks on the {n} items left would make {pct}.', { n: r.left, pct: show(r.best) })
           : r.share === 0 ? t("You'd stay at {pct} or above even with zeros on what's left.", { pct: show(goal) })
-            : t("You'd need about {pct} on each of the {n} items left.", { n: r.left, pct: rqd ? C.letter(r.share * 100, st.scheme) : GZ_I18N.pct(Math.ceil(r.share * 1000) / 10, locale()) });
+            : t("You'd need about {pct} on each of the {n} items left.", { n: r.left, pct: rqd ? C.letter(r.share * 100, st.scheme) : GZ_I18N.pct(r.pct, locale()) });
     });
     target.addEventListener('input', () => { st.target = target.value; update(); });
     const [before, after] = t('Aim for {target}% overall').split('{target}');

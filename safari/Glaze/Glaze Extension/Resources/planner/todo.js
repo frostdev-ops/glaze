@@ -268,13 +268,13 @@ var GZ_TODO = globalThis.GZ_TODO || (() => {
     const sessions = (Array.isArray(x?.sessions) ? x.sessions : []).filter((s) => when(s?.at) && Number.isInteger(s.min) && s.min >= 5 && s.min <= 600)
       .slice(0, MAX.sessions).map((s) => ({ at: s.at, min: s.min })).sort((a, b) => a.at - b.at);
     if (sessions.length) out.sessions = sessions;
-    const subs = (Array.isArray(x?.subs) ? x.subs : []).filter((s) => /^[\w-]{1,40}$/.test(s?.id) && text(s.title, 200)).slice(0, MAX.steps)
+    const subs = (Array.isArray(x?.subs) ? x.subs : []).filter((s) => isObj(s) && typeof s.id === 'string' && /^[\w-]{1,40}$/.test(s.id) && text(s.title, 200)).slice(0, MAX.steps)
       .map((s) => ({ id: s.id, title: text(s.title, 200), done: !!s.done }));
     if (subs.length) out.subs = subs;
     return out;
   };
   const clean = (raw) => {
-    const tasks = (Array.isArray(raw?.tasks) ? raw.tasks : []).filter((x) => /^[\w-]{1,40}$/.test(x?.id) && text(x.title, 300)).slice(0, MAX.tasks)
+    const tasks = (Array.isArray(raw?.tasks) ? raw.tasks : []).filter((x) => isObj(x) && typeof x.id === 'string' && /^[\w-]{1,40}$/.test(x.id) && text(x.title, 300)).slice(0, MAX.tasks)
       .map((x) => ({ id: x.id, title: text(x.title, 300), cid: id(x.cid), due: due(x.due), notes: typeof x.notes === 'string' ? x.notes.slice(0, 2000) : '', done: when(x.done), at: when(x.at) }));
     const ids = new Set(tasks.map((x) => `task:${x.id}`));
     const items = Object.fromEntries((isObj(raw?.items) ? Object.entries(raw.items) : [])
@@ -310,7 +310,7 @@ var GZ_TODO = globalThis.GZ_TODO || (() => {
       return;
     }
     if (op === 'taskDone') { const x = d.tasks.find((y) => y.id === k); if (x) x.done = when(a); return; }
-    if (op === 'dropTask') { d.tasks = d.tasks.filter((y) => y.id !== k); delete d.items[`task:${k}`]; return; }
+    if (op === 'dropTask') { if (typeof k !== 'string') return; d.tasks = d.tasks.filter((y) => y.id !== k); delete d.items[`task:${k}`]; return; }
     if (typeof k !== 'string' || !ITEM_KEY.test(k)) return;
     const l = (d.items[k] ||= {});
     if (op === 'on') { if (keyDay(a) !== null) l.on = a; else delete l.on; }
