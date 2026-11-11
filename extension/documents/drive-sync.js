@@ -1052,7 +1052,14 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       // Too large to sync: passed over, marked while this device holds it.
       if (e?.why === 'large') { const k = key || (await docOf(h))?.key; if (k && await env.papers.get(k)) await tooLarge('docs', k, true); return; }
       if (e?.why === 'pending') return 'pending';
-      if (SKIP.has(e?.why)) { console.warn('Sync to Google Drive: passed over', h, e.why); return; }
+      // Refused by Drive for a reason it doesn't name as busy or full (denied): passed over this run, still marked if it was
+      // changed here, so it goes up once Drive takes it.
+      if (SKIP.has(e?.why)) {
+        console.warn('Sync to Google Drive: passed over', h, e.why);
+        const k = e.why === 'denied' && (key || (await docOf(h))?.key);
+        if (k && ((await S.get(DIRTY))[DIRTY] || {})[k]) await mark(k);
+        return;
+      }
       if (e instanceof Fail ? e.why !== 'stale' : typeof e?.why === 'string') throw e;
       console.warn('Sync to Google Drive: again next run', h, e);
       const k = key || (await docOf(h))?.key;
