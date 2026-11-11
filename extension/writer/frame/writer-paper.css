@@ -268,8 +268,8 @@ html[data-gz-motion="off"] .gp-fill, html[data-gz-no-trans] .gp-fill { transitio
 .gp-menu small { color: var(--gz-ink-faint); font-size: 12px; }
 .gp-form { display: grid; gap: 8px; padding: 6px 4px; min-width: 240px; }
 .gp-form label { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; color: var(--gz-ink-muted); }
-.gp-form input, .gp-form select, .gp-note textarea { font: inherit; font-size: 13px; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-line-strong); border-radius: 7px; padding: 4px 8px; min-width: 0; }
-.gp-form input:focus, .gp-form select:focus, .gp-note textarea:focus { border-color: var(--gz-accent); outline: none; }
+.gp-form input, .gp-form select, .gp-note textarea { font: inherit; font-size: 13px; color: var(--gz-ink); background: var(--gz-surface-2); border: 1px solid var(--gz-ink-faint); border-radius: 7px; padding: 4px 8px; min-width: 0; }
+.gp-form input:focus, .gp-form select:focus, .gp-note textarea:focus { border-color: var(--gz-accent); box-shadow: 0 0 0 1px var(--gz-accent); outline: none; }
 .gp-note { position: fixed; z-index: 5; width: min(360px, calc(100vw - 16px)); display: grid; gap: 8px; }
 .gp-note textarea { width: 100%; min-height: 72px; resize: vertical; }
 .gp-toast { position: fixed; left: 50%; bottom: 46px; z-index: 6; transform: translateX(-50%); max-width: min(520px, calc(100vw - 24px)); padding: 9px 14px; font-size: 13px; display: flex; align-items: center; gap: 14px; }

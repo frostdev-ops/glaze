@@ -17,7 +17,7 @@
 .gq-more .gp-ico { stroke-width: 3.2; }
 .gq-find { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 16px; border-bottom: 1px solid var(--edge); background: var(--panel); }
 .gq-find[hidden] { display: none; }
-.gq-find input { flex: 0 1 280px; min-width: 0; height: 32px; padding: 0 12px; border: 1px solid var(--gz-line-strong); border-radius: 8px; background: var(--gz-surface-2); color: var(--gz-ink); font: inherit; font-size: 13px; }
+.gq-find input { flex: 0 1 280px; min-width: 0; height: 32px; padding: 0 12px; border: 1px solid var(--gz-ink-faint); border-radius: 8px; background: var(--gz-surface-2); color: var(--gz-ink); font: inherit; font-size: 13px; }
 .gq-find input:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
 .gq-find-n { min-width: 64px; font-size: 13px; color: var(--gz-ink-muted); white-space: nowrap; }
 .gq-work { flex: 1; position: relative; min-height: 0; }

@@ -24,8 +24,8 @@
 .gzo-ibtn[aria-pressed="true"] { background: var(--gz-accent-soft); color: var(--gz-accent-hi); }
 :root:not([data-dark]) .gzo-ibtn[aria-pressed="true"] { color: var(--gz-accent); }
 .gzo-ibtn:focus-visible, .gzo-sbtn:focus-visible, .gzo-cat:focus-visible, .gzo-char:focus-visible, .gzo-grid:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
-.gzo-field { height: 30px; min-width: 0; width: 100%; padding: 0 8px; border: 1px solid var(--gz-line-strong); border-radius: 7px; background: var(--card); color: var(--gz-ink); font: inherit; font-size: 13px; outline: none; }
-.gzo-field:focus { border-color: var(--gz-accent); }
+.gzo-field { height: 30px; min-width: 0; width: 100%; padding: 0 8px; border: 1px solid var(--gz-ink-faint); border-radius: 7px; background: var(--card); color: var(--gz-ink); font: inherit; font-size: 13px; outline: none; }
+.gzo-field:focus { border-color: var(--gz-accent); box-shadow: 0 0 0 1px var(--gz-accent); }
 .gzo-field[aria-invalid="true"] { border-color: var(--gz-err); }
 .gzo-field::placeholder { color: var(--gz-ink-faint); }
 .gzo-sbtn { padding: 5px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; background: var(--gz-accent); color: var(--gz-accent-ink); white-space: nowrap; }

@@ -17,7 +17,7 @@ label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
 /* Every checkbox is a slide switch: the input is the track, ::before the knob. Matches .switch below. */
 input[type="checkbox"]:not(.switch > input) {
   appearance: none; -webkit-appearance: none; position: relative; flex: none; margin: 0; cursor: pointer;
-  width: 38px; height: 22px; border-radius: 999px; background: var(--gz-line-strong);
+  width: 38px; height: 22px; border-radius: 999px; background: var(--gz-line-strong); box-shadow: inset 0 0 0 1px var(--gz-border-field, var(--gz-ink-faint));
   transition: background 0.25s var(--gz-ease);
 }
 input[type="checkbox"]:not(.switch > input)::before {
@@ -25,7 +25,7 @@ input[type="checkbox"]:not(.switch > input)::before {
   background: var(--gz-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
   transition: transform 0.3s var(--gz-ease), background 0.25s var(--gz-ease);
 }
-input[type="checkbox"]:not(.switch > input):checked { background: var(--gz-accent); }
+input[type="checkbox"]:not(.switch > input):checked { background: var(--gz-accent); box-shadow: none; }
 input[type="checkbox"]:not(.switch > input):checked::before { transform: translateX(16px); background: var(--gz-accent-ink); }
 input[type="checkbox"]:not(.switch > input):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 input[type="checkbox"]:disabled { opacity: 0.45; cursor: default; }
@@ -37,7 +37,7 @@ input[type="color"] {
 input[type="color"]::-webkit-color-swatch-wrapper { padding: 2px; }
 input[type="color"]::-webkit-color-swatch { border: 0; border-radius: calc(var(--gz-radius, 12px) * 1 / 4); }
 input[type="text"], input[type="url"], input[type="password"], select {
-  font: inherit; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong));
+  font: inherit; color: var(--gz-ink); background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-field, var(--gz-ink-faint));
   border-radius: calc(var(--gz-radius, 12px) * 2 / 3); padding: 0.4rem 0.6rem; min-width: 0;
 }
 :is(input, select, button, a.button):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
@@ -54,17 +54,17 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
 /* On/off switch: a checkbox under a track. */
 .switch { position: relative; width: 38px; height: 22px; flex: none; }
 .switch input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer; }
-.switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--gz-line-strong); transition: background 0.25s var(--gz-ease); pointer-events: none; }
+.switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--gz-line-strong); box-shadow: inset 0 0 0 1px var(--gz-border-field, var(--gz-ink-faint)); transition: background 0.25s var(--gz-ease); pointer-events: none; }
 .switch span::after {
   content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
   background: var(--gz-ink); transition: transform 0.3s var(--gz-ease);
 }
-.switch input:checked + span { background: var(--gz-accent); }
+.switch input:checked + span { background: var(--gz-accent); box-shadow: none; }
 .switch input:checked + span::after { transform: translateX(16px); background: var(--gz-accent-ink); }
 .switch input:focus-visible + span { outline: 2px solid var(--gz-accent); outline-offset: 2px; }
 
 /* Segmented choice: radio inputs inside labels; the checked one is the value. */
-.seg { display: inline-flex; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; padding: 2px; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); }
+.seg { display: inline-flex; border: 1px solid var(--gz-border-field, var(--gz-ink-faint)); border-radius: 999px; padding: 2px; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); }
 .seg label { padding: 0.25rem 0.7rem; border-radius: 999px; color: var(--gz-ink-muted); font-size: calc(12px * var(--gz-scale, 1)); transition: background 0.2s var(--gz-ease), color 0.2s var(--gz-ease); }
 .seg input { position: absolute; opacity: 0; width: 0; height: 0; }
 .seg label:has(input:checked) { background: var(--gz-accent-soft); color: var(--gz-on-soft, var(--gz-accent)); font-weight: 600; }
