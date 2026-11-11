@@ -325,3 +325,15 @@ test("while a Canvas student's course list is on its way, their own cards draw a
   answer(Object.assign([], { complete: false })); await settle(); p.ui.sync(true); await settle();
   assert.ok(p.tile(key('5')) && p.tile(key('7')), 'a failed read says nothing about whose a course is');
 });
+
+test("a complete Canvas course list removes another student's drawn card even when no course metadata changes", async () => {
+  const store = { widgetLayout: { todo: true, canvasTodo: true, filled: ['cdash'], boards: { cdash: [{ id: key('5'), on: true }] } } };
+  let answer;
+  const p = page({ store, student: { uid: '4', native: [], rows: new Promise((r) => { answer = r; }), list: { [`canvas:${HOST}/5`]: { name: 'Previous student', canvas: true } } } });
+  await settle();
+  assert.ok(p.tile(key('5')), 'the kept card draws while ownership is unknown');
+  answer([]);
+  await settle();
+  assert.equal(p.c.GZ_COURSE_CARDS.own(key('5')), false, 'the completed list rejects the old course');
+  assert.equal(p.tile(key('5')), null, 'ownership alone redraws the board without a later page or storage event');
+});
