@@ -76,11 +76,13 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
   const tag = (name, a, body) => (body === undefined || body === '' ? `<${name}${attrText(a)}/>` : `<${name}${attrText(a)}>${body}</${name}>`);
   const HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
   // Kept roots may be prefixed or self-closing. Generated children use the default namespace and r: relationships.
+  // A root the reader never found (a part cut inside it) is the plain one.
   const rootTags = (raw, name) => {
-    let open = (raw ?? `<${name}>`).replace(/\s*\/>$/, '>');
+    let open = String(raw ?? '').replace(/\s*\/>$/, '>');
+    if (!/^<[^\s>/]/.test(open)) open = `<${name}>`;
     if (!/\sxmlns=/.test(open)) open = open.replace(/>$/, ` xmlns="${SML}">`);
     if (!/\sxmlns:r=/.test(open)) open = open.replace(/>$/, ` xmlns:r="${OD}">`);
-    return { open, close: `</${/^<([^\s>]+)/.exec(open)[1]}>` };
+    return { open, close: `</${/^<([^\s>]+)/.exec(open)?.[1] ?? name}>` };
   };
 
   // ── Package ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -481,6 +483,8 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
       }
       if (!tk.empty) depth++;
     }
+    // A part that stops inside its root tag, or before the root closes, lost what came after the cut.
+    if (depth > 0 || !root.open) ctx.problem(sh, 'part', `${sh.name}: its XML ends before the worksheet closes`);
     // Shared formulas: a cell naming only its group gets the formula moved from the cell that holds it.
     for (const [rr, cc, si] of sharedKids) {
       const m = shared.get(si), cell = rows.get(rr)?.get(cc);
