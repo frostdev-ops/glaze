@@ -363,6 +363,9 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   };
   // Only what differs is written: the page's own observer sees nothing of an unchanged pass.
   const put = (el, k, v) => { if (el[k] !== v) el[k] = v; };
+  // Text as the search compares it, as documents/doc-home.js folds it: lower case in no locale's way, accents off. A Turkish or Azeri
+  // browser's own would turn I into a dotless ı and miss "istanbul" in "İstanbul" and "Istanbul".
+  const fold = (s) => String(s ?? '').normalize('NFKD').replace(/\p{M}+/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
   const shownItems = () => [...pick.items.values()].filter((it) => !it.li.hidden);
   // Up to the room left, in the order shown; a course already on the board is left as it is.
   const turn = (list, on) => {
@@ -494,7 +497,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
   const syncPicker = () => {
     if (!pick?.dlg.isConnected) return;
     if (JSON.stringify(list().map((c) => [c, title(c.key)])) !== pick.keys) fillPicker();
-    const room = pick.o.room(), q = pick.query.value.trim().toLocaleLowerCase();
+    const room = pick.o.room(), q = fold(pick.query.value);
     let on = 0;
     for (const it of pick.items.values()) {
       const there = pick.o.on(it.c.key);
@@ -504,7 +507,7 @@ var GZ_COURSE_CARDS = globalThis.GZ_COURSE_CARDS || (() => {
       put(it.box, 'disabled', full);
       if (it.li.hasAttribute('data-on') !== there) it.li.toggleAttribute('data-on', there);
       put(it.box, 'title', full ? ctx.t('Up to {n} course cards per board.', { n: W.COURSE_MAX }) : '');
-      put(it.li, 'hidden', !!q && ![title(it.c.key), it.c.name, it.c.code, it.c.term].some((x) => String(x || '').toLocaleLowerCase().includes(q)));
+      put(it.li, 'hidden', !!q && ![title(it.c.key), it.c.name, it.c.code, it.c.term].some((x) => fold(x).includes(q)));
       tone(it.card, it.c.id);
     }
     for (const { sec, its } of pick.terms) put(sec, 'hidden', its.every((it) => it.li.hidden));

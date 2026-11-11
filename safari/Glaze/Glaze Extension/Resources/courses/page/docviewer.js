@@ -264,7 +264,7 @@ html[data-gz-tool][data-gz-pencil] .gz-ink { touch-action: pan-x pan-y pinch-zoo
   background:var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface, #fff)); color: var(--gz-ink, #111); border: 1px solid var(--gz-border-strong, var(--gz-line-strong, #c8cdd4)); box-shadow: var(--gz-shadow, 0 6px 24px rgb(0 0 0 / 0.25)); }
 button { all: unset; box-sizing: border-box; width: 32px; height: 32px; display: grid; place-items: center; border-radius: calc(var(--gz-radius, 12px) * 2 / 3); cursor: pointer; color: inherit; }
 button:hover:not(:disabled) { background: var(--gz-accent-soft, #dbeafe); }
-button[aria-pressed="true"] { background: var(--gz-accent-soft, #dbeafe); color: var(--gz-accent, #2563eb); box-shadow: inset 0 0 0 1.5px currentColor; }
+button[aria-pressed="true"] { background: var(--gz-accent-soft, #dbeafe); color: var(--gz-on-soft, var(--gz-accent, #2563eb)); box-shadow: inset 0 0 0 1.5px currentColor; }
 button:disabled { opacity: 0.4; cursor: default; }
 :is(button, input):focus-visible { outline: 2px solid var(--gz-accent, #2563eb); outline-offset: 1px; }
 svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }

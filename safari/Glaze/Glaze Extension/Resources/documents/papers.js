@@ -233,6 +233,9 @@
     // The heading and the New band share one panel of glass; the toolbar is another, the cards each their own.
     main.append(h('div', { class: 'gd-top' }, $('heading'), band), bar, docs, count);
     const say = (text) => motion().say(said, text || '');
+    // A save the worker refuses past the cap on documents (writer/writer-papers.js) says so, not "try again": FULL_N fills its number.
+    const FULL = 'Documents is full ({n}). Delete or export some to save a new one.', FULL_N = { n: PA.CAP.rows };
+    const notSaved = (e) => (e?.message === 'too many documents' ? t(FULL, FULL_N) : t('Not saved. Try again in a moment.'));
 
     // ---- state
     // Text is bounded by characters, thumbnails by count (including those held in a detached card). Search retains each
@@ -529,7 +532,7 @@
       dismiss();
       say('');
       if (act === 'rename') rename(k);
-      else if (act === 'copy') copy(k).catch((e) => { console.error(e); say(t('Not saved. Try again in a moment.')); });
+      else if (act === 'copy') copy(k).catch((e) => { console.error(e); say(notSaved(e)); });
       // A paper Word can't take (a picture kept in a form Word has no place for) is said on the page, not logged.
       else if (act === 'export') { const id = DK.kindOf(cards.get(k)?.row); DK.get(id).exportFile(k).catch(() => { say(t(id === 'paper' ? 'The .docx could not be made.' : id === 'sheet' ? 'Not saved. Try again in a moment.' : 'That file could not be read.')); }); }
       else if (act === 'delete') del(k);
@@ -566,7 +569,7 @@
         c.link.hidden = false;
         if (keep && v !== was) {
           if (v) { c.title = v; c.link.textContent = v; }
-          name(k, v).catch((e) => { console.error(e); say(t('Not saved. Try again in a moment.')); refresh(); });
+          name(k, v).catch((e) => { console.error(e); say(notSaved(e)); refresh(); });
         }
         if (back) go(k);
         if (held) { held = false; render(); }
@@ -609,8 +612,9 @@
       render();
       if (inside && next) go(next);
       else if (inside) q.focus();
-      try { if (await write()) { refresh(); return true; } } catch (e) { console.error(e); }
-      back(); render(); say(t('Not saved. Try again in a moment.'));
+      let failed;
+      try { if (await write()) { refresh(); return true; } } catch (e) { console.error(e); failed = e; }
+      back(); render(); say(notSaved(failed));
       return false;
     };
     const del = async (k) => {
@@ -627,7 +631,7 @@
       if (!u || u.restoring) return;
       u.restoring = true; clearTimeout(u.timer);
       try { await st.untrash(u.k); } catch (e) {
-        console.error(e); say(t('Not saved. Try again in a moment.')); u.restoring = false;
+        console.error(e); say(notSaved(e)); u.restoring = false;
         if (undoable === u) u.timer = setTimeout(dismiss, 8000);
         return;
       }
@@ -646,7 +650,7 @@
       const here = e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey;
       if (here) e.preventDefault();
       st.untrash(k).then(() => { if (here && active) location[window.top === window ? 'assign' : 'replace'](link.href); },
-        (err) => { console.error(err); if (here) say(t('Not saved. Try again in a moment.')); });
+        (err) => { console.error(err); if (here) say(notSaved(err)); });
     };
     binB.addEventListener('click', () => {
       bin = !bin;
@@ -672,7 +676,7 @@
     const STEPS = { pdf: ['read', 'prepare', 'copy', 'save'], slides: ['read', 'prepare', 'copy', 'save'] };
     let jobs = 0;
     const showJob = (j) => {
-      const { el, bar, fill, meta, acts } = j.ui, f = j.failed ? 0 : j.p?.fraction || 0, w = j.failed ? [j.failed] : DK.said(j.p, j.kind);
+      const { el, bar, fill, meta, acts } = j.ui, f = j.failed ? 0 : j.p?.fraction || 0, w = j.failed ? [j.failed, FULL_N] : DK.said(j.p, j.kind);
       el.toggleAttribute('data-failed', !!j.failed);
       meta.textContent = w ? t(...w) : '';
       bar.hidden = !!j.failed; acts.hidden = !j.failed;
@@ -699,7 +703,7 @@
       } catch (e) {
         console.error(e);
         const says = saysOf(j.kind);
-        j.failed = e instanceof RangeError && (REFUSALS.has(e.message) || Object.values(says).includes(e.message)) ? e.message : says.read;
+        j.failed = e?.message === 'too many documents' ? FULL : e instanceof RangeError && (REFUSALS.has(e.message) || Object.values(says).includes(e.message)) ? e.message : says.read;
         report.fail(e);
         return { failed: j.failed };
       } finally {
@@ -725,7 +729,7 @@
       if (focused) j.ui.el.focus({ preventScroll: true });
       const r = await pending;
       if (r.failed && j.ui.el.contains(document.activeElement) && j.ui.el.isConnected) j.ui.again.focus();
-      if (r.failed || r.notice) say(t(r.failed || r.notice));
+      if (r.failed || r.notice) say(t(r.failed || r.notice, FULL_N));
     };
     const job = (f, id) => {
       const j = { id: ++jobs, file: f, kind: id, p: { stage: 'read', fraction: 0 }, failed: '', key: null, running: false };
@@ -752,7 +756,7 @@
       const mine = take.map(({ file: f, kind: id }) => job(f, id));
       if (mine.length) { incoming.unshift(...mine); render(); }
       for (const j of mine) { const r = await importJob(j); why ||= r.failed || r.notice || ''; }
-      say([why && t(why), limitText].filter(Boolean).join(' '));
+      say([why && t(why, FULL_N), limitText].filter(Boolean).join(' '));
     };
     importB.addEventListener('click', () => file.click());
     file.addEventListener('change', () => { const list = [...file.files]; file.value = ''; bring(list).catch((e) => console.error(e)); });

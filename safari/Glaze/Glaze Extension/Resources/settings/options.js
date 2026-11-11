@@ -1161,11 +1161,14 @@ GZ_UI.load().then((s) => {
     };
     let gdBusy = false;
     gdLoad().then(gdResume);
+    // Settings framed in a school's page: the worker takes Connect, Disconnect and Sync from Settings' own tab only, so that tab opens at this row.
+    const gdAway = () => { if (!ownTabAt) return false; ownTabAt('#writer/papers'); return true; };
     // Inside the student's click: the browser's identity permission first (optional; nothing is asked before this), then
     // Google's own screen, from the worker. Safari signs in through the Glaze app and has no identity permission: Connect
     // answers 'pending' until the app is done (each answer waits a while), and Settings asks again.
     $('#gdrive-connect').addEventListener('click', async (e) => {
       if (!e.isTrusted || gdBusy) return;
+      if (gdAway()) return;
       // Firefox has no optional identity: its package holds it from install (tools/build/oauth-manifest.js), so nothing is asked.
       const held = gdFlow === 'native' || /^moz-extension:/i.test(chrome.runtime.getURL(''));
       const native = gdFlow === 'native';
@@ -1195,6 +1198,7 @@ GZ_UI.load().then((s) => {
     });
     $('#gdrive-disconnect').addEventListener('click', async (e) => {
       if (!e.isTrusted || gdBusy) return;
+      if (gdAway()) return;
       gdBusy = true;
       try {
         const r = await gdOp('disconnect');
@@ -1236,6 +1240,7 @@ GZ_UI.load().then((s) => {
     gsRender();
     $('#gdrive-sync-on').addEventListener('change', async (e) => {
       const on = e.currentTarget.checked;
+      if (gdAway()) { e.currentTarget.checked = !on; return; }
       const r = await new Promise((res) => chrome.runtime.sendMessage({ type: 'glaze:driveSync', op: 'set', on }, (x) => res(chrome.runtime.lastError ? { ok: false, why: 'network' } : x || { ok: false })));
       if (!r.ok && on && !(await chrome.storage.local.get('driveSync')).driveSync?.on) $('#gdrive-sync-on').checked = false;
       gsRender();
