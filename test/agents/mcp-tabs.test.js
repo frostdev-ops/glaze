@@ -160,6 +160,29 @@ test('Ultra through the worker: a site reset during the read leaves the kept pla
     assert.equal(env.store.local.todoCache, undefined, 'the worker refused it');
   } finally { await H.off(env); }
 });
+test('Ultra through the worker: a site reset during the identity read cannot recreate the cleared planner', async () => {
+  const tab = H.tab({ id: 8, url: `${C.ULTRA}/ultra/course`, site: 'ultra', uid: C.ULTRA_UID, store: {}, routes: ultraRoutes() });
+  const env = await H.boot({ local: { ultra: [C.ULTRA] }, tabs: [tab] });
+  // The tab sees the worker's current fences, including the reset that happens while its identity request is in flight.
+  tab.context.chrome.storage.local.get = (keys, cb) => env.w.context.chrome.storage.local.get(keys).then((r) => { cb?.(r); return r; });
+  const fetch = tab.context.fetch;
+  let reset = false;
+  tab.context.fetch = async (...args) => {
+    const response = await fetch(...args);
+    if (!reset && new URL(args[0]).pathname === '/learn/api/v1/users/me') {
+      reset = true;
+      await vm.runInContext(`purgeUltra(${JSON.stringify(C.ULTRA)}, true, true)`, env.w.context);
+    }
+    return response;
+  };
+  try {
+    await H.conn(env.w);
+    const result = await vm.runInContext(`mcpRefresh(${JSON.stringify(UL)}, 'courses', {})`, env.w.context);
+    assert.equal(reset, true, 'the identity response crossed the reset');
+    assert.equal(env.store.local.todoCache, undefined, 'a refresh already reading before the reset must leave the planner cleared');
+    assert.deepEqual({ ...result }, { ok: false, source: 'tab' });
+  } finally { await H.off(env); }
+});
 
 test('grades: Insights read afresh only while it is on and the account keeps a record; a cleared record stays cleared', async () => {
   const store = {};
