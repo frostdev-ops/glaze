@@ -39,7 +39,16 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   // Ultra: the site, who you are, the page, the nearest Blackboard id above the editor (a reply's post, say), and the editor's
   // own id; null until the account is known. A snapshot's own values only, never its elements (Ultra may reuse them for another post).
   const keyOf = (s) => (ultra ? GZ_DRAFTS.ultraKey({ origin: location.origin, user: account?.user, path: s.path, near: s.near, id: s.id })
-    : rce(s.ed) ? GZ_DRAFTS.canvasRceKey({ origin: location.origin, user: account?.user, path: s.path, id: s.id }) : GZ_DRAFTS.canvasKey(identityOf(s)));
+    : rce(s.ed) ? GZ_DRAFTS.canvasRceKey({ origin: location.origin, user: account?.user, path: s.path, id: rceId(s) }) : GZ_DRAFTS.canvasKey(identityOf(s)));
+  // A quiz's essay is its box's id on every attempt (question_input_N, by its place on the page): its copy is the question's
+  // (the textarea's name) in this attempt (the form's attempt number), read while the box is on the page. Unknown: none kept.
+  const quizzes = new WeakMap();
+  const rceId = (s) => {
+    if (!/^\/courses\/\d+\/quizzes\/\d+\/take(?:\/|$)/.test(s.path)) return s.id;
+    const q = s.ed.getAttribute('name')?.match(/^question_(\d{1,20})$/)?.[1], a = s.ed.closest('form#submit_quiz_form')?.querySelector('input[name="attempt"]')?.value;
+    if (s.ed.isConnected && q && /^\d{1,6}$/.test(a || '')) quizzes.set(s.ed, `${s.id}-q${q}-a${a}`);
+    return quizzes.get(s.ed) || null;
+  };
   const draftKey = (ed) => keyOf(ctx.draftAt(ed));
   const typed = new Map(); // key -> { ed, text, id, gone }: written here, watched until it posts
   const sending = new Map(); // key -> { text, n, at, away }: sent from here, with how often the page showed the text then
@@ -460,21 +469,33 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
     } finally { clearTimeout(timer); }
   };
   // Writer opening an empty Canvas RCE box: the newest copy kept of it (another page's, a crash's), unless Canvas already has
-  // its text as what was submitted or posted, which then goes. Writer offers it (offerText); settle takes it away.
+  // its text as what was submitted or posted, which then goes. Writer offers it (offerText); settle takes it away. Posted: all
+  // of it in the submission, or in a post of the student's where this box's reply goes, made since the copy was written.
+  // Canvas's times are its clock's, the copy's the device's: the device's lead over Canvas (the answer's Date header) is
+  // taken off. A reply deep in a thread goes where Canvas files it (DiscussionThreadContainer getParentId): to the entry
+  // replied to at depth 1 or 2, to its parent at 3, to its thread's first entry below that.
   const rcePosted = async (d, at) => {
     const a = at.path.match(/^\/courses\/(\d+)\/assignments\/(\d+)\/?$/), t = at.path.match(/^\/(courses|groups)\/(\d+)\/discussion_topics\/(\d+)\/?$/);
+    let lead = 0;
+    const clock = (r) => { const server = Date.parse(r?.headers?.get?.('date')); if (Number.isFinite(server)) lead = Date.now() - server; };
+    const since = (when) => Date.parse(when) >= d.at - lead - 2000; // the header counts whole seconds
     try {
       if (a) {
-        const s = await capi(`/courses/${a[1]}/assignments/${a[2]}/submissions/self`);
-        return Date.parse(s?.submitted_at) >= d.at - 1000 && GZ_DRAFTS.postedIn(d.text, [s?.body]);
+        const s = await capi(`/courses/${a[1]}/assignments/${a[2]}/submissions/self`, clock);
+        return since(s?.submitted_at) && GZ_DRAFTS.postedIn(d.text, [s?.body]);
       }
       if (t) {
-        const parent = at.id === 'message-body-root' ? null : at.id.match(/^message-body-(\d+)$/)?.[1];
-        const mine = [], walk = (es, above = null) => { for (const e of Array.isArray(es) ? es : []) {
-          if (String(e?.user_id) === account.user && String(e.parent_id ?? above) === String(parent) && Date.parse(e.created_at) >= d.at - 1000) mine.push(e.message);
-          walk(e?.replies, e?.id);
+        const view = (await capi(`/${t[1]}/${t[2]}/discussion_topics/${t[3]}/view`, clock))?.view;
+        const up = new Map(), entries = [], walk = (es, above = null, depth = 1, first = null) => { for (const e of Array.isArray(es) ? es : []) {
+          const id = String(e?.id);
+          up.set(id, { parent: String(e?.parent_id ?? above), depth, first: first ?? id });
+          entries.push([e, String(e?.parent_id ?? above)]);
+          walk(e?.replies, id, depth + 1, first ?? id);
         } };
-        walk((await capi(`/${t[1]}/${t[2]}/discussion_topics/${t[3]}/view`))?.view);
+        walk(view);
+        const entry = at.id === 'message-body-root' ? null : at.id.match(/^message-body-(\d+)$/)?.[1], e = up.get(entry);
+        const parent = String(!e || e.depth <= 2 ? entry : e.depth === 3 ? e.parent : e.first);
+        const mine = entries.filter(([x, p]) => String(x?.user_id) === account.user && p === parent && since(x.created_at)).map(([x]) => x.message);
         return GZ_DRAFTS.postedIn(d.text, mine);
       }
     } catch { /* offline: offer it */ }
