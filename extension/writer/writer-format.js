@@ -46,9 +46,9 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     else if ((x = /^([A-Za-z]+)\.?\s+(\d{1,2}),?\s+(\d{4})$/.exec(s))) [y, m, d] = [+x[3], mon(x[1]), +x[2]];
     else if ((x = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(s))) {
       const a = +x[1], b = +x[2];
-      if (a <= 12 && b <= 12 && a !== b) return null;
+      if (x[3].length === 2 || a <= 12 && b <= 12 && a !== b) return null;
       [m, d] = a > 12 ? [b, a] : [a, b];
-      y = x[3].length === 2 ? 2000 + +x[3] : +x[3];
+      y = +x[3];
     } else return null;
     const date = new Date(y, m - 1, d);
     return m >= 1 && date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d ? date : null;
