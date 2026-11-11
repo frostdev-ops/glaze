@@ -495,7 +495,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
             if (SKIP.has(e?.why) || (t.owner?.snap && e?.why === 'quota')) {
               console.warn('Sync to Google Drive: passed over a transfer', slot, e.why);
               await dropMove(slot);
-              if (t.owner?.key) await held('dirty', async () => { const m = (await S.get(DIRTY))[DIRTY] || {}; if (m[t.owner.key]) { delete m[t.owner.key]; await S.set({ [DIRTY]: m }); } });
+              if (e.why !== 'denied' && t.owner?.key) await held('dirty', async () => { const m = (await S.get(DIRTY))[DIRTY] || {}; if (m[t.owner.key]) { delete m[t.owner.key]; await S.set({ [DIRTY]: m }); } });
               if (t.owner?.snap || t.owner?.rec) await more?.failed?.(t.owner, e.why, hooks(folder));
               continue;
             }
