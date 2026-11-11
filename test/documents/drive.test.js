@@ -650,3 +650,12 @@ test('From Google Drive shows only where the Picker works; Save to Google Drive 
   assert.deepEqual(shown(), []);
   assert.equal(p.page.items(p.api, () => {}).length, 0);
 });
+
+test('Sync\'s answer cut off while its body is read is a network failure, not a bad answer', async () => {
+  const D2 = require('../../extension/documents/drive.js');
+  const body = new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('{"changes":[')); c.error(new TypeError('terminated')); } });
+  const c = D2.create({ fetch: async () => new Response(body, { status: 200, headers: { 'content-type': 'application/json' } }), token: async () => 'tok-1', interactive: false });
+  await assert.rejects(c.changes('1234'), (e) => e.why === 'network');
+  const bad = D2.create({ fetch: async () => new Response('{"changes": [', { status: 200 }), token: async () => 'tok-1', interactive: false });
+  await assert.rejects(bad.changes('1234'), (e) => e.why === 'bad', 'an answer that came whole but isn\'t JSON is still bad');
+});
