@@ -115,6 +115,24 @@ test('ping while down is answered at once, without Glaze', () => {
   assert.ok(!back(s, 500).glaze.some((l) => l.includes('ping')));
 });
 
+test('a connection or replay answer at the waiting deadline expires queued calls before sending them', () => {
+  const call = J({ id: 8, method: 'tools/call', params: { name: 'todo_mark_done', arguments: {} } });
+  const first = make();
+  first.fromApp(call, 0);
+  const initial = first.up(S.WAIT, 'chrome');
+  assert.deepEqual(initial.glaze, [], 'a late first connection cannot execute an expired call');
+  assert.equal(P(initial.app)[0].error.code, S.AWAY);
+
+  const s = legacy();
+  s.down(0);
+  s.fromApp(call, 0);
+  s.up(S.WAIT - 1, 'chrome');
+  const resumed = s.fromGlaze(J({ id: REPLAY, result: ANSWER }), S.WAIT);
+  assert.deepEqual(resumed.glaze, [J({ method: 'notifications/initialized' })]);
+  assert.deepEqual(P(resumed.app).filter((m) => m.id === 8).map((m) => m.error.code), [S.AWAY]);
+  assert.equal(s.held(), 0);
+});
+
 test('a replay that errors or answers another protocolVersion is fatal', () => {
   const s = legacy();
   s.down(0);
