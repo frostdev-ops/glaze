@@ -59,7 +59,7 @@ const list = (names) => (names.length < 2 ? names.join('') : `${names.slice(0, -
 const main = async (args, io = {}) => {
   const { stdin = process.stdin, stdout = process.stdout, stderr = process.stderr } = io;
   const platform = io.platform || process.platform;
-  const ctx = { platform, env: io.env, node: io.node, run: io.run, src: io.src };
+  const ctx = { platform, env: io.env, node: io.node, run: io.run, src: io.src, execPath: io.execPath, versions: io.versions, list: io.list };
   const m = mode(args, platform);
   try {
     switch (m.mode) {
@@ -106,6 +106,13 @@ const main = async (args, io = {}) => {
           stderr.write(`glaze-mcp: No supported browser found. Name one with --browser <id>: ${B.table(c.platform, c.env).map((b) => b.id).join(', ')}\n`);
           return 1;
         }
+        // The launchers are written either way; with no node they tell the browser so (launcher.js).
+        if (r.node === null) {
+          stderr.write(`glaze-mcp: not set up: no Node.js here is safe for a browser to start.\n${r.refused ? `The one running setup, ${r.refused.node}: ${r.refused.why}.\n` : ''}`
+            + 'Install Node.js 18 or later in a folder only you or an administrator can change, or fix the above, then run: npx glaze-mcp setup\n');
+          return 1;
+        }
+        if (r.refused) stderr.write(`glaze-mcp: browsers will start ${r.node}, not ${r.refused.node}: ${r.refused.why}.\n`);
         stdout.write(`glaze-mcp ${r.version} is set up for ${list(r.names)}.\n`);
         if (r.ids.length > 1) stdout.write(`It also lets in ${r.ids.slice(1).join(', ')}.\n`);
         return 0;

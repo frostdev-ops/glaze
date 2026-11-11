@@ -1156,7 +1156,7 @@ test('setup run by a Node a browser can\'t safely start names the first safe one
   for (const which of ['world-writable ancestor', 'group-writable binary', 'Claude\'s runtime']) await t.test(which, async (t) => {
     const home = scratch(t);
     mk(AS(home), 'Google', 'Chrome');
-    const open = path.join(home, 'open');
+    const open = path.join(home, ...(which === 'Claude\'s runtime' ? ['Claude.app', 'Contents', 'MacOS'] : ['open']));
     const running = which === 'group-writable binary' ? nodeIn(open, (f) => fs.chmodSync(f, 0o775)) : nodeIn(open);
     if (which === 'world-writable ancestor') fs.chmodSync(open, 0o777);
     const first = nodeIn(path.join(home, '.nvm', 'versions', 'node', 'v24.1.0', 'bin')), second = nodeIn(path.join(home, '.volta', 'bin'));

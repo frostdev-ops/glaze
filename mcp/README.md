@@ -34,8 +34,9 @@ given to it.
 Setup refuses symlinked destinations and files or registrations belonging to another installation. On Windows, Chromium
 browsers sharing a registry location use the first installed browser's host manifest.
 
-Browsers start the helper with the Node.js that ran setup, or else another Node.js 18 or later setup found. After you
-change Node.js, run setup again.
+Browsers start the helper with the Node.js that ran setup, or else another Node.js 18 or later setup found. One that other
+users could change (it, or a folder above it, is writable by them or theirs) is never used: setup says which it chose
+instead, or exits 1 with none. After you change Node.js, run setup again.
 
 ## App bundle
 
