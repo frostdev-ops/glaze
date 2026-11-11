@@ -1925,7 +1925,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       if (!flushing || flushing.request !== request) return;
       const action = flushing.action;
       release(flushing);
-      const why = { save: () => action === 'save' ? notSaved() : t('The paper could not be saved. Nothing was submitted.'), text: () => t('The text didn’t go into Ultra’s text box. Nothing was submitted.'), submit: () => t('Ultra’s Submit didn’t turn on. Nothing was submitted.'), page: () => t('The attempt page changed. Nothing was submitted.') }[reason];
+      const why = { save: () => action === 'save' ? t('Not saved. Try again in a moment.') : t('The paper could not be saved. Nothing was submitted.'), text: () => t('The text didn’t go into Ultra’s text box. Nothing was submitted.'), submit: () => t('Ultra’s Submit didn’t turn on. Nothing was submitted.'), page: () => t('The attempt page changed. Nothing was submitted.') }[reason];
       if (why) tell('error', why()); else if (saying === 'saving') tell('');
     };
     // action: 'submit' or 'save' (Ultra's Save and Close).
