@@ -2120,3 +2120,17 @@ test('adjacent dashboard note edits merge independently without restoring old li
     for (const d of [a, b]) assert.equal((await d.local.get(NOTE))[NOTE].text, expected);
   }
 });
+
+test('removing the last saved source merges with a source added on another device', async () => {
+  for (const deletedFirst of [true, false]) {
+    const key = 'writer:sources:school|_1_1|_2_1|_3_1', old = { id: 's-old1', type: 'book', title: 'Old' }, added = { id: 's-new1', type: 'book', title: 'New' };
+    const { clock, devs: [a, b] } = await linked({ [key]: { sources: [old], at: 100 } });
+    await change(b, clock, key, (v) => ({ sources: [...v.sources, added], at: clock.t }));
+    // writer-sources.js save removes the key when the last source is removed.
+    clock.t += 1000; await a.local.remove(key);
+    const [first, second] = deletedFirst ? [a, b] : [b, a];
+    assert.ok((await first.run({ push: true })).ok);
+    await settled(second, first);
+    for (const d of [a, b]) assert.deepEqual((await d.local.get(key))[key]?.sources, [added]);
+  }
+});
