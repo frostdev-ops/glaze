@@ -555,7 +555,7 @@ bb-assignment-attempt-authoring-panel [class*="makeStylessubmission-"] > h2 { in
 /* Glaze Writer's frame (writer/page/writer.js) paints the Look's ground, surfaces, corners and edge itself; behind a paper over
    a background the page adds the blur of the glass cards beside it. Nothing that clips or outlines the frame element: Chrome
    runs the frame in its own process, and with a rounded clip or an outline on it a click right after Focus ended went to
-   the page instead (scripts/writer-paper-check.js, "Fix applies the citation fix"). */
+   the page instead (checks/writer/writer-paper-check.js, "Fix applies the citation fix"). */
 html[data-gz-bg]:not([data-gz-bg="solid"]) #site-wrap iframe.gz-writer[data-gz-writer-frame="assignment"] { backdrop-filter: blur(var(--gz-glass, 0px)) saturate(1.2); }
 /* Blackboard's empty native composer may collapse as focus moves to Writer. Its actions belong to the ready Writer
    until Cancel or hand-back, including when Angular leaves ng-hide on the native control row. */

@@ -1,7 +1,7 @@
 // Blackboard Ultra's file previews in Glaze's PDF viewer (enhance.bbPreviews, and only with Settings → Writer → PDFs on),
 // loaded on demand: content.js loads this for attachments on an Ultra page and hands it each pass. Ultra converts
 // attachments to PDFs for its own viewer, a frame at the attachment's data-bbfile viewerUrl (live probe,
-// 2026-10-30; the shapes: scripts/ultra-mock.js PREVIEW). Expanded, or open already, the worker is asked for that PDF
+// 2026-10-30; the shapes: checks/mocks/ultra-mock.js PREVIEW). Expanded, or open already, the worker is asked for that PDF
 // (courses/bb-preview.js) while Blackboard's frame stays. Done: this page reads the converted PDF from its presigned S3 address
 // (the bucket lets the page's own origin read it, as the probe found; at most MAX, the worker asked again once if S3
 // refuses an address that ran out) while Glaze's viewer (writer.html in view mode, pdf-kind.js show) loads out of sight

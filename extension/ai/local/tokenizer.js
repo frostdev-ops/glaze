@@ -4,7 +4,7 @@
 // one token); added tokens; the ByteLevel decoder. A tokenizer.json or a GGUF's tokenizer.ggml.* keys load the same
 // neutral vocabulary, and anything they say that this file doesn't do is refused rather than ignored.
 // Page text can never produce a control token: encode() reads added tokens only when asked, and Glaze's own specials
-// (add) only ever come from encodeWith. scripts/local-tokenizer-check.js holds it to HF tokenizers line for line.
+// (add) only ever come from encodeWith. checks/ai/local-tokenizer-check.js holds it to HF tokenizers line for line.
 // Classic script; node exports.
 var GZ_AI_TOKENIZER = globalThis.GZ_AI_TOKENIZER || (() => {
   // GPT-2's table: printable Latin-1 bytes are themselves, the other 68 are U+0100 onwards in byte order.

@@ -12,7 +12,7 @@ const {
   BufferGeometry, Float32BufferAttribute, ShaderMaterial, RawShaderMaterial, Color, ColorManagement,
   CustomBlending, AddEquation, OneFactor, DstColorFactor, OneMinusSrcAlphaFactor, OneMinusSrcColorFactor,
   // Through the extension's address (Firefox's linter takes a dynamic import only so, or of a literal); served on its own
-  // (scripts/scene-check.mjs, over HTTP) there is no chrome.runtime, and three.js is the file beside it.
+  // (checks/looks/scene-check.mjs, over HTTP) there is no chrome.runtime, and three.js is the file beside it.
 } = await (globalThis.chrome?.runtime?.getURL ? import(chrome.runtime.getURL(`vendor/three.js${new URL(import.meta.url).search}`)) : import('../vendor/three.js'));
 
 // Colors pass through as written, the way CSS mixes them, so a scene matches the gradient under it.

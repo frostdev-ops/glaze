@@ -2638,7 +2638,7 @@ const loadInto = (m, sender, files, reply) => {
 // in and the tab's page, read live, and on an Ultra assignment attempt it may ask for the writer's features only once the
 // tab's own Glaze has said the attempt is an assignment (aiWriter). The connections live in the worker's own store; only
 // Settings' top frame reads and writes them ('glaze:ai-config'; the first screen as its Simple mode, welcomeAi), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
-// worker's importScripts calls name (scripts/package-firefox.sh). A task (ai/tasks/<id>.js) goes in this list too.
+// worker's importScripts calls name (tools/build/package-firefox.sh). A task (ai/tasks/<id>.js) goes in this list too.
 const aiFiles = () => importScripts('../writer/writer-sources.js', '../writer/writer-cite.js', '../ai/schema.js', '../ai/request.js', '../ai/stream.js', '../ai/failure.js', '../ai/endpoint.js', '../ai/text.js', '../ai/visual-cache.js', '../ai/models.js', '../ai/providers.js', '../ai/providers/openai.js', '../ai/providers/device.js', '../ai/providers/apple.js', '../ai/local/store.js', '../ai/local/updates.js', '../ai/local/format.js', '../ai/local/link.js', '../ai/local/ladder.js', '../ai/providers/local.js', '../ai/tools.js', '../ai/loop.js', '../ai/task.js', '../ai/memory.js', '../ai/agent/memory.js', '../ai/recall.js', '../ai/tasks/syllabus-read.js', '../ai/tasks/writer-context.js', '../ai/tasks/writer-complete.js', '../ai/tasks/writer-review.js', '../ai/tasks/writer-image.js', '../ai/tasks/writer-feedback.js', '../ai/tasks/writer-outline.js', '../ai/tasks/writer-requirements.js', '../ai/tasks/writer-cite.js', '../ai/tasks/writer-decide.js', '../ai/tasks/wording.js', '../ai/tasks/study-help.js', '../ai/current.js', '../ai/tasks/agent-tools.js', '../ai/tasks/chat-compact.js', '../ai/agent/js.js', '../ai/agent/places.js', '../ai/agent/wakes.js', '../ai/agent/school.js', '../ai/settings.js', '../ai/broker.js', '../ai/ask.js');
 globalThis.addEventListener?.('install', aiFiles);
 // run_js's engine (ai/agent/js.js), cached here so the worker may import it on its first run; its WebAssembly loads then.
@@ -3143,7 +3143,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // (storage.local mcp, agents/grants.js): nothing of it loads until it is on. While it is on the link loads at worker start,
 // as ensure() must run then (a worker granted nativeMessaging connects once it restarts), and the rest with it; after a
 // switch-on, with the first frame. Glaze or agent access off ends every connection, and with them every ask waiting for
-// one, and the link; the apps and their grants stay. Every file by name in literal importScripts calls (scripts/package-firefox.sh).
+// one, and the link; the apps and their grants stay. Every file by name in literal importScripts calls (tools/build/package-firefox.sh).
 const MCP_BROWSER = SAFARI ? 'safari' : new URL(chrome.runtime.getURL('')).protocol === 'moz-extension:' ? 'firefox' : 'chrome';
 const agentFiles = () => importScripts('../agents/agent-frames.js', '../agents/agent-link.js');
 const grantFiles = () => importScripts('../ai/request.js', '../ai/schema.js', '../ai/tools.js', '../agents/grants.js');

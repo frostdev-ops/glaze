@@ -1,7 +1,7 @@
 // Google Calendar sync (Chrome, and Safari through the Glaze app; W13): a calendar named "Glaze" in the student's
 // Google account, made by Glaze and the only one it touches, kept in step with what Export calendar (.ics) would save
 // (planner/calexport.js, with the same choices). Runs in the background worker (background/background.js 'glaze:gcal'), which gives
-// it Chrome's sign-in, or Safari's handler's; node tests run it against a local mock of the API (scripts/gcal-mock.js).
+// it Chrome's sign-in, or Safari's handler's; node tests run it against a local mock of the API (checks/mocks/gcal-mock.js).
 // Requests go only to www.googleapis.com (the Calendar API), never with cookies, never following a redirect. Disconnect
 // never revokes Google's grant, which Google Drive shares (background/background.js). Classic script; module.exports for node.
 //
