@@ -348,7 +348,11 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (globalTh
     });
     // Read when the step first shows, and Rime's again on each show: a download started earlier may have gone on.
     const load = async () => { await connections(); await Promise.all([ownStatus(), deviceStatus()]); };
-    c.storage.onChanged.addListener((changes, area) => { if (area === 'local' && KEY in changes) { s = S.clean(changes[KEY].newValue); render(); } });
+    c.storage.onChanged.addListener((changes, area) => { if (area === 'local' && KEY in changes) {
+      const next = S.clean(changes[KEY].newValue);
+      if (s.on && !next.on) picked = null;
+      s = next; render();
+    } });
     store.get(KEY).then((r) => { s = S.clean(r?.[KEY]); render(); }, () => {});
 
     // ---- drawing -----------------------------------------------------------------------------------------------------------
