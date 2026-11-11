@@ -782,8 +782,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         const got = await fetchRec(ctx, R, h, owner);
         await stamp();
         if (got.sum === lsum) {
-          // The same value on both sides, changed here later than Drive's: sent again with this device's time (retold below).
-          if (at > got.at && !def.view && !MERGE[cat]) return over({ id: R.id }, at);
+          // A whole-value record changed here later than Drive's is retold with its time. Mergeable records just link it.
+          if (at > got.at && !def.view && !MERGE[cat] && !merges) return over({ id: R.id }, at);
           return put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null, got.value);
         }
         // The replacement file holds the saved agreement, even when this device removed the whole key since it agreed.
