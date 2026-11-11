@@ -1285,10 +1285,17 @@ GZ_UI.load().then((s) => {
   let from = null;
   // The background file the worker kept for a gallery or share offer, pending (looks/media.js) until the offer is used: any other
   // end of the offer, or leaving the editor, lets it go. used: the Look (or a favorite) now names it, so it stays.
-  let offerFile = '', offerGeneration = 0;
+  // While the offer is open its file is touched every ten minutes, so the worker's hour for a pending file starts again.
+  let offerFile = '', offerGeneration = 0, offerBeat = 0;
+  const hold = (h) => {
+    offerFile = h;
+    clearInterval(offerBeat);
+    offerBeat = setInterval(() => chrome.runtime.sendMessage({ type: 'glaze:media', op: 'touch', h }, () => void chrome.runtime.lastError), 10 * 60e3);
+  };
   const letGo = (used = false) => {
     if (offerFile) chrome.runtime.sendMessage({ type: 'glaze:media', op: used ? 'keep' : 'drop', h: offerFile, ...(!used && { pending: true }) }, () => void chrome.runtime.lastError);
     offerFile = '';
+    clearInterval(offerBeat);
   };
   addEventListener('pagehide', () => { offerGeneration++; letGo(); });
   const endOffer = (used = false) => { offerGeneration++; letGo(used === true); offer = null; from = null; $('#share-offer').hidden = true; GZ_UI.paint(s, { page: true }); preview(); drawLooks(); };
@@ -1297,7 +1304,7 @@ GZ_UI.load().then((s) => {
     if (!code) return endOffer();
     const generation = ++offerGeneration;
     if (offerFile && offerFile !== gallery?.media?.h) letGo();
-    if (gallery?.media?.pending) offerFile = gallery.media.h;
+    if (gallery?.media?.pending) hold(gallery.media.h);
     let got;
     try { got = await GZ_SHARE.decode(code); } catch (e) { if (generation !== offerGeneration) return; endOffer(); return hint(t(e.why || e.message, e.vars), true); }
     if (generation !== offerGeneration) return; // Cancel, another code or leaving the editor won while decoding.

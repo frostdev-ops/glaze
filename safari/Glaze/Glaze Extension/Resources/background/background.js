@@ -505,7 +505,8 @@ const BROKER = {
       // Ticked by id (looks/looks.js); a tick from before ids, by its code, is its kept Look's.
       const kept = GZ_CATALOG.keptAll(lookFavorites);
       const list = GZ_LX.rotation(GZ_CATALOG.ids(rotateLooks, lookFavorites), GZ_LOOKS.map((L) => L.name), kept.map((f) => f.id));
-      const r = GZ_LX.turn(rotateState, Date.now(), s.extras, list, m.now === true);
+      // The account's last turn (storage.sync, written with the Look it wore): a turn another device made is this device's own.
+      const r = GZ_LX.turn(rotateState, Date.now(), s.extras, list, m.now === true, (await sync.get(GZ_LX.SHARED))[GZ_LX.SHARED]);
       if (r.wear >= 0) {
         const L = GZ_LOOKS.find((l) => l.name === list[r.wear]);
         const lookX = (await sync.get('lookX')).lookX;
@@ -523,7 +524,7 @@ const BROKER = {
           if (!same(now.extras, s.extras) || !same(st, rotateState) || !same(GZ_HISTORY.theme(now), GZ_HISTORY.theme(s)) || !same((await sync.get('lookX')).lookX, lookX)) return { ok: false, error: 'changed' };
         }
         // The Look's parts go in with it, in the same write: a built-in Look its own, and a code brings its own or none.
-        if (patch && !await GZ_XPARTS.write({ sync, local }, (L ? GZ_LOOK_PARTS(L) : got?.parts) || null, { version: 2, ...patch })) return { ok: false };
+        if (patch && !await GZ_XPARTS.write({ sync, local }, (L ? GZ_LOOK_PARTS(L) : got?.parts) || null, { version: 2, ...patch, ...(r.state.turned && { [GZ_LX.SHARED]: GZ_LX.shared(r.state) }) })) return { ok: false };
         if (!patch) r.state.turned = false;
       }
       return { ok: r.state === rotateState || await local.set({ rotateState: r.state }) };
@@ -844,7 +845,7 @@ BROKER.mods = {
 BROKER_FILES.media = ['../looks/media.js'];
 globalThis.addEventListener?.('install', () => importScripts('../looks/media.js'));
 BROKER.media = {
-  allow: (m, s) => fromEditor(s) && trustedFrame(s, 'settings') && ['put', 'list', 'drop', 'keep', 'reset'].includes(m.op),
+  allow: (m, s) => fromEditor(s) && trustedFrame(s, 'settings') && ['put', 'list', 'drop', 'keep', 'touch', 'reset'].includes(m.op),
   run: async (m, area) => {
     const store = { ...area, files: MEDIA_FILES };
     // Settings can open before the update event finishes, or after a failed migration. Discover legacy files there too.
@@ -1498,18 +1499,20 @@ chrome.storage.onChanged.addListener((changes, area) => {
     mediaHistory.add(left);
     before = null;
     serial(async () => {
-      const was = await left;
-      const [now, { lookHistory }] = await Promise.all([chrome.storage.sync.get(null), chrome.storage.local.get('lookHistory')]);
-      const at = Date.now();
-      // Each theme with the parts it wore (lookX). The theme left, whose parts were in this computer's local storage, can
-      // no longer be told apart from the new ones: it isn't added again, having been recorded when it was worn.
-      const local = brokerArea('local');
-      const [wasParts, nowParts] = await Promise.all([GZ_XPARTS.fromStored(was.lookX, local), GZ_XPARTS.fromStored(now.lookX, local)]);
-      const list = GZ_HISTORY.entries(lookHistory);
-      // An editor checkpoint captured edits made during this burst. Keep it ahead of the older burst origin.
-      const prior = wasParts === undefined || list[0]?.at >= started ? list : GZ_HISTORY.add(list, { ...was, parts: wasParts }, at);
-      await chrome.storage.local.set({ lookHistory: GZ_HISTORY.add(prior, { ...now, parts: nowParts ?? null }, at) });
-      mediaHistory.delete(left);
+      // A recording that fails still lets go of the files it held: one snapshot kept here would stop every later sweep.
+      try {
+        const was = await left;
+        const [now, { lookHistory }] = await Promise.all([chrome.storage.sync.get(null), chrome.storage.local.get('lookHistory')]);
+        const at = Date.now();
+        // Each theme with the parts it wore (lookX). The theme left, whose parts were in this computer's local storage, can
+        // no longer be told apart from the new ones: it isn't added again, having been recorded when it was worn.
+        const local = brokerArea('local');
+        const [wasParts, nowParts] = await Promise.all([GZ_XPARTS.fromStored(was.lookX, local), GZ_XPARTS.fromStored(now.lookX, local)]);
+        const list = GZ_HISTORY.entries(lookHistory);
+        // An editor checkpoint captured edits made during this burst. Keep it ahead of the older burst origin.
+        const prior = wasParts === undefined || list[0]?.at >= started ? list : GZ_HISTORY.add(list, { ...was, parts: wasParts }, at);
+        await chrome.storage.local.set({ lookHistory: GZ_HISTORY.add(prior, { ...now, parts: nowParts ?? null }, at) });
+      } finally { mediaHistory.delete(left); }
       sweepMedia();
     });
   }, 4000);
@@ -2635,7 +2638,7 @@ const loadInto = (m, sender, files, reply) => {
 // in and the tab's page, read live, and on an Ultra assignment attempt it may ask for the writer's features only once the
 // tab's own Glaze has said the attempt is an assignment (aiWriter). The connections live in the worker's own store; only
 // Settings' top frame reads and writes them ('glaze:ai-config'; the first screen as its Simple mode, welcomeAi), and never sees a key it kept. Every file by name, in the one call: Firefox's package loads what the
-// worker's importScripts calls name (scripts/package-firefox.sh). A task (ai/tasks/<id>.js) goes in this list too.
+// worker's importScripts calls name (tools/build/package-firefox.sh). A task (ai/tasks/<id>.js) goes in this list too.
 const aiFiles = () => importScripts('../writer/writer-sources.js', '../writer/writer-cite.js', '../ai/schema.js', '../ai/request.js', '../ai/stream.js', '../ai/failure.js', '../ai/endpoint.js', '../ai/text.js', '../ai/visual-cache.js', '../ai/models.js', '../ai/providers.js', '../ai/providers/openai.js', '../ai/providers/device.js', '../ai/providers/apple.js', '../ai/local/store.js', '../ai/local/updates.js', '../ai/local/format.js', '../ai/local/link.js', '../ai/local/ladder.js', '../ai/providers/local.js', '../ai/tools.js', '../ai/loop.js', '../ai/task.js', '../ai/memory.js', '../ai/agent/memory.js', '../ai/recall.js', '../ai/tasks/syllabus-read.js', '../ai/tasks/writer-context.js', '../ai/tasks/writer-complete.js', '../ai/tasks/writer-review.js', '../ai/tasks/writer-image.js', '../ai/tasks/writer-feedback.js', '../ai/tasks/writer-outline.js', '../ai/tasks/writer-requirements.js', '../ai/tasks/writer-cite.js', '../ai/tasks/writer-decide.js', '../ai/tasks/wording.js', '../ai/tasks/study-help.js', '../ai/current.js', '../ai/tasks/agent-tools.js', '../ai/tasks/chat-compact.js', '../ai/agent/js.js', '../ai/agent/places.js', '../ai/agent/wakes.js', '../ai/agent/school.js', '../ai/settings.js', '../ai/broker.js', '../ai/ask.js');
 globalThis.addEventListener?.('install', aiFiles);
 // run_js's engine (ai/agent/js.js), cached here so the worker may import it on its first run; its WebAssembly loads then.
@@ -3140,7 +3143,7 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
 // (storage.local mcp, agents/grants.js): nothing of it loads until it is on. While it is on the link loads at worker start,
 // as ensure() must run then (a worker granted nativeMessaging connects once it restarts), and the rest with it; after a
 // switch-on, with the first frame. Glaze or agent access off ends every connection, and with them every ask waiting for
-// one, and the link; the apps and their grants stay. Every file by name in literal importScripts calls (scripts/package-firefox.sh).
+// one, and the link; the apps and their grants stay. Every file by name in literal importScripts calls (tools/build/package-firefox.sh).
 const MCP_BROWSER = SAFARI ? 'safari' : new URL(chrome.runtime.getURL('')).protocol === 'moz-extension:' ? 'firefox' : 'chrome';
 const agentFiles = () => importScripts('../agents/agent-frames.js', '../agents/agent-link.js');
 const grantFiles = () => importScripts('../ai/request.js', '../ai/schema.js', '../ai/tools.js', '../agents/grants.js');
