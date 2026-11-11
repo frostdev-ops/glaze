@@ -290,7 +290,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (target) X.need('writer/writer-target.js', () => globalThis.GZ_WRITER_TARGET).then(() => {
       const T = globalThis.GZ_WRITER_TARGET;
       if (!T || boxes.get(ed) !== box || !box.port) return;
-      box.context = { ...box.context, requirements: T.forKind(T.parse(box.context.prompt.text, { lang: X.locale?.() }), target) };
+      // Canvas escaped its extracted text for the AI's rich-text reader; the target parser takes plain text.
+      const prompt = box.context.prompt.text.replace(/&(amp|lt|gt);/g, (_, k) => ({ amp: '&', lt: '<', gt: '>' })[k]);
+      box.context = { ...box.context, requirements: T.forKind(T.parse(prompt, { lang: X.locale?.() }), target) };
       box.port.postMessage({ type: 'context', context: box.context });
     }, () => {});
     if (X.site === 'ultra' && box.kind === 'reply') X.need('writer/page/writer-quote.js', () => globalThis.GZ_WRITER_QUOTE).then(() => globalThis.GZ_WRITER_QUOTE?.arm(box), () => {});

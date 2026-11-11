@@ -69,6 +69,9 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
   // due-date testids. Not seen live, and gating nothing: announcement.reply, and a description's file link (data-api-returntype).
   const LIMIT = { prompt: 20000, post: 4000, name: 120, title: 300 };
   const squash = (s) => String(s ?? '').replace(/[ \t ]+/g, ' ').trim();
+  // The AI context readers accept rich text. Escape the page's already-extracted text once, after bounding it, so
+  // literal tags and entity spellings survive their HTML-to-text pass. Transport size is at most five times LIMIT.
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const BLOCK = new Set('P DIV LI UL OL H1 H2 H3 H4 H5 H6 PRE BLOCKQUOTE TABLE TR'.split(' '));
   const SKIP = new Set('SCRIPT STYLE BUTTON SVG TEMPLATE NOSCRIPT IFRAME OBJECT'.split(' '));
   // An element's text, a line a block, at most n characters → { text, cut }.
@@ -92,7 +95,7 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
   const line = (el, n) => squash(el?.textContent).replace(/\s+/g, ' ').slice(0, n);
   const courseOf = (doc, id) => {
     const a = [...doc.querySelectorAll('#breadcrumbs a')].find((x) => /^\/courses\/(\d+)\/?$/.exec(x.getAttribute('href') || '')?.[1] === id);
-    return { id, name: line(a, LIMIT.name) };
+    return { id, name: esc(line(a, LIMIT.name)) };
   };
   const isoOf = (v) => { const t = new Date(v); return Number.isFinite(t.getTime()) ? t.toISOString() : null; };
   const FILE = 'a[data-api-returntype="File"], a[href*="/files/"]';
@@ -108,7 +111,7 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     const due = classic ? (/^\d{9,11}$/.test(stamp) ? isoOf(Number(stamp) * 1000) : null) : isoOf(show.querySelector('time[data-testid="due-date"]')?.getAttribute('datetime') || '');
     const { text, cut } = textOf(body, LIMIT.prompt);
     const incomplete = cut || !!body?.querySelector(FILE);
-    return { kind: 'assignment', course, assignment: { title, due, instructions: text, description: '', rubric: null, files: [], ...(incomplete && { incomplete: true }) } };
+    return { kind: 'assignment', course, assignment: { title: esc(title), due, instructions: esc(text), description: '', rubric: null, files: [], ...(incomplete && { incomplete: true }) } };
   };
   const replyOf = (doc, ed, course, topic) => {
     const body = pageElement(doc, `[data-resource-type="discussion_topic.body"][data-resource-id="${topic}"], [data-resource-type="announcement.body"][data-resource-id="${topic}"]`);
@@ -116,9 +119,9 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     const prompt = [title, textOf(body, LIMIT.prompt).text].filter(Boolean).join('\n').slice(0, LIMIT.prompt);
     const entry = /^message-body-(\d+)$/.exec(ed.id)?.[1];
     const said = entry ? textOf(pageElement(doc, `[data-resource-type="discussion_topic.reply"][data-resource-id="${entry}"], [data-resource-type="announcement.reply"][data-resource-id="${entry}"]`), LIMIT.post).text : '';
-    const replyTo = said ? { id: entry, author: line(pageElement(doc, `[data-entry-id="${entry}"] [data-testid="author_name"]`), LIMIT.name), text: said } : null;
+    const replyTo = said ? { id: entry, author: esc(line(pageElement(doc, `[data-entry-id="${entry}"] [data-testid="author_name"]`), LIMIT.name)), text: esc(said) } : null;
     const announcement = [...doc.querySelectorAll('#breadcrumbs a')].some((a) => /^\/(?:courses|groups)\/\d+\/announcements\/?$/.test(a.getAttribute('href') || ''));
-    return { kind: 'reply', course, prompt: prompt ? { text: prompt } : null, requirements: null, thread: [], replyTo, ...(announcement && { announcement: true }) };
+    return { kind: 'reply', course, prompt: prompt ? { text: esc(prompt) } : null, requirements: null, thread: [], replyTo, ...(announcement && { announcement: true }) };
   };
   const contextOf = (ed, kind, { path = '' } = {}) => {
     if (QUIZ.test(path) || kind === 'test' || !ed) return {};
@@ -177,7 +180,6 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     : !!bodyOf(ed) && bodyOf(ed).getAttribute('contenteditable') !== 'false' && editable(read(ed).html);
 
   // The Inbox's text as Writer's plain document holds it: a paragraph a line. Its text is what that HTML reads as.
-  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const paragraphs = (value) => String(value ?? '').replace(/\r\n?/g, '\n').split('\n').map((l) => (l ? `<p>${esc(l)}</p>` : '<p><br></p>')).join('');
   const ENTITY = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
   const linesOf = (html) => String(html ?? '').split(/<\/p>/i).filter((p, i, all) => i < all.length - 1 || p.trim())
