@@ -406,6 +406,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     const W = typeof GZ_WRITER_SCHEMA !== 'undefined' ? GZ_WRITER_SCHEMA : require('./writer-schema.js');
     const t = W.text(doc), notes = [];
     doc.descendants((n, pos) => { if (n.type.name === 'footnote_ref') notes.push({ pos, text: plain(String(n.attrs.content || '').replace(/<[^>]*>/g, '')).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ') }); return true; });
+    // posAt(end, -1) for a range's end: it stops before a footnote mark or picture that follows (writer-schema.js text).
     return { text: t.text, posAt: t.posAt, notes, end: doc.content.size };
   };
   // A footnote's first name: "Zadie Smith, Swing Time …" → Smith; "Smith, Swing Time, 320." → Smith; "“Yale Facts.”" → title;
@@ -436,7 +437,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
 
   const cites = (doc, sources, st) => {
     const k = style(st), all = S().dedupe(sources), T = textOf(doc);
-    const found = findIn(T.text, all, k).map((c) => ({ ...c, at: [T.posAt(c.from), T.posAt(c.to)] }));
+    const found = findIn(T.text, all, k).map((c) => ({ ...c, at: [T.posAt(c.from), T.posAt(c.to, -1)] }));
     // Ibid. is the source of the note before it, when that one named a saved source.
     let prev = null;
     for (const n of T.notes) {
@@ -452,7 +453,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
       // The same citation as a year found in parentheses, whose start already moved back to the name.
       const c = found.find((x) => (x.from === at || x.from === m.index) && x.kind === 'narrative');
       const entry = { from: m.index, to: m.index + m[0].length, text: m[0], name: bare(m[1]), year: m[2], page: m[3] || '', kind: 'narrative', ids: matchIds(m[1], all) };
-      entry.at = [T.posAt(entry.from), T.posAt(entry.to)];
+      entry.at = [T.posAt(entry.from), T.posAt(entry.to, -1)];
       if (c) Object.assign(c, entry); else found.push(entry);
     }
     const typed = typedList(T), start = typed ? T.posAt(typed.entries[0]?.from ?? T.text.length) : Infinity;
@@ -520,7 +521,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     // Typed entries that no citation names, and the typed list's order.
     if (typed?.entries.length) {
       const i = S().disorder(typed.entries.map((e) => e.text));
-      if (i > 0) issues.push(ISSUE(T.posAt(typed.entries[i].from), T.posAt(typed.entries[i].to), t('{list} is out of order', { list: typed.title }), { title: typed.title }));
+      if (i > 0) issues.push(ISSUE(T.posAt(typed.entries[i].from), T.posAt(typed.entries[i].to, -1), t('{list} is out of order', { list: typed.title }), { title: typed.title }));
     }
     for (const s of all) {
       if (used.has(s.id)) continue;
@@ -530,7 +531,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
       const k2 = keysOf(s)[0];
       const line = typed?.entries.find((e) => k2 && S().fold(e.text).startsWith(k2));
       const label = who(s) ? N.cite(who(s).names) : plain(shortTitle(s));
-      const at = line ? [T.posAt(line.from), T.posAt(line.to)] : [end, end];
+      const at = line ? [T.posAt(line.from), T.posAt(line.to, -1)] : [end, end];
       issues.push(ISSUE(at[0], at[1], t('{name} is never cited', { name: label }), { title: listName, sourceId: s.id, action: 'cite' }));
     }
     return issues;

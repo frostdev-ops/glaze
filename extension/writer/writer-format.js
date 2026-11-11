@@ -6,6 +6,7 @@
 // Classic script; module.exports for node.
 var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
   const ST = () => (typeof GZ_WRITER_STYLES !== 'undefined' ? GZ_WRITER_STYLES : require('./writer-styles.js'));
+  const SCHEMA = () => (typeof GZ_WRITER_SCHEMA !== 'undefined' ? GZ_WRITER_SCHEMA : require('./writer-schema.js'));
   const SRC = () => (typeof GZ_WRITER_SOURCES !== 'undefined' ? GZ_WRITER_SOURCES : require('./writer-sources.js'));
 
   // ---- making a paper
@@ -392,11 +393,18 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
     const fixed = outline(doc, f, { paragraphs: true }).filter((x) => x.kind === 'title' || x.kind === 'list');
     const title = fixed.find((x) => x.kind === 'title'), list = fixed.find((x) => x.kind === 'list');
     const start = opening ? (top[opening.end]?.pos ?? doc.content.size) : title ? title.pos + doc.nodeAt(title.pos).nodeSize : 0;
+    let carried = [];
     const blocks = top.filter(({ n, pos }) => pos >= start && pos < (list?.pos ?? doc.content.size) && /[\p{L}\p{N}]/u.test(n.textContent))
       .map(({ n, pos }, i) => {
         let anchor = pos;
         if (!n.isTextblock) { let found = false; n.descendants((child, off) => { if (found) return false; if (child.isTextblock) { anchor = pos + 1 + off; found = true; return false; } return true; }); }
-        return { id: `b${i}`, kind: n.type.name, level: n.type.name === 'heading' ? n.attrs.level : 0, text: n.isTextblock ? n.textContent : n.textBetween(0, n.content.size, '\n', ' '), pos: anchor };
+        // A block's footnotes follow its text, so the outline reads a notes paper's citations too; a heading's text is its
+        // label, so its notes go with the next block.
+        const own = n.isTextblock ? n.textContent : n.textBetween(0, n.content.size, '\n', ' ');
+        let notes = [...carried, ...SCHEMA().notes(n).filter(Boolean)];
+        carried = [];
+        if (n.type.name === 'heading') { carried = notes; notes = []; }
+        return { id: `b${i}`, kind: n.type.name, level: n.type.name === 'heading' ? n.attrs.level : 0, text: notes.length ? `${own}\n\nFootnotes:\n${notes.map((x) => `- ${x}`).join('\n')}` : own, pos: anchor };
       });
     return { blocks, fixed };
   };
