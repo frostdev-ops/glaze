@@ -983,23 +983,13 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
   };
 
   // ── Writing ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-  // Recalculates, so every formula's cached value is current. A formula with a function Glaze lacks gives #NAME? here;
-  // the file keeps the value it came with instead. → Map cell → the { t, v } to write.
+  // Recalculates, so every formula's cached value is current. A formula calling a function Glaze lacks keeps the value it
+  // holds (the file's, sheet-calc.js keep) until an edit changes one of its inputs.
   const refresh = (wb, opts) => {
     const C = calc();
-    const before = new Map();
-    for (const sh of wb.sheets) for (const row of sh.rows.values()) for (const x of row.values()) if (x.f !== undefined && x.t !== 'z') before.set(x, { t: x.t, v: x.v });
     let eng = opts.engine ?? null;
-    if (!eng && opts.recalc !== false && C && C.fn('SUM')) { try { eng = C.engine(wb); } catch { eng = null; } }
+    if (!eng && opts.recalc !== false && C && C.fn('SUM')) { try { eng = C.engine(wb, { keep: true }); } catch { eng = null; } }
     try { eng?.recalc(); } catch { /* the cached values stay */ }
-    const keepOld = new Map();
-    for (const [x, old] of before) {
-      if (x.t !== 'e' || x.v !== '#NAME?') continue;
-      let toks;
-      try { toks = F.tokenize(x.f); } catch { continue; }
-      if (toks.some((t) => t.k === 'fn' && C && !C.fn(t.name))) keepOld.set(x, old);
-    }
-    return keepOld;
   };
 
   const ERR_OK = new Set(['#NULL!', '#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#NUM!', '#N/A', '#GETTING_DATA']);
@@ -1109,7 +1099,7 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
   };
 
   const sortedKeys = (map) => [...map.keys()].sort((a, b) => a - b);
-  // One model sheet → worksheet XML. w: { sst, keepOld, active, log, entries, rels kept, metadata (vm allowed), dynamic
+  // One model sheet → worksheet XML. w: { sst, active, log, entries, rels kept, metadata (vm allowed), dynamic
   // (cm allowed), colors }.
   const writeSheet = (sh, w) => {
     const keep = sh.keep ?? {};
@@ -1190,19 +1180,18 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     const ref = M.cellName(r, c);
     const s = x.s ? ` s="${x.s}"` : '';
     if (x.f !== undefined) {
-      const val = w.keepOld.get(x) ?? x;
       // An array formula over one cell is its own cell's, even copied by a fill or paste that kept the original's range.
       const g = x.a !== undefined ? M.rangePosition(x.a) : null;
       const own = g && g.r0 === g.r1 && g.c0 === g.c1;
       const array = g && (own || (g.r0 === r && g.c0 === c));
       const f = escBody(toFile(x.f));
       const ft = array ? `<f t="array" ref="${own ? ref : M.rangeName(g.r0, g.c0, g.r1, g.c1)}">${f}</f>` : `<f>${f}</f>`;
-      const meta = (array && x.cm !== undefined && w.dynamic ? ` cm="${esc(w.dynamic.valid.has(String(x.cm)) ? x.cm : w.dynamic.index)}"` : '') + (x.vm !== undefined && w.metadata && val.t === 'e' && errText(val.v) === '#VALUE!' ? ` vm="${esc(x.vm)}"` : '');
-      switch (val.t) {
-        case 's': return `<c r="${ref}"${s} t="str"${meta}>${ft}<v>${escText(val.v ?? '')}</v></c>`;
-        case 'b': return `<c r="${ref}"${s} t="b"${meta}>${ft}<v>${val.v ? 1 : 0}</v></c>`;
-        case 'e': return `<c r="${ref}"${s} t="e"${meta}>${ft}<v>${errText(val.v)}</v></c>`;
-        case 'n': return `<c r="${ref}"${s}${meta}>${ft}<v>${num(val.v)}</v></c>`;
+      const meta = (array && x.cm !== undefined && w.dynamic ? ` cm="${esc(w.dynamic.valid.has(String(x.cm)) ? x.cm : w.dynamic.index)}"` : '') + (x.vm !== undefined && w.metadata && x.t === 'e' && errText(x.v) === '#VALUE!' ? ` vm="${esc(x.vm)}"` : '');
+      switch (x.t) {
+        case 's': return `<c r="${ref}"${s} t="str"${meta}>${ft}<v>${escText(x.v ?? '')}</v></c>`;
+        case 'b': return `<c r="${ref}"${s} t="b"${meta}>${ft}<v>${x.v ? 1 : 0}</v></c>`;
+        case 'e': return `<c r="${ref}"${s} t="e"${meta}>${ft}<v>${errText(x.v)}</v></c>`;
+        case 'n': return `<c r="${ref}"${s}${meta}>${ft}<v>${num(x.v)}</v></c>`;
         default: return `<c r="${ref}"${s}${meta}>${ft}</c>`;
       }
     }
@@ -1259,7 +1248,7 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
   // The workbook model → .xlsx bytes (a Uint8Array). opts: { engine (the grid's, recalculated here instead of a new one),
   // recalc: false (write the values as they are), macros: false (leave a macro project out), date (the parts' time) }.
   const write = async (wb, opts = {}) => {
-    const keepOld = refresh(wb, opts);
+    refresh(wb, opts);
     const keep = wb.keep ?? {};
     const kept = { ...(keep.parts ?? {}) };
     const keptPaths = new Map(Object.keys(kept).map((p) => [p.toLowerCase(), p]));
@@ -1313,7 +1302,7 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     const active = Math.min(Math.max(0, wb.active | 0), wb.sheets.length - 1);
     for (const [i, f] of sheetFiles.entries()) {
       const entries = own(log, f.sh.id);
-      put(f.path, writeSheet(f.sh, { sst, keepOld, active: i === active, log, entries, metadata, dynamic, colors, dropped: f.dropped, copy: f.copy }));
+      put(f.path, writeSheet(f.sh, { sst, active: i === active, log, entries, metadata, dynamic, colors, dropped: f.dropped, copy: f.copy }));
       if (f.rels.length) put(relsPath(f.path), relsXml(f.rels));
     }
     // Workbook relationships: the kept ones keep their ids.
@@ -1530,7 +1519,7 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
   // a field quoted when it holds the delimiter, a quote or a line break, CRLF after every row, a byte-order mark
   // (opts.bom: false leaves it out). opts.delimiter: '\t' for TSV. → text.
   const writeDelimited = (wb, opts = {}) => {
-    const keepOld = refresh(wb, opts);
+    refresh(wb, opts);
     const sh = opts.sheet === undefined ? wb.sheets[wb.active] ?? wb.sheets[0] : M.getSheet(wb, opts.sheet);
     if (!sh) fail('sheet', `no sheet ${opts.sheet}`);
     const d = opts.delimiter ?? ',';
@@ -1540,7 +1529,6 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     const shown = (x) => {
       if (!x || x.t === 'z') return '';
       const style = wb.styles[x.s ?? 0];
-      x = keepOld.get(x) ?? x;
       if (x.t === 'b') return x.v ? 'TRUE' : 'FALSE';
       if (x.t === 'e') return String(x.v);
       const fmt = style?.fmt ?? 0;

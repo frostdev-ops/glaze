@@ -284,7 +284,7 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const { key, t, papers } = o;
     const NF = GZ_SHEET_NUMFMT, CALC = GZ_SHEET_CALC, SD = GZ_SHEET_DATA, F = FX();
     let wb = o.wb, eng = null, sigs = o.sigs || new Map(), rec = o.rec, fresh = !!o.fresh;
-    const begin = () => { eng = CALC.engine(wb); eng.recalc(); };
+    const begin = () => { eng = CALC.engine(wb, { keep: true }); eng.recalc(); };
     begin();
     // A workbook kept with a hidden sheet active (a file's) opens on the first one shown.
     if (wb.sheets[wb.active]?.keep?.hidden) wb.active = Math.max(0, wb.sheets.findIndex((x) => !x.keep?.hidden));
@@ -342,8 +342,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
     const live = h('p', { id: 'gx-live', class: 'gx-sr', 'aria-live': 'polite' });
     const tabs = h('div', { id: 'gx-tabs', class: 'gx-tabs', role: 'tablist', 'aria-label': t('Sheets') });
     const addB = btn({ id: 'gx-add', class: 'gp-tbtn gx-tb', 'aria-label': t('Add sheet'), title: t('Add sheet') }, icon('plus'));
-    const circ = h('span', { id: 'gx-circ', class: 'gx-circ' }), said = h('span', { class: 'gx-said', role: 'status' }), stats = h('span', { id: 'gx-sum', class: 'gx-sum' });
-    const status = h('div', { id: 'gx-status', class: 'gp-status gx-status' }, circ, said, h('span', { class: 'grow' }), stats);
+    const circ = h('span', { id: 'gx-circ', class: 'gx-circ' }), lacks = h('span', { id: 'gx-calc', class: 'gx-calc' }), said = h('span', { class: 'gx-said', role: 'status' }), stats = h('span', { id: 'gx-sum', class: 'gx-sum' });
+    const status = h('div', { id: 'gx-status', class: 'gp-status gx-status' }, circ, lacks, said, h('span', { class: 'grow' }), stats);
     const view = h('div', { class: 'gp gp-standalone gx' }, top, tool, fbar, findBar, h('div', { class: 'gx-wrap' }, gridEl, live), h('div', { class: 'gx-tabbar' }, o.memory ? null : addB, tabs), status);
     (host?.mount || document.body).append(view);
     // The one style read: the grid's font, for measuring text to fit a column.
@@ -604,6 +604,9 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       const fm = FORMATS.find(([, code]) => code === NF.code(fmtOf(cellAt(r, c))));
       fmtB.querySelector('.gx-lbl').textContent = t(fm ? fm[0] : 'Custom');
       undoB.disabled = !undos.length; redoB.disabled = !redos.length;
+      // A formula calling a function Glaze lacks: the file's value until an input changes (sheet-calc.js keep), then #NAME?.
+      const x = eng.missing(S().id, r, c);
+      lacks.textContent = x ? t(x.kept ? 'From the file: Glaze can’t calculate {name}' : 'Glaze can’t calculate {name}', { name: x.names.join(', ') }) : '';
       clearTimeout(liveTimer);
       liveTimer = setTimeout(() => { live.textContent = [M.cellName(r, c), shownAt(r, c)].filter(Boolean).join(' '); }, 250);
     };

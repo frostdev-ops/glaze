@@ -107,7 +107,7 @@
 .gx-tab:focus-visible, .gx-add:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
 .gx-tab-in { width: 120px; height: 26px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--gz-accent); background: var(--gz-surface-2); color: var(--gz-ink); font: inherit; font-size: 13px; }
 .gx-status { overflow: hidden; gap: 14px; }
-.gx-said:empty, .gx-circ:empty { display: none; }
+.gx-said:empty, .gx-circ:empty, .gx-calc:empty { display: none; }
 .gx-circ { color: var(--gz-err, #dc2626); }
 .gx-sum { white-space: pre; font-variant-numeric: tabular-nums; }
 
