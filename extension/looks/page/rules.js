@@ -138,7 +138,7 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
         const drop = paints && unreadable(el, w.vars) ? ['o', 'fg', 'bg'] : ['o'];
         for (const k of drop) delete w.vars[`--gz-r-${k}`];
         w.st = w.st.filter((k) => !drop.includes(k));
-      } else if (paints && !w.part.hide && w.vars['--gz-r-fg'] && w.vars['--gz-r-bg'] && unreadable(el, w.vars)) {
+      } else if (paints && !w.part.hide && unreadable(el, w.vars)) {
         // A main navigation holds the school's own links: text and background that read as one colour give way, as for Glaze's.
         for (const k of ['fg', 'bg']) delete w.vars[`--gz-r-${k}`];
         w.st = w.st.filter((k) => k !== 'fg' && k !== 'bg');
