@@ -80,6 +80,25 @@ test('a browser that cannot adopt a sheet gets a <style> element', async () => {
   assert.equal(x.styles[0].isConnected, false);
 });
 
+// Audit 2026-11-11 A2: content.js's pass calls route() where the browser has no Navigation API to say a quiz came or went.
+test('route() takes the animations off a quiz entered in place and puts them back when it is left', async () => {
+  const x = feature({ parts: { anim: { 'card.enter': ENTER } } });
+  await x.api.sync();
+  await settle();
+  assert.equal(x.adopted().length, 1);
+  x.api.route();
+  await settle();
+  assert.equal(x.adopted().length, 1, 'the same kind of page: nothing changes');
+  x.setQuiet(true);
+  x.api.route();
+  await settle();
+  assert.equal(x.adopted().length, 0, 'a quiz: the animations are off');
+  x.setQuiet(false);
+  x.api.route();
+  await settle();
+  assert.equal(x.adopted().length, 1, 'and back on when it is left');
+});
+
 test('a Look without animations leaves the page as it was; a quiz page gets nothing', async () => {
   for (const parts of [null, {}, { bg: {} }, { fx: { complete: {} } }]) {
     const x = feature({ parts });
