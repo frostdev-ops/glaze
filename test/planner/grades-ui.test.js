@@ -1120,6 +1120,20 @@ test('Ultra what-if: a course with no overall grade is an estimate from the shar
   assert.doesNotMatch(text, /Blackboard now/, "no figure of Blackboard's to show");
 });
 
+test("Ultra what-if: an overall grade written only as a letter can't check the recipe, so the figures are an estimate and say why", async () => {
+  const letter = ufix('grades').results.map((r) => (r.column.externalGrade ? { ...r, displayGrade: { isOverride: false, requiresSchemaKnowledgeToDisplay: true, text: 'B+' } } : r));
+  const p = ultraPage({ books: { _101_1: letter } });
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  await settle(10);
+  const text = p.box().textContent;
+  assert.match(text, /Glaze can't work out this course's overall grade: Blackboard shows no overall number to check it against\./);
+  assert.doesNotMatch(text, /Blackboard now/, 'the recipe\'s figure is not shown as Blackboard\'s');
+  assert.match(text, /These figures are an estimate/);
+  assert.ok(find(p.box(), (e) => e.className === 'gz-calc-tag' && e.textContent === 'Estimate'), 'marked in its heading');
+});
+
 test("Ultra GPA: on Grades, above the terms, this term's courses with Blackboard's grade or an estimate, schemas asked once", async () => {
   // Each course's gradebook through courses/ultra.js's reader (not the page's own requests); the page's own answers aren't used.
   const p = ultraPage({ path: '/ultra/grades', enhance: { gpa: true }, books: {}, answers: { '/gradebook/schemas': { results: [] }, '/courses/_101_1/gradebook/grades?': { results: ufix('grades').results }, '/courses/_102_1/gradebook/grades?': { results: ufix('grades-status').results }, '/gradebook/grades?': { results: [] } } });

@@ -75,6 +75,20 @@ test("what Glaze can't read, it says so instead of guessing", () => {
   assert.equal(C.model([g('_1_1', 10, 5), overall(weights([['c_1', 100]]), 70)]).kind, 'unsupported');
 });
 
+test("an overall grade that is not a number has nothing to check the recipe against: unsupported, not trusted as weighted", () => {
+  const rows = (shown) => { const o = overall(weights([['c_1', 100]]), 80); o.displayGrade = shown; return [g('_1_1', 10, 8), o]; };
+  // Not graded yet, hidden, a letter or other text, a figure that isn't one.
+  for (const shown of [null, {}, { text: 'B+' }, { score: null, text: 'Pass' }, { score: 'B+' }, { score: '' }, { score: NaN }]) {
+    const m = C.model(rows(shown));
+    assert.deepEqual([m.kind, m.overall], ['unsupported', null], JSON.stringify(shown));
+    assert.equal(m.why, 'Blackboard shows no overall number to check it against', JSON.stringify(shown));
+  }
+  // A number, even as text, is still the check: this recipe makes 80%.
+  assert.equal(C.model(rows({ score: 80 })).kind, 'weighted');
+  assert.equal(C.model(rows({ score: '80' })).kind, 'weighted');
+  assert.equal(C.model(rows({ score: 70 })).kind, 'unsupported', 'and a wrong one still fails');
+});
+
 test('no overall grade in Blackboard: a plain share of points, said to be just that', () => {
   const m = C.model([g('_1_1', 10, 8), g('_2_1', 30, 15), g('_2_1', 60, null)]);
   assert.equal(m.kind, 'points');
