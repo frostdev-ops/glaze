@@ -108,6 +108,8 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
   .seg label:has(input:checked) { forced-color-adjust: none; background: Highlight; color: HighlightText; }
   .swatch { forced-color-adjust: none; border-color: CanvasText; }
   .swatch[aria-pressed="true"], .look[aria-pressed="true"] { outline: 3px solid Highlight; outline-offset: 2px; }
+  button.swatch:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+  input[type="checkbox"]:not(.switch > input):focus-visible, .switch input:focus-visible + span, .seg label:has(input:focus-visible) { outline-color: Highlight; }
 }
 
 /* Touch screens (Safari on iPhone and iPad): fingertip-sized controls, text fields iOS won't zoom into
