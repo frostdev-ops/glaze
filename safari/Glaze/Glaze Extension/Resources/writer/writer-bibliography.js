@@ -39,7 +39,9 @@ var GZ_WRITER_BIBLIOGRAPHY = globalThis.GZ_WRITER_BIBLIOGRAPHY || (() => {
         // citation's continuation; unknown entries remain verbatim and independently reviewable.
         if (out.length && (/^[“"]/.test(entry) && authorOnly(out.at(-1)) || !starts(entry) && (wrapped || /^(?:https?:|www\.|doi\s*:|doi\.org\/|vol\.?\s|no\.?\s|pp?\.?\s|\d+\s*\()/i.test(entry)))) out[out.length - 1] += ' ' + entry;
         else out.push(entry);
-        wrapped = starts(entry) && !/\b(?:1[5-9]\d{2}|20\d{2})\b/.test(entry.replace(/^.+?\(\d{4}[^)]*\)\.?\s*/, '')) && !address(entry);
+        // An entry with no year past APA's author-date ("Lee, A. (2018). …") may go on in the next paragraph; Chicago's
+        // "(2018): 1–9." is the entry's own year.
+        wrapped = starts(entry) && !/\b(?:1[5-9]\d{2}|20\d{2})\b/.test(entry.replace(/^.+?\(\d{4}[^)]*\)\.\s*/, '')) && !address(entry);
       }
     }
     return [...new Set(out.map(trim).filter(Boolean))].slice(0, LIMIT.entries).map((text) => ({ id: `s-bib-${hash(text)}`, text: text.slice(0, LIMIT.entry) }));

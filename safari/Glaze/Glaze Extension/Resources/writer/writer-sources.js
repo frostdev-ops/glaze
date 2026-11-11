@@ -37,29 +37,47 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
     if (typeof n === 'string') return parseName(n);
     if (!isObj(n)) return null;
     const literal = clean(n.literal || n.name, 200);
-    const family = clean(n.family, 120), given = clean(n.given, 120);
-    if (family) return given ? { family, given } : { family };
+    const family = clean(n.family, 120), given = clean(n.given, 120), suffix = clean(n.suffix, 20);
+    if (family) return { family, ...(given && { given }), ...(suffix && SUFFIX.test(suffix) && { suffix }) };
     return literal ? { literal } : given ? { family: given } : null;
   };
-  // What a student types: "Morrison, Toni", "Toni Morrison", "World Health Organization", "Beyoncé".
+  // A generational suffix: Jr., Sr., II, III, IV.
+  const SUFFIX = /^(?:jr|sr|ii|iii|iv)\.?$/i;
+  // Initials: "W.", "J.K.", or two or three capitals ("JK", "JRR"), unless the word is a well-known group's acronym.
+  const ACRONYM = /^(?:UN|EU|UK|US|USA|IBM|BBC|CNN|NBC|CBS|ABC|NPR|PBS|HBO|NHS|WHO|CDC|FDA|NIH|NSF|NOAA|MIT|AP|AFP|IMF|ILO|IEA|ACM|APA|MLA|AMA|AAP|ACS|RAND|NYU|UCL|LSE)$/;
+  const initial = (w) => /^(?:\p{Lu}\.)+$/u.test(w) || (/^\p{Lu}{2,3}$/u.test(w) && !ACRONYM.test(w));
+  const person = (family, given, suffix) => ({ family, ...(given && { given }), ...(suffix && { suffix }) });
+  // What a student types: "Morrison, Toni", "Toni Morrison", "World Health Organization", "Beyoncé", "Martin Luther King
+  // Jr.", "King, Martin Luther, Jr.", "JK Rowling", "W. E. B. Du Bois".
   const parseName = (s) => {
     const v = clean(s, 200);
     if (!v) return null;
     if (v.includes(',')) {
-      const [family, ...rest] = v.split(',');
-      const given = clean(rest.join(','));
-      return family.trim() ? (given ? { family: family.trim(), given } : { family: family.trim() }) : null;
+      const parts = v.split(',').map((x) => x.trim());
+      // "Martin Luther King, Jr.": natural order with its suffix after a comma.
+      if (parts.length === 2 && SUFFIX.test(parts[1]) && parts[0].includes(' ')) { const n = parseName(parts[0]); return n?.family ? { ...n, suffix: parts[1] } : n; }
+      let suffix = parts.length > 2 && SUFFIX.test(parts.at(-1)) ? parts.pop() : '';
+      let family = parts[0];
+      const fw = family.split(' ');
+      // "King Jr., Martin Luther"
+      if (!suffix && fw.length > 1 && SUFFIX.test(fw.at(-1))) { suffix = fw.pop(); family = fw.join(' '); }
+      return family ? person(family, clean(parts.slice(1).join(', ')), suffix) : null;
     }
-    const words = v.split(' ');
+    let words = v.split(' '), suffix = '';
+    if (words.length > 2 && SUFFIX.test(words.at(-1))) { suffix = words.at(-1); words = words.slice(0, -1); }
     if (words.length === 1) return { family: v };
-    if (group(v) || words.length > 4) return { literal: v };
+    // Leading initials count as one given name, so "W. E. B. Du Bois" is a person and "JK" no group's acronym.
+    let k = 0;
+    while (k < words.length - 1 && initial(words[k])) k++;
+    const rest = words.slice(k).join(' ');
+    if (!suffix && (group(k ? rest : v) || words.length - Math.max(0, k - 1) > 4)) return { literal: v };
     // Particles stay with the family name: "Ludwig van Beethoven", "Rodrigo de la Fuente".
     let i = words.length - 1;
-    while (i > 1 && /^(van|von|der|den|de|del|della|di|da|du|la|le|ter|ten|bin|ibn|al|el)$/i.test(words[i - 1])) i--;
-    return { family: words.slice(i).join(' '), given: words.slice(0, i).join(' ') };
+    while (i > Math.max(1, k) && /^(van|von|der|den|de|del|della|di|da|du|la|le|ter|ten|bin|ibn|al|el)$/i.test(words[i - 1])) i--;
+    return person(words.slice(i).join(' '), words.slice(0, i).join(' '), suffix);
   };
   const names = (list) => (Array.isArray(list) ? list : typeof list === 'string' ? list.split(/\n|;/) : []).map(name).filter(Boolean).slice(0, MAX.names);
-  const showName = (n) => (n.literal ? n.literal : n.given ? `${n.family}, ${n.given}` : n.family);
+  const showName = (n) => (n.literal ? n.literal : `${[n.family, n.given, n.suffix].filter(Boolean).join(', ')}`);
 
   // ---- dates --------------------------------------------------------------------------------------------------------
   const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
@@ -142,19 +160,24 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
     if (i) s.ISBN = i;
     if (u) s.URL = u;
     if (s.page) s.page = s.page.replace(/\s*[-–—]+\s*/g, '–');
-    if (s.edition) s.edition = s.edition.replace(/\s*(?:st|nd|rd|th)?\.?\s*(?:ed(?:ition)?\.?)?$/i, '') || s.edition;
+    // "2nd ed.", "4th edition" → the number; an edition in words ("Second edition", "Revised") stays as typed.
+    if (s.edition) s.edition = s.edition.replace(/^(\d+)\s*(?:st|nd|rd|th)?\.?(?:\s*(?:ed\.?|edition))?$/i, '$1');
     return s.title || s.author || s.editor ? s : null;
   };
 
-  // The same work twice: one DOI, ISBN or address, or one title, first name and year.
-  const fold = (v) => String(v || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/<\/?i>/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  // The same work twice: one DOI, ISBN or address, or one title, first name and year (and book, and address, when both say).
+  // Letters NFKD leaves whole file as their base letters (Æ as ae, Ø as o, Ł as l).
+  const LETTERS = { æ: 'ae', ø: 'o', ł: 'l', đ: 'd', ð: 'd', þ: 'th', œ: 'oe', ß: 'ss', ı: 'i', ħ: 'h', ŧ: 't' };
+  const fold = (v) => String(v || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[æøłđðþœßıħŧ]/g, (c) => LETTERS[c]).replace(/<\/?i>/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   const where = (u) => { try { const x = new URL(u); return `${x.hostname.replace(/^www\./, '')}${x.pathname.replace(/\/+$/, '')}${x.search}`; } catch { return ''; } };
   const lead = (s) => { const n = (s.author || s.editor || [])[0]; return fold(n ? n.family || n.literal : ''); };
   const year = (s) => s.issued?.['date-parts']?.[0]?.[0] || '';
   const same = (a, b) => {
     if (a.DOI && b.DOI) return a.DOI.toLowerCase() === b.DOI.toLowerCase();
     if (a.ISBN && b.ISBN) return a.ISBN === b.ISBN;
-    if (a.URL && b.URL && where(a.URL) === where(b.URL)) return true;
+    // Two addresses, or two books holding a chapter, that differ are two works ("Introduction" in two books).
+    if (a.URL && b.URL) { if (where(a.URL) === where(b.URL)) return true; if (!a.unparsed && !b.unparsed) return false; }
+    if (a['container-title'] && b['container-title'] && fold(a['container-title']) !== fold(b['container-title'])) return false;
     if (a.unparsed || b.unparsed) return !!a.original && !!b.original && fold(a.original) === fold(b.original);
     return !!a.title && fold(a.title) === fold(b.title) && lead(a) === lead(b) && year(a) === year(b);
   };
@@ -170,6 +193,30 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
   const replace = (list, raw) => { const s = normalize(raw); return s ? list.map((x) => (x.id === s.id ? s : x)) : list; };
   const remove = (list, id) => list.filter((x) => x.id !== id);
   const dedupe = (list) => (Array.isArray(list) ? list : []).reduce((acc, s) => add(acc, s).sources, []);
+
+  // Parentheses that point inside a text or give a date, not a source: "(Figure 2)", "(Act 3)", "(May 1945)". One list: the
+  // citation check (writer-cite.js, which writer-compose.js's count reads it from) and the format checks use it.
+  const INSIDE = /^(?:fig(?:ure)?s?|tables?|chapters?|ch|parts?|pages?|weeks?|sections?|appendix|appendices|steps?|units?|modules?|questions?|exhibits?|lessons?|days?|vol(?:ume)?s?|acts?|scenes?|lines?|notes?|book|verse|slides?|problems?|exercises?|items?|level|grade|room|period|session|episode|season|january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec|spring|summer|autumn|fall|winter)\.?$/i;
+
+  // ---- a reference list's order ------------------------------------------------------------------------------------
+  // APA 7 9.44–9.48, MLA 9 5.124–5.126, CMOS 17 14.66 and 16.58: letter by letter by an entry's first element (the
+  // surname, a group's name, a title without A, An or The), so nothing precedes something (Brown before Browning). Only
+  // that element is compared: what orders one author's works differs by style, so it is never flagged.
+  const head = (text) => fold(String(text || '').replace(/^[^\p{L}\p{N}]+/u, '').replace(/^(?:a|an|the)\s+/i, '').split(',')[0]).replace(/\s+/g, '');
+  // "———." and "---." stand for the entry before's author.
+  const repeated = (text) => /^\s*[-—–_]{2,}/.test(String(text || ''));
+  // texts → the index of the first entry out of order, or -1.
+  const disorder = (texts) => {
+    let prev = null;
+    for (let i = 0; i < texts.length; i++) { if (repeated(texts[i])) continue; const k = head(texts[i]); if (prev !== null && k < prev) return i; prev = k; }
+    return -1;
+  };
+  // texts → their indices in order; a repeated-author entry stays after the one before it, and equal heads keep their order.
+  const order = (texts) => {
+    const groups = [];
+    texts.forEach((t, i) => { if (repeated(t) && groups.length) groups.at(-1).at.push(i); else groups.push({ key: head(t), at: [i] }); });
+    return groups.map((g, i) => ({ ...g, i })).sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : a.i - b.i)).flatMap((g) => g.at);
+  };
 
   // ---- storage ------------------------------------------------------------------------------------------------------
   const PREFIX = 'writer:sources:';
@@ -195,7 +242,7 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
     return Promise.resolve(sources.length || removed.length ? a.set({ [k]: { sources, ...(removed.length && { removed }), at: Date.now() } }) : a.remove(k)).then(() => true, () => false);
   };
 
-  return { TYPES, MAX, normalize, add, replace, remove, dedupe, same, name: parseName, names, showName, date, showDate, today, doi, isbn, url, key, keyOf, load, loadState, save, PREFIX, fold, rich };
+  return { TYPES, MAX, normalize, add, replace, remove, dedupe, same, name: parseName, names, showName, date, showDate, today, doi, isbn, url, key, keyOf, load, loadState, save, PREFIX, fold, rich, disorder, order, INSIDE };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SOURCES;

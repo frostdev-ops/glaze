@@ -11,7 +11,7 @@
 // sends that text. Notes, page breaks, pictures, fonts and colours stay in the paper, for the full view's .docx.
 // Classic script after writer.js; the paper libraries load only when a paper opens. module.exports (project) for node.
 var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
-  const LIBS = ['writer/writer-styles.js', 'writer/writer-paginate.js', 'writer/writer-format.js', 'writer/writer-outline.js', 'writer/writer-papers.js', 'writer/writer-submit.js'];
+  const LIBS = ['writer/writer-sources.js', 'writer/writer-styles.js', 'writer/writer-paginate.js', 'writer/writer-format.js', 'writer/writer-outline.js', 'writer/writer-papers.js', 'writer/writer-submit.js'];
   const DOCX = ['writer/writer-color.js', 'core/zip.js', 'core/doctext.js', 'writer/writer-docx.js', 'writer/writer-objects-docx.js'];
   const GAP = 26.4; // between pages, in page px (22px at 100%)
   const PX100 = 80 / 96; // 100% shows an inch as 80px, as the mockup does
@@ -55,6 +55,39 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
   const HIGHLIGHTS = [['yellow', 'Yellow'], ['green', 'Bright green'], ['cyan', 'Turquoise'], ['magenta', 'Pink'], ['blue', 'Blue'], ['red', 'Red'], ['darkBlue', 'Dark blue'], ['darkCyan', 'Teal'],
     ['darkGreen', 'Green'], ['darkMagenta', 'Violet'], ['darkRed', 'Dark red'], ['darkYellow', 'Dark yellow'], ['darkGray', 'Gray 50%'], ['lightGray', 'Gray 25%'], ['black', 'Black']];
   const SIZES = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
+  // A footnote's text as its popup shows it: paragraphs apart by a blank line, a line break as a new line.
+  const noteChars = (content) => {
+    const S = globalThis.GZ_WRITER_SCHEMA, out = [];
+    S.parse(S.paper, `<div>${content}</div>`).content.forEach((p, _, i) => {
+      if (i) out.push({ c: '\n', marks: null }, { c: '\n', marks: null });
+      p.forEach((n) => { if (n.isText) for (const c of n.text) out.push({ c, marks: n.marks }); else if (n.type.name === 'hard_break') out.push({ c: '\n', marks: null }); });
+    });
+    return out;
+  };
+  const noteText = (content) => noteChars(content).map((x) => x.c).join('');
+  // The note with its plain text changed to text: only the part that differs is rewritten (taking the formatting of the
+  // text it replaces, else of the character before it, else after it), so the rest keeps its italics, bold and links.
+  // → the note's HTML.
+  const noteEdit = (content, text) => {
+    const S = globalThis.GZ_WRITER_SCHEMA, old = noteChars(content), now = [...text];
+    let a = 0, b = 0;
+    while (a < old.length && a < now.length && old[a].c === now[a]) a++;
+    while (b < old.length - a && b < now.length - a && old[old.length - 1 - b].c === now[now.length - 1 - b]) b++;
+    const marked = (x) => x.c !== '\n' && x.marks;
+    const near = old.slice(a, old.length - b).find(marked) || old.slice(0, a).reverse().find(marked) || old.slice(old.length - b).find(marked);
+    const chars = [...old.slice(0, a), ...now.slice(a, now.length - b).map((c) => ({ c, marks: near?.marks || [] })), ...old.slice(old.length - b)];
+    const schema = S.paper, paras = [[]];
+    for (let i = 0; i < chars.length; i++) {
+      if (chars[i].c === '\n' && chars[i + 1]?.c === '\n') { paras.push([]); i++; continue; }
+      const runs = paras.at(-1), last = runs.at(-1);
+      if (chars[i].c === '\n') runs.push(schema.nodes.hard_break.create());
+      else if (last?.isText && last.marks.length === chars[i].marks.length && last.marks.every((m, k) => m.eq(chars[i].marks[k]))) runs[runs.length - 1] = schema.text(last.text + chars[i].c, last.marks);
+      else runs.push(schema.text(chars[i].c, chars[i].marks || []));
+    }
+    const doc = schema.nodes.doc.create(null, paras.map((r) => schema.nodes.paragraph.create(null, r)));
+    return S.inline(S.serialize(schema, doc));
+  };
+
   // A paper as compose holds it, what the compact view writes into Ultra's box: headings as Quill's, a block quote as
   // indented lines, a table's cells as lines; notes, page breaks, pictures, fonts and colours left out. → { html, text,
   // delta } (writer/writer-schema.js compose serialize and Quill ops), or null past compose's input limit.
@@ -640,6 +673,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const fixGroup = (g) => {
       if (g.issues.length === 1 || !g.issues.every((i) => (i.fix ? SIMPLE.has(i.fix.op) : i.suggestions.length))) { fixIssue(g.issues[0]); return; }
       const s = view.state, tr = s.tr;
+      if (!g.issues.every((i) => F.current(s.doc, i))) { runChecks(); return; }
       for (const i of [...g.issues].sort((a, b) => b.from - a.from)) {
         const x = i.fix;
         if (!x) tr.insertText(i.suggestions[0], i.from, i.to);
@@ -653,6 +687,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     };
     // The format fixes: each one transaction, undoable at once.
     const fixIssue = (i) => {
+      // A card found on text that has changed since: checked again, nothing applied.
+      if (i.source === 'format' && !F.current(view.state.doc, i)) { runChecks(); return; }
       if (i.source !== 'format' || (!i.fix && i.suggestions.length)) {
         if (ISSUES() && i.source !== 'format') { ISSUES().apply(i, 0); return; }
         view.dispatch(view.state.tr.insertText(i.suggestions[0], i.from, i.to));
@@ -677,20 +713,16 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       else if (x.op === 'page-break') tr.insert(x.at, n.page_break.create());
       else if (x.op === 'hanging') for (const at of x.at) { const node = s.doc.nodeAt(at); if (node) tr.setNodeMarkup(at, null, { ...node.attrs, first: null, indent: 0 }); }
       else if (x.op === 'sort') {
-        const part = tops.slice(x.from, x.to), sorted = [...part].sort((a, b) => a.node.textContent.trim().replace(/^[^\p{L}\p{N}]+/u, '').localeCompare(b.node.textContent.trim().replace(/^[^\p{L}\p{N}]+/u, ''), 'en', { sensitivity: 'base' }));
+        // The check's own order (writer-sources.js order), so a sorted list is one the check passes.
+        const part = tops.slice(x.from, x.to), sorted = GZ_WRITER_SOURCES.order(part.map((p) => p.node.textContent.trim())).map((k) => part[k]);
         tr.replaceWith(part[0].pos, part.at(-1).pos + part.at(-1).node.nodeSize, sorted.map((p) => p.node));
       } else if (x.op === 'title-repeat') tr.insert(x.at, para(x.title, { align: 'center' }, format.title.bold));
       else if (x.op === 'to-note') {
         const before = s.doc.textBetween(x.from - 1, x.from) === ' ' ? x.from - 1 : x.from;
         tr.replaceWith(before, x.to, n.footnote_ref.create({ content: S.inline(x.note.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c])) }));
       } else if (x.op === 'block-quote') {
-        const $f = s.doc.resolve(x.from), start = $f.start(), end = $f.end(), text = s.doc.textBetween(x.from + 1, x.to - 1, ' ');
-        const parts = [s.doc.slice(start, x.from).content, s.doc.slice(x.to, end).content];
-        const out = [];
-        if (parts[0].size && s.doc.textBetween(start, x.from).trim()) out.push(n.paragraph.create($f.parent.attrs, parts[0]));
-        out.push(n.blockquote.create(null, n.paragraph.create(null, s.schema.text(text))));
-        if (parts[1].size && s.doc.textBetween(x.to, end).trim()) out.push(n.paragraph.create({ ...$f.parent.attrs, first: 0 }, parts[1]));
-        tr.replaceWith($f.before(), $f.after(), out);
+        const q = F.quoteBlock(s.doc, x.from, x.to);
+        if (q) tr.replaceWith(q.from, q.to, q.nodes);
       }
       if (tr.docChanged) view.dispatch(tr.scrollIntoView());
       view.focus();
@@ -1320,8 +1352,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     const editNote = (pos, fresh = false) => {
       const node = view.state.doc.nodeAt(pos);
       if (node?.type.name !== 'footnote_ref') return;
-      const noteDoc = S.parse(S.paper, `<div>${node.attrs.content}</div>`);
-      const plain = noteDoc.content.content.map((p) => p.textBetween(0, p.content.size, '', '\n')).join('\n\n');
+      const plain = noteText(node.attrs.content);
       const area = h('textarea', { 'aria-label': t('Footnote'), maxlength: '4000' });
       area.value = plain;
       const el = h('div', { class: 'gp-menu gp-note', role: 'dialog', 'aria-label': t('Footnote') }, area);
@@ -1332,7 +1363,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
         const now = view.state.doc.nodeAt(pos);
         if (now?.type.name !== 'footnote_ref') return;
         const text = area.value.replace(/\r\n?/g, '\n').trim();
-        if (keep && text !== plain) view.dispatch(text ? view.state.tr.setNodeMarkup(pos, null, { content: S.inline(text.split(/\n\n/).map((p) => `<p>${p.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]).replace(/\n/g, '<br>')}</p>`).join('')) }) : view.state.tr.delete(pos, pos + 1));
+        if (keep && text !== plain) view.dispatch(text ? view.state.tr.setNodeMarkup(pos, null, { content: noteEdit(now.attrs.content, text) }) : view.state.tr.delete(pos, pos + 1));
         else if (!keep && fresh && !plain) view.dispatch(view.state.tr.delete(pos, pos + 1));
         if (returnFocus) view.focus();
       };
@@ -1974,7 +2005,7 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
     return api;
   };
 
-  const self = { mount, need, project, current: () => current, submit: null };
+  const self = { mount, need, project, noteText, noteEdit, current: () => current, submit: null };
   // In writer.html: an assignment's frame opens a paper when its editor is ready.
   const frame = globalThis.GZ_WRITER_FRAME;
   if (frame) {
