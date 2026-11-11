@@ -122,7 +122,7 @@ test('--only takes an area, a name with or without -check, a path, and several; 
   assert.deepEqual(names(A.plan(SET, { where: 'runner', only: ['five'] }).run), ['five-check']);
   assert.deepEqual(names(A.plan(SET, { where: 'runner', only: ['two-check', 'c/five-check.js'] }).run), ['two-check', 'five-check']);
   assert.deepEqual(A.plan(SET, { where: 'runner', only: ['b'] }).run, []);
-  assert.deepEqual(names(A.plan(SET, { where: 'runner', only: ['b'] }).skipped), ['three-check', 'four-check'], 'only what --only chose is reported');
+  assert.deepEqual(A.plan(SET, { where: 'runner', only: ['b'] }).skipped.map((s) => s.check.name), ['three-check', 'four-check'], 'only what --only chose is reported');
   assert.throws(() => A.plan(SET, { where: 'runner', only: ['nope'] }), /no check matches "nope"/);
   assert.throws(() => A.plan(SET, { where: 'moon' }), /--where/);
 });
@@ -184,10 +184,9 @@ const fake = (behave) => {
     (async () => {
       if (b.hold) await b.hold;
       else await new Promise((r) => setImmediate(r));
-      if (call.hang) return;
       if (b.out) child.stdout.write(b.out);
       if (b.err) child.stderr.write(b.err);
-      finish(b.code ?? 0, b.signal ?? null);
+      if (!call.hang) finish(b.code ?? 0, b.signal ?? null);
     })();
     return child;
   };
@@ -195,7 +194,10 @@ const fake = (behave) => {
 };
 const nameOf = (call) => (call.command === 'glaze-remote' ? call.args[call.args.indexOf('--') + 2] : call.args.at(-2)).replace(/^checks\/.*\//, '').replace(/\.[^.]+$/, '');
 const noTimers = { setTimeout: () => 0, clearTimeout: () => {} };
-const opts = (t, extra = {}) => ({ evidence: scratch(t), lock: CTX.lock, nodePath: CTX.nodePath, timers: noTimers, kill: (c, s) => c.kill(s), ...extra });
+const opts = (t, extra = {}) => {
+  const evidence = scratch(t);
+  return { evidence, lock: path.join(evidence, 'lock/glaze-heavy.lock'), nodePath: CTX.nodePath, timers: noTimers, kill: (c, s) => c.kill(s), ...extra };
+};
 
 test('a check that exits 0 passes; non-zero fails with its last lines; the log holds the command and the output', async (t) => {
   const f = fake((c) => (nameOf(c) === 'one-check' ? { out: 'ok one\n' } : { out: Array.from({ length: 40 }, (_, i) => `line ${i}`).join('\n') + '\n', err: 'boom\n', code: 1 }));
@@ -370,7 +372,15 @@ test('arguments: --where is required, lists split on commas, --jobs defaults to 
   assert.throws(() => A.parseArgs(['--where', 'runner', '--jobs', '0']), /--jobs/);
   const a = A.parseArgs(['--where', 'runner', '--only', 'writer,ai/ask-check.js', '--needs', 'canvas,moodle', '--known', 'k.txt', '--evidence', '/e', '--dry-run']);
   assert.deepEqual([a.where, a.only, a.needs, a.known, a.evidence, a.dryRun, a.jobs], ['runner', ['writer', 'ai/ask-check.js'], ['canvas', 'moodle'], 'k.txt', '/e', true, 8]);
-  assert.equal(A.parseArgs(['--where', 'mac', '--jobs', '4']).jobs, 1, 'the Mac runs one at a time whatever --jobs says');
+  const mac = ['--where', 'mac', '--lock', '/l.lock', '--node-path', '/nm'];
+  assert.equal(A.parseArgs([...mac, '--jobs', '4'], {}).jobs, 1, 'the Mac runs one at a time whatever --jobs says');
+  assert.throws(() => A.parseArgs(['--where', 'mac'], {}), /--where mac needs --lock .* --node-path/);
+  assert.throws(() => A.parseArgs(['--where', 'mac', '--lock', '/l.lock'], {}), /--node-path/);
+  const viaEnv = A.parseArgs(['--where', 'mac'], { GLAZE_HEAVY_LOCK: '/e.lock', NODE_PATH: '/en' });
+  assert.deepEqual([viaEnv.lock, viaEnv.nodePath], ['/e.lock', '/en'], 'the environment fills in what the flags leave out');
+  assert.deepEqual([A.parseArgs([...mac], { GLAZE_HEAVY_LOCK: '/e.lock' }).lock], ['/l.lock'], 'a flag wins');
+  assert.equal(A.parseArgs(['--where', 'runner'], {}).lock, undefined, 'the runner needs neither');
+  assert.throws(() => A.commandFor(check('a/x-check.js'), 'mac', { evidence: '/ev' }), /--lock/);
 });
 
 test('--dry-run prints each command and each skip, spawns nothing, and exits 0', async (t) => {
