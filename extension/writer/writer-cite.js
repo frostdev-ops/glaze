@@ -367,7 +367,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
       for (const raw of parts) {
         const part = raw.replace(/^(see also|see|e\.g\.,?|cf\.|qtd\. in)\s+/i, '');
         let a;
-        if (k === 'chicago17' && part.split(',').length >= 3) { const name = noteName(part); if (looksNamed(name)) { out.push({ from, to, text: m[0], name, page: '', kind: 'note', ids: matchIds(name, sources) }); continue; } }
+        if (k === 'chicago17' && part.split(',').length >= 3) { const name = noteName(part, sources); if (looksNamed(name)) { out.push({ from, to, text: m[0], name, page: '', kind: 'note', ids: matchIds(name, sources) }); continue; } }
         if (k === 'apa7' && (a = PART.apa.exec(part)) && looksNamed(a[1])) { if (INSIDE.test(a[1]) && !matchIds(a[1], sources).length) continue; out.push({ from, to, text: m[0], name: a[1], year: a[2], page: a[3] || '', kind: 'paren', ids: matchIds(a[1], sources) }); continue; }
         if ((a = PART.year.exec(part))) { if (k !== 'apa7') continue; out.push({ from, to, text: m[0], name: '', year: a[1], page: a[2] || '', kind: 'narrative', ids: [] }); continue; }
         if ((a = PART.page.exec(part))) { out.push({ from, to, text: m[0], name: '', page: a[1], kind: 'narrative', ids: [] }); continue; }
@@ -407,12 +407,18 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   // "For a contrasting view, see Smith, …" → Smith. '' for a note that names no one (an explanatory note, "Translation mine.").
   const SEE = String.raw`(?:see also|see|cf\.|compare)(?:,?\s+(?:e\.g\.|for example),?)?\s+`;
   const named = (head) => { const ws = head.split(/\s+/); return ws.length <= 6 && ws.every((w) => new RegExp(`^(?:${PARTICLE}|and|&)$`).test(w) || /^(?:(?:al|el)-)?\p{Lu}[\p{L}\p{M}'’.-]*$/u.test(w)); };
-  const noteName = (text) => {
+  const noteName = (text, sources = []) => {
     const lead = (t) => {
       t = t.trim().replace(/^\d+\.\s*/, '').replace(new RegExp(`^${SEE}`, 'i'), '');
       if (/^[“"]/.test(t)) return t.replace(/^[“"]([^”"]+)[”"].*$/, '$1').replace(/[,.]$/, '');
       const head = t.split(/,|\s\(/)[0].replace(/\s+et al\.?$/, '').trim();
       if (!named(head)) return '';
+      // A saved full name resolves a given name that also looks like a particle, and a generational suffix.
+      const first = head.split(/\s+(?:and|&)\s+/)[0];
+      for (const s of sources) {
+        const n = who(s)?.names[0];
+        if (n && S().fold(fwd(n)) === S().fold(first)) return fam(n);
+      }
       const ws = head.split(/\s+(?:and|&)\s+/)[0].split(/\s+/);
       // "Hans van der Berg" → "van der Berg": the last word and the particles before it.
       let i = ws.length - 1;
@@ -430,7 +436,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     let prev = null;
     for (const n of T.notes) {
       if (/^\s*ibid\b/i.test(n.text)) { if (prev?.ids.length) found.push({ ...prev, at: [n.pos, n.pos + 1], text: n.text }); continue; }
-      const name = noteName(n.text);
+      const name = noteName(n.text, all);
       prev = name && looksNamed(name) ? { from: -1, to: -1, at: [n.pos, n.pos + 1], text: n.text, name, kind: 'note', page: '', ids: matchIds(name, all) } : null;
       if (prev) found.push(prev);
     }
