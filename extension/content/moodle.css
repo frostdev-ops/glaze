@@ -863,6 +863,8 @@ html[data-gz-raw-courses] [data-region="course-content"][style*="--gz-course-raw
 /* Glaze navigation: keep Moodle's links alive, replace its 60px header room, and leave content drawers usable.
    First paint words come from content.js; the renderer then supplies the measured room inline. */
 html[data-gz-navbar] { --gz-navbar-left: 0px; --gz-navbar-top: 0px; --gz-navbar-bottom: 0px; }
+/* Printed, the page is Moodle's own: the bar doesn't print (navigation/page/navbar.css), and the page keeps no room for it. */
+@media print { html[data-gz-navbar] { --gz-navbar-left: 0px !important; --gz-navbar-top: 0px !important; --gz-navbar-bottom: 0px !important; } }
 html[data-gz-navbar] :is(nav.navbar.fixed-top, #theme_boost-drawers-primary, [data-target="theme_boost-drawers-primary"]) { display: none !important; }
 /* Everything in that navbar has a place in the bar (navigation/page/navbar-moodle.js): its links, menus and Edit mode switch. The bar's
    own sheet styles only its pin as a toggle, so the Edit mode switch is lit from here, by part, while editing is on. */
