@@ -123,13 +123,20 @@ const usable = async (c, t, run) => {
 // The first usable candidate, or null.
 const find = async ({ platform = process.platform, env = process.env, run, list = places(platform, env) } = {}) => {
   const t = trust(platform);
-  for (const c of list) if (await usable(c, t, run)) return c;
+  for (const c of list) {
+    const named = session(c, platform, env) ? stable(c, platform, env) : c;
+    if (named && await usable(named, t, run)) return named;
+  }
   return null;
 };
 // Every usable candidate but those in skip, in order, at most 8: what a launcher tries after its own node.
 const all = async ({ platform = process.platform, env = process.env, run, list = places(platform, env), skip = [] } = {}) => {
   const t = trust(platform), out = [];
-  for (const c of list) if (out.length < 8 && !skip.includes(c) && await usable(c, t, run)) out.push(c);
+  for (const c of list) {
+    if (out.length >= 8) break;
+    const named = session(c, platform, env) ? stable(c, platform, env) : c;
+    if (named && !skip.includes(named) && !out.includes(named) && await usable(named, t, run)) out.push(named);
+  }
   return out;
 };
 const choose = async (o = {}) => {
