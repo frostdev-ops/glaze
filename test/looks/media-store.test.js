@@ -126,6 +126,33 @@ test('a file kept for an offer waits as pending: Cancel takes it, using the Look
   assert.deepEqual(await M.change({ op: 'keep', h: 'A'.repeat(43) }, a), { ok: false, error: 'missing' });
 });
 
+test('an offer still being previewed keeps its pending file: a touch gives it another hour, an untouched one goes', async () => {
+  const a = kit();
+  const previewed = (await put(a, 'clip.mp4', 'video', { pending: true })).h, idle = (await put(a, 'clip.webm', 'video', { pending: true })).h;
+  const long = Date.now() - 50 * 60e3;
+  for (const e of Object.values(a.local.data[M.INDEX])) e.at = long;
+  // The editor's heartbeat for the offer it shows.
+  assert.deepEqual(await M.change({ op: 'touch', h: previewed }, a), { ok: true });
+  assert.ok(a.local.data[M.INDEX][previewed].at > long + 49 * 60e3, 'its hour starts again');
+  assert.equal(a.local.data[M.INDEX][previewed].p, true, 'it is still only an offer\'s file: touching does not keep it');
+  assert.equal(a.local.data[M.INDEX][idle].at, long);
+  // Thirty minutes on, the previewed file is under an hour old and the other is over it.
+  const r = await M.collect(a, { ...env, now: () => Date.now() + 30 * 60e3 });
+  assert.deepEqual(r.gone, [idle]);
+  assert.ok(a.files.map.has(previewed) && !a.files.map.has(idle));
+  // And it can still be kept when the student uses the Look.
+  assert.deepEqual(await M.change({ op: 'keep', h: previewed }, a), { ok: true });
+  assert.equal(a.local.data[M.INDEX][previewed].p, undefined);
+  // A kept file stays as it is (never made pending); a file that is gone says so, so the editor knows the preview has lost it.
+  const used = (await put(a, 'anim.webp', 'image')).h;
+  assert.deepEqual(await M.change({ op: 'touch', h: used }, a), { ok: true });
+  assert.equal(a.local.data[M.INDEX][used].p, undefined);
+  assert.deepEqual(await M.change({ op: 'touch', h: idle }, a), { ok: false, error: 'missing' });
+  assert.deepEqual(await M.change({ op: 'touch', h: 'x' }, a), { ok: false, error: 'bad' });
+  a.files.map.delete(used);
+  assert.deepEqual(await M.change({ op: 'touch', h: used }, a), { ok: false, error: 'missing' }, 'an index entry with no record is missing');
+});
+
 test('migration failures keep the legacy file and report failure until index and old-key cleanup both persist', async () => {
   for (const failure of ['file', 'index', 'remove']) {
     const bytes = fx('anim.webp'), h = await M.sha(bytes), key = `${M.KEY}${h}`;
