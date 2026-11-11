@@ -11,6 +11,7 @@ const E = require('../../extension/writer/writer-editor.js');
 const ST = require('../../extension/writer/writer-styles.js');
 const F = require('../../extension/writer/writer-format.js');
 const PA = require('../../extension/writer/writer-papers.js');
+const I = require('../../extension/core/i18n.js');
 
 const source = fs.readFileSync(process.env.WRITER_PAPER_SOURCE || path.join(__dirname, '../../extension/writer/frame/writer-paper.js'), 'utf8');
 const cut = (a, b) => { const i = source.indexOf(a), j = source.indexOf(b, i); assert.ok(i >= 0 && j > i, a); return source.slice(i, j); };
@@ -48,7 +49,7 @@ const frame = async ({ local, ss, context = { recovery: RECOVERY }, changed = []
     restyleCSS() {}, counts() {}, setZoom() {}, PG: { relayout() {} }, runChecks() {}, runChecksSoon() {}, outlineDraw() {}, outlineAI: { stop() {} }, sourcesPanel: null,
     own: false, titleIn: null, URLSearchParams, location: { search: '' }, compact: false, ...extra,
   });
-  vm.runInContext(`${BLOCKS}\nglobalThis.__ = { load, changed, save, restore, key: () => key, keep: () => keep, edits: () => edits, format: () => format, dirty: () => dirty, fromDocs: typeof fromDocs === 'function' ? fromDocs : null };`, sandbox);
+  vm.runInContext(`${BLOCKS}\nglobalThis.__ = { load, changed, save, restore, key: () => key, keep: () => keep, edits: () => edits, format: () => format, dirty: () => dirty, fromDocs: typeof fromDocs === 'function' ? fromDocs : null, notSaved: typeof notSaved === 'function' ? notSaved : null };`, sandbox);
   const $ = sandbox.__;
   await $.load();
   const settle = async () => { for (let i = 0; i < 40; i++) await new Promise(setImmediate); };
@@ -644,4 +645,57 @@ test('a document with a large picture stays intact in the pick and its session r
   f.type(' More notes.');
   assert.ok(ss.getItem(`gz-paper-pending:${KEY}`).length < 5000, 'the saved picture is a digest in sessionStorage');
   assert.equal((await stored(local)).paper.doc.content[0].content[1].attrs.src, picture.attrs.src);
+});
+
+// The cap on documents (writer/writer-papers.js: 'too many documents'): a document the index has no room for is refused, and the
+// frame says why in its own words, once; every other refusal stays "Not saved" with the old sentence.
+const FULL = 'Documents is full (2,000). Delete or export some to save a new one.';
+const crowd = (local, ...keep) => {
+  local.data[PA.KEYS.INDEX] = [...keep.map((key) => ({ key, kind: 'paper', title: '', updated: 1 })), ...Array.from({ length: PA.CAP.rows - keep.length }, (_, i) => ({ key: `filler:${i}`, kind: 'paper', title: '', updated: 1 }))];
+};
+const capped = async ({ room = false } = {}) => {
+  const local = memory(), toasts = [], app = {};
+  if (!room) crowd(local);
+  const f = await frame({ local, ss: session(), context: { recovery: RECOVERY, paper: PARTS, assignment: { title: 'Essay 2' } },
+    extra: { root: { isConnected: true, inert: false }, current: app, api: app, noteCache: new Map(), console: { error() {} }, t: (k, v) => I.t(k, v, 'en'), toast: (text) => toasts.push(text) } });
+  return { local, f, toasts };
+};
+
+test('an autosave the cap refuses says Documents is full, once, and the state stays Not saved', async () => {
+  const { local, f, toasts } = await capped();
+  f.type(' More.');
+  assert.equal(await f.$.save(), null);
+  assert.deepEqual(toasts, [FULL]);
+  assert.equal(f.sandbox.state.textContent, 'Not saved');
+  assert.equal(await f.$.save(), null);
+  assert.deepEqual(toasts, [FULL], 'a retry does not say it again');
+  local.data[PA.KEYS.INDEX].pop();
+  assert.ok(await f.$.save(), 'room again: it saves');
+  assert.equal(f.sandbox.state.textContent, 'Saved');
+  assert.deepEqual(toasts, [FULL]);
+});
+
+test('any other refused autosave stays Not saved, with no toast', async () => {
+  const { local, f, toasts } = await capped({ room: true });
+  local.set = async () => { throw Error('QUOTA_BYTES'); };
+  f.type(' More.');
+  assert.equal(await f.$.save(), null);
+  assert.deepEqual(toasts, []);
+  assert.equal(f.sandbox.state.textContent, 'Not saved');
+  assert.equal(f.$.notSaved(Error('QUOTA_BYTES')), 'Not saved. Try again in a moment.');
+});
+
+test('Open from Documents at the cap says Documents is full; with room, a failed pick still says Not saved', async () => {
+  const { local, f, toasts } = await capped();
+  local.data[PA.KEYS.INDEX] = [];
+  await PA.open(local, () => (clock += 1000), { versions: async () => 40 }).save(DOC, { doc: docOf('New document.'), format: 'plain', keep: true });
+  crowd(local, DOC);
+  assert.equal(await f.$.fromDocs(DOC, 'New document'), null);
+  assert.deepEqual(toasts.slice(-1), [FULL]);
+  // The cap refused the last save, and a document that is gone is another failure: it keeps its own line.
+  assert.equal(await f.$.fromDocs('doc:11111111-2222-4333-8444-555555555555', 'Gone'), null);
+  assert.deepEqual(toasts.slice(-1), ['Not saved. Try again in a moment.']);
+  const roomy = await capped({ room: true });
+  assert.equal(await roomy.f.$.fromDocs(DOC, 'Gone'), null);
+  assert.deepEqual(roomy.toasts, ['Not saved. Try again in a moment.']);
 });

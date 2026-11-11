@@ -372,6 +372,7 @@
   'Tint pages inside this course': "Pagina's in deze cursus tinten",
   'Nickname': 'Bijnaam',
   'Not saved. Try again in a moment.': 'Niet opgeslagen. Probeer het zo opnieuw.',
+  "Documents is full ({n}). Delete or export some to save a new one.": "De documentenlijst is vol ({n}). Verwijder of exporteer er een paar om een nieuw document op te slaan.",
   'Too much to sync. Shorten a nickname or clear one.': 'Te veel om te synchroniseren. Maak een bijnaam korter of wis er een.',
   'Open Settings in its own tab.': 'Open de instellingen in een eigen tabblad.',
   'Purple': 'Paars',

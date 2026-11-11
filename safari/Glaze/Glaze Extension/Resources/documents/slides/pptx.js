@@ -887,12 +887,20 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
   const IDENTITY = (x, y, w, h) => ({ x, y, w, h });
   // The shapes of a shape tree, each converted on its own: one that throws comes back as a broken box where its bounds
   // can be read. Master and layout placeholders are only templates; hidden shapes aren't drawn.
+  // A master's or layout's shape tree is walked for each slide that uses it: the nodes worth converting (no template placeholders,
+  // no hidden shapes) are found once per tree, and where the deck's shape budget runs out the rest is counted in one step.
+  const drawn = new WeakMap();
+  const nodesOf = (container, X) => {
+    const keep = (node) => SHAPES.has(node.n) && !(X.level !== 'slide' && X.depth === 0 && phOf(node)) && !flag(at(kid(nvOf(node), 'cNvPr'), 'hidden'));
+    if (X.level === 'slide') return container.kids.filter(keep);
+    if (!drawn.has(container)) drawn.set(container, container.kids.filter(keep));
+    return drawn.get(container);
+  };
   const shapesIn = (container, X) => {
-    const out = [];
-    for (const node of container ? container.kids : []) {
-      if (!SHAPES.has(node.n) || (X.level !== 'slide' && X.depth === 0 && phOf(node))) continue;
-      if (flag(at(kid(nvOf(node), 'cNvPr'), 'hidden'))) continue;
-      if (X.budget.shapes >= X.L.shapes) { X.count('shapes'); continue; }
+    const out = [], nodes = container ? nodesOf(container, X) : [];
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      if (X.budget.shapes >= X.L.shapes) { X.count('shapes', nodes.length - i); break; }
       X.budget.shapes++;
       let s = null;
       try {

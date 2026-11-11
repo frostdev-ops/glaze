@@ -152,13 +152,13 @@ html[data-gz-motion="off"] .gz-w-cheer { top: 0; }
 /* Slide switches, as in the popup and the course menu: drawn whole, since Ultra's CSS hides native checkboxes (opacity 0). */
 #gz-hub input[type="checkbox"] {
   appearance: none !important; -webkit-appearance: none !important; position: relative !important; flex: none; width: 34px !important; height: 20px !important;
-  margin: 0 !important; opacity: 1 !important; cursor: pointer; background: var(--gz-line-strong) !important; border: 0 !important; border-radius: 999px !important;
+  margin: 0 !important; opacity: 1 !important; cursor: pointer; background: var(--gz-line-strong) !important; border: 0 !important; border-radius: 999px !important; box-shadow: inset 0 0 0 1px var(--gz-border-field, var(--gz-ink-faint));
 }
 #gz-hub input[type="checkbox"]::before {
   content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%;
   background: var(--gz-ink); transition: transform var(--gz-t) var(--gz-ease), background var(--gz-t) var(--gz-ease);
 }
-#gz-hub input[type="checkbox"]:checked { background: var(--gz-accent) !important; }
+#gz-hub input[type="checkbox"]:checked { background: var(--gz-accent) !important; box-shadow: none; }
 #gz-hub input[type="checkbox"]:checked::before { transform: translateX(14px); background: var(--gz-accent-ink); }
 /* Forced colours drop fills: the hub's switches in system colours, as the popup's are (core/ui.css). */
 @media (forced-colors: active) {
@@ -1079,7 +1079,7 @@ html[data-gz-course-tiles] #DashboardCard_Container { display: none !important; 
 #gz-ccm input[type="search"],
 #gz-ccm input[type="url"] {
   flex: 1 1 12rem; min-width: 0; min-height: 2rem; margin: 0; padding: 0.3rem 0.6rem; color: var(--gz-ink); color-scheme: inherit;
-  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); box-shadow: none;
+  background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)); border: 1px solid var(--gz-border-field, var(--gz-ink-faint)); border-radius: var(--gz-radius-sm); box-shadow: none;
 }
 #gz-ccm input[type="search"]:focus-visible,
 #gz-ccm input[type="url"]:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
@@ -1113,7 +1113,7 @@ html[data-gz-course-tiles] #DashboardCard_Container { display: none !important; 
 #gz-ccm .gz-ccm-style[aria-expanded="true"] { color: var(--gz-accent); border-color: var(--gz-accent); }
 #gz-ccm .gz-ccm-look { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; align-content: start; min-width: 0; padding: 0.6rem 0.7rem; border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius-sm); }
 #gz-ccm .gz-ccm-look > .gz-w-btn { justify-self: start; }
-#gz-ccm .gz-ccm-kinds { display: flex; flex-wrap: wrap; width: max-content; max-width: 100%; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 1rem; overflow: hidden; }
+#gz-ccm .gz-ccm-kinds { display: flex; flex-wrap: wrap; width: max-content; max-width: 100%; border: 1px solid var(--gz-border-field, var(--gz-ink-faint)); border-radius: 1rem; overflow: hidden; }
 #gz-ccm .gz-ccm-kinds label { position: relative; display: flex; align-items: center; padding: 0.25rem 0.7rem; cursor: pointer; color: var(--gz-ink-muted); }
 #gz-ccm .gz-ccm-kinds input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
 #gz-ccm .gz-ccm-kinds label:has(input:checked) { color: var(--gz-on-soft, var(--gz-accent)); background: var(--gz-accent-soft); }
