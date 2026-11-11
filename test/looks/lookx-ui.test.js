@@ -223,6 +223,30 @@ test('rotation: two signed-in devices with one period and a shared sync turn the
   assert.deepEqual([a.local.rotateState.i, b.local.rotateState.i], [1, 1], 'both devices are at the account\'s place');
 });
 
+test('rotation: a shared turn arriving during the sync read is not mistaken for a future clock', async () => {
+  const G = require('../../extension/content/defaults.js');
+  const H = 36e5, t0 = 1e12, mode = '6h 08:00';
+  const w = worker({ rotateState: { mode, at: t0, i: -1 } }, structuredClone(G.GZ_SANITIZE({ extras: { rotate: '6h' } })));
+  w.context.now = t0 + 6 * H;
+  vm.runInContext('Date = class extends Date { static now() { return globalThis.now; } }', w.context);
+  const get = w.context.chrome.storage.sync.get;
+  let delivered;
+  w.context.chrome.storage.sync.get = async (k) => {
+    if (k === L.SHARED && !delivered) {
+      // Another device turns while this device's storage read is in flight.
+      w.context.now += 20;
+      w.sync[L.SHARED] = delivered = { mode, at: w.context.now, i: 3 };
+    }
+    return get(k);
+  };
+  const theme = JSON.stringify([w.sync.colors, w.sync.look, w.sync.bg]);
+  assert.deepEqual(await w.send({ type: 'glaze:rotate' }), { ok: true });
+  assert.ok(delivered, 'the shared read actually delivered the other device\'s turn');
+  assert.deepEqual(w.local.rotateState, delivered, 'adopt the turn instead of wearing another Look');
+  assert.equal(JSON.stringify([w.sync.colors, w.sync.look, w.sync.bg]), theme);
+  assert.deepEqual(w.sync[L.SHARED], delivered, 'the delivered turn is not overwritten');
+});
+
 // ---- the page -------------------------------------------------------------------------------------------------------
 test('rotation refuses legacy outside favorites that hide critical controls without restricting own Look storage', async () => {
   const G = require('../../extension/content/defaults.js'), X = require('../../extension/looks/lookparts.js'), S = require('../../extension/sharing/share.js');
