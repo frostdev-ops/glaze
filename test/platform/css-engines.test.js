@@ -83,3 +83,12 @@ test('the approval page and the quick share page keep a palette where light-dark
     }
   }
 });
+
+test('Canvas titles and status text do not keep dark-screen lightness on white print surfaces', () => {
+  const lifted = declarations(read('content/canvas.css')).filter(({ text, headers }) =>
+    /^color\s*:/.test(text) && /max\(l,\s*0\.72\)/.test(text) && headers.at(-1).includes('[data-gz-dark-theme]'));
+  assert.equal(lifted.length, 3, 'both course titles and the status pill are covered');
+  for (const { headers } of lifted) {
+    assert.ok(headers.some((h) => /^@media\s+screen\b/.test(h)), `${headers.at(-1)} would stay light when the palette prints white`);
+  }
+});
