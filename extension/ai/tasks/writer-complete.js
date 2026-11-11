@@ -224,9 +224,10 @@ var GZ_AI_TASK_WRITER_COMPLETE = globalThis.GZ_AI_TASK_WRITER_COMPLETE || (() =>
     if (fresh.length <= 4 && fresh.every((w) => had.has(w))) return null;
     if (/^[ \t]/.test(s)) s = ` ${s.replace(/^[ \t]+/, '')}`;
     if (inp.spaced) { if (!/^ /.test(s)) return null; s = s.slice(1); }
-    // Refuse citation/quotation/number/link content before cutting, so a URL's dot cannot hide it.
+    // Refuse citation/quotation/number/link content before cutting, so a URL's dot cannot hide it. A domain is tried only
+    // from a word's start: from inside a long word it would scan that word again from every letter.
     if (/["“”«»()[\]{}\p{N}]/u.test(s) || /(^|[^\p{L}\p{N}])['‘’]|['‘’]($|[^\p{L}\p{N}])/u.test(s)
-      || /\bet al\b|\bp{1,2}\.\s*\d|https?:|www\.|[\p{L}\p{N}-]+\.[a-z]{2,}(?:[\/\s]|$)/u.test(s)) return null;
+      || /\bet al\b|\bp{1,2}\.\s*\d|https?:|www\.|(?<![\p{L}\p{N}-])[\p{L}\p{N}-]+\.[a-z]{2,}(?:[\/\s]|$)/u.test(s)) return null;
     // Cut at the first sentence end; cut short by maxTokens without one, the last word may be cut too.
     const end = END.exec(s);
     if (end) s = s.slice(0, end.index + end[0].length);

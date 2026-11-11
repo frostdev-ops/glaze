@@ -2,7 +2,8 @@
 // given the sentence, the flagged words in it and the candidate fixes, whether one candidate is clearly right here (apply,
 // with undo), one is likely (suggest: it becomes the top suggestion), or the words are fine as written (keep). check() takes a
 // choice only from the candidates, and apply only with one.
-// input: { sentence, from, to (UTF-16 offsets of the flagged words in it), suggestions: [string], context? }.
+// input: { sentence, from, to (UTF-16 offsets of the flagged words in it), suggestions: [string], context? }. The context
+// only refuses a test's box: the call sends the sentence and its candidates, never the course or assignment (PRIVACY.md).
 // output: { verdict: 'apply' | 'suggest' | 'keep', choice: string | null }.
 // Classic script for the worker (background/background.js aiFiles); module.exports for node.
 var GZ_AI_TASK_WRITER_DECIDE = globalThis.GZ_AI_TASK_WRITER_DECIDE || (() => {
@@ -23,12 +24,10 @@ var GZ_AI_TASK_WRITER_DECIDE = globalThis.GZ_AI_TASK_WRITER_DECIDE || (() => {
     const { sentence, from, to, suggestions } = raw;
     if (typeof sentence !== 'string' || !sentence.trim() || sentence.length > LIMIT.sentence || !Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 || to <= from || to > sentence.length) return null;
     if (!Array.isArray(suggestions) || !suggestions.length || suggestions.length > LIMIT.suggestions || !suggestions.every((s) => typeof s === 'string' && s.length <= LIMIT.suggestion && !/[\n\r]/.test(s))) return null;
-    const context = W.clean(raw.context);
-    return context ? { sentence, from, to, flagged: sentence.slice(from, to), suggestions: [...new Set(suggestions)], context } : null;
+    return W.clean(raw.context) ? { sentence, from, to, flagged: sentence.slice(from, to), suggestions: [...new Set(suggestions)] } : null;
   };
   const build = (inp, { text }) => text.request({
     system: SYSTEM,
-    context: W.blocks({ ...inp.context, thread: [], replyTo: null }),
     data: [{ label: 'sentence', text: inp.sentence }, { label: 'flagged words', text: inp.flagged }, { label: 'candidates', text: JSON.stringify(inp.suggestions) }],
     temperature: 0, maxTokens: 100,
   });

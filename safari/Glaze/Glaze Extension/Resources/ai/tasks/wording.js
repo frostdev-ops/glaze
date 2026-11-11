@@ -138,13 +138,20 @@ var GZ_AI_WORDING = globalThis.GZ_AI_WORDING || (() => {
   // quote. Include short spans so a quoted word such as "sag" is not mistaken for a German imperative.
   const localeQuotes = (s) => [...s.matchAll(/«([^«»]*)»|»([^«»]*)«|‹([^‹›]*)›|›([^‹›]*)‹|„([^„“”]*)[“”]|‚([^‚‘]*)‘/gu)]
     .map((m) => ({ start: m.index + 1, end: m.index + m[0].length - 1, text: m.slice(1).find((x) => x !== undefined) }));
+  // The code points just before and after index i (a surrogate pair as one; a lone surrogate as itself).
+  const pointBefore = (s, i) => (i < 1 ? undefined : i > 1 && /[\udc00-\udfff]/.test(s[i - 1]) && /[\ud800-\udbff]/.test(s[i - 2]) ? s.slice(i - 2, i) : s[i - 1]);
+  const pointAfter = (s, i) => (i < s.length ? String.fromCodePoint(s.codePointAt(i)) : undefined);
   const quotedRanges = (s, locales = false) => {
     const out = locales ? localeQuotes(s) : [], word = (c) => !!c && /[\p{L}\p{M}\p{N}_]/u.test(c);
     const opens = { single: null, double: null };
+    // The locale quotes come in order and never overlap: one pointer walks them with the marks.
+    const inLocale = out.length;
+    let k = 0;
     for (const m of s.matchAll(/["“”'‘’]/g)) {
       const c = m[0], at = m.index, single = /['‘’]/.test(c);
-      if (locales && out.some((q) => at >= q.start - 1 && at <= q.end)) continue;
-      const before = [...s.slice(0, at)].at(-1), after = [...s.slice(at + 1)][0];
+      while (k < inLocale && out[k].end < at) k++;
+      if (k < inLocale && at >= out[k].start - 1) continue;
+      const before = pointBefore(s, at), after = pointAfter(s, at + 1);
       if (single && word(before) && word(after)) continue;
       const group = single ? 'single' : 'double', open = opens[group];
       if (!open) {

@@ -499,7 +499,11 @@ html[data-gz-dash]:not([data-gz-dash="ip"]) institution-page-home { display: non
 :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="ok"] { color: var(--gz-ok); background: color-mix(in srgb, var(--gz-ok) 14%, transparent); }
 :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="warn"] { color: var(--gz-warn); background: color-mix(in srgb, var(--gz-warn) 14%, transparent); }
 :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="err"] { color: var(--gz-err); background: color-mix(in srgb, var(--gz-err) 14%, transparent); }
+/* Light Looks: a toned chip darkens its own tone toward the ink (currentColor in `color` is the parent's). */
 html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { color: color-mix(in srgb, currentColor 70%, var(--gz-ink)); }
+html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="ok"] { color: color-mix(in srgb, var(--gz-ok) 70%, var(--gz-ink)); }
+html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="warn"] { color: color-mix(in srgb, var(--gz-warn) 70%, var(--gz-ink)); }
+html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="err"] { color: color-mix(in srgb, var(--gz-err) 70%, var(--gz-ink)); }
 #gz-todo .gz-todo-plan { color: var(--gz-accent); }
 #gz-todo .gz-todo-more, #gz-todo .gz-todo-small {
   padding: 0.05rem 0.5rem; border: 1px solid transparent; border-radius: 999px; background: none; cursor: pointer;

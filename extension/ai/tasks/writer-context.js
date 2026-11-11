@@ -15,8 +15,11 @@ var GZ_AI_WRITER = globalThis.GZ_AI_WRITER || (() => {
   const obj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
   const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
   const code = (n) => (Number.isInteger(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : ' ');
+  // A tag pattern applied only up to the last >: no tag can end after it, and a < past it would scan to the end for
+  // nothing, once per <.
+  const tags = (s, re, to) => { const end = s.lastIndexOf('>') + 1; return s.slice(0, end).replace(re, to) + s.slice(end); };
   // Rich text (a rubric cell, instructions as Ultra keeps them) as plain text: tags out, blocks as lines.
-  const plain = (s) => String(s ?? '').replace(/<(br|\/p|\/div|\/li|\/h\d)\b[^>]*>/gi, '\n').replace(/<[^>]*>/g, ' ')
+  const plain = (s) => tags(tags(String(s ?? ''), /<(br|\/p|\/div|\/li|\/h\d)\b[^>]*>/gi, '\n'), /<[^>]*>/g, ' ')
     .replace(/&(#\d+|#x[\da-f]+|\w+);/gi, (m, e) => (e[0] === '#' ? code(Number(/^#x/i.test(e) ? `0${e.slice(1)}` : e.slice(1))) : ENT[e.toLowerCase()] ?? m))
     .replace(/[ \t\f\v ]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   // At most n characters, cut at a space when there is one in the last fifth.
