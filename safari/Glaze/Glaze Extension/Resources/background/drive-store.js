@@ -792,7 +792,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         // file holds the very value this device last agreed through another (its own let go for this one, or left in a
         // Glaze/Data put in Drive's trash): this device's changes since go up as they are, its deletions too.
         if (cat === 'settings') { if (got.at > at) return take(h, got, R, null, value); return over({ id: R.id }, at || now()); }
-        if (based(cat, key) && (await S.get(BASE + h))[BASE + h]?.sum === got.sum) return over({ id: R.id }, at || now());
+        if (based(cat, key) && (await S.get(BASE + h))[BASE + h]?.sum === got.sum) {
+          const link = { area, key, cat, id: R.id, lsum: got.sum, rsum: got.sum, at: got.at, seen: got.at };
+          // Keep this agreement before the upload: a fenced retry must merge against it, including local deletions.
+          await put(h, link, null, got.value);
+          return over(link, at || now());
+        }
         return joinBoth(got, null, at);
       }
       // Its file gone or in Drive's trash: put back from here, unchanged since it last synced with the time of that change.
