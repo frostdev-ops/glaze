@@ -141,7 +141,7 @@ test('rotation turns: a new schedule starts its clock without changing; then one
   const list = ['Library', 'Terminal', 'Clear'];
   const t0 = 1e12;
   let r = L.turn(undefined, t0, x, list);
-  assert.deepEqual(r, { state: { mode: '6h 08:00', at: t0, i: -1 }, wear: -1 });
+  assert.deepEqual(r, { state: { mode: '6h 08:00', at: t0, i: -1, started: true }, wear: -1 });
   assert.equal(L.turn(r.state, t0 + 36e5, x, list).wear, -1, 'not due');
   r = L.turn(r.state, t0 + 6 * 36e5, x, list);
   assert.deepEqual(r, { state: { mode: '6h 08:00', at: t0 + 6 * 36e5, i: 0, turned: true }, wear: 0 });
@@ -150,7 +150,7 @@ test('rotation turns: a new schedule starts its clock without changing; then one
   r = L.turn({ ...r.state, i: 2 }, t0 + 12 * 36e5, x, list);
   assert.equal(r.wear, 0, 'wraps');
   // Changing the schedule restarts the clock, keeping the place in the list.
-  assert.deepEqual(L.turn(r.state, t0 + 13 * 36e5, { rotate: 'daily', at: '07:00' }, list), { state: { mode: 'daily 07:00', at: t0 + 13 * 36e5, i: 0 }, wear: -1 });
+  assert.deepEqual(L.turn(r.state, t0 + 13 * 36e5, { rotate: 'daily', at: '07:00' }, list), { state: { mode: 'daily 07:00', at: t0 + 13 * 36e5, i: 0, started: true }, wear: -1 });
   // "Next Look now" turns at once; off never does.
   assert.equal(L.turn(r.state, t0 + 12 * 36e5 + 1, x, list, true).wear, 1);
   assert.equal(L.turn(r.state, t0 + 99 * 36e5, { rotate: 'off', at: '08:00' }, list, true).wear, -1);
@@ -188,6 +188,20 @@ test('rotation across devices: the last turn any device made, shared through syn
   const newer = { ...shared, at: t0 + 6 * H + 1000 };
   assert.equal(L.turn(rb.state, t0 + 7 * H, x, list, true, { ...newer, i: 1 }).wear, 2);
   assert.equal(L.turn(rb.state, t0 + 7 * H, x, list, true, { ...newer, i: 2 }).wear, 0, 'and wraps');
+});
+
+test('a delayed shared turn takes precedence over a clock that only just started', () => {
+  const H = 36e5, t0 = 1e12, x = { rotate: '6h', at: '08:00' }, list = ['Library', 'Terminal', 'Clear'];
+  const last = { mode: '6h 08:00', at: t0, i: 1 };
+  for (const prior of [undefined, { mode: 'daily 07:00', at: t0 - H, i: 0, turned: true }]) {
+    const local = L.turn(prior, t0 + H, x, list).state;
+    const adopted = L.turn(local, t0 + 2 * H, x, list, false, last);
+    assert.deepEqual(adopted, { state: last, wear: -1 }, 'starting a clock did not turn the account Look');
+    assert.equal(L.shared(adopted.state), null);
+    assert.equal(L.turn(adopted.state, t0 + 6 * H, x, list, false, last).wear, 2, 'the shared place and deadline survive');
+  }
+  const future = { ...last, at: t0 + 20 * H, turned: true };
+  assert.deepEqual(L.turn(future, t0 + H, x, list, false, last), { state: last, wear: -1 }, 'a future local clock cannot defeat a valid shared turn');
 });
 
 test('rotation across devices: a record that is old, from another schedule, from the future or damaged changes nothing', () => {
