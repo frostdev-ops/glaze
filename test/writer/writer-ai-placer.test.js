@@ -1,7 +1,7 @@
 // Check with AI (writer/frame/writer-ai.js placer): a suggestion's offsets in the text the model read become positions in the
 // document as it is now, and the words there must still be the quote. A footnote mark or picture put inside the range since the
 // check is no text in textBetween, so the words looked unchanged and the suggestion was offered over it (writer-issues.js's
-// apply guard was the only thing that refused it). The placer counts such a leaf as a character the quote lacks.
+// apply guard was the only thing that refused it). The placer rejects such leaves independently of the quote's characters.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -50,6 +50,19 @@ test('a footnote mark or picture put inside a suggestion\'s range after the chec
     assert.equal(leaves, 1, 'the leaf is in the document');
     assert.equal(now.textBetween(1, now.content.size - 1, '\n'), TEXT, 'textBetween alone reads no change');
     assert.equal(place(s, e, q), null, `${leaf().type.name} inside the range`);
+  }
+});
+
+test('a literal object-replacement character cannot hide a new footnote or picture inside a suggestion', () => {
+  const quote = 'results \ufffc was clear', text = `The ${quote} and significant.`;
+  const before = doc(para(text)), start = text.indexOf(quote), end = start + quote.length;
+  const unchanged = placerOver(before, true).place(start, end, quote);
+  assert.ok(unchanged, 'the literal Unicode character is ordinary text before it is replaced');
+  for (const leaf of [note, pic]) {
+    const pos = 1 + text.indexOf('\ufffc');
+    const { place, now } = placerOver(before, true, (tr) => tr.replaceWith(pos, pos + 1, leaf()));
+    assert.equal(now.nodeAt(pos).type.name, leaf().type.name, 'the character was replaced by an inline object');
+    assert.equal(place(start, end, quote), null, `${leaf().type.name} must not be covered by the suggestion`);
   }
 });
 

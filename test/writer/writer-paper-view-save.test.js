@@ -163,9 +163,20 @@ test('compact: Save and Close, refused because Documents is full, says so; every
     const f = flushCtx({ save: async () => null, project: () => PROJECTED, capped });
     await f.ctx.begin('a', action);
     assert.equal(f.line.textContent, line, `flush: ${action}, capped ${capped}`);
-    const g = flushCtx({ save: () => new Promise(() => {}), project: () => PROJECTED, capped });
-    g.ctx.begin('b', action);
-    g.ctx.end('b', 'save');
-    assert.equal(g.line.textContent, line, `a save that never answered: ${action}, capped ${capped}`);
+  }
+});
+
+test('compact: a timed-out save never reuses an earlier document-cap refusal', async () => {
+  for (const capped of [true, false]) {
+    let finish;
+    const f = flushCtx({ save: () => new Promise((resolve) => { finish = resolve; }), project: () => PROJECTED, capped });
+    const pending = f.ctx.begin('timeout', 'save');
+    assert.equal(f.line.textContent, 'Saving…');
+    f.ctx.end('timeout', 'save');
+    assert.equal(f.line.textContent, 'Not saved. Try again in a moment.', `prior cap refusal: ${capped}`);
+    assert.equal(f.view.props.editable(), true);
+    finish({});
+    await pending;
+    assert.deepEqual(f.messages, [], 'a late success cannot close the page after the timeout');
   }
 });
