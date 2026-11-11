@@ -96,6 +96,9 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
   };
   const isoOf = (v) => { const t = new Date(v); return Number.isFinite(t.getTime()) ? t.toISOString() : null; };
   const FILE = 'a[data-api-returntype="File"], a[href*="/files/"]';
+  // Canvas permits data-* attributes in authored HTML. Only Canvas's own markers, outside any authored body, identify
+  // the topic or entry: a classmate's post must never impersonate the one this box answers.
+  const pageElement = (doc, selector) => [...doc.querySelectorAll(selector)].find((el) => !el.parentElement?.closest('.user_content')) || null;
   const assignmentOf = (doc, ed, course) => {
     const classic = ed.id === 'submission_body', show = classic ? doc.querySelector('#assignment_show') : doc.querySelector('[data-testid="assignments-2-student-view"]');
     if (!show) return {};
@@ -108,12 +111,12 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     return { kind: 'assignment', course, assignment: { title, due, instructions: text, description: '', rubric: null, files: [], ...(incomplete && { incomplete: true }) } };
   };
   const replyOf = (doc, ed, course, topic) => {
-    const body = doc.querySelector(`[data-resource-type="discussion_topic.body"][data-resource-id="${topic}"], [data-resource-type="announcement.body"][data-resource-id="${topic}"]`);
-    const title = line(doc.querySelector('[data-testid="discussion-topic-container"] h1[data-testid="message_title"] [aria-hidden="true"]'), LIMIT.title);
+    const body = pageElement(doc, `[data-resource-type="discussion_topic.body"][data-resource-id="${topic}"], [data-resource-type="announcement.body"][data-resource-id="${topic}"]`);
+    const title = line(pageElement(doc, '[data-testid="discussion-topic-container"] h1[data-testid="message_title"] [aria-hidden="true"]'), LIMIT.title);
     const prompt = [title, textOf(body, LIMIT.prompt).text].filter(Boolean).join('\n').slice(0, LIMIT.prompt);
     const entry = /^message-body-(\d+)$/.exec(ed.id)?.[1];
-    const said = entry ? textOf(doc.querySelector(`[data-resource-type="discussion_topic.reply"][data-resource-id="${entry}"], [data-resource-type="announcement.reply"][data-resource-id="${entry}"]`), LIMIT.post).text : '';
-    const replyTo = said ? { id: entry, author: line(doc.querySelector(`[data-entry-id="${entry}"] [data-testid="author_name"]`), LIMIT.name), text: said } : null;
+    const said = entry ? textOf(pageElement(doc, `[data-resource-type="discussion_topic.reply"][data-resource-id="${entry}"], [data-resource-type="announcement.reply"][data-resource-id="${entry}"]`), LIMIT.post).text : '';
+    const replyTo = said ? { id: entry, author: line(pageElement(doc, `[data-entry-id="${entry}"] [data-testid="author_name"]`), LIMIT.name), text: said } : null;
     const announcement = [...doc.querySelectorAll('#breadcrumbs a')].some((a) => /^\/(?:courses|groups)\/\d+\/announcements\/?$/.test(a.getAttribute('href') || ''));
     return { kind: 'reply', course, prompt: prompt ? { text: prompt } : null, requirements: null, thread: [], replyTo, ...(announcement && { announcement: true }) };
   };
