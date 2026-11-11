@@ -142,7 +142,8 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
     if (i) s.ISBN = i;
     if (u) s.URL = u;
     if (s.page) s.page = s.page.replace(/\s*[-–—]+\s*/g, '–');
-    if (s.edition) s.edition = s.edition.replace(/\s*(?:st|nd|rd|th)?\.?\s*(?:ed(?:ition)?\.?)?$/i, '') || s.edition;
+    // "2nd ed.", "4th edition" → the number; an edition in words ("Second edition", "Revised") stays as typed.
+    if (s.edition) s.edition = s.edition.replace(/^(\d+)\s*(?:st|nd|rd|th)?\.?(?:\s*(?:ed\.?|edition))?$/i, '$1');
     return s.title || s.author || s.editor ? s : null;
   };
 

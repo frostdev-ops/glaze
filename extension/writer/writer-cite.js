@@ -29,7 +29,15 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   const cap = (s) => s.replace(/^(<i>)?([a-z])/, (_, i, c) => `${i || ''}${c.toUpperCase()}`);
   const join = (parts, sep = ', ') => parts.filter(Boolean).join(sep);
   const ordinal = (n) => { const v = +n; if (!Number.isInteger(v)) return n; const s = ['th', 'st', 'nd', 'rd'], k = v % 100; return v + (s[(k - 20) % 10] || s[k] || s[0]); };
-  const edition = (e) => (e ? (/^\d+$/.test(e) ? `${ordinal(e)} ed.` : /ed\.?$/i.test(e) ? e : `${e} ed.`) : '');
+  // Every guide gives an edition's number as a numeral ("2nd ed."), typed "Second edition" or "2"; any other statement as
+  // typed, with "edition" shortened to "ed." ("Revised ed.").
+  const ORDINAL = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth', 'eleventh', 'twelfth', 'thirteenth', 'fourteenth', 'fifteenth', 'sixteenth', 'seventeenth', 'eighteenth', 'nineteenth', 'twentieth'];
+  const edition = (e) => {
+    if (!e) return '';
+    const w = /^([a-z]+)(?:\s+(?:ed\.?|edition))?$/i.exec(e), n = w ? ORDINAL.indexOf(w[1].toLowerCase()) + 1 : 0;
+    if (/^\d+$/.test(e) || n) return `${ordinal(n || e)} ed.`;
+    return /\bed\.?$/i.test(e) ? e : /\bedition$/i.test(e) ? e.replace(/edition$/i, 'ed.') : `${e} ed.`;
+  };
 
   // ---- names --------------------------------------------------------------------------------------------------------
   const fam = (n) => n.literal || n.family || '';
