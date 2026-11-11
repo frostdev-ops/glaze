@@ -226,6 +226,31 @@ test('a subscription cut off before its first acknowledgement still receives tha
   assert.deepEqual(r.app, [ack, J({ method: 'notifications/tools/list_changed', params: { _meta: { 'io.modelcontextprotocol/subscriptionId': 'L' } } })]);
 });
 
+test('malformed cancellation envelopes cannot erase an in-flight call from reconnect tracking', () => {
+  for (const cancel of [
+    JSON.stringify({ method: 'notifications/cancelled', params: { requestId: 5 } }),
+    J({ id: 99, method: 'notifications/cancelled', params: { requestId: 5 } }),
+  ]) {
+    const s = legacy();
+    s.fromApp(J({ id: 5, method: 'tools/call', params: { name: 'todo_mark_done', arguments: {} } }), 1);
+    assert.deepEqual(s.fromApp(cancel, 2).glaze, [cancel], 'the worker still gets to reject the original line');
+    assert.ok(P(s.down(3).app).some((m) => m.id === 5 && m.error.code === S.CUT), 'the real call still gets its interruption error');
+  }
+});
+
+test('invalid ping and initialize envelopes are never answered locally as successful requests', () => {
+  for (const text of [
+    JSON.stringify({ jsonrpc: '1.0', id: 1, method: 'ping' }),
+    J({ id: 1, method: 'ping', params: [] }),
+    JSON.stringify({ jsonrpc: '1.0', id: 1, method: 'initialize', params: INIT }),
+  ]) {
+    const s = make();
+    assert.deepEqual(s.fromApp(text, 0).app, []);
+    assert.deepEqual(s.tick(S.WAIT).app, [], 'leave invalid input for the worker to reject');
+    assert.deepEqual(s.up(S.WAIT + 1, 'chrome').glaze, [text]);
+  }
+});
+
 test('tries: every 250 ms for 5 s, then doubling to 2 s; from 250 ms again after 30 s connected', () => {
   const s = legacy();
   s.down(0);
