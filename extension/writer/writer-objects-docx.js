@@ -51,25 +51,36 @@ var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
     const lists = [];
     doc.descendants((n) => { if (isList(n)) { lists.push(n); return false; } return true; });
     if (lists.some((l) => l.attrs.styles || l.attrs.continue || l.content.content.some((li) => li.attrs.start != null)) && parts['word/numbering.xml']) {
-      let next = lists.length + 1, prev = null;
-      const extra = [], itemNums = [];
+      // A continued list in its predecessor's styles shares its instance (unless that instance overrides them). In styles of its own it is a new instance of the
+      // same definition whose levels override the formats, starting where the predecessor's count left off (counts: the
+      // numbered lists' counters, as the paper keeps them).
+      let next = lists.length + 1, prev = null, counts = [];
+      const extra = [], itemNums = [], level = (li) => Math.min(8, li.attrs.indent || 0);
       lists.forEach((l, i) => {
-        const ordered = l.type.name === 'ordered_list';
-        let num = i + 1, abs = i + 1;
-        if (ordered && l.attrs.continue && prev) ({ num, abs } = prev);
+        const ordered = l.type.name === 'ordered_list', styles = L().levelStyles(l);
+        let num = i + 1, abs = i + 1, own = [];
+        if (ordered && l.attrs.continue && prev) {
+          ({ num, abs } = prev);
+          const base = L().levelStyles(lists[abs - 1]);
+          own = styles.map((st, lv) => (st !== base[lv] ? lv : -1)).filter((lv) => lv >= 0);
+          // Also a new instance when the one before overrides styles this list doesn't share.
+          if ((own.length || prev.own) && l.firstChild.attrs.start == null) { num = next++; extra.push({ num, abs, own, styles, level: level(l.firstChild), start: (counts[level(l.firstChild)] || 0) + 1 }); }
+        } else if (ordered) counts = [];
         l.forEach((li) => {
-          if (ordered && li.attrs.start != null) { num = next++; extra.push({ num, abs, level: Math.min(8, li.attrs.indent || 0), start: li.attrs.start }); }
+          if (ordered && li.attrs.start != null) { num = next++; extra.push({ num, abs, own, styles, level: level(li), start: li.attrs.start }); }
           itemNums.push(num);
+          if (ordered) { counts.length = level(li) + 1; counts[level(li)] = li.attrs.start ?? (counts[level(li)] || 0) + 1; }
         });
-        if (ordered) prev = { num, abs };
+        if (ordered) prev = { num, abs, own: own.length > 0 };
       });
+      const override = (e) => [...new Set([e.level, ...(e.own || [])])].sort((a, b) => a - b).map((lv) => `<w:lvlOverride w:ilvl="${lv}">${lv === e.level ? `<w:startOverride w:val="${e.start}"/>` : ''}${e.own?.includes(lv) ? lvl(e.styles[lv], lv, true) : ''}</w:lvlOverride>`).join('');
       let k = 0;
       x = x.replace(/<w:numId w:val="\d+"\/>/g, (whole) => (k < itemNums.length ? `<w:numId w:val="${itemNums[k++]}"/>` : whole));
       const open = /^[\s\S]*?<w:numbering[^>]*>/.exec(parts['word/numbering.xml'])[0];
       parts['word/numbering.xml'] = `${open}${lists.map((l, i) => {
         const ordered = l.type.name === 'ordered_list', styles = L().levelStyles(l);
         return `<w:abstractNum w:abstractNumId="${i + 1}"><w:multiLevelType w:val="hybridMultilevel"/>${styles.map((s, lv) => lvl(s, lv, ordered)).join('')}</w:abstractNum>`;
-      }).join('')}${lists.map((_, i) => `<w:num w:numId="${i + 1}"><w:abstractNumId w:val="${i + 1}"/></w:num>`).join('')}${extra.map((e) => `<w:num w:numId="${e.num}"><w:abstractNumId w:val="${e.abs}"/><w:lvlOverride w:ilvl="${e.level}"><w:startOverride w:val="${e.start}"/></w:lvlOverride></w:num>`).join('')}</w:numbering>`;
+      }).join('')}${lists.map((_, i) => `<w:num w:numId="${i + 1}"><w:abstractNumId w:val="${i + 1}"/></w:num>`).join('')}${extra.map((e) => `<w:num w:numId="${e.num}"><w:abstractNumId w:val="${e.abs}"/>${override(e)}</w:num>`).join('')}</w:numbering>`;
     }
 
     // ---- tables, cells and pictures, in document order
@@ -170,21 +181,31 @@ var GZ_WRITER_OBJECTS_DOCX = globalThis.GZ_WRITER_OBJECTS_DOCX || (() => {
     };
 
     // ---- the HTML, tag by tag
-    let ri = -1, li = 0, prevOrdered = null, continued = false;
+    // counts: the numbered lists' counters so far. A list on the definition of the numbered list before it whose first
+    // item starts at the number that list's count goes on to continues it (as export writes one in styles of its own).
+    let ri = -1, li = 0, prevOrdered = null, continued = false, counts = [];
+    const abstractOf = (item) => val(nums.get(item.id), 'abstractNumId');
+    const countsOn = (run, last) => {
+      const first = run.items[0], o = els(nums.get(first.id)).find((x) => x.local === 'lvlOverride' && +at(x, 'ilvl') === first.level);
+      return abstractOf(first) != null && abstractOf(first) === abstractOf(last) && +val(o, 'startOverride') === (counts[first.level] || 0) + 1;
+    };
     html = html.replace(/<(ol|ul)>|<li\b[^>]*? data-w-num="[^"]*"/g, (tag) => {
       if (tag === '<ol>' || tag === '<ul>') {
         const run = runs[++ri];
         li = 0;
         if (!run?.items.length) return tag;
-        const styles = styleOf(run), cont = run.ordered && prevOrdered && prevOrdered.items.at(-1).id === run.items[0].id;
+        const last = prevOrdered?.items.at(-1), styles = styleOf(run), cont = run.ordered && last && (last.id === run.items[0].id || countsOn(run, last));
         continued = !!cont;
+        if (run.ordered && !cont) counts = [];
         if (run.ordered) prevOrdered = run;
         return `<${tag.slice(1, 3)}${styles ? ` data-styles="${styles}"` : ''}${cont ? ' data-continue="true"' : ''}>`;
       }
       if (tag.startsWith('<li')) {
         const run = runs[ri], item = run?.items[li], before = run?.items[li - 1], open = tag.replace(/ data-w-num="[^"]*"$/, '');
         li++;
-        return run?.ordered && item && (before ? item.id !== before.id : !continued && startOf(item) !== 1) ? `<li data-start="${startOf(item)}"${open.slice(3)}` : open;
+        const start = run?.ordered && item && (before ? item.id !== before.id : !continued && startOf(item) !== 1) ? startOf(item) : null;
+        if (run?.ordered && item) { counts.length = item.level + 1; counts[item.level] = start ?? (counts[item.level] || 0) + 1; }
+        return start != null ? `<li data-start="${start}"${open.slice(3)}` : open;
       }
       return tag;
     });

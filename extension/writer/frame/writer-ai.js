@@ -11,7 +11,17 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   // The same place ai/tasks/writer-complete.js fits() takes: the caret right after a word or one space after it, in a
   // sentence of at least three words, with only white space after it in its line.
   const WORD = /[\p{L}\p{N}\p{M}]/u;
-  const TAIL = /[\p{L}\p{N}\p{M}]+(?:['’-][\p{L}\p{N}\p{M}]+)*['’-]?$/u;
+  // The word at the end of s: letters, digits, and an apostrophe or hyphen inside it (or one after it), found backward,
+  // since a pattern anchored only at the end tries every start of a long run of letters. → [word] or null.
+  const caretWord = (s) => {
+    const size = (j) => (j > 1 && (s.charCodeAt(j - 1) & 0xfc00) === 0xdc00 && (s.charCodeAt(j - 2) & 0xfc00) === 0xd800 ? 2 : 1);
+    const letter = (j) => j > 0 && WORD.test(s.slice(j - size(j), j)), mark = (j) => j > 0 && "'’-".includes(s[j - 1]);
+    let i = s.length;
+    if (mark(i)) i--;
+    if (!letter(i)) return null;
+    for (;;) { while (letter(i)) i -= size(i); if (mark(i) && letter(i - 1)) i--; else break; }
+    return [s.slice(i)];
+  };
   const sentence = (before) => {
     const s = before.split('\n').pop();
     let at = 0;
@@ -32,8 +42,6 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     return single || n(/"/g) % 2 === 1 || n(/“/g) > n(/”/g) || n(/«/g) > n(/»/g) || n(/‘/g) > n(/’(?![\p{L}\p{N}])/gu);
   };
   const word = (before) => (/[^ ] $/.test(before) ? before.slice(0, -1) : before);
-  // Find the final whitespace first: searching a long CJK word before a space with an unanchored suffix is quadratic.
-  const caretWord = (s) => { let at = s.length; while (at && !/\s/u.test(s[at - 1])) at--; return TAIL.exec(s.slice(at)); };
   const fits = (before, after = '') => typeof before === 'string' && !inQuote(before) && !!caretWord(word(before)) && !/^[^\S\n]*[^\s]/.test(after)
     && sentence(word(before)).split(/\s+/).filter((w) => WORD.test(w)).length >= 3;
   // Document and suggestion caps count UTF-16 units; discard a low surrogate exposed at their start.
@@ -54,7 +62,12 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const providerName = (st, t) => (st?.provider === 'device' ? t('Chrome on-device AI') : st?.provider === 'apple' ? t('Apple Intelligence') : st?.provider === 'local' ? t('Rime') : st?.to || t('Endpoint'));
   // The models on this computer (ai/settings.js HERE): no model id, and a status that can change without the student.
   const HERE = ['device', 'apple', 'local'];
-  const api = { fits, sentence, tailText, nextWord, consume, pause, wait, learn, providerName };
+  // The text on each side of the caret at head that the gray text is asked with; the footnotes follow the draft.
+  const around = (doc, head) => {
+    const tx = (globalThis.GZ_WRITER_SCHEMA || require('../writer-schema.js')).text(doc, { notes: true }), off = tx.offsetAt(head);
+    return { before: tailText(tx.text.slice(0, off), 1e6), after: tx.text.slice(off, off + 4001) };
+  };
+  const api = { fits, sentence, tailText, nextWord, consume, pause, wait, learn, providerName, around };
   const D = typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : typeof require === 'function' ? require('../../ai/failure.js') : null;
   const reasonText = (e) => D?.explain(e) || '';
 
@@ -353,8 +366,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (!v || !ok('completion') || v.composing || !v.hasFocus() || KEY.getState(v.state)) return;
     const st = v.state, { selection } = st;
     if (!selection.empty || !selection.$head.parent.isTextblock || selection.$head.parent.type.spec.code || quoted(selection.$head)) return;
-    const tx = S.text(st.doc), off = tx.offsetAt(selection.head);
-    const before = tailText(tx.text.slice(0, off), 1e6), after = tx.text.slice(off, off + 4001);
+    const { before, after } = around(st.doc, selection.head);
     if (!fits(before, after)) return;
     const r = run('completion', 'writer.complete', { before, after, mode: F.mode() === 'paper' ? 'paper' : 'compose', kind: F.kind(), context: F.context(), past: past.slice() });
     flight = r.id;
@@ -380,8 +392,8 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (!selection.empty) return 'a selection';
     if (!selection.$head.parent.isTextblock || selection.$head.parent.type.spec.code) return 'not at this caret';
     if (quoted(selection.$head)) return 'in a quotation';
-    const tx = S.text(st.doc), off = tx.offsetAt(selection.head);
-    if (!fits(tailText(tx.text.slice(0, off), 1e6), tx.text.slice(off, off + 4000))) return 'not at this caret';
+    const { before, after } = around(st.doc, selection.head);
+    if (!fits(before, after)) return 'not at this caret';
     return KEY.getState(st) ? 'showing' : flight ? 'asking' : timer ? 'waiting for the pause' : 'ready: type a letter or a space';
   };
 
@@ -389,17 +401,20 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const KINDS = { spelling: 'spelling', grammar: 'grammar', punctuation: 'grammar', style: 'style', clarity: 'style' };
   let reviewing = false;
   // Offsets of a run's text (S.text of the doc it read) → positions now, or null when those words have changed since.
-  const placer = (doc, m) => {
+  // edit: a range a suggestion replaces, so never one holding a footnote mark or picture.
+  const placer = (doc, m, edit = false) => {
     const tx = S.text(doc);
     return (start, end, quote) => {
-      const from = m.map(tx.posAt(start), 1), to = m.map(tx.posAt(end), -1), v = view();
+      const at = edit ? tx.range(start, end) : { from: tx.posAt(start), to: tx.posAt(end, -1) };
+      if (!at) return null;
+      const from = m.map(at.from, 1), to = m.map(at.to, -1), v = view();
       return v && to > from && v.state.doc.textBetween(from, to, '\n') === quote ? { from, to } : null;
     };
   };
   const review = async () => {
     const v = view();
     if (!v || !ok('writing') || reviewing) return;
-    const doc = v.state.doc, text = S.text(doc).text;
+    const doc = v.state.doc, text = S.text(doc, { notes: true }).text;
     if (!text.trim()) return;
     const tr = track(), gen = generation;
     reviewing = true;
@@ -410,7 +425,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     render();
     try {
       if (end.type !== 'end' || !Array.isArray(end.output?.issues)) { say(t("AI couldn't check it.")); return; }
-      const place = placer(doc, tr.m);
+      const place = placer(doc, tr.m, true);
       const issues = end.output.issues.map((i, n) => { const at = place(i.start, i.end, i.quote); return at && { ...at, source: 'ai', kind: KINDS[i.kind] || 'style', message: i.message, suggestions: i.suggestions, sure: false, id: `ai-${n}-${at.from}` }; }).filter(Boolean);
       globalThis.GZ_WRITER_ISSUES?.set('ai', issues);
       say(issues.length ? t('AI found {n} issues.', { n: issues.length }) : t('AI found no issues.'));
@@ -520,7 +535,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const feedback = async () => {
     const v = view();
     if (!v || !ok('writing') || fb.state === 'running' || !assignment()) return;
-    const doc = v.state.doc, text = S.text(doc).text;
+    const doc = v.state.doc, text = S.text(doc, { notes: true }).text;
     if (!text.trim()) return;
     fb.done?.();
     const tr = track(), gen = generation, turn = ++feedbackTurn;

@@ -108,11 +108,45 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
   };
   // A token (the run between spaces) that is an address, a path, a handle, code or a number: www.teh.com, teh@x.edu, a_teh.
   const unsafe = (token) => /[@/\\_:#<>{}=|~^`$%&*+]|\d|\.\p{L}|^\p{L}+\.\p{L}/u.test(token) || /\p{Ll}\p{Lu}/u.test(token);
-  // The textblock at pos is code, or the range carries a link.
-  const guarded = (doc, from, to) => {
+  // Autocorrect and Harper are English: a paragraph reads as another language when more of its words are another
+  // language's common words than English's (words both use, such as "a", "in", "die" or "was", count for neither).
+  const EN = new Set(('the and are were that this these those with not have has had be been but they we you she his their there them him its your our from '
+    + 'as which what who would could should can than then when where while how why about because into just like very some only more most such other many '
+    + 'does did said think know').split(' '));
+  const OTHER = new Set(('le la les des une est et que qui nous vous ils elle elles pas dans pour sur avec mais je tu du au aux ce cette sont très où ça '
+    + 'el los las y es del por para con pero como más muy sí yo él ella está lo se su sus una '
+    + 'il di che non gli della delle sono è mi miei mia ma anche ho '
+    + 'os um não são em eu você ele muito com '
+    + 'der das und ist nicht ein eine ich sie wir ihr mit auf für sich auch zu den dem von dass weiß '
+    + 'het een en van zijn niet ik je wij met voor ook maar '
+    + 'jeg og er ikke det til på har att och inte är jag vi bor '
+    + 'się jest nie że czy oraz jak ale są').split(' '));
+  const english = (text) => {
+    let en = 0, other = 0;
+    for (const w of text.slice(-1500).toLowerCase().split(/[^\p{L}\p{M}]+/u)) { if (EN.has(w)) en++; else if (OTHER.has(w)) other++; }
+    return other <= en;
+  };
+  // An open quotation before the end of text in its paragraph: straight double quotes by parity, curly and angle ones by
+  // more openers than closers. A ’ before a letter or digit (don’t, ’90s) is an apostrophe; a straight single quote opens
+  // before a letter, closes after a word, and is otherwise an apostrophe (as frame/writer-ai.js reads quotations).
+  const quoting = (text) => {
+    const n = (c) => text.split(c).length - 1, ink = /[\p{L}\p{N}\p{M}]/u;
+    let single = false;
+    for (let i = text.indexOf("'"); i >= 0; i = text.indexOf("'", i + 1)) {
+      if (!ink.test(text[i - 1] || '') && /\p{L}/u.test(text[i + 1] || '')) single = true;
+      else if (single && !ink.test(text[i + 1] || '')) single = false;
+    }
+    return single || n('"') % 2 === 1 || n('“') > n('”') || n('«') > n('»') || n('‘') > (text.match(/’(?![\p{L}\p{N}])/gu) || []).length;
+  };
+  // Where a fix never goes: code, a block quote, an address or identifier, a range that carries a link and, for a fix to
+  // words (words), a quotation or a paragraph in another language.
+  const guarded = (doc, from, to, words = true) => {
     const $from = doc.resolve(from);
     if ($from.parent.type.spec.code || $from.parent !== doc.resolve(to).parent) return true;
-    if (literalLike(blockText($from.parent), $from.parentOffset, $from.parentOffset + to - from)) return true;
+    for (let d = $from.depth; d > 0; d--) if ($from.node(d).type.name === 'blockquote') return true;
+    const text = blockText($from.parent);
+    if (words && (quoting(text.slice(0, $from.parentOffset)) || !english(text))) return true;
+    if (literalLike(text, $from.parentOffset, $from.parentOffset + to - from)) return true;
     let link = false;
     doc.nodesBetween(Math.max(from - 1, $from.start()), Math.min(to + 1, $from.end()), (n) => { if (n.isText && n.marks.some((m) => m.type.name === 'link')) link = true; });
     return link;
@@ -160,22 +194,37 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     'long', 'far', 'many', 'much', 'more', 'come', 'go', 'hear', 'please', 'night', 'mahi', 'ylang', 'beri', 'pom', 'tom', 'tuk', 'cha', 'choo', 'boo',
     'aye', 'hip', 'la', 'ta', 'na', 'dum', 'oh', 'ah', 'uh', 'mm', 'hmm', 'ooh', 'wow', 'yeah', 'yay', 'hey', 'ho', 'hush', 'shh', 'tick', 'bang', 'boom', 'woof']);
   const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-  const WORD = /([\p{L}\p{M}'’]+)$/u;
-  // A lone i before '.', ',' or ')' may be i.e., a roman-numeral marker or a variable ("Let i, j"), not the pronoun.
-  const notI = (word, next) => word === 'i' && /^[.,)]/.test(next || '');
+  // Where the run of characters like re that ends at end in s starts, found backward: a pattern anchored only at the end
+  // tries every start of a long run (a pasted DNA sequence before a full stop).
+  const LETTER = /[\p{L}\p{M}'’]/u, INK = /\S/;
+  const runStart = (s, re, end = s.length) => {
+    let i = end;
+    for (;;) {
+      const n = i > 1 && (s.charCodeAt(i - 1) & 0xfc00) === 0xdc00 && (s.charCodeAt(i - 2) & 0xfc00) === 0xd800 ? 2 : 1;
+      if (i <= 0 || !re.test(s.slice(i - n, i))) return i;
+      i -= n;
+    }
+  };
+  // A lone i before '.', ',' or ')' may be i.e., a roman-numeral marker or a variable ("Let i, j"), not the pronoun; so is
+  // one after a word that names a variable ("the loop variable i", "for each index i").
+  const VARIABLE = new Set(['variable', 'index', 'indices', 'element', 'row', 'column', 'counter', 'iteration', 'integer', 'subscript', 'entry', 'item', 'term', 'node', 'vertex', 'step', 'let']);
+  const notI = (word, next, ahead = '') => word === 'i' && (/^[.,)]/.test(next || '') || VARIABLE.has(/([\p{L}]+)\s+$/u.exec(ahead.slice(-40))?.[1]?.toLowerCase()));
+  // Curly quotes as typed with Smart quotes off.
+  const straight = (s) => s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
   // before: the paragraph's text up to the caret, next the boundary about to follow it. → { from, to, was, now, rule }
   // (offsets into before) or null. kept: lower-cased words (and '  ') the student took back; they stay as typed.
   const fix = (before, kept = new Set(), next = ' ') => {
-    const m = WORD.exec(before);
-    if (!m) return null;
-    const word = m[1].replace(/^['’]+/, ''), to = before.length, from = to - word.length, ahead = before.slice(0, from);
-    const token = (/(\S*)$/.exec(ahead)?.[1] || '') + word;
+    const at = runStart(before, LETTER);
+    if (at === before.length) return null;
+    const word = before.slice(at).replace(/^['’]+/, ''), to = before.length, from = to - word.length, ahead = before.slice(0, from);
+    const token = ahead.slice(runStart(ahead, INK)) + word;
     if (!word || unsafe(token) || /[-'’“”]$/.test(ahead) || kept.has(word.toLowerCase())) return null;
     const lower = word.toLowerCase(), start = sentenceStart(ahead);
     // i, i'm, i'll, i'd, i've → I…
-    if (/^i(['’](m|ll|d|ve))?$/.test(word)) return notI(word, next) ? null : { from, to, was: word, now: 'I' + word.slice(1), rule: 'i' };
+    if (/^i(['’](m|ll|d|ve))?$/.test(word)) return notI(word, next, ahead) ? null : { from, to, was: word, now: 'I' + word.slice(1), rule: 'i' };
     // A doubled word, the second dropped: "the the" → "the". A Capitalised pair is a name ("Bora Bora", "Walla Walla").
-    const prev = /([\p{L}\p{M}'’]+) $/u.exec(ahead), pre = prev ? ahead.slice(0, -prev[0].length) : '';
+    const p = ahead.endsWith(' ') ? runStart(ahead, LETTER, ahead.length - 1) : ahead.length - 1;
+    const prev = p < ahead.length - 1 ? [ahead.slice(p), ahead.slice(p, -1)] : null, pre = prev ? ahead.slice(0, p) : '';
     if (prev && prev[1].toLowerCase() === lower && !TWICE.has(lower) && !kept.has(`${lower} ${lower}`) && /\p{L}/u.test(lower) && (!pre || /\s$/.test(pre))
       && !/^\p{Lu}/u.test(word) && (!/^\p{Lu}/u.test(prev[1]) || sentenceStart(pre))) {
       return { from: from - prev[0].length, to, was: `${prev[1]} ${word}`, now: prev[1], rule: 'twice' };
@@ -257,6 +306,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
   const plugin = (o = {}) => {
     let expect = null;
     const allowed = (rule) => !CLASS[rule] || o.allow?.(CLASS[rule]) !== false;
+    const asTyped = (f) => (o.allow?.('smart') === false ? { ...f, now: straight(f.now) } : f);
     const commit = (view, f) => { const made = commitFix(view, f); o.onFix?.(view, made); return true; };
     // The word before pos in its textblock, fixed if it is sure and was typed here.
     const tryFix = (view, pos) => {
@@ -267,7 +317,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
       if (!f || !allowed(f.rule) || st.words.has(f.was.toLowerCase())) return false;
       const from = start + f.from, to = start + f.to;
       if (!within(st.typed, from, to) || guarded(view.state.doc, from, to)) return false;
-      return commit(view, { ...f, from, to });
+      return commit(view, asTyped({ ...f, from, to }));
     };
     return new Plugin({
       key,
@@ -319,7 +369,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
           if (!$from.parent.isTextblock || $from.parent.type.spec.code) return false;
           // Two spaces → one.
           if (text === ' ' && allowed('space') && !st.kept.has('  ') && $from.parentOffset > 1 && $from.parent.textBetween($from.parentOffset - 1, $from.parentOffset) === ' '
-            && $from.parent.textBetween($from.parentOffset - 2, $from.parentOffset - 1) !== ' ' && within(st.typed, from - 1, from) && !guarded(view.state.doc, from - 1, from)) {
+            && $from.parent.textBetween($from.parentOffset - 2, $from.parentOffset - 1) !== ' ' && within(st.typed, from - 1, from) && !guarded(view.state.doc, from - 1, from, false)) {
             expect = null;
             view.dispatch(view.state.tr.insertText(text, from, to).setMeta(key, { typed: [from, from + 1] }).scrollIntoView());
             return commit(view, { from: from - 1, to: from + 1, was: '  ', now: ' ', rule: 'space' });
@@ -331,7 +381,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
           // The boundary goes in as typing (its own undo group with the word), the fix after it as its own step.
           expect = null;
           view.dispatch(view.state.tr.insertText(text, from, to).setMeta(key, { typed: [from, from + text.length] }).scrollIntoView());
-          return commit(view, { ...f, from: a, to: b });
+          return commit(view, asTyped({ ...f, from: a, to: b }));
         },
         handleKeyDown(view, e) {
           // Enter ends a word too: fixed once the new line is in, as its own step.
@@ -378,7 +428,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
     if (issue.rule !== 'Capitalization' && /^\p{Lu}/u.test(was) && !sentenceStart(before)) return null;
     if (issue.sure && issue.rule === 'Typo' && /^\p{Lu}/u.test(was)) return null;
     if (issue.sure && issue.rule === 'Capitalization' && !sentenceStart(before) && !/^i(['’](m|ll|d|ve))?$/.test(was)) return null;
-    if (issue.rule === 'Capitalization' && notI(was, $to.parent.textBetween($to.parentOffset, Math.min($to.parentOffset + 1, $to.parent.content.size)))) return null;
+    if (issue.rule === 'Capitalization' && notI(was, $to.parent.textBetween($to.parentOffset, Math.min($to.parentOffset + 1, $to.parent.content.size)), before)) return null;
     return commitFix(view, { from, to, was, now, rule: issue.rule || 'harper' });
   };
   // Which fix was the last change, per view: revert takes it back with the editor's own undo.
@@ -411,7 +461,7 @@ var GZ_WRITER_PROOF = globalThis.GZ_WRITER_PROOF || (() => {
 
   return {
     decide: null, verdict, key, KIND, SURE, ASK, CLASS, TYPOS, TWICE, toIssue, kindOf, plausible, distance, blockText, docText, unsafe, guarded, sentenceStart, fix,
-    contextWords, nameLike, literalLike, plugin, since, mapPos, autofix, revert, within, finished,
+    contextWords, nameLike, literalLike, english, quoting, straight, plugin, since, mapPos, autofix, revert, within, finished,
   };
 })();
 

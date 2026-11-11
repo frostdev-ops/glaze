@@ -59,7 +59,7 @@ const ruling = async (context) => {
   let resolve;
   f.proof.decide = () => new Promise((r) => { resolve = r; });
   await f.run(150);
-  f.reply(f.ports[0], { op: 'lint', id: f.lint().id, lints: [{ start: 0, end: 5, kind: 'Grammar', problem: 'Their', suggestions: [{ k: 0, t: "They're" }] }] });
+  f.reply(f.ports[0], { op: 'lint', id: f.lint().id, lints: [{ start: 0, end: 5, kind: 'Typo', problem: 'Their', suggestions: [{ k: 0, t: "They're" }] }] });
   assert.equal(typeof resolve, 'function');
   return { f, finish: async () => { resolve('apply'); await flush(); } };
 };
@@ -147,7 +147,7 @@ test('decide cannot apply a verdict after the surrounding sentence changes', asy
   let resolve;
   f.proof.decide = () => new Promise((r) => { resolve = r; });
   await f.run(150);
-  f.reply(f.ports[0], { op: 'lint', id: f.lint().id, lints: [{ start: 0, end: 5, kind: 'Grammar', problem: 'Their', suggestions: [{ k: 0, t: "They're" }] }] });
+  f.reply(f.ports[0], { op: 'lint', id: f.lint().id, lints: [{ start: 0, end: 5, kind: 'Typo', problem: 'Their', suggestions: [{ k: 0, t: "They're" }] }] });
   assert.equal(typeof resolve, 'function');
   f.view.dispatch(f.view.state.tr.insertText('going home was surprising. ', 7, f.view.state.doc.content.size - 1));
   resolve('apply'); await flush();
@@ -282,7 +282,7 @@ test('decide drops a verdict from another state even if the version and issue ma
   f.view.dispatch(f.view.state.tr.setMeta(P.key, { typed: [1, 6] }).setSelection(GZ_PM.state.TextSelection.atEnd(f.view.state.doc)));
   let resolve;
   f.proof.decide = () => new Promise((r) => { resolve = r; });
-  f.reply(f.ports[0], { op: 'lint', id: f.lint().id, lints: [{ start: 0, end: 5, kind: 'Grammar', problem: 'Their', suggestions: [{ k: 0, t: "They're" }] }] });
+  f.reply(f.ports[0], { op: 'lint', id: f.lint().id, lints: [{ start: 0, end: 5, kind: 'Typo', problem: 'Their', suggestions: [{ k: 0, t: "They're" }] }] });
   assert.equal(typeof resolve, 'function');
   const issue = f.issues.list()[0], old = f.view.state;
   f.replace(GZ_PM.state.EditorState.create({ doc: old.doc, plugins: old.plugins.slice() }));
@@ -290,4 +290,36 @@ test('decide drops a verdict from another state even if the version and issue ma
   f.issues.set('harper', [{ ...issue, id: issue.id.replace(/^harper:/, '') }]);
   resolve('apply'); await flush();
   assert.equal(f.view.state.doc.textContent, old.doc.textContent);
+});
+
+// Owner rule (audit 2026-11-11 #5): an AI "apply" goes through Settings → Writer → Typing. Grammar and word choice have no
+// switch there, so they come back as the first suggestion on the card, never typed in.
+const ruled = async ({ kind, said = 'apply', autocorrect, problem = 'Their', fix = 'They’re' }) => {
+  const f = frame({ html: '<p></p>' }); await flush();
+  if (autocorrect) f.configure({ autocorrect: { typos: true, capitalI: true, doubles: true, smart: true, ...autocorrect } });
+  const plugin = f.view.state.plugins.find((p) => p.spec.key === P.key);
+  for (const ch of `${problem} going home. `) {
+    const { from, to } = f.view.state.selection;
+    if (!plugin.props.handleTextInput(f.view, from, to, ch)) f.view.dispatch(f.view.state.tr.insertText(ch));
+  }
+  let resolve;
+  f.proof.decide = () => new Promise((r) => { resolve = r; });
+  await f.run(150);
+  f.reply(f.ports[0], { op: 'lint', id: f.lint().id, lints: [{ start: 0, end: problem.length, kind, problem, suggestions: [{ k: 0, t: 'Thier' }, { k: 0, t: fix }] }] });
+  assert.equal(typeof resolve, 'function', kind);
+  resolve({ verdict: said, choice: 1 }); await flush();
+  return { text: f.view.state.doc.textContent, card: [...(f.issues.list().find((i) => i.rule === kind)?.suggestions || [])] };
+};
+
+test('an AI apply for grammar or word choice is a suggestion, never typed in; a typo fix follows its Typing switch', async () => {
+  for (const kind of ['Grammar', 'Agreement', 'WordChoice', 'Eggcorn', 'Malapropism']) {
+    const r = await ruled({ kind });
+    assert.equal(r.text, 'Their going home. ', kind);
+    assert.deepEqual(r.card, ['They’re', 'Thier'], `${kind}: the choice first on the card`);
+  }
+  assert.equal((await ruled({ kind: 'Typo' })).text, 'They’re going home. ', 'a typo with Fix typos on');
+  const off = await ruled({ kind: 'Typo', autocorrect: { typos: false } });
+  assert.equal(off.text, 'Their going home. ', 'Fix typos off');
+  assert.deepEqual(off.card, ['They’re', 'Thier']);
+  assert.equal((await ruled({ kind: 'Typo', autocorrect: { smart: false } })).text, "They're going home. ", 'Smart quotes off: a straight apostrophe');
 });

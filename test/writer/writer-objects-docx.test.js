@@ -93,7 +93,7 @@ test('round trip: lists, tables and pictures come back from the .docx with their
   const back = await imported(exported(src));
   const lists = back.content.content.filter((n) => /_list$/.test(n.type.name));
   assert.deepEqual(lists.map((n) => [n.type.name, n.attrs.styles, n.attrs.continue]), [
-    ['ordered_list', 'upper-roman,upper-alpha', false], ['ordered_list', 'upper-roman,upper-alpha', true], ['bullet_list', 'dash', undefined]]);
+    ['ordered_list', 'upper-roman,upper-alpha', false], ['ordered_list', null, true], ['bullet_list', 'dash', undefined]]);
   assert.deepEqual(lists[1].content.content.map((li) => li.attrs.start), [null, 1]);
   let t = null, img = null;
   back.descendants((n) => { if (n.type.name === 'table') t = n; if (n.type.name === 'image') img = n; });
@@ -109,4 +109,28 @@ test('import: a Word file\'s own numbering formats map to list styles; unknown o
   const html = OD.importHTML('<ol><li data-w-num="4">a</li><li class="ql-indent-1" data-w-num="4">b</li></ol>', { body: X.xml(body), numbering: X.xml(numbering), styles: null });
   assert.equal(html, '<ol data-styles="upper-alpha"><li>a</li><li class="ql-indent-1">b</li></ol>');
   assert.equal(OD.importHTML('<p>plain</p>', { body: X.xml(body.replace(/<w:p>.*<\/w:p>/, '<w:p><w:r><w:t>plain</w:t></w:r></w:p>')), numbering: null, styles: null }), '<p>plain</p>');
+});
+
+test('export: a continued list in a style of its own counts on in the list before it, in its own numbering style', async () => {
+  const parts = exported(doc('<ol data-styles="upper-roman"><li>a</li><li>b</li></ol><p>x</p><ol data-continue="true"><li>c</li><li data-start="5">d</li></ol>'));
+  const ids = nums(parts['word/document.xml']), N = parts['word/numbering.xml'];
+  assert.equal(ids[0], ids[1]);
+  assert.notEqual(ids[2], ids[0], 'its own instance');
+  const inst = (id) => new RegExp(`<w:num w:numId="${id}">(.*?)</w:num>`).exec(N)?.[1] || '';
+  assert.match(inst(ids[2]), /^<w:abstractNumId w:val="1"\/><w:lvlOverride w:ilvl="0"><w:startOverride w:val="3"\/><w:lvl w:ilvl="0"><w:start w:val="1"\/><w:numFmt w:val="decimal"\/>/,
+    'on the first list\'s definition, numbered on from it (c is 3) in its own style');
+  assert.match(inst(ids[3]), /<w:lvlOverride w:ilvl="0"><w:startOverride w:val="5"\/><w:lvl w:ilvl="0"><w:start w:val="1"\/><w:numFmt w:val="decimal"\/>/, 'a restart in it keeps its style');
+  const back = (await imported(parts)).content.content.filter((n) => n.type.name === 'ordered_list');
+  assert.deepEqual(back.map((n) => [n.attrs.styles, n.attrs.continue]), [['upper-roman', false], [null, true]]);
+  assert.deepEqual(back[1].content.content.map((li) => li.attrs.start), [null, 5]);
+});
+
+test('a continued list can return to the original numbering style after an override', async () => {
+  const parts = exported(doc('<ol data-styles="upper-roman"><li>a</li><li>b</li></ol><p>x</p>'
+    + '<ol data-continue="true"><li>c</li></ol><p>y</p>'
+    + '<ol data-styles="upper-roman" data-continue="true"><li>d</li></ol>'));
+  const back = (await imported(parts)).content.content.filter((n) => n.type.name === 'ordered_list');
+  assert.deepEqual(back.map((n) => [n.attrs.styles, n.attrs.continue]), [
+    ['upper-roman', false], [null, true], ['upper-roman', true],
+  ]);
 });

@@ -2733,8 +2733,9 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     }
     return shell;
   };
-  // Whitespace as Quill's clipboard reads it: a run inside one text node collapses to its no-break spaces (or one
-  // space), and a text node that is the block's own first or last child loses its plain edge spaces. Then no-break
+  // Whitespace as Quill's clipboard reads it, among the characters CSS collapses (an ideographic or typographic space is
+  // text): a run inside one text node collapses to its no-break spaces (or one space), and a text node that is the
+  // block's own first or last child loses its plain edge spaces. Then no-break
   // spaces become plain ones; serialize writes back as no-break the spaces Quill would collapse, so text holds only plain.
   // A paper keeps as written a run that holds a tab and no line break: its own HTML writes its tabs as they are, and
   // writer-paste.js makes a page's collapsible tabs spaces first.
@@ -2742,7 +2743,7 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     items.forEach((it, i) => {
       if (it.n.nodeType !== 3) return;
       const s = it.n.nodeValue, head = !it.chain.length && i === 0, tail = !it.chain.length && i === items.length - 1;
-      const v = s.replace(/\s+/g, (run, at) => {
+      const v = s.replace(/[ \t\n\r\f\u00a0]+/g, (run, at) => {
         if (paper && run.includes('\t') && !/[\n\r]/.test(run)) return run;
         const nb = run.replace(/[^\u00a0]/g, '');
         if ((head && at === 0) || (tail && at + run.length === s.length)) return nb;
@@ -3079,9 +3080,20 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
     return ops;
   };
 
+  // The plain text of each footnote under node, in order.
+  const notes = (node) => {
+    const out = [];
+    node.descendants((n) => {
+      if (n.type.name === 'footnote_ref') out.push(text(parse(paperSchema, `<div>${n.attrs.content}</div>`)).text.replace(/\s+/g, ' ').trim());
+      return !n.isLeaf;
+    });
+    return out;
+  };
   // The doc's text, textblocks joined by '\n' (a hard break is '\n' too; an image or note mark is no text), with UTF-16
   // offsets ↔ doc positions. runs: { start, end, pos }, each a stretch where offset and position advance together.
-  const text = (doc) => {
+  // { notes: true }, for AI: the footnotes follow as a numbered "Footnotes:" block; main is the paper's own length, and
+  // offsets past it map to no place.
+  const text = (doc, opts) => {
     let out = '';
     const runs = [];
     doc.descendants((n, pos) => {
@@ -3096,10 +3108,15 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       });
       return false;
     });
+    const main = out.length, list = opts?.notes ? notes(doc) : [];
+    if (list.length) out += `\n\nFootnotes:\n${list.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
     const last = (key, v) => { let lo = 0, hi = runs.length - 1, hit = -1; while (lo <= hi) { const mid = (lo + hi) >> 1; if (runs[mid][key] <= v) { hit = mid; lo = mid + 1; } else hi = mid - 1; } return hit; };
-    const posAt = (i) => {
+    // assoc < 0 (a range's end): an offset where a footnote mark or picture begins stays before it.
+    const posAt = (i, assoc = 1) => {
       if (!runs.length) return 0;
-      const r = runs[Math.max(0, last('start', clamp(i, 0, out.length)))];
+      let k = Math.max(0, last('start', clamp(i, 0, main)));
+      if (assoc < 0) while (k > 0 && runs[k - 1].end >= i) k--;
+      const r = runs[k];
       return r.pos + clamp(i - r.start, 0, r.end - r.start);
     };
     const offsetAt = (pos) => {
@@ -3108,11 +3125,20 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       const r = runs[k];
       return r.start + clamp(pos - r.pos, 0, r.end - r.start);
     };
-    return { text: out, runs, posAt, offsetAt };
+    // The positions offsets start–end cover, for an edit, or null when they are not text of the paper or hold a footnote
+    // mark or picture (replacing them would delete it).
+    const range = (start, end) => {
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start || end > main) return null;
+      const from = posAt(start), to = posAt(end, -1);
+      let leaf = false;
+      if (to > from) doc.nodesBetween(from, to, (n) => { if (n.isInline && !n.isText && n.type.name !== 'hard_break') leaf = true; return !leaf; });
+      return to > from && !leaf ? { from, to } : null;
+    };
+    return { text: out, main, runs, posAt, offsetAt, range };
   };
 
   const compose = make(false), paperSchema = make(true), canvasSchema = make('canvas'), plainSchema = make('plain');
-  return { compose, paper: paperSchema, canvas: canvasSchema, plain: plainSchema, parse, slice, serialize, delta, text, loses, href, imageSrc, inline, MAX_INDENT, MAX_INPUT, MAX_DOCUMENT_INPUT, MAX_IMAGE_BYTES, MAX_TOKENS, MAX_DEPTH, FONTS, HIGHLIGHT, dataGz: writeGz, readGz, html: { tags, attrs: attrsOf, decode, fontOf, sizeOf, inches } };
+  return { compose, paper: paperSchema, canvas: canvasSchema, plain: plainSchema, parse, slice, serialize, delta, text, notes, loses, href, imageSrc, inline, MAX_INDENT, MAX_INPUT, MAX_DOCUMENT_INPUT, MAX_IMAGE_BYTES, MAX_TOKENS, MAX_DEPTH, FONTS, HIGHLIGHT, dataGz: writeGz, readGz, html: { tags, attrs: attrsOf, decode, fontOf, sizeOf, inches } };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SCHEMA; else GZ_WRITER_SCHEMA;

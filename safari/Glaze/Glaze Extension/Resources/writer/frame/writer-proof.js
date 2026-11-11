@@ -17,7 +17,9 @@
   const W = globalThis.GZ_WRITER_SETTINGS, pref = () => W?.now() || null;
   const proofOn = () => pref()?.proofing !== false;
   const allow = (cls) => pref()?.autocorrect?.[cls] !== false;
-  const allowRule = (rule) => !P.CLASS?.[rule] || allow(P.CLASS[rule]);
+  // A fix goes in on its own only through its Typing switch; a kind with none (grammar, word choice) is only suggested.
+  const allowRule = (rule) => !!P.CLASS?.[rule] && allow(P.CLASS[rule]);
+  const asTyped = (s) => (allow('smart') ? s : P.straight(s));
   let view = null, port = null, started = false, ids = 0, seen = 0, line = null, dirty = [], blockTimer = 0, docTimer = 0;
   const respell = () => view?.setProps?.({}); // the editor's attributes (spellcheck, below) read again
   let context = [], dict = new Set();
@@ -197,7 +199,7 @@
       if (!i) break;
       tried.add(i.id);
       if (!allowRule(i.rule)) continue;
-      const made = P.autofix(view, i);
+      const made = P.autofix(view, i, asTyped(i.suggestions[0]));
       if (made) showFix(made);
     }
     if (typeof P.decide !== 'function' || F.kind() === 'test') return;
@@ -220,7 +222,7 @@
     try { said = await P.decide({ text: P.blockText($from.parent), from: i.from - start, to: i.to - start, suggestions: i.suggestions.slice(), context: contextAtAsk }); } catch (e) { console.error(e); }
     const v = P.verdict(said, i.suggestions.length), now = view && I.list().find((x) => x.id === i.id);
     if (stopped || view.composing || P.key.getState(view.state).line !== lineAtAsk || ver() !== version || rulingContext(F.context()) !== contextKey || !v || !now || now.suggestions[v.choice] !== i.suggestions[v.choice]) return;
-    if (v.verdict === 'apply' && allowRule(now.rule)) { const made = P.autofix(view, now, now.suggestions[v.choice]); if (made) showFix(made); return; }
+    if (v.verdict === 'apply' && allowRule(now.rule)) { const made = P.autofix(view, now, asTyped(now.suggestions[v.choice])); if (made) showFix(made); return; }
     // 'suggest': the choice first on the card.
     const list = now.suggestions.slice(), [pick] = list.splice(v.choice, 1), bare = (x) => ({ ...x, id: x.id.replace(/^harper:/, '') });
     const others = I.list().filter((x) => x.source === 'harper' && x.id !== now.id && x.from >= now.from && x.to <= now.to);

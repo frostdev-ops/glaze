@@ -30,8 +30,17 @@ var GZ_AI_TASK_WRITER_COMPLETE = globalThis.GZ_AI_TASK_WRITER_COMPLETE || (() =>
   // already shown take at most `share` of it first. tokens × room × bytes stays under ai/request.js LIMIT.text.
   const READ = { bytes: 4, room: 0.9, tokens: 60000, unknown: 60000, share: 0.05, header: 48 };
   const WORD = /[\p{L}\p{N}\p{M}]/u;
-  // The word at the caret: letters, digits, and an apostrophe or hyphen inside it.
-  const TAIL = /[\p{L}\p{N}\p{M}]+(?:['’-][\p{L}\p{N}\p{M}]+)*['’-]?$/u;
+  // The word at the caret (the end of s): letters, digits, and an apostrophe or hyphen inside it (or one after it), found backward,
+  // since a pattern anchored only at the end tries every start of a long run of letters. → [word] or null.
+  const caretWord = (s) => {
+    const size = (j) => (j > 1 && (s.charCodeAt(j - 1) & 0xfc00) === 0xdc00 && (s.charCodeAt(j - 2) & 0xfc00) === 0xd800 ? 2 : 1);
+    const letter = (j) => j > 0 && WORD.test(s.slice(j - size(j), j)), mark = (j) => j > 0 && "'’-".includes(s[j - 1]);
+    let i = s.length;
+    if (mark(i)) i--;
+    if (!letter(i)) return null;
+    for (;;) { while (letter(i)) i -= size(i); if (mark(i) && letter(i - 1)) i--; else break; }
+    return [s.slice(i)];
+  };
   // A sentence ends at . ! ? or … followed (after any closing quotes or brackets) by a space or the end.
   const END = /[.!?…。！？]+["'”’)\]]*/u;
   // Words a new sentence starts with; mid-sentence they are lower case.
@@ -65,7 +74,6 @@ var GZ_AI_TASK_WRITER_COMPLETE = globalThis.GZ_AI_TASK_WRITER_COMPLETE || (() =>
   };
   const word = (before) => (/[^ ] $/.test(before) ? before.slice(0, -1) : before);
   // Find the final whitespace first: searching a long CJK word before a space with an unanchored suffix is quadratic.
-  const caretWord = (s) => { let at = s.length; while (at && !/\s/u.test(s[at - 1])) at--; return TAIL.exec(s.slice(at)); };
   const fits = (before, after = '') => typeof before === 'string' && !inQuote(before) && !!caretWord(word(before)) && !/^[^\S\n]*[^\s]/.test(after) && words(sentence(word(before))).length >= LIMIT.sentence;
 
   // ---- input --------------------------------------------------------------------------------------------------------

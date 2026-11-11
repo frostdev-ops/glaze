@@ -95,3 +95,21 @@ test('multi-paragraph notes keep their paragraphs in text and Markdown exports',
   assert.ok(X.text(d).includes('[1] First paragraph.\n\nSecond paragraph.'));
   assert.ok(X.markdown(d).includes('[^1]: First paragraph.\n\n    Second paragraph.'));
 });
+
+test('a rowspan cell holds its column in the rows below, in text and Markdown', () => {
+  const cell = (s, attrs = {}) => ({ type: 'table_cell', attrs: { colspan: 1, rowspan: 1, colwidth: null, ...attrs }, content: [para(s)] });
+  const row = (...c) => ({ type: 'table_row', content: c });
+  const d = doc({ type: 'table', content: [row(cell('Name'), cell('Score'), cell('Note')), row(cell('Ann', { rowspan: 2 }), cell('90'), cell('good')), row(cell('85'), cell('retake')),
+    row(cell('Bo'), cell('70 and 75', { colspan: 2, rowspan: 2 })), row(cell('Cy')), row(cell('Di'), cell('60'), cell('last', { rowspan: 3 }))] });
+  assert.equal(X.markdown(d), '| Name | Score | Note |\n| --- | --- | --- |\n| Ann | 90 | good |\n|  | 85 | retake |\n| Bo | 70 and 75 |  |\n| Cy |  |  |\n| Di | 60 | last |\n');
+  assert.equal(X.text(d), 'Name\tScore\tNote\nAnn\t90\tgood\n\t85\tretake\nBo\t70 and 75\t\nCy\t\t\nDi\t60\tlast\n');
+});
+
+test('lists number as the paper does: their own styles, an item\'s start and a list that continues the one before', () => {
+  const ol = (attrs, ...items) => ({ type: 'ordered_list', attrs: { styles: null, continue: false, ...attrs }, content: items });
+  const at = (text, start, indent = 0) => ({ type: 'list_item', attrs: { ...BLOCK, indent, start }, content: [t(text)] });
+  const d = doc(ol({}, item('one'), item('two')), para('Between.'), ol({ continue: true }, item('three'), item('sub', 1)), ol({ styles: 'upper-roman,upper-alpha' }, at('four', 4), item('five'), item('A sub', 1)),
+    para('Then.'), ol({ continue: true }, item('six')), ol({}, item('again')));
+  assert.equal(X.text(d), '1. one\n2. two\n\nBetween.\n\n3. three\n    a. sub\n\nIV. four\nV. five\n    A. A sub\n\nThen.\n\n6. six\n\n1. again\n');
+  assert.equal(X.markdown(d), '1. one\n2. two\n\nBetween.\n\n3. three\n    1. sub\n\n4. four\n5. five\n    1. A sub\n\nThen.\n\n6. six\n\n1. again\n');
+});
