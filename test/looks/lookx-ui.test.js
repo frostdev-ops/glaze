@@ -342,6 +342,24 @@ test('page: route() puts the stickers away on a quiz entered in place', async ()
   assert.equal(p.body.find('gz-stickers'), null, 'a quiz: none, though it has some saved');
 });
 
+test('page: route() restores stickers after leaving a quiz in place', async () => {
+  const home = '/ultra/courses/_1_1/outline';
+  const quiz = '/ultra/courses/_1_1/assessment/_2_1/attempt/_3_1';
+  for (const start of [home, quiz]) {
+    const p = page({ [`stk:${SITE}${home}`]: [sticker('a')] }, start);
+    await p.lx.sync();
+    await tick(5);
+    p.location.pathname = quiz;
+    p.lx.route();
+    await tick(5);
+    assert.equal(p.body.find('gz-stickers'), null);
+    p.location.pathname = home;
+    p.lx.route();
+    await tick(5);
+    assert.ok(p.body.find('gz-stickers'), `stickers restored after starting on ${start}`);
+  }
+});
+
 test('page: Place stickers with Show stickers off opens sticker mode with its layer, and placing works', async () => {
   const p = page({});
   p.settings.extras = { ...p.settings.extras, stickers: false };
