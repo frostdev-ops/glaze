@@ -45,3 +45,31 @@ test('possessives, apostrophe names and name particles match their source and ar
   for (const n of ['Hans van der Berg, <em>On van der Berg</em> (Leiden: Brill, 2016), 4.', 'van der Berg, <em>On van der Berg</em>, 4.', 'Sean O’Malley, <em>On O’Malley</em> (Boston: Beacon, 2017), 9.'])
     assert.deepEqual(C.check(note(n), [who('van der Berg', 2016), who('O’Malley', 2017)].filter((s) => n.includes(s.author[0].family)), 'chicago17').map((i) => i.message), [], n);
 });
+
+// APA 7 §9.44–9.48, MLA 9 §5.124–5.126, CMOS 17 14.66 and 16.58: entries go letter by letter by their first element (the
+// surname, a group's name, or a title without A, An or The); "nothing precedes something" (Brown before Browning);
+// letters with diacritics file as their base letter; a repeated-author dash (———. or ---.) keeps the entry with the one before.
+const LISTS = {
+  articles: ['Adams, J. (2019). One. Press.', 'Brown, K. (2018). Two. Press.', 'The Pew Research Center. (2020). Three. Press.', 'Smith, A. (2017). Four. Press.'],
+  prefix: ['Brown, J. (2020). One. Press.', 'Browning, K. (2019). Two. Press.', 'Smith, A. (2021). Three. Press.'],
+  diacritics: ['Łoś, A. (2018). Three. Press.', 'Nilsen, P. (2020). One. Press.', 'Ødegaard, M. (2019). Two. Press.', 'Smith, A. (2021). Four. Press.'],
+  dash: ['Smith, Zadie. Swing Time. New York: Penguin, 2016.', '———. White Teeth. New York: Vintage, 2000.', 'Thomas, Ann. Notes. Boston: Beacon, 2010.'],
+  quoted: ['Brown, K. Two. Press, 2018.', '“A Quiet Year.” Times, 2019.', 'Smith, A. Four. Press, 2021.'],
+};
+const typed = (entries, title = 'References') => ['Body text.', title, ...entries].join('\n');
+test('a correctly ordered typed reference list is never "out of order" (APA 9.44–9.48, MLA 5.124–5.126, CMOS 14.66)', () => {
+  for (const [k, entries] of Object.entries(LISTS)) for (const st of ['apa7', 'mla9', 'chicago17'])
+    assert.deepEqual(C.check(typed(entries, C.TITLES[st]), [], st).filter((i) => /out of order/.test(i.message)), [], `${st} ${k}`);
+  assert.deepEqual(C.check(typed(['Smith, A. (2017). Four.', 'Adams, J. (2019). One.']), [], 'apa7').filter((i) => /out of order/.test(i.message)).length, 1, 'a misordered list is still flagged');
+});
+test('reference-list order: one comparison for the check and the sort, articles skipped, letter by letter (APA 9.44, MLA 5.125)', () => {
+  for (const entries of Object.values(LISTS)) assert.equal(SRC.disorder(entries), -1, entries[0]);
+  assert.equal(SRC.disorder(['Smith, A.', 'The Pew Research Center.', 'Adams, J.']), 1);
+  assert.deepEqual(SRC.order(['Smith, Zadie. Swing Time.', '———. White Teeth.', 'The Pew Research Center.', 'Adams, J.']).map((i) => i), [3, 2, 0, 1]);
+  assert.deepEqual(SRC.order(['Browning, K.', 'Brown, J.']), [1, 0]);
+});
+test('the generated list files Æ, Ø and Ł under A, O and L (APA 9.44, MLA 5.125, CMOS 16.62)', () => {
+  const s = (family, id) => ({ id, type: 'book', author: [{ family, given: 'A.' }], title: 'T', issued: d(2020) });
+  const ids = (st) => C.list([s('Zimmer', 'zzzz'), s('Łoś', 'llll'), s('Ødegaard', 'oooo'), s('Ærø', 'aaaa'), s('Nilsen', 'nnnn')], st).entries.map((e) => e.id);
+  for (const st of ['apa7', 'mla9', 'chicago17']) assert.deepEqual(ids(st), ['aaaa', 'llll', 'nnnn', 'oooo', 'zzzz'], st);
+});
