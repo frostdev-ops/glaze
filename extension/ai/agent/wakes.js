@@ -9,7 +9,8 @@
 // watches) nothing is made, checked or shown. Safari unloads Glaze's background about 30 s after its last event, so an
 // alarm may come late there; take() checks everything due before it answers, so nothing is lost, only shown later.
 // storage.local rimeWakes: { wakes: [{ id, at, say, made }], monitors: [{ id, watch, account, course?, item?: { type, id },
-//   say, made, until, base }], fired: [{ id, what, watch?, say, at, fact?, shown?, to? }] }, each list capped (LIMIT); shown: when
+//   say, made, until, base }], fired: [{ id, what, watch?, say, at, fact?, shown?, to? }] }, each list capped (LIMIT); fired
+//   holds at most LIMIT.fired waiting and LIMIT.fired shown records. shown: when
 //   a page took it, to: that page's scope.
 // env: { local (storage.local: get, set), alarms (chrome.alarms: create, clear, getAll), read(name, args, account) → an Agents
 //   tool's answer (todo_list, course_grades), on() → whether the switch and Ask Rime are on, now() }.
@@ -31,6 +32,8 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
   const fail = (error) => ({ ok: false, error });
   const text = (v, n) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, n) : '');
   const when = (v) => (Number.isSafeInteger(v) && v > 0 && v <= 8640000000000000 ? v : 0);
+  const bounded = (fired) => fired.filter((f) => when(f.shown)).slice(-LIMIT.fired)
+    .concat(fired.filter((f) => !when(f.shown)).slice(-LIMIT.fired));
   const clock = (env) => (typeof env.now === 'function' ? env.now() : Date.now());
   const accountOk = (v) => {
     if (typeof v !== 'string' || v.length > 320) return false;
@@ -71,8 +74,8 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
         .map((m) => ({ id: m.id, watch: m.watch, account: m.account, ...(m.course !== undefined && { course: m.course }),
           ...(isObj(m.item) && { item: { type: m.item.type, id: m.item.id } }), say: text(m.say, LIMIT.say), made: when(m.made), until: m.until, base: baseOf(m) })).filter((m) => m.base))
         .slice(0, LIMIT.monitors),
-      fired: unique(list(r.fired).filter((f) => ID.test(f.id) && (f.what === 'wake' ? f.id[0] === 'w' : f.what === 'monitor' && f.id[0] === 'm') && when(f.at)))
-        .slice(-LIMIT.fired).map((f) => ({ id: f.id, what: f.what, ...(WATCHES.includes(f.watch) && { watch: f.watch }), say: text(f.say, LIMIT.say), at: f.at, ...(factOf(f.fact) && { fact: factOf(f.fact) }),
+      fired: bounded(unique(list(r.fired).filter((f) => ID.test(f.id) && (f.what === 'wake' ? f.id[0] === 'w' : f.what === 'monitor' && f.id[0] === 'm') && when(f.at))))
+        .map((f) => ({ id: f.id, what: f.what, ...(WATCHES.includes(f.watch) && { watch: f.watch }), say: text(f.say, LIMIT.say), at: f.at, ...(factOf(f.fact) && { fact: factOf(f.fact) }),
           ...(when(f.shown) && { shown: f.shown }), ...(when(f.shown) && typeof f.to === 'string' && f.to.length <= LIMIT.scope && { to: f.to }) })),
     };
   };
@@ -136,8 +139,9 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
       : a.type !== undefined || a.id !== undefined ? `${a.watch} takes no item.` : a.watch === 'grade' && !UID.test(a.course || '') ? 'grade takes the course id.' : '');
 
   // ---- firing ----------------------------------------------------------------------------------------------------------
-  const fire = (s, f) => { s.fired.push(f); s.fired = s.fired.slice(-LIMIT.fired); };
+  const fire = (s, f) => { s.fired = bounded([...s.fired, f]); };
   const settle = (s, now) => {
+    s.fired = s.fired.filter((f) => !f.shown || f.shown + LIMIT.hold > now);
     const due = s.wakes.filter((w) => w.at <= now);
     for (const w of due) fire(s, { id: w.id, what: 'wake', say: w.say, at: now });
     s.wakes = s.wakes.filter((w) => w.at > now);
@@ -180,9 +184,10 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
     return turn(async () => {
       const s = await read(env), now = clock(env);
       if (!(await env.on())) return [];
-      const out = s.fired.filter((f) => !f.shown);
-      s.fired = s.fired.filter((f) => f.shown && f.shown + LIMIT.hold > now)
-        .concat(out.map((f) => ({ ...f, shown: now, ...(typeof to === 'string' && to.length <= LIMIT.scope && { to }) })));
+      s.fired = s.fired.filter((f) => !f.shown || f.shown + LIMIT.hold > now);
+      const room = LIMIT.fired - s.fired.filter((f) => f.shown).length;
+      const out = s.fired.filter((f) => !f.shown).slice(0, room), ids = new Set(out.map((f) => f.id));
+      s.fired = s.fired.map((f) => ids.has(f.id) ? { ...f, shown: now, ...(typeof to === 'string' && { to }) } : f);
       await write(env, s);
       return out;
     });
@@ -202,7 +207,8 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
     return turn(async () => {
       const s = await read(env);
       if (!(await env.on())) return 0;
-      return Math.min(LIMIT.fired, s.fired.filter((f) => !f.shown).length + s.wakes.filter((w) => w.at <= clock(env)).length);
+      const now = clock(env), room = LIMIT.fired - s.fired.filter((f) => f.shown && f.shown + LIMIT.hold > now).length;
+      return Math.min(room, s.fired.filter((f) => !f.shown).length + s.wakes.filter((w) => w.at <= now).length);
     });
   };
 
