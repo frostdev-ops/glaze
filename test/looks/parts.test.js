@@ -462,6 +462,62 @@ test('the main navigation\'s own colours give way on the page when its text coul
   }
 });
 
+test('one navigation colour cannot hide native links against the page colour left alone', () => {
+  const tokens = { '--gz-surface-2': '#102030', '--gz-ink': '#eef2f8' };
+  const getComputedStyle = (e) => ({ getPropertyValue: (k) => tokens[k] || '', color: '#eef2f8', backgroundColor: '#102030', backgroundImage: 'none' });
+  for (const [site, part] of [['ultra', 'ultra.nav'], ['canvas', 'canvas.global-nav'], ['moodle', 'moodle.navbar']]) {
+    const { body, wear, R } = page(site, (el, s) => el([], [el(s(part), [el([], ['Account'], { href: '/profile' })])]), '/', { getComputedStyle });
+    const nav = body.children[0];
+    for (const st of [{ fg: '#102030' }, { fg: 'surface-2' }, { bg: '#eef2f8' }, { bg: 'ink' }]) {
+      wear([{ p: part, do: 'style', st: { ...st, r: 8 } }]);
+      R.sync();
+      assert.deepEqual([nav.getAttribute('data-gz-r-st'), nav.style.getPropertyValue('--gz-r-fg'), nav.style.getPropertyValue('--gz-r-bg')], ['r', '', ''], `${part} ${JSON.stringify(st)}`);
+    }
+    wear([{ p: part, do: 'style', st: { fg: '#ffffff' } }]);
+    assert.equal(nav.style.getPropertyValue('--gz-r-fg'), '#ffffff');
+    wear([{ p: part, do: 'style', st: { bg: '#000000' } }]);
+    assert.equal(nav.style.getPropertyValue('--gz-r-bg'), '#000000');
+  }
+});
+
+test('navigation contrast uses native link colours without paints left by the previous rule', () => {
+  for (const [site, part] of [['ultra', 'ultra.nav'], ['canvas', 'canvas.global-nav'], ['moodle', 'moodle.navbar']]) {
+    const getComputedStyle = (e) => {
+      const nav = e.closest(P.get(part).s), st = nav?.getAttribute('data-gz-r-st')?.split(' ') || [];
+      return { getPropertyValue: () => '', backgroundImage: 'none',
+        color: st.includes('fg') ? nav.style.getPropertyValue('--gz-r-fg') : e.href ? '#eef2f8' : '#102030',
+        backgroundColor: e === nav ? st.includes('bg') ? nav.style.getPropertyValue('--gz-r-bg') : '#102030' : 'rgba(0, 0, 0, 0)' };
+    };
+    const { body, wear, R } = page(site, (el, s) => el([], [el(s(part), [el([], ['Account'], { href: '/profile' })])]), '/', { getComputedStyle });
+    const nav = body.children[0];
+    wear([{ p: part, do: 'style', st: { bg: '#eef2f8', r: 8 } }]);
+    assert.equal(nav.style.getPropertyValue('--gz-r-bg'), '', `${part}: the link has its own light ink`);
+    for (const [first, second] of [[{ fg: '#ff0000' }, { bg: '#ff0000' }], [{ bg: '#ff0000' }, { fg: '#ff0000' }]]) {
+      wear([{ p: part, do: 'style', st: first }]);
+      wear([{ p: part, do: 'style', st: second }]);
+      for (let i = 0; i < 3; i++) {
+        R.sync();
+        const key = Object.keys(second)[0];
+        assert.equal(nav.style.getPropertyValue(`--gz-r-${key}`), second[key], `${part}: the prior paint cannot reject or toggle a readable replacement`);
+      }
+      const writes = nav.doc.writes;
+      R.sync();
+      assert.equal(nav.doc.writes, writes, 'an unchanged colour rule causes no new mutations');
+    }
+  }
+});
+
+test('navigation contrast checks the native links even when the container or Glaze link uses different ink', () => {
+  const getComputedStyle = (e) => ({ getPropertyValue: () => '', color: e.href === '/profile' ? '#ffffff' : '#000000', backgroundColor: e.href ? 'rgba(0, 0, 0, 0)' : '#102030', backgroundImage: 'none' });
+  for (const [site, part] of [['ultra', 'ultra.nav'], ['canvas', 'canvas.global-nav'], ['moodle', 'moodle.navbar']]) {
+    for (const glaze of [false, true]) {
+      const { body, wear } = page(site, (el, s) => el([], [el(s(part), [el([], ['Account'], { href: '/profile' }), ...(glaze ? [el([], ['Settings'], { href: '#glaze' })] : [])])]), '/', { getComputedStyle });
+      wear([{ p: part, do: 'style', st: { bg: '#ffffff', r: 8 } }]);
+      assert.deepEqual([body.children[0].getAttribute('data-gz-r-st'), body.children[0].style.getPropertyValue('--gz-r-bg')], ['r', ''], `${part}, Glaze link: ${glaze}`);
+    }
+  }
+});
+
 test('Glaze classes are protected even after native classes', () => {
   const { body, wear } = page('ultra', (el, s) => el([], [
     el(s('ultra.nav.footer'), ['Own footer'], { className: 'native gz-own' }),
