@@ -294,6 +294,12 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     if (!label) el.removeAttribute('data-gz-new');
     else if (el.getAttribute('data-gz-new') !== label) el.setAttribute('data-gz-new', label);
   };
+  // Where a count's click sends the next page to scroll. sessionStorage can throw (storage off, a sandboxed or partitioned frame,
+  // full): then there is no jump, and the click and the pass go on.
+  const JUMP = 'gz-new-jump';
+  const jumpKept = () => { try { return sessionStorage.getItem(JUMP); } catch { return null; } };
+  const jumpKeep = (v) => { try { sessionStorage.setItem(JUMP, v); } catch { /* the page opens without it */ } };
+  const jumpDrop = () => { try { sessionStorage.removeItem(JUMP); } catch { /* none kept */ } };
   // A count's click or key (content.js's listeners hand them here, KIND has what each opens).
   const openNew = (e) => {
     const pill = e.target instanceof Element && e.target.closest('.gz-new[role="link"]');
@@ -303,7 +309,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     if (e.type !== 'click' && e.type !== 'keydown') return;
     const { kind, cid } = pill.dataset;
     if (kind === 'inside') { jump = { under: pill.closest('[data-content-id]').dataset.contentId, at: Date.now(), opened: new Set() }; return renderNew(); }
-    sessionStorage.setItem('gz-new-jump', `${kind} ${cid}`);
+    jumpKeep(`${kind} ${cid}`);
     location.assign(`${location.origin}/ultra/courses/${cid}/${kind === 'items' ? 'outline' : 'grades'}`);
   };
   const glide = (el) => el?.scrollIntoView({ block: 'center', behavior: html.getAttribute('data-gz-motion') === 'off' ? 'auto' : 'smooth' });
@@ -324,8 +330,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
         if (JSON.stringify(now) !== JSON.stringify(seen[cid])) { seen[cid] = now; keepSeen('seenGrades', cid, now); }
         for (const el of document.querySelectorAll('[id^="course-student-grades-item-name-"]')) badge(el, set.has(el.id.slice(32)) && t('New'));
         // Arrived from a card's "N new": bring the first new grade into view, once.
-        const first = sessionStorage.getItem('gz-new-jump') === `grades ${cid}` && document.querySelector('[id^="course-student-grades-item-name-"][data-gz-new]');
-        if (first) { sessionStorage.removeItem('gz-new-jump'); glide(first.closest('li, tr, [role="row"]')); }
+        const first = jumpKept() === `grades ${cid}` && document.querySelector('[id^="course-student-grades-item-name-"][data-gz-new]');
+        if (first) { jumpDrop(); glide(first.closest('li, tr, [role="row"]')); }
       }
     }
     // Cards only count: nothing is marked seen until its gradebook is shown. Only on the Courses and
@@ -400,7 +406,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     // Arrived from a card's count, or a folder's count was clicked: unfold the folders down to the
     // newest new item (the highest id) and bring it into view. Folders are only unfolded, never opened,
     // and each at most once, so a slow one isn't folded back. Given up after ten seconds.
-    if (sessionStorage.getItem('gz-new-jump') === `items ${cid}`) { sessionStorage.removeItem('gz-new-jump'); jump = { under: null, at: Date.now(), opened: new Set() }; }
+    if (jumpKept() === `items ${cid}`) { jumpDrop(); jump = { under: null, at: Date.now(), opened: new Set() }; }
     if (!jump) return;
     const up = new Map(c.items.map((i) => [i.id, i.parentId]));
     const chain = (id) => { const a = []; for (let p = up.get(id); up.has(p); p = up.get(p)) a.unshift(p); return a; };
