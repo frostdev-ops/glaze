@@ -1130,11 +1130,12 @@ var GZ_NAVBAR_UI = globalThis.GZ_NAVBAR_UI || (() => {
 
 // Blackboard Ultra: its own nav (the drawer's list) read for items, labels, badges and which is current; its links clicked
 // for the bar's, so Ultra's router opens them as its own would. A course opened at its own address has no drawer: the
-// items last read on this site (storage.local navbarSeen:<origin>, this device only) stand in, else Ultra's usual ones,
-// and open as plain links.
+// items last read on this site by this student (storage.local navbarSeen:<origin>:<user id>, this device only: the drawer
+// names the student) stand in, else Ultra's usual ones, and open as plain links.
 function GZ_NAVBAR_ULTRA(X) {
   const ROOT = '[data-gz-nav-root], nav#base_tools, nav:has(> #base_tools), nav[class*="makeStylesnavigation-"]';
-  const SEEN = `navbarSeen:${location.origin}`;
+  // Who is signed in (Ultra's word), once asked; until then nothing is read or kept. The per-site key before it goes.
+  let who = '', held = null;
   const USUAL = [['institution-page', 'Institution page'], ['stream', 'Activity'], ['course', 'Courses'], ['organization', 'Organizations'], ['calendar', 'Calendar'], ['messages', 'Messages'], ['grades', 'Grades'], ['tools', 'Tools'], ['profile', 'Profile']];
   let mo = null, swap = null, watched = null, notify = null, seen = null, saved = '', last = null, lastAt = '', stale = true;
   const rootOf = () => document.querySelector(ROOT);
@@ -1165,14 +1166,21 @@ function GZ_NAVBAR_ULTRA(X) {
     // Ultra redraws the drawer whole: its parent sees the new one come in.
     if (scope?.parentElement) swap.observe(scope.parentElement, { childList: true });
   };
-  try { chrome.storage.local.get(SEEN, (r) => { const list = r?.[SEEN]; if (Array.isArray(list)) { seen = list.slice(0, 20); notify?.(); } }); } catch { /* reloaded */ }
+  Promise.resolve().then(() => X.account()).then((u) => {
+    if (!/^_\d+_\d+$/.test(String(u))) return;
+    who = String(u);
+    const k = `navbarSeen:${location.origin}:${who}`;
+    try { chrome.storage.local.get(k, (r) => { const list = r?.[k]; if (Array.isArray(list) && !seen) { seen = list.slice(0, 20); notify?.(); } if (held) keep(held); }); } catch { /* reloaded */ }
+  }, () => {});
   // What the drawer had, kept for the pages without one: ids, names and same-site paths only.
   const keep = (items) => {
+    if (!who) { held = items; return; }
+    held = null;
     const list = items.filter((i) => i.id !== 'logout').map((i) => { try { const u = new URL(i.href); return u.origin === location.origin ? { id: i.id, label: i.label.slice(0, 80), path: u.pathname } : null; } catch { return null; } }).filter(Boolean);
     const json = JSON.stringify(list);
     if (!list.length || json === saved || json === JSON.stringify(seen)) { saved = json; return; }
     saved = json; seen = list;
-    try { chrome.storage.local.set({ [SEEN]: list }); } catch { /* reloaded */ }
+    try { chrome.storage.local.set({ [`navbarSeen:${location.origin}:${who}`]: list }); chrome.storage.local.remove(`navbarSeen:${location.origin}`); } catch { /* reloaded */ }
   };
   return {
     read: () => {
