@@ -506,7 +506,8 @@ const BROKER = {
       const kept = GZ_CATALOG.keptAll(lookFavorites);
       const list = GZ_LX.rotation(GZ_CATALOG.ids(rotateLooks, lookFavorites), GZ_LOOKS.map((L) => L.name), kept.map((f) => f.id));
       // The account's last turn (storage.sync, written with the Look it wore): a turn another device made is this device's own.
-      const r = GZ_LX.turn(rotateState, Date.now(), s.extras, list, m.now === true, (await sync.get(GZ_LX.SHARED))[GZ_LX.SHARED]);
+      const last = (await sync.get(GZ_LX.SHARED))[GZ_LX.SHARED];
+      const r = GZ_LX.turn(rotateState, Date.now(), s.extras, list, m.now === true, last);
       if (r.wear >= 0) {
         const L = GZ_LOOKS.find((l) => l.name === list[r.wear]);
         const lookX = (await sync.get('lookX')).lookX;
