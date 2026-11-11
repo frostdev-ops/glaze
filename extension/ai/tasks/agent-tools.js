@@ -927,6 +927,22 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
       }));
     }));
   };
+  // A markdown link in an answer stays a link only to the page's own site (origin) or to an address one of this turn's
+  // results holds verbatim; any other keeps its label as text. Code and escaped brackets are left as the chat draws them.
+  const links = (text, { results = [], origin = '' } = {}) => {
+    const held = new Set(), walk = (v) => {
+      if (typeof v === 'string') { held.add(v); for (const m of v.matchAll(/https:\/\/[^\s"'<>()[\]{}|\\^`]+/g)) held.add(m[0]); }
+      else if (Array.isArray(v)) v.forEach(walk);
+      else if (S.isObj(v)) Object.values(v).forEach(walk);
+    };
+    results.forEach(walk);
+    const kept = (href) => { try { return held.has(href) || !!origin && new URL(href).origin === origin; } catch { return false; } };
+    let fence = false;
+    return String(text).split('\n').map((line) => {
+      if (/^```/.test(line)) { fence = !fence; return line; }
+      return fence ? line : line.replace(/(\\[\\`*_[\]~])|(`[^`]+`)|\[([^\]]+)\]\(([^)\s]+)\)/g, (all, escaped, code, label, href) => escaped || code || kept(href) ? all : label);
+    }).join('\n');
+  };
   const why = (out, inp) => {
     if (S.validate(out, OUTPUT).length) return 'schema';
     if ((out.call === null) === (out.answer === null)) return 'one';
@@ -1103,6 +1119,6 @@ var GZ_AI_TASK_AGENT_TOOLS = globalThis.GZ_AI_TASK_AGENT_TOOLS || (() => {
   };
   const recoveryAnswer = (steps, { locale = 'en' } = {}) => [listAnswer(steps, { locale }), INCOMPLETE[locale] || INCOMPLETE.en].filter(Boolean).join('\n\n');
   const task = T.add(T.define({ id: 'agent.tools', version: 1, input, build, output: OUTPUT, check, why: (out, inp) => why(out, inp), limits: { ms: 60000 }, rate: { perMinute: 6 * (LIMIT.steps + 1) } }));
-  return { task, LIMIT, HISTORY, FIX, FIXES, listAnswer, recoveryAnswer, SPECS, NAMES, OWN, PHRASES, AGENTS, AHEAD, HELP, rich, gradedWork, fold, LATER, moment, SYSTEM, CURRENT, MEMORY, currentBound, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, RETRY_READS, retryable, repeatWhy, why };
+  return { task, LIMIT, HISTORY, FIX, FIXES, listAnswer, recoveryAnswer, SPECS, NAMES, OWN, PHRASES, AGENTS, AHEAD, HELP, rich, gradedWork, fold, LATER, moment, SYSTEM, CURRENT, MEMORY, currentBound, OUTPUT, ANSWER, constraint, instructions, line, py, shown, native, fromNative, readable, layout, fromRequest, answerParts, RETRY_READS, retryable, repeatWhy, why, links };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_AI_TASK_AGENT_TOOLS; else GZ_AI_TASK_AGENT_TOOLS;

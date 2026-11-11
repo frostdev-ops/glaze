@@ -943,6 +943,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       let level = 1;
       let active, memory;
       const documents = []; // private read provenance; never added to the public current/task schema
+      // An answer's links: the page's own site, or an address this turn's results hold (agent-tools' links()).
+      const origin = (() => { try { return new URL(current.page.url).origin; } catch { return ''; } })();
+      const linked = (text, results) => AT().links(text, { results, origin });
       const validate = async () => {
         if (signal.aborted) throw cancelled();
         if (active?.valid && !await F().wait(() => active.valid(), signal)) throw R().error('changed');
@@ -1159,8 +1162,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           if (level >= 3 && !reads) await count('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...studyContext, ...inRecall, ...(material && { material }), ...(records && { records }) });
           // Level 3: the summary as the conversation's first turn, then the turns it doesn't cover (a model reads them).
           const past = level >= 3 ? [...(CHAT.summary ? [{ question: 'Earlier in this chat', answer: CHAT.summary }] : []), ...retained(open)].slice(-Math.floor(LIMIT.turns * scale())) : history;
-          const output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...studyContext, ...inRecall, ...(past.length && { history: past }), ...(material && { material }), ...(records && { records }) });
+          let output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...studyContext, ...inRecall, ...(past.length && { history: past }), ...(material && { material }), ...(records && { records }) });
           await memoryCurrent();
+          if (isObj(output) && typeof output.reply === 'string') output = { ...output, reply: linked(output.reply, (seen?.steps || []).map((s) => s.result)) };
           if (level >= 3 && isObj(output)) void compact({ id, open, turn: { question, answer: [output.reply, output.followUp].filter((x) => typeof x === 'string' && x).join('\n\n') }, locale, tools, zone }).catch(() => {});
           post({ id, type: 'end', task: r.task, output });
           return;
@@ -1187,8 +1191,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         await memoryCurrent();
         for (const a of current.actions) { const { action, ...rest } = a; post({ id, type: 'action', action: { kind: action, ...rest } }); }
         // A built answer also carries the failed answer it replaced and its code, to this panel only (never Activity).
-        if (level >= 3) void compact({ id, open, turn: { question, answer: res.answer.text }, locale, tools, zone }).catch(() => {});
-        post({ id, type: 'end', task: r.task, answer: { text: res.answer.text, ...(res.built && { built: true }) }, ...(res.built && { ...(res.why && { why: res.why }), ...(res.raw && { raw: res.raw.slice(0, 2000) }) }) });
+        const text = linked(res.answer.text, [...res.steps.map((s) => s.result), ...(record ? [record] : [])]);
+        if (level >= 3) void compact({ id, open, turn: { question, answer: text }, locale, tools, zone }).catch(() => {});
+        post({ id, type: 'end', task: r.task, answer: { text, ...(res.built && { built: true }) }, ...(res.built && { ...(res.why && { why: res.why }), ...(res.raw && { raw: res.raw.slice(0, 2000) }) }) });
       } catch (e) {
         // { id, type: 'error', error, why?, steps?, raw? }: the check's code, the tool steps run, and the model's raw answer
         // (to this panel only; Activity keeps the code, never the answer).
