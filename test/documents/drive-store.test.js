@@ -2041,3 +2041,28 @@ test('two devices pushing one record in the same window both keep their change: 
   for (const d of [a, b]) assert.deepEqual((await d.local.get('writerWords')).writerWords.sort(), ['Alpha', 'Beta', 'Gamma']);
   assert.deepEqual(body(recFile(drive, 'local', 'writerWords')).value.sort(), ['Alpha', 'Beta', 'Gamma']);
 });
+
+test('a device joining while Drive\'s search doesn\'t show another device\'s record yet meets it once the records are listed again', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  let hide = null;
+  // Drive's search lag: a file made just before B's page token stays out of B's lists (its change never comes either).
+  const lag = { ...drive, fetch: async (u, i = {}) => {
+    const r = await drive.fetch(u, i);
+    if (hide && (i.method || 'GET') === 'GET' && new URL(u).pathname === '/drive/v3/files' && decodeURIComponent(u).includes("value='rec'")) {
+      const j = await r.json();
+      j.files = j.files.filter((f) => !hide.has(f.id));
+      return new Response(JSON.stringify(j), { status: 200, headers: { 'content-type': 'application/json; charset=UTF-8' } });
+    }
+    return r;
+  } };
+  const a = device(drive, { clock }), b = device(lag, { clock });
+  await a.local.set({ writerWords: ['Alpha'] });
+  assert.ok((await a.on()).ok);
+  hide = new Set([recFile(drive, 'local', 'writerWords').meta.id]);
+  await b.local.set({ writerWords: ['Beta'] });
+  assert.ok((await b.on()).ok);
+  hide = null;
+  clock.t += 61e3;
+  await settled(b, a);
+  for (const d of [a, b]) assert.deepEqual((await d.local.get('writerWords')).writerWords.sort(), ['Alpha', 'Beta']);
+});
