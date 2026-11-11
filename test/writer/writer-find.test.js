@@ -162,3 +162,22 @@ test('footnote highlight offsets exclude line and paragraph separators absent fr
   assert.ok(hit?.note);
   assert.deepEqual(FIND.noteRange(content, hit.note.start, hit.note.end), [17, 23]);
 });
+
+test('every printable ASCII character and a few others search as text, plain and whole word, and a hyphen replaces', () => {
+  const chars = [...Array(95)].map((_, i) => String.fromCharCode(32 + i)).concat(['é', '—', '–', '…', '中', '😀', '‑', ' ']);
+  for (const c of chars) {
+    const st = stateOf(doc(para(`a ${c} b x${c}y`)));
+    for (const word of [false, true]) {
+      assert.doesNotThrow(() => FIND.pattern(c, { word }), `query ${JSON.stringify(c)} word ${word}`);
+      assert.doesNotThrow(() => FIND.pattern(`well${c}known`, { word }), `query well${c}known`);
+    }
+    if (c.trim()) assert.ok(FIND.search(st.doc, c, {}).length >= 2, `query ${JSON.stringify(c)} finds its matches`);
+  }
+  const st = stateOf(doc(para('A well-known x-ray from 1990-2000, well-known again.')));
+  assert.equal(FIND.search(st.doc, 'well-known', {}).length, 2);
+  assert.equal(FIND.search(st.doc, 'well-known', { word: true }).length, 2);
+  assert.equal(FIND.search(st.doc, '1990-2000', { word: true }).length, 1);
+  assert.equal(FIND.search(st.doc, 'well', { word: true }).length, 2);
+  const next = st.apply(FIND.replace(st, FIND.search(st.doc, 'well-known', {}), 'famous'));
+  assert.equal(next.doc.textContent, 'A famous x-ray from 1990-2000, famous again.');
+});
