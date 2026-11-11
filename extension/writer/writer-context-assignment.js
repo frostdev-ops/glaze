@@ -14,7 +14,10 @@ var GZ_WRITER_CONTEXT_ASSIGNMENT = globalThis.GZ_WRITER_CONTEXT_ASSIGNMENT || ((
   const settle = (p) => Promise.resolve().then(p).catch(() => null);
   // Rich text Ultra keeps (a content item's description and instructions) as text.
   const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
-  const html = (v, n = 20000) => str(typeof v === 'string' ? v.replace(/<(br|\/p|\/div|\/li|\/h\d)\b[^>]*>/gi, '\n').replace(/<[^>]*>/g, '').replace(/&(\w+|#39);/g, (m, e) => ENT[e] ?? m) : '', n);
+  // A tag pattern applied only up to the last >: no tag can end after it, and a < past it would scan to the end for nothing,
+  // once per < (ai/tasks/writer-context.js does the same).
+  const tags = (t, re, to) => { const end = t.lastIndexOf('>') + 1; return t.slice(0, end).replace(re, to) + t.slice(end); };
+  const html = (v, n = 20000) => str(typeof v === 'string' ? tags(tags(v, /<(br|\/p|\/div|\/li|\/h\d)\b[^>]*>/gi, '\n'), /<[^>]*>/g, '').replace(/&(\w+|#39);/g, (m, e) => ENT[e] ?? m) : '', n);
 
   const MATERIAL = 200000;
   // Preserve complete assessment material within an explicit shared budget. When a source is longer, keep a useful
