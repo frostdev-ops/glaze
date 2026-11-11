@@ -75,7 +75,8 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   const D = {
     mla: (d) => { const [y, m, day] = dp(d); return !y ? '' : d.season ? `${season(d)} ${y}` : m ? `${day ? `${day} ` : ''}${MLA_MONTH[m - 1]} ${y}` : String(y); },
     long: (d) => { const [y, m, day] = dp(d); return !y ? '' : d.season ? `${season(d, true)} ${y}` : m ? `${MONTH[m - 1]}${day ? ` ${day},` : ''} ${y}` : String(y); },
-    apa: (d, full) => { const [y, m, day] = dp(d); return !y ? 'n.d.' : !full ? String(y) : d.season ? `${y}, ${season(d, true)}` : m ? `${y}, ${MONTH[m - 1]}${day ? ` ${day}` : ''}` : String(y); },
+    // letter: APA's a, b, … for one author's works of one year (2020a; n.d.-a).
+    apa: (d, full, letter = '') => { const [y, m, day] = dp(d); const yl = `${y}${letter}`; return !y ? `n.d.${letter ? `-${letter}` : ''}` : !full ? yl : d.season ? `${yl}, ${season(d, true)}` : m ? `${yl}, ${MONTH[m - 1]}${day ? ` ${day}` : ''}` : yl; },
   };
   const yearOf = (s) => dp(s.issued)[0] || null;
 
@@ -164,10 +165,10 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   };
 
   // ==== APA 7 =======================================================================================================
-  const apa = (s) => {
+  const apa = (s, letter) => {
     const lead = who(s) || (s.type === 'motion_picture' && s.publisher ? { names: [{ literal: s.publisher }], role: '' } : null);
     const full = ['article-magazine', 'article-newspaper', 'webpage', 'motion_picture'].includes(s.type);
-    const date = `(${D.apa(s.issued, full)}).`;
+    const date = `(${D.apa(s.issued, full, letter)}).`;
     const t = rich(s.title);
     const italicTitle = !['chapter', 'article-journal', 'article-magazine', 'article-newspaper'].includes(s.type);
     const pubOk = (p) => p && !groupIs(s, p) && !(lead && lead.names.length === 1 && lead.names[0].literal && sameText(lead.names[0].literal, p));
@@ -208,8 +209,22 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     return lead ? esc(N.cite(lead.names, word)) : ['chapter', 'article-journal', 'article-magazine', 'article-newspaper'].includes(s.type) ? `“${apaTitle(s)}”` : it(apaTitle(s));
   };
   const apaPage = (page) => (page ? (/^(p{1,2}|para|chap|ch)\./i.test(String(page)) ? esc(page) : apaPages(String(page).replace(/\s*[-–—]+\s*/g, '–'))) : '');
-  const apaIn = (s, page) => `(${join([apaName(s, '&'), D.apa(s.issued), apaPage(page)])})`;
-  const apaNarr = (s, page) => `${apaName(s, 'and')} (${join([D.apa(s.issued), apaPage(page)])})`;
+  const apaIn = (s, page, letter) => `(${join([apaName(s, '&'), D.apa(s.issued, false, letter), apaPage(page)])})`;
+  const apaNarr = (s, page, letter) => `${apaName(s, 'and')} (${join([D.apa(s.issued, false, letter), apaPage(page)])})`;
+  // APA 8.19, 9.47: works with the same authors, in the same order, and the same year take a, b, … by title (A, An, The
+  // skipped). sources (deduped) → Map id → letter, for those that share.
+  const letters = (all) => {
+    const groups = new Map(), out = new Map();
+    for (const s of all) {
+      const lead = who(s);
+      if (!lead) continue;
+      const k = `${lead.role}|${lead.names.map((n) => `${fold(fam(n))} ${fold(n.given || '')}`).join('|')}|${yearOf(s) || 'nd'}`;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(s);
+    }
+    for (const g of groups.values()) if (g.length > 1 && g.length <= 26) g.map((s) => [fold(article(s.title)), s]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).forEach(([, s], i) => out.set(s.id, String.fromCharCode(97 + i)));
+    return out;
+  };
 
   // ==== Chicago 17, notes and bibliography ==========================================================================
   // A book's place, publisher and year; n.d. without one (14.145).
@@ -271,17 +286,20 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   };
 
   // ==== the public part =============================================================================================
-  const format = (raw, st) => {
+  // opts.sources: the paper's saved sources, for APA's year letters.
+  const format = (raw, st, opts = {}) => {
     const s = S().normalize(raw);
     const k = style(st);
     if (!s) return { entry: '', inText: () => '', narrative: () => '', note: () => '', short: () => '' };
-    const entry = k === 'apa7' ? apa(s) : k === 'chicago17' ? cms(s, 'bib') : mla(s);
+    let letter = opts.letter || '';
+    if (!letter && k === 'apa7' && Array.isArray(opts.sources)) { const all = S().dedupe(opts.sources), x = all.find((o) => o.id === (raw?.id) || S().same(o, s)); letter = (x && letters(all).get(x.id)) || ''; }
+    const entry = k === 'apa7' ? apa(s, letter) : k === 'chicago17' ? cms(s, 'bib') : mla(s);
     const note = (page) => cms(s, 'note', page);
     const short = (page) => cmsShort(s, page);
     return {
       entry,
-      inText: (page) => (k === 'apa7' ? apaIn(s, page) : k === 'chicago17' ? note(page) : mlaIn(s, page)),
-      narrative: (page) => (k === 'apa7' ? apaNarr(s, page) : k === 'chicago17' ? short(page) : mlaIn(s, page, true)),
+      inText: (page) => (k === 'apa7' ? apaIn(s, page, letter) : k === 'chicago17' ? note(page) : mlaIn(s, page)),
+      narrative: (page) => (k === 'apa7' ? apaNarr(s, page, letter) : k === 'chicago17' ? short(page) : mlaIn(s, page, true)),
       note, short,
     };
   };
@@ -299,7 +317,8 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   const list = (sources, st) => {
     const k = style(st);
     const all = S().dedupe(sources);
-    return { title: TITLES[k], entries: all.map((s) => ({ s, key: sortKey(s, k) })).sort((a, b) => cmp(a.key, b.key)).map(({ s }) => ({ id: s.id, html: s.unparsed && s.original ? esc(s.original) : format(s, k).entry })) };
+    const L = k === 'apa7' ? letters(all) : new Map();
+    return { title: TITLES[k], entries: all.map((s) => ({ s, key: sortKey(s, k) })).sort((a, b) => cmp(a.key, b.key)).map(({ s }) => ({ id: s.id, html: s.unparsed && s.original ? esc(s.original) : format(s, k, { letter: L.get(s.id) }).entry })) };
   };
 
   // ---- finding citations in the text --------------------------------------------------------------------------------
@@ -312,7 +331,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   const NAME = String.raw`(?:${PARTICLE}\s+)*(?:(?:al|el)-)?[\p{Lu}][\p{L}'’.-]*`;
   const bare = (n) => n.replace(/(?:’s|'s)$/u, '');
   const PAGE = String.raw`(?:(?:pp?\.|para\.|ch\.)\s*)?(?:[\dxivlc]+(?:\s*[-–]\s*[\dxivlc]+)?(?:,\s*\d+(?:[-–]\d+)?)*)`;
-  const YEAR = String.raw`(?:\d{4}[a-z]?|n\.d\.)`;
+  const YEAR = String.raw`(?:\d{4}[a-z]?|n\.d\.(?:-[a-z])?)`;
   const PART = {
     apa: new RegExp(String.raw`^(.+?),\s*(${YEAR})(?:,\s*(${PAGE}))?$`, 'iu'),
     named: new RegExp(String.raw`^(.+?)(,?)\s+(${PAGE})$`, 'u'),
@@ -426,7 +445,15 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
       if (c) Object.assign(c, entry); else found.push(entry);
     }
     const typed = typedList(T), start = typed ? T.posAt(typed.entries[0]?.from ?? T.text.length) : Infinity;
-    return found.filter((c) => c.at[0] < start).map((c) => ({ ...c, ids: k === 'apa7' && c.year ? c.ids.filter((id) => { const s = all.find((s) => s.id === id); return String(yearOf(s) || 'n.d.') === c.year.replace(/(\d)[a-z]$/, '$1'); }) : c.ids }));
+    // An APA year names the work by its year, and by its letter when the work has one (2020a).
+    const L = k === 'apa7' ? letters(all) : new Map();
+    const byYear = (c) => {
+      const m = /^(\d{4}|n\.d\.)-?([a-z])?$/.exec(c.year);
+      const ids = m ? c.ids.filter((id) => String(yearOf(all.find((x) => x.id === id)) || 'n.d.') === m[1]) : [];
+      const lettered = m?.[2] ? ids.filter((id) => L.get(id) === m[2]) : [];
+      return lettered.length ? lettered : ids.filter((id) => !m?.[2] || !L.has(id));
+    };
+    return found.filter((c) => c.at[0] < start).map((c) => ({ ...c, ids: k === 'apa7' && c.year ? byYear(c) : c.ids }));
   };
 
   // The reference list typed into the document: its title on a line of its own, its entries the lines after it.
@@ -448,7 +475,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     const inList = (c) => typed && T.posAt(typed.entries[0]?.from ?? Infinity) <= c.at[0];
     // Imported and hand-written papers need no saved CSL record to have a reference entry.
     const hasEntry = (c) => typed?.entries.some((e) => {
-      if (c.year && !new RegExp(`\\b${c.year.replace(/(\d)[a-z]$/, '$1')}\\b`).test(e.text)) return false;
+      if (c.year && !new RegExp(`\\b${c.year.replace(/^(\d{4}|n\.d\.)-?[a-z]$/, '$1').replace(/\./g, '\\.')}(?!\\d)`).test(e.text)) return false;
       // An unsigned article starts with its quoted title, not an author's surname followed by a comma. MLA may cite
       // that title in shortened form; compare whole words so an unrelated title with a shared prefix can't match.
       const title = e.text.match(/^\s*(?:“([^”]+)”|"([^"]+)"|‘([^’]+)’|'([^']+)')/u)?.slice(1).find(Boolean);
@@ -474,7 +501,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
       }
       if (k === 'apa7' && c.kind === 'paren' && !c.year && c.ids.length) {
         const s = c.ids.length === 1 ? all.find((x) => x.id === c.ids[0]) : null;
-        const replacement = s ? join([c.name, D.apa(s.issued), c.page ? (/^p/i.test(c.page) ? c.page : apaPages(c.page)) : '']) : '';
+        const replacement = s ? join([c.name, D.apa(s.issued, false, letters(all).get(s.id)), c.page ? (/^p/i.test(c.page) ? c.page : apaPages(c.page)) : '']) : '';
         const fixed = replacement && c.part ? c.text.replace(c.part, replacement) : '';
         issues.push({ ...ISSUE(from, to, t('Add the year'), { title: t('APA citation') }), suggestions: fixed ? [fixed] : [] });
       }

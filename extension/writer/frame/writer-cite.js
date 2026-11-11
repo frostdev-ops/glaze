@@ -5,6 +5,7 @@
 // (GZ_WRITER_ISSUES, when the proofing part is there). Adds to GZ_WRITER_CITE:
 //   open({ anchor, prefill, form }) · add(prefill) · sourcesView(container) → { refresh, destroy } · count(doc?, sources?, style?)
 //   sources() · setSources(list) · use(style) · style() · on(fn) (sources or style changed) · references() · lookup(value, say)
+//   format(source, style) (writer-cite.js format among the saved sources)
 // A lookup asks the browser for a page's host from the click itself (GZ_SITE.reach's way), then the worker fetches
 // ('glaze:writer-lookup', writer/writer-lookup.js); what comes back is parsed here as untrusted text. Open writers reload
 // sources on storage changes. Simultaneous saves across tabs still use the last write; storage.local has no transaction.
@@ -12,7 +13,7 @@
   const F = globalThis.GZ_WRITER_FRAME, C = globalThis.GZ_WRITER_CITE, S = globalThis.GZ_WRITER_SOURCES, LK = globalThis.GZ_WRITER_LOOKUP;
   if (!F || !C || !S || !LK) return;
   const t = (k, v) => F.t(k, v);
-  const countIn = C.count;
+  const countIn = C.count, formatOf = C.format;
   const { TextSelection } = GZ_PM.state, { Fragment } = GZ_PM.model;
   const STYLE = { mla: 'mla9', mla9: 'mla9', apa: 'apa7', apa7: 'apa7', chicago: 'chicago17', chicago17: 'chicago17' };
   let sources = [], key = null, style = 'mla9', saved = null, loading = null, referenceBlock = null;
@@ -581,6 +582,8 @@
     open, lookup, sourcesView, references, use, on: (fn) => { if (typeof fn === 'function') subs.add(fn); return () => subs.delete(fn); },
     add: (prefill) => open({ prefill: prefill?.name ? { author: [S.name(prefill.name)].filter(Boolean) } : prefill || {}, form: true }),
     style: () => style, sources: () => sources.slice(), setSources,
+    // A source formatted among this paper's saved sources (APA's 2020a and 2020b); every caller here and the agents' cite.
+    format: (src, st, o = {}) => formatOf(src, st, { sources, ...o }),
     // The compose bar's sources pill: how many of the saved sources the text cites, of how many.
     count: (doc = F.editor()?.view?.state.doc, list = sources, st = style) => (doc ? countIn(doc, list, st) : { cited: 0, total: list.length }),
   });
