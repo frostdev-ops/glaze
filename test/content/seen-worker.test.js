@@ -64,11 +64,12 @@ for (const [key, value] of [
     courseSlots: { _6_1: '7' }, seenGrades: { _6_1: { _9_1: 'A' } }, seenContent: { _6_1: ['_9_1', '+'] },
   };
   const w = worker(structuredClone(before));
-  const r = await seen(w, 'ultra', { key, set: { _6_1: value }, drop: true, stamp: true });
-  assert.equal(r?.ok, false, 'a sender-supplied site or bare id cannot override the stored owner');
-  assert.deepEqual(plain(w.store.local[key]), before[key]);
-  assert.deepEqual(plain(w.store.local.seenCourses), before.seenCourses);
-  assert.equal(w.store.local[`seenCoursesAt ${ULTRA}`], undefined, 'a refused claim cannot stamp the course-list gate');
+  // Another school's course with the same id keeps its entry; the rest of this school's patch still lands (two Ultra
+  // sites number their courses alike).
+  await seen(w, 'ultra', { key, set: { _6_1: value, _2_1: value }, drop: true, stamp: true });
+  assert.deepEqual(plain(w.store.local[key]._6_1), before[key]._6_1, 'a sender-supplied site or bare id cannot override the stored owner');
+  assert.deepEqual(plain(w.store.local.seenCourses._6_1), before.seenCourses._6_1);
+  assert.deepEqual(plain(w.store.local[key]._2_1), value, "this school's other course is kept");
   assert.equal((await seen(w, 'ultra', { key, set: { _1_1: value } }))?.ok, true, 'the stored owner still writes its course');
   assert.deepEqual(plain(w.store.local[key]._6_1), before[key]._6_1);
 });
