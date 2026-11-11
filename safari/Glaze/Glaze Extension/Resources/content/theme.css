@@ -168,7 +168,7 @@ html:not([data-gz-font="blackboard"]) body { font-family: var(--gz-font) !import
    targeted #site-wrap rule below can still set a colour. (1.0 had it at (1,2,3), which silently beat
    the button, badge and chip colors written later in this file.) */
 /* SVG's own elements by name, not `svg *`: that made every element on Ultra's page walk its ancestors for an <svg>. */
-#site-wrap :where(*:not(a, .MuiButton-root, .MuiChip-label, svg, svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop))) { color: inherit !important; }
+#site-wrap :where(*:not(a, .MuiButton-root, .MuiChip-label, svg, svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop), :is(.bb-editor-container.is-read-only, .bbml-content) :is([style^="color"], [style*=";color"], [style*=" color"], font[color]))) { color: inherit !important; }
 #site-wrap :where(.course-id),
 #site-wrap :where(.course-status),
 #site-wrap :where(.summary),
@@ -395,7 +395,7 @@ aside.student-grade-overview { background: transparent !important; border-left: 
 .MuiAccordion-root, .MuiAccordionSummary-root, .MuiAccordionDetails-root, .MuiCollapse-root { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; }
 .MuiAccordionDetails-root { border-top: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
 .MuiAccordionDetails-root > div { background: var(--gz-surface-grain, none), var(--gz-surface-fill-2, var(--gz-surface-2)) !important; color: var(--gz-ink-muted) !important; border-radius: var(--gz-radius-sm); }
-.MuiBadge-badge { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
+.MuiBadge-badge { background: var(--gz-accent-soft) !important; color: var(--gz-on-soft, var(--gz-accent)) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
 /* The favourite star pops. */
 #site-wrap .js-favourite-button { transition: transform var(--gz-t-slow) var(--gz-spring), color var(--gz-t) var(--gz-ease) !important; }
 #site-wrap .js-favourite-button:hover { transform: var(--gz-pop); color: var(--gz-accent) !important; }
@@ -425,8 +425,8 @@ input, textarea, select, .MuiInputBase-root, .MuiOutlinedInput-root, .MuiSelect-
 #site-wrap .MuiFormControl-root:has(> label.MuiInputLabel-shrink) fieldset.MuiOutlinedInput-notchedOutline > legend { max-width: 100% !important; }
 .course-overview-management > div > div > div { background: transparent !important; }
 .course-overview-management label:has(input) { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; color: var(--gz-ink-muted) !important; border-radius: var(--gz-radius-sm) !important; transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease); }
-.course-overview-management label:has(input:checked) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
-.MuiChip-root { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
+.course-overview-management label:has(input:checked) { background: var(--gz-accent-soft) !important; color: var(--gz-on-soft, var(--gz-accent)) !important; border-color: var(--gz-border-strong, var(--gz-line-strong)) !important; }
+.MuiChip-root { background: var(--gz-accent-soft) !important; color: var(--gz-on-soft, var(--gz-accent)) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
 .MuiButton-contained { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; border-radius: var(--gz-radius-sm) !important; box-shadow: none !important; }
 .MuiButton-contained:hover { filter: var(--gz-hover-filter); }
 .MuiButton-contained.MuiButton-containedSecondary { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; }
@@ -449,7 +449,7 @@ th { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-
 .element-image { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; border-color: var(--gz-border-line, var(--gz-line)) !important; }
 #site-wrap button:not(.MuiButton-contained) { color: var(--gz-ink) !important; }
 .button-group button, .button-group li { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink-muted) !important; border-color: var(--gz-border-line, var(--gz-line)) !important; }
-.button-group button.active, .button-group button[aria-pressed=true], .button-group button.selected { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; }
+.button-group button.active, .button-group button[aria-pressed=true], .button-group button.selected { background: var(--gz-accent-soft) !important; color: var(--gz-on-soft, var(--gz-accent)) !important; }
 .days .week-day button { color: var(--gz-ink-muted) !important; }
 .days .week-day.today button, .days .week-day button.selected { background: var(--gz-accent) !important; color: var(--gz-accent-ink) !important; }
 .base-grades-empty-state, .base-grades-empty-state *, .no-grades { background: var(--gz-ground) !important; background-image: none !important; color: var(--gz-ink-muted) !important; }
@@ -666,7 +666,7 @@ html[data-gz-bg="solid"] #site-wrap .bb-offcanvas-panel.full .panel-header.simpl
   transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease), border-color var(--gz-t) var(--gz-ease) !important;
 }
 /* Colour only: Ultra positions this button with a transform, so a hover transform moved it out from under the pointer. */
-#site-wrap .peek button.bb-close:is(:hover, :focus-visible) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-color: var(--gz-accent) !important; }
+#site-wrap .peek button.bb-close:is(:hover, :focus-visible) { background: var(--gz-accent-soft) !important; color: var(--gz-on-soft, var(--gz-accent)) !important; border-color: var(--gz-accent) !important; }
 #site-wrap button.bb-close::after { display: none !important; }
 #site-wrap .rubric-view-panel .panel-body > div, #site-wrap .rubric-view-panel .MuiAccordionDetails-root > div > div > div { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)) !important; color: var(--gz-ink) !important; border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius-sm) !important; }
 #site-wrap .js-rubric-view-achievement-score { background: var(--gz-accent-soft) !important; color: var(--gz-accent-hi) !important; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)) !important; }
@@ -869,7 +869,7 @@ svg:has(> path[class*="makeStylesindeterminateSvg-"]) { filter: drop-shadow(0 0 
 /* ---- portals: MUI popovers, menus and dialogs mount on <body>, OUTSIDE #site-wrap, so the page-scoped
    inherit/border rules above never reach them. Same rules, portal scope. ---- */
 .MuiModal-root, .MuiPopper-root, .MuiPopover-root, .MuiDialog-root { color: var(--gz-ink) !important; }
-.MuiModal-root *:not(a):not(.MuiButton-root):not(.MuiChip-label):not(svg):not(svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop)), .MuiPopper-root *:not(a):not(.MuiButton-root):not(.MuiChip-label):not(svg):not(svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop)) { color: inherit !important; }
+.MuiModal-root *:not(a):not(.MuiButton-root):not(.MuiChip-label):not(svg):not(svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop)):not(:where(:is(.bb-editor-container.is-read-only, .bbml-content) :is([style^="color"], [style*=";color"], [style*=" color"], font[color]))), .MuiPopper-root *:not(a):not(.MuiButton-root):not(.MuiChip-label):not(svg):not(svg :is(path, g, circle, rect, use, polygon, polyline, line, ellipse, text, tspan, defs, clipPath, mask, symbol, linearGradient, radialGradient, stop)):not(:where(:is(.bb-editor-container.is-read-only, .bbml-content) :is([style^="color"], [style*=";color"], [style*=" color"], font[color]))) { color: inherit !important; }
 .MuiModal-root *, .MuiPopper-root * { border-color: var(--gz-border-line, var(--gz-line)) !important; }
 .MuiModal-root :where(a):is(a, .MuiLink-root),
 .MuiModal-root .MuiLink-root,
@@ -1071,7 +1071,9 @@ html[data-gz-navbar][data-gz-footer] .inner-wrap > :where(.routed-page):is(.rout
 .course-color-8, .stream-panel-activity-card[data-gz-course-slot="8"] { --gz-course-raw: #22c7cc; --gz-pick: var(--gz-pick-8); }
 .course-color-9, .stream-panel-activity-card[data-gz-course-slot="9"] { --gz-course-raw: #ca22ad; --gz-pick: var(--gz-pick-9); }
 .course-color-10, .stream-panel-activity-card[data-gz-course-slot="10"] { --gz-course-raw: #157afb; --gz-pick: var(--gz-pick-10); }
-[class*="course-color-"], .stream-panel-activity-card[data-gz-course-slot] { --gz-course: var(--gz-pick, color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0))); }
+[class*="course-color-"], .stream-panel-activity-card[data-gz-course-slot] { --gz-course: var(--gz-pick, var(--gz-course-raw)); }
+/* Toned where relative colours are read; the ten slot classes by name, which files them (a [class*=] is tried on every element). */
+@supports (color: oklab(from red l 0 0)) { .course-color-1, .course-color-2, .course-color-3, .course-color-4, .course-color-5, .course-color-6, .course-color-7, .course-color-8, .course-color-9, .course-color-10, .stream-panel-activity-card[data-gz-course-slot] { --gz-course: var(--gz-pick, color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0))); } }
 html[data-gz-raw-courses] [class*="course-color-"], html[data-gz-raw-courses] .stream-panel-activity-card[data-gz-course-slot] { --gz-course: var(--gz-pick, var(--gz-course-raw)); }
 [class*="course-color-"]::before, .element-card.element-card-deadline[class*="course-color-"]::after,
 .calendar-wrapper .event-dot[class*="course-color-"] { background-color: var(--gz-course) !important; }
@@ -1220,7 +1222,7 @@ html[data-gz-bg="solid"] :where(bb-assignment-attempt-authoring-panel [class*="m
 #site-wrap .js-completion-chart [class*="chartLineProgressbarUnopened"] { background-color: var(--gz-line) !important; }
 
 /* ---- stream & grades item icons: a soft accent tile instead of a white outline on navy ---- */
-#site-wrap .element-card .element-image { background: var(--gz-accent-soft) !important; border: 0 !important; border-radius: var(--gz-radius-sm) !important; color: var(--gz-accent) !important; }
+#site-wrap .element-card .element-image { background: var(--gz-accent-soft) !important; border: 0 !important; border-radius: var(--gz-radius-sm) !important; color: var(--gz-on-soft, var(--gz-accent)) !important; }
 #site-wrap .element-card .element-image svg { color: var(--gz-accent) !important; }
 /* An Activity card's outline, icon tile and divider are its course's color, the tile tinted as the accent's is; a card
    of no course has no --gz-course and keeps the accent's. */
@@ -1350,6 +1352,24 @@ html[data-gz-dark-theme] img[data-gz-rule] { filter: invert(1) hue-rotate(180deg
    pointed at, so a white screenshot doesn't glare. */
 #site-wrap .bb-editor-container.is-read-only img:not([data-gz-rule]) { border-radius: var(--gz-radius-sm); transition: filter var(--gz-t) var(--gz-ease); }
 html[data-gz-dark-theme] #site-wrap .bb-editor-container.is-read-only img:not([data-gz-rule], :hover) { filter: brightness(0.85); }
+/* An instructor's own text colour (a red due date, a green step) is theirs: the rules above leave it be inside what they wrote. On
+   a dark Look it is lifted, in its own hue, to OKLCH lightness 0.78 or more (6.3:1 and up on every built-in dark surface), so
+   black and navy turn light and a colour that already read is left alone. A text fill, so the element's own colour stays the
+   source; highlights and what sits in them keep the dark ink the highlight rule below gives. Before Chrome 119 the ink again. */
+@supports (color: oklch(from red l c h)) {
+  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root) :is(.bb-editor-container.is-read-only, .bbml-content) [style^="color"]:not(:is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])), :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) *),
+  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root) :is(.bb-editor-container.is-read-only, .bbml-content) [style*=";color"]:not(:is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])), :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) *),
+  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root) :is(.bb-editor-container.is-read-only, .bbml-content) [style*=" color"]:not(:is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])), :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) *),
+  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root) :is(.bb-editor-container.is-read-only, .bbml-content) font[color]:not(:is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])), :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) *) { -webkit-text-fill-color: oklch(from currentColor max(l, 0.78) c h); }
+  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root) :is(.bb-editor-container.is-read-only, .bbml-content) mark,
+  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root) :is(.bb-editor-container.is-read-only, .bbml-content) :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light]) { -webkit-text-fill-color: currentColor; }
+}
+@supports not (color: oklch(from red l c h)) {
+  :where(html[data-gz-dark-theme]) :where(#site-wrap, .MuiModal-root) :where(.bb-editor-container.is-read-only, .bbml-content) [style^="color"],
+  :where(html[data-gz-dark-theme]) :where(#site-wrap, .MuiModal-root) :where(.bb-editor-container.is-read-only, .bbml-content) [style*=";color"],
+  :where(html[data-gz-dark-theme]) :where(#site-wrap, .MuiModal-root) :where(.bb-editor-container.is-read-only, .bbml-content) [style*=" color"],
+  :where(html[data-gz-dark-theme]) :where(#site-wrap, .MuiModal-root) :where(.bb-editor-container.is-read-only, .bbml-content) font[color] { color: inherit !important; }
+}
 /* An instructor's highlight (an inline background, or <mark>) keeps its colour, light as highlighters are, but the words
    in it took the palette's ink: light on yellow, about 1:1, on a dark palette. There they take the ground's dark instead.
    Only inline text: a dark table cell or banner pasted from Word keeps the light ink it reads with. Not a see-through
@@ -1510,7 +1530,7 @@ html[data-gz-bg="solid"] #site-wrap .assessment-attempt footer.submit-footer.pan
 #site-wrap [class*="empty-state"] { padding: 1.5rem 1rem !important; text-align: center; color: var(--gz-ink-muted) !important; border-color: color-mix(in srgb, var(--gz-border-strong, var(--gz-line-strong)) 70%, transparent) !important; }
 
 /* ---- course header pieces Ultra paints #404040 ---- */
-course-page-header > header [data-analytics-id="course.header.home"] { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border-radius: var(--gz-radius-sm) !important; }
+course-page-header > header [data-analytics-id="course.header.home"] { background: var(--gz-accent-soft) !important; color: var(--gz-on-soft, var(--gz-accent)) !important; border-radius: var(--gz-radius-sm) !important; }
 course-page-header > header .MuiDivider-root { background-color: var(--gz-line) !important; }
 
 /* ---- row actions: a solid MUI button repeated on every gradebook row is noise; tonal, like .button ---- */
@@ -1587,7 +1607,7 @@ course-page-header > header .MuiDivider-root { background-color: var(--gz-line) 
 #site-wrap :where(a.standard-button):is(a.standard-button, button.icon.clear):is(:hover, :focus-visible),
 #site-wrap :where(button.standard-button):is(button.standard-button, button.icon.clear):is(:hover, :focus-visible) {
   background: color-mix(in srgb, var(--gz-accent-soft) 80%, transparent) !important;
-  color: var(--gz-accent) !important;
+  color: var(--gz-on-soft, var(--gz-accent)) !important;
 }
 
 /* Course tab strip: hovered tabs tint like rows. */

@@ -183,7 +183,7 @@ html[data-gz-pearson] .gz-pearson-controls { position: fixed; right: 16px; botto
 html[data-gz-pearson] .gz-pearson-controls button { font: 500 13px var(--gz-font); min-height: 32px; padding: 5px 10px; background: transparent; color: var(--gz-ink-muted); border: 1px solid transparent; border-radius: min(var(--gz-radius),8px); cursor: pointer; }
 html[data-gz-pearson] .gz-pearson-controls button:hover { background: var(--gz-accent-soft); color: var(--gz-ink); }
 html[data-gz-pearson] .gz-pearson-controls button[aria-expanded]::before { content: ""; display: inline-block; width: 12px; height: 12px; margin-right: 8px; vertical-align: -1px; border: 1.5px solid currentColor; border-radius: 2px; background: linear-gradient(90deg,currentColor 30%,transparent 30%); opacity: .8; }
-html[data-gz-pearson] .gz-pearson-controls button[aria-expanded="true"] { color: var(--gz-accent); background: var(--gz-accent-soft); }
+html[data-gz-pearson] .gz-pearson-controls button[aria-expanded="true"] { color: var(--gz-on-soft, var(--gz-accent)); background: var(--gz-accent-soft); }
 html[data-gz-pearson] .gz-pearson-controls[hidden] { display: none !important; }
 html[data-gz-pearson-viewer] :is(body,#playerViewer) { width: 100% !important; height: 100vh !important; overflow: hidden !important; }
 html[data-gz-pearson-viewer] .mainPanel {

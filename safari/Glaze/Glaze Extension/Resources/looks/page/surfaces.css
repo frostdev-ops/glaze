@@ -10,6 +10,15 @@
   --gz-surface-fill-2: color-mix(in srgb, var(--gz-surface-paint-2) var(--gz-surface-opacity, 100%), transparent);
   --gz-border-line: color-mix(in srgb, var(--gz-line) var(--gz-surface-border, 100%), transparent);
   --gz-border-strong: color-mix(in srgb, var(--gz-line-strong) var(--gz-surface-border, 100%), transparent);
+  /* A field's or switch's edge, the faint ink the palette contract holds to 3:1 (line-strong is for cards and rules). */
+  --gz-border-field: color-mix(in srgb, var(--gz-ink-faint) var(--gz-surface-border, 100%), transparent);
+}
+/* Text on the accent tint (accent-soft): the accent on a dark palette, the bright accent on a light one, which the palette contract holds
+   to 4.5:1 on the tint (the accent itself read 4.24:1 on Paper and 4.47:1 on Rose). The palette sets the page's color-scheme, so
+   light-dark() tells which. Before Chrome 123 the accent stays. */
+html, [data-gz-course-look] { --gz-on-soft: var(--gz-accent); }
+@supports (color: light-dark(red, red)) {
+  html, [data-gz-course-look] { --gz-on-soft: light-dark(var(--gz-accent-hi), var(--gz-accent)); }
 }
 /* Per-course colors are inherited locally, including on course cards outside a course page. */
 [data-gz-course],
@@ -37,3 +46,22 @@ html[data-gz-bg]:not([data-gz-bg="solid"]) { --gz-panel-opacity: 88%; }
 :is(html, :host, [data-gz-course-look])[data-gz-depth="0"] { --gz-shadow: none; }
 :is(html, :host, [data-gz-course-look])[data-gz-depth="2"] { --gz-shadow: 0 12px 32px var(--gz-shadow-ink), 0 2px 6px var(--gz-shadow-ink); --gz-rest-shadow: 0 1px 3px var(--gz-shadow-ink); }
 :is(html, :host, [data-gz-course-look])[data-gz-depth="3"] { --gz-shadow: 0 20px 48px var(--gz-shadow-ink), 0 4px 12px var(--gz-shadow-ink); --gz-rest-shadow: 0 4px 14px var(--gz-shadow-ink); }
+
+/* Printed, a dark Look is ink on paper: Chrome, Edge, Firefox and Safari drop backgrounds by default and keep the ink, so a dark
+   Look's near-white text printed at 1.1:1 on white (with background graphics on, the page printed as a dark slab). Paper's values
+   take the palette's place, over the inline ones content.js writes on <html> (!important beats them), so every sheet that reads the
+   palette prints dark on white. A light Look already is. The background layers and the floating chrome Glaze draws are off in any
+   Look; the sheets are linked only while Glaze is on, and each is named by what Glaze put on the page. */
+@media print {
+  html[data-gz-dark-theme] {
+    color-scheme: light !important;
+    --gz-ink: #14181f !important; --gz-ink-muted: #3d4552 !important; --gz-ink-faint: #5b6472 !important;
+    --gz-surface: #fff !important; --gz-surface-2: #fff !important; --gz-surface-color: #fff !important;
+    --gz-surface-grain: none !important; --gz-surface-tint-strength: 0% !important; --gz-surface-opacity: 100% !important;
+    --gz-accent: #2563eb !important; --gz-accent-hi: #1d4ed8 !important; --gz-accent-soft: #dbeafe !important; --gz-accent-ink: #fff !important;
+    --gz-ok: #15803d !important; --gz-warn: #b45309 !important; --gz-err: #b91c1c !important;
+    --gz-line: #e3e6ea !important; --gz-line-strong: #c8cdd4 !important; --gz-shadow: none !important; --gz-rest-shadow: none !important;
+  }
+  html[data-gz-bg]::before, html[data-gz-bg] .panel-wrap::before, html[data-gz-bg] .bb-offcanvas-panel::before, #gz-scene,
+  #gz-read, #gz-boot, #gz-cmd, #gz-keys, #gz-cm, #gz-peek, #gz-mk, #gz-doc-tools, .gz-tip { display: none !important; }
+}

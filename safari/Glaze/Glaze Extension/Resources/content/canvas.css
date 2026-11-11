@@ -406,7 +406,7 @@ html[data-gz-nav-size="large"] { --gz-nav-wide: 100px; --gz-nav-narrow: 64px; --
 }
 #application #section-tabs li a:hover { background: var(--gz-row-hover); color: var(--gz-accent-hi); transform: var(--gz-nudge); }
 #application #section-tabs li a.active {
-  color: var(--gz-accent); font-weight: 600; background: color-mix(in srgb, var(--gz-accent-soft) 55%, transparent);
+  color: var(--gz-on-soft, var(--gz-accent)); font-weight: 600; background: color-mix(in srgb, var(--gz-accent-soft) 55%, transparent);
   box-shadow: inset 3px 0 0 var(--gz-accent);
 }
 html:not([data-gz-dark-theme]) #application #section-tabs li a.active { color: var(--gz-accent-hi); }
@@ -674,7 +674,7 @@ html[data-gz-motion="expressive"] :is(.ic-DashboardCard, .ig-row, .ic-item-row):
 :is(#application, .ui-dialog) :is(.btn:disabled, .btn.disabled, .Button--disabled, .btn-primary[disabled]) { opacity: 0.5; }
 /* Icon-only buttons and the ⋯ menus: a round tint behind the icon. */
 :is(#application, .ui-dialog) :is(.Button--icon-action, .al-trigger, .ic-DashboardCard__header-button, .btn-link.icon-only) { border-radius: 999px; transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease); }
-:is(#application, .ui-dialog) :is(.Button--icon-action, .al-trigger, .ic-DashboardCard__header-button):is(:hover, :focus-visible) { background: color-mix(in srgb, var(--gz-accent-soft) 80%, transparent); color: var(--gz-accent); }
+:is(#application, .ui-dialog) :is(.Button--icon-action, .al-trigger, .ic-DashboardCard__header-button):is(:hover, :focus-visible) { background: color-mix(in srgb, var(--gz-accent-soft) 80%, transparent); color: var(--gz-on-soft, var(--gz-accent)); }
 
 /* ---- forms: fields are surfaces with an edge, the accent ring while you type ---- */
 :is(#application, .ui-dialog, [role="dialog"]:not([id^="gz-"] *)) :is(input:not([type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="file"], [type="range"], [type="color"], [type="image"]), textarea, select),
@@ -813,9 +813,13 @@ html :is([data-cid~="IconButton"], [data-cid~="Button"]):is([disabled], [aria-di
       Canvas's inline value is never overwritten, only overridden here, so a re-read is always Canvas's).
       The [style*=] guards leave Canvas's own color showing until it has.
    Course picks (settings.courses.colors) are Ultra's for now. */
-html { --gz-course: color-mix(in oklab, currentColor 70%, oklab(from var(--gz-ink-muted) l 0 0)); }
+/* A browser that can't read a relative colour gets the course's own colour: inside the value it would make --gz-course invalid,
+   and every use of it unset. The same goes for the oklch() titles below. */
+html { --gz-course: currentColor; }
+@supports (color: oklab(from red l 0 0)) { html { --gz-course: color-mix(in oklab, currentColor 70%, oklab(from var(--gz-ink-muted) l 0 0)); } }
 html[data-gz-raw-courses] { --gz-course: currentColor; }
-:is(.ic-DashboardCard, .planner-grouping)[style*="--gz-course-raw"] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); }
+:is(.ic-DashboardCard, .planner-grouping)[style*="--gz-course-raw"] { --gz-course: var(--gz-course-raw); }
+@supports (color: oklab(from red l 0 0)) { :is(.ic-DashboardCard, .planner-grouping)[style*="--gz-course-raw"] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); } }
 html[data-gz-raw-courses] :is(.ic-DashboardCard, .planner-grouping)[style*="--gz-course-raw"] { --gz-course: var(--gz-course-raw); }
 /* Calendar: the chips of the month and week grids (restyled in the calendar section above; here they take the
    toned color), the swatches of the sidebar's checked calendars (an unchecked one is Canvas's grey), the agenda's lines. */
@@ -832,15 +836,19 @@ html[data-gz-raw-courses] :is(.ic-DashboardCard, .planner-grouping)[style*="--gz
    is Canvas's own color sunk toward the ground instead, so it keeps its hue and sits in the palette. */
 html[data-gz-dark-theme]:not([data-gz-raw-courses]) #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header_hero { background-color: var(--gz-card-c, color-mix(in oklab, var(--gz-course-raw) 62%, var(--gz-surface-paint-2, var(--gz-surface-2)))) !important; }
 /* Only title lightness changes; the course hue and its hero colour stay Canvas's own. */
-#application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: oklch(from var(--gz-course) min(l, 0.48) c h) !important; }
-html[data-gz-dark-theme] #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: oklch(from var(--gz-course) max(l, 0.72) c h) !important; }
+@supports (color: oklch(from red l c h)) {
+  #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: oklch(from var(--gz-course) min(l, 0.48) c h) !important; }
+  html[data-gz-dark-theme] #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: oklch(from var(--gz-course) max(l, 0.72) c h) !important; }
+}
 /* List view (the planner): the group's banner and edge, and the icon (the avatar, for a personal to-do) of each item. */
 #application .planner-grouping[style*="--gz-course-raw"] > ol { border-color: var(--gz-course) !important; }
 #application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__overlay"] { background-color: var(--gz-course) !important; }
 #application .planner-grouping[style*="--gz-course-raw"] :is([class*="PlannerItem-styles__icon"], [class*="PlannerItem-styles__avatar"]) { color: var(--gz-course) !important; }
 /* The group's title is Canvas's brand blue whatever the course (3.8:1 on a dark band): the course's hue, at a lightness that reads, as on a card. */
-#application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__title"] { color: oklch(from var(--gz-course) min(l, 0.48) c h); }
-html[data-gz-dark-theme] #application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__title"] { color: oklch(from var(--gz-course) max(l, 0.72) c h); }
+@supports (color: oklch(from red l c h)) {
+  #application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__title"] { color: oklch(from var(--gz-course) min(l, 0.48) c h); }
+  html[data-gz-dark-theme] #application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__title"] { color: oklch(from var(--gz-course) max(l, 0.72) c h); }
+}
 /* Its long titles fade out under a white gradient, a bright line along the band on a dark palette. */
 html[data-gz-dark-theme] #application [class*="Grouping-styles__title"]::after { display: none; }
 /* InstUI's pills (Missing, Late, Excused) print their state in its mid tone, 3.8:1 on a dark panel. The pill carries the colour
@@ -982,10 +990,11 @@ body > :is(.ui-dialog, .ui-menu, .ui-datepicker, span:not([class])) :where(*) { 
 /* Menus and the date picker. Canvas fills the chosen row with the brand colour and writes the text white. */
 .ui-menu, .ui-datepicker, .ui-autocomplete { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); box-shadow: var(--gz-shadow); }
 .ui-menu .ui-menu-item a, .ui-menu .ui-menu-item .ui-menu-item-wrapper { color: var(--gz-ink); background: transparent; border: 0; }
-.ui-menu .ui-menu-item :is(.ui-state-focus, .ui-state-active, .ui-state-hover), .ui-menu .ui-menu-item a:is(:hover, :focus) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 0; }
+.ui-menu .ui-menu-item :is(.ui-state-focus, .ui-state-active, .ui-state-hover), .ui-menu .ui-menu-item a:is(:hover, :focus) { background: var(--gz-accent-soft) !important; color: var(--gz-on-soft, var(--gz-accent)) !important; border: 0; }
+.ui-menu .ui-menu-item a:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
 .ui-menu .ui-menu-item :is(.ui-state-focus, .ui-state-active) * { color: inherit !important; }
 .ui-datepicker :is(.ui-datepicker-header, .ui-datepicker-title, th, td a, td span) { background: transparent; color: var(--gz-ink); border-color: transparent; }
-.ui-datepicker td a:hover { background: var(--gz-accent-soft); color: var(--gz-accent); }
+.ui-datepicker td a:hover { background: var(--gz-accent-soft); color: var(--gz-on-soft, var(--gz-accent)); }
 .ui-datepicker td a.ui-state-active, .ui-datepicker td.ui-datepicker-today a { background: var(--gz-accent); color: var(--gz-accent-ink); }
 /* Tooltips and the popovers built on them (a calendar event's card): the one tooltip language of theme.css,
    a surface with an edge and a shadow. Canvas fills them with a 2-class chain, opacity .8, and draws a caret
@@ -1082,12 +1091,13 @@ html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) 
 /* The text and highlight colour icons paint their letter with a fill attribute (their colour bar is the chosen colour, left alone). */
 .tox.tox-tinymce .tox-tbtn svg g[fill="#2B3B46"] { fill: currentColor; }
 .tox.tox-tinymce .tox-tbtn[data-gz-light] { background: transparent !important; }
-.tox.tox-tinymce :is(.tox-tbtn, .tox-mbtn):is(:hover, :focus, :focus-visible, [aria-expanded="true"]) { background: var(--gz-accent-soft) !important; color: var(--gz-accent); }
+.tox.tox-tinymce :is(.tox-tbtn, .tox-mbtn):is(:hover, :focus, :focus-visible, [aria-expanded="true"]) { background: var(--gz-accent-soft) !important; color: var(--gz-on-soft, var(--gz-accent)); }
+.tox.tox-tinymce :is(.tox-tbtn, .tox-mbtn):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
 /* A split button (text colour, highlight, lists) lights #f2f2f2 whole, and white round its arrow: one wash, its halves clear. */
 .tox.tox-tinymce .tox-split-button { border-radius: var(--gz-radius-sm); transition: background var(--gz-t) var(--gz-ease); }
 .tox.tox-tinymce .tox-split-button:is(:hover, :focus, :focus-within) { background: var(--gz-accent-soft) !important; box-shadow: none; }
 .tox.tox-tinymce .tox-split-button:is(:hover, :focus, :focus-within) .tox-tbtn { background: transparent !important; color: var(--gz-accent); }
-.tox.tox-tinymce :is(.tox-tbtn--enabled, .tox-tbtn--enabled:hover, .tox-mbtn--active) { background: var(--gz-accent-soft) !important; color: var(--gz-accent); }
+.tox.tox-tinymce :is(.tox-tbtn--enabled, .tox-tbtn--enabled:hover, .tox-mbtn--active) { background: var(--gz-accent-soft) !important; color: var(--gz-on-soft, var(--gz-accent)); }
 .tox.tox-tinymce :is(.tox-tbtn--disabled, .tox-tbtn--disabled:hover, .tox-mbtn--disabled, .tox-mbtn--disabled:hover, .tox-tbtn:disabled) { background: transparent !important; color: var(--gz-ink-faint); opacity: 0.6; cursor: default; }
 .tox.tox-tinymce :is(.tox-tbtn, .tox-mbtn):focus-visible { box-shadow: inset 0 0 0 2px var(--gz-accent); }
 /* Canvas's status bar (path, word count, the editor's switches) is InstUI, not TinyMCE's. */
@@ -1104,7 +1114,8 @@ html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) 
 .tox.tox-tinymce-aux .tox-collection__group { border-color: var(--gz-border-line, var(--gz-line)) !important; background: transparent !important; }
 .tox.tox-tinymce-aux .tox-collection__item { color: var(--gz-ink); background: transparent !important; border-radius: calc(var(--gz-radius-sm) - calc(var(--gz-radius, 12px) * 1 / 6)); }
 .tox.tox-tinymce-aux .tox-collection__item :is(.tox-collection__item-label, .tox-collection__item-label *) { color: inherit !important; }
-.tox.tox-tinymce-aux .tox-collection__item:is(.tox-collection__item--active, :hover) { background: var(--gz-accent-soft) !important; color: var(--gz-accent); }
+.tox.tox-tinymce-aux .tox-collection__item:is(.tox-collection__item--active, :hover) { background: var(--gz-accent-soft) !important; color: var(--gz-on-soft, var(--gz-accent)); }
+.tox.tox-tinymce-aux .tox-collection__item:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
 .tox.tox-tinymce-aux .tox-collection__item :is(svg, .tox-collection__item-icon, .tox-collection__item-checkmark, .tox-collection__item-caret) { fill: currentColor !important; color: inherit; }
 .tox.tox-tinymce-aux .tox-collection__item--state-disabled { opacity: 0.5; }
 .tox.tox-tinymce-aux .tox-collection__item-accessory { color: var(--gz-ink-faint); }
@@ -1159,6 +1170,8 @@ html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) 
 /* The submission form under an assignment: the open tab's box with the panels' corners, and a comments field a few lines tall. */
 #application #submit_assignment .ui-tabs-panel { border: 1px solid var(--gz-border-line, var(--gz-line)); border-radius: var(--gz-radius); border-start-start-radius: 0; }
 #application #submit_assignment textarea.submission_comment_textarea { box-sizing: border-box; width: min(100%, 40rem); min-height: 4.5rem; resize: vertical; }
+/* A comment's signature (author and date): Canvas draws it in #888 (3.25:1 on Paper's ground), inline on one just posted; the muted ink holds 4.5:1. */
+#application :is(.comment_author_and_date, .comment > div[style*="color: #888"]) { color: var(--gz-ink-muted) !important; }
 /* Assignments 2 draws the line above its submission box and its footer bar's edge inline, #e8eaec on every Look (AttemptTab.jsx, StudentFooter.jsx): white on a dark one. */
 #application [data-testid="attempt-tab"] > div[style*="border-top"] { border-top-color: var(--gz-border-line, var(--gz-line)) !important; }
 #application #assignments-student-footer[style*="border-color"] { border-color: var(--gz-border-line, var(--gz-line)) !important; }
@@ -1190,7 +1203,7 @@ html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) 
   background: transparent; border-color: transparent; border-radius: 999px; color: var(--gz-ink-muted);
   transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease);
 }
-#mobile-header button.Button--icon-action-rev:is(:hover, :focus-visible, [aria-expanded="true"]), #mobile-header #mobile-top-nav-tools-mount-point button:is(:hover, :focus-visible, [aria-expanded="true"]) { background: var(--gz-accent-soft); color: var(--gz-accent); }
+#mobile-header button.Button--icon-action-rev:is(:hover, :focus-visible, [aria-expanded="true"]), #mobile-header #mobile-top-nav-tools-mount-point button:is(:hover, :focus-visible, [aria-expanded="true"]) { background: var(--gz-accent-soft); color: var(--gz-on-soft, var(--gz-accent)); }
 #mobile-header button.Button--icon-action-rev:focus-visible { box-shadow: 0 0 0 2px var(--gz-accent); outline: 0; }
 #mobile-header .mobile-header-title { color: var(--gz-ink-muted); }
 #mobile-header .mobile-header-title div:last-child { color: var(--gz-ink); font-weight: 600; }
@@ -1409,7 +1422,7 @@ html[data-gz-enhance-reading] #application :is(#wiki_page_show .show-content, #a
 #gz-cmd li { display: flex; align-items: baseline; gap: 0.75rem; margin: 0; padding: 0.45rem 0.75rem; border-radius: calc(var(--gz-radius) * 2 / 3); cursor: pointer; }
 #gz-cmd li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #gz-cmd li small { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--gz-ink-faint); }
-#gz-cmd li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-accent); box-shadow: inset 3px 0 0 var(--gz-accent); }
+#gz-cmd li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-on-soft, var(--gz-accent)); box-shadow: inset 3px 0 0 var(--gz-accent); }
 #gz-cmd li[aria-selected="true"] small { color: inherit; opacity: 0.8; }
 #gz-cmd .gz-cmd-empty { cursor: default; color: var(--gz-ink-faint); }
 #gz-cmd .gz-cmd-foot { margin: 0; padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-faint); border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
@@ -1512,7 +1525,8 @@ html .ic-DashboardCard > .gz-cm-btn { width: 32px; height: 32px; }
 .ic-DashboardCard > .gz-cm-btn svg { display: none; }
 .ic-DashboardCard > .gz-cm-btn::before { content: ""; width: 4px; height: 18px; background: radial-gradient(circle closest-side, currentColor 85%, transparent) 0 0 / 4px 6px repeat-y; }
 html .ic-DashboardCard > .gz-cm-btn { color: var(--gz-ink-muted); opacity: 0.85; }
-[data-gz-course-color] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); }
+[data-gz-course-color] { --gz-course: var(--gz-course-raw); }
+@supports (color: oklab(from red l 0 0)) { [data-gz-course-color] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); } }
 html[data-gz-raw-courses] [data-gz-course-color] { --gz-course: var(--gz-course-raw); }
 #section-tabs[data-gz-course-color] { border-inline-start: 3px solid var(--gz-course); padding-inline-start: 10px; }
 #breadcrumbs [data-gz-course-color], #content :is(a, span)[data-gz-course-color] { text-decoration-color: var(--gz-course); border-block-end: 2px solid var(--gz-course); }
@@ -1653,7 +1667,7 @@ html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surf
   background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); animation: var(--gz-tip-in);
 }
 #gz-mk a { padding: 0.4rem 0.7rem; border-radius: var(--gz-radius-sm); color: var(--gz-ink); text-decoration: none; }
-#gz-mk a:is(:hover, :focus-visible) { background: var(--gz-accent-soft); color: var(--gz-accent); outline: none; }
+#gz-mk a:is(:hover, :focus-visible) { background: var(--gz-accent-soft); color: var(--gz-on-soft, var(--gz-accent)); outline: none; }
 @media (max-width: 520px) { #gz-ce .gz-ce-field { grid-template-columns: minmax(0, 1fr) auto; } #gz-ce .gz-ce-field > span { grid-column: 1 / -1; } }
 
 /* Canvas has one breadcrumb row. A full-width strip wraps above or below that row. */

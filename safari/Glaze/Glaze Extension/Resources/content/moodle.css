@@ -764,7 +764,7 @@ html[data-gz-enhance-overall] [data-region="course-content"] [data-gz-grade]::af
 #gz-cmd li { display: flex; align-items: baseline; gap: 0.75rem; margin: 0; padding: 0.45rem 0.75rem; border-radius: calc(var(--gz-radius) * 2 / 3); cursor: pointer; }
 #gz-cmd li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #gz-cmd li small { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--gz-ink-faint); }
-#gz-cmd li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-accent); box-shadow: inset 3px 0 0 var(--gz-accent); }
+#gz-cmd li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-on-soft, var(--gz-accent)); box-shadow: inset 3px 0 0 var(--gz-accent); }
 #gz-cmd li[aria-selected="true"] small { color: inherit; opacity: 0.8; }
 #gz-cmd .gz-cmd-empty { cursor: default; color: var(--gz-ink-faint); }
 #gz-cmd .gz-cmd-foot { margin: 0; padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-faint); border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
@@ -856,12 +856,15 @@ html [data-region="course-content"][data-gz-course-look="light"] { --gz-on-soft:
 /* A card's course color, toned as canvas.css and theme.css tone theirs: Moodle's own (--gz-course-raw, courses/page/moodle.js) is
    70% itself and 30% a grey as light as the muted ink, mixed in OKLab; data-gz-raw-courses (toning off) keeps Moodle's. A
    color picked for the course is the card's --gz-course as is. */
-html [data-region="course-content"][style*="--gz-course-raw"] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); }
+html [data-region="course-content"][style*="--gz-course-raw"] { --gz-course: var(--gz-course-raw); }
+@supports (color: oklab(from red l 0 0)) { html [data-region="course-content"][style*="--gz-course-raw"] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); } }
 html[data-gz-raw-courses] [data-region="course-content"][style*="--gz-course-raw"] { --gz-course: var(--gz-course-raw); }
 
 /* Glaze navigation: keep Moodle's links alive, replace its 60px header room, and leave content drawers usable.
    First paint words come from content.js; the renderer then supplies the measured room inline. */
 html[data-gz-navbar] { --gz-navbar-left: 0px; --gz-navbar-top: 0px; --gz-navbar-bottom: 0px; }
+/* Printed, the page is Moodle's own: the bar doesn't print (navigation/page/navbar.css), and the page keeps no room for it. */
+@media print { html[data-gz-navbar] { --gz-navbar-left: 0px !important; --gz-navbar-top: 0px !important; --gz-navbar-bottom: 0px !important; } }
 html[data-gz-navbar] :is(nav.navbar.fixed-top, #theme_boost-drawers-primary, [data-target="theme_boost-drawers-primary"]) { display: none !important; }
 /* Everything in that navbar has a place in the bar (navigation/page/navbar-moodle.js): its links, menus and Edit mode switch. The bar's
    own sheet styles only its pin as a toggle, so the Edit mode switch is lit from here, by part, while editing is on. */
