@@ -321,10 +321,12 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     const r = cat === 'tasks' ? { tasks: key.startsWith('todo:') ? { tasks: { [key]: value } } : { tasks: {}, pets: { [key]: value } } }
       : ['dashNotes', 'classes', 'gpa'].includes(cat) ? { [cat]: { [key]: value } } : cat === 'widgets' ? { widgets: value }
         : key === 'lookFavorites' ? { favorites: value } : cat === 'writerWords' ? { writerWords: value } : null;
+    // Saved sources: every source either side has, and every bibliography entry either side removed.
     if (cat === 'sources') {
       const here = (await local.get(key))[key], mine = Array.isArray(here?.sources) ? here.sources : [], ids = new Set(mine.map((x) => x.id));
-      const sources = [...mine, ...value.sources.filter((x) => !ids.has(x.id))];
-      if (sources.length > mine.length) await local.set({ [key]: { sources, at: Math.max(Number.isFinite(here?.at) ? here.at : 0, value.at) } });
+      const sources = [...mine, ...value.sources.filter((x) => !ids.has(x.id))], list = (v) => (Array.isArray(v?.removed) ? v.removed.filter((x) => typeof x === 'string') : []);
+      const removed = [...new Set([...list(here), ...list(value)])];
+      if (sources.length > mine.length || removed.length > list(here).length) await local.set({ [key]: { sources, ...(removed.length && { removed }), at: Math.max(Number.isFinite(here?.at) ? here.at : 0, value.at) } });
       return;
     }
     if (!r) return;

@@ -547,12 +547,16 @@ var GZ_BACKUP = globalThis.GZ_BACKUP || (() => {
       const theirs = r.writerWords.filter((w) => !low.has(w.toLowerCase()) && low.add(w.toLowerCase()));
       if (theirs.length) patch.writerWords = [...theirs, ...mine].slice(-WORDS.max);
     }
-    // Saved sources: each box's list joined with the backup's, one entry per work (writer/writer-sources.js dedupe).
+    // Saved sources: each box's list joined with the backup's, one entry per work (writer/writer-sources.js dedupe), and the
+    // bibliography entries either side removed (writer-sources.js save's removed) kept removed.
     if (r.sources) {
       const { SR } = await paperLibraries();
       for (const [k, v] of Object.entries(r.sources)) {
         const mine = Array.isArray(here[k]?.sources) ? here[k].sources : [], sources = SR.dedupe([...mine, ...v.sources]);
-        if (JSON.stringify(sources) !== JSON.stringify(SR.dedupe(mine))) patch[k] = { sources, at: Math.max(Number.isFinite(here[k]?.at) ? here[k].at : 0, v.at) };
+        const was = Array.isArray(here[k]?.removed) ? here[k].removed : [], removed = [...new Set([...was, ...(Array.isArray(v.removed) ? v.removed : [])])].filter((id) => typeof id === 'string');
+        if (JSON.stringify(sources) !== JSON.stringify(SR.dedupe(mine)) || removed.length !== was.length) {
+          patch[k] = { sources, ...(removed.length && { removed }), at: Math.max(Number.isFinite(here[k]?.at) ? here[k].at : 0, v.at) };
+        }
       }
     }
     if (r.papers !== undefined) {
