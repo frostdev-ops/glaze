@@ -3580,6 +3580,8 @@
   "Average: {n}": "Moyenne : {n}",
   "Count: {n}": "Nombre : {n}",
   "Circular reference: {ref}": "Référence circulaire : {ref}",
+  "From the file: Glaze can’t calculate {name}": "Valeur du fichier : Glaze ne peut pas calculer {name}",
+  "Glaze can’t calculate {name}": "Glaze ne peut pas calculer {name}",
   "There’s a problem with this formula.": "Cette formule contient une erreur.",
   "Reference isn’t valid.": "Cette référence n’est pas valide.",
   "That format can’t be used.": "Ce format ne peut pas être utilisé.",

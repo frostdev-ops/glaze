@@ -3580,6 +3580,8 @@
   "Average: {n}": "Gemiddelde: {n}",
   "Count: {n}": "Aantal: {n}",
   "Circular reference: {ref}": "Kringverwijzing: {ref}",
+  "From the file: Glaze can’t calculate {name}": "Uit het bestand: Glaze kan {name} niet berekenen",
+  "Glaze can’t calculate {name}": "Glaze kan {name} niet berekenen",
   "There’s a problem with this formula.": "Er is een probleem met deze formule.",
   "Reference isn’t valid.": "Deze verwijzing is ongeldig.",
   "That format can’t be used.": "Deze notatie kan niet worden gebruikt.",
