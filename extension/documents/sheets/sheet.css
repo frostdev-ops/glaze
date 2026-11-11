@@ -18,7 +18,7 @@
 
 /* Formula bar and find */
 .gx-bar, .gx-find { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--edge); background: var(--panel); min-width: 0; }
-.gx-bar input, .gx-find input, .gx-fmt-row input { height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); background: var(--gz-surface-fill-2, var(--gz-surface-2));
+.gx-bar input, .gx-find input, .gx-fmt-row input { height: 28px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--gz-border-field, var(--gz-ink-faint)); background: var(--gz-surface-fill-2, var(--gz-surface-2));
   color: var(--gz-ink); font: inherit; font-size: 13px; min-width: 0; }
 .gx-bar input:focus, .gx-find input:focus, .gx-fmt-row input:focus { outline: none; border-color: var(--gz-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gz-accent) 22%, transparent); }
 .gx-name { width: 92px; flex: none; font-variant-numeric: tabular-nums; }
