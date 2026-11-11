@@ -55,7 +55,7 @@ const load = ({ store, path: pathname, box, capi = async () => { throw new Error
   // Writer keeps what its frame holds as a snapshot of the box (writer/page/writer.js remember).
   const keep = async (text = TEXT) => { ctx.GZ_DRAFT_UI.keep({ ...ctx.GZ_CTX.draftAt(ed), html: `<p>${text}</p>`, text, at: now }, true); await settle(); };
   const offer = async () => { const d = await ctx.GZ_DRAFT_UI.offer(ed); return d && d.text; };
-  return { ed, keep, offer };
+  return { ed, keep, offer, ready: () => ctx.GZ_DRAFT_UI.ready(ed) };
 };
 // Canvas's answer, with its own clock in the Date header (whole seconds), as capi hands the response to its reply callback.
 const canvas = (answers, server) => async (u, reply) => {
@@ -107,4 +107,15 @@ test('Canvas quiz: a retake is not offered an earlier attempt\'s answer; the sam
   await load({ store, path: at, box: quiz('1'), now: SERVER }).keep();
   assert.equal(await load({ store, path: at, box: quiz('2'), now: SERVER + 3600000 }).offer(), null, 'attempt 2');
   assert.equal(await load({ store, path: at, box: quiz('1'), now: SERVER + 60000 }).offer(), TEXT, 'attempt 1, after a reload');
+});
+
+test('Canvas quiz: retiring an essay before its first backup keeps its answer in the original attempt', async () => {
+  const store = {}, at = '/courses/36/quizzes/56/take';
+  const quiz = (attempt) => rce('question_input_0', (add) => { const f = add('form', { id: 'submit_quiz_form' }); add('input', { type: 'hidden', name: 'attempt', value: attempt }, f); return f; }, { class: 'question_input', name: 'question_442' });
+  const p = load({ store, path: at, box: quiz('1'), now: SERVER });
+  await p.ready(); // Writer can open on a nonempty native answer without asking for a recovery offer.
+  p.ed.closest('form').remove(); // Canvas retires it before Writer's first one-second backup.
+  await p.keep();
+  assert.equal(await load({ store, path: at, box: quiz('1'), now: SERVER + 60000 }).offer(), TEXT, 'the detached editor still owns its saved answer');
+  assert.equal(await load({ store, path: at, box: quiz('2'), now: SERVER + 60000 }).offer(), null, 'the retake owns no copy of it');
 });
