@@ -353,6 +353,22 @@ test('port: a fired record cannot authorize a replacement question', async () =>
   assert.equal(h.seen.runs.length, 0);
 });
 
+test('port: a long page scope stays bound to its document across a worker restart', async () => {
+  const id = 'w-longpage', scope = `tab-1/frame-0/https://school.example/course?view=${'x'.repeat(800)}`;
+  const store = firedStore(id), owner = harness({ scope, store });
+  owner.say({ id: 74, op: 'fired' }); await settle(25);
+  assert.equal(owner.ends()[0]?.fired.length, 1);
+  const other = harness({ scope: `${scope}other`, store });
+  other.say({ id: 75, op: 'dismiss', fired: id }); await settle(25);
+  assert.equal(store.rimeWakes.fired.length, 1, 'a different long scope cannot dismiss the card');
+  assert.ok(store.rimeWakes.fired[0].to.length <= W.LIMIT.scope, 'the stored binding stays bounded');
+  delete require.cache[require.resolve('../../extension/ai/ask.js')];
+  const again = harness({ scope, store, ask: require('../../extension/ai/ask.js'), script: [said('Your reminder: finish the lab report.')] });
+  again.say({ id: 76, op: 'ask', question: 'Finish the lab report', fired: id }); await settle(25);
+  assert.equal(again.seen.runs[0]?.input.fired?.what, 'wake', JSON.stringify(again.ends()));
+  assert.equal(store.rimeWakes.fired.length, 0);
+});
+
 
 test('port: own tools never fall back to another school account', async () => {
   const h = harness({ script: [call('places_list', {}), said('No cached courses on this site.')] });
