@@ -243,3 +243,22 @@ test('automatic or rejected paste ink remains legible on every retained highligh
     }
   }
 });
+
+// A Word-style <style> block: rules are read once each, so a block of 128,000 of them (an HTML email's) doesn't freeze the paste.
+const word = (css, body) => `<html xmlns:w="urn:schemas-microsoft-com:office:word"><head><style><!--${css}--></style></head><body>${body}</body></html>`;
+
+test('a Word paste whose <style> holds 128,000 rules is normalised in under a second, its last rule applied', () => {
+  const css = Array.from({ length: 128000 }, (_, i) => `.c${i}{a:b}`).join('') + '.last{font-weight:700}';
+  const html = word(css, '<p class="last">tail</p>');
+  const from = performance.now();
+  const out = P.normalize(html);
+  const ms = performance.now() - from;
+  assert.equal(out.source, 'word');
+  assert.equal(out.html, '<p><strong>tail</strong></p>');
+  assert.ok(ms < 1000, `${Math.round(ms)} ms for ${html.length} characters`);
+});
+
+test('a rule inside an at-rule is left out, the rule after its closing brace is read', () => {
+  const out = P.normalize(word('@page Section1{size:8.5in} @media print{.a{font-weight:700}} .b{font-style:italic}', '<p class="a">x</p><p class="b">y</p>'));
+  assert.equal(out.html, '<p>x</p><p><em>y</em></p>');
+});
