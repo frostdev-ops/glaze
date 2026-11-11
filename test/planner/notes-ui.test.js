@@ -460,6 +460,33 @@ test('pasting or dropping more than the sanitizer can keep inserts none of it, a
   assert.deepEqual(inserted(), ['<p>a few rows</p>'.length]);
 });
 
+test('a paste dropped into a note goes in at the pointer where only caretPositionFromPoint exists (Firefox)', async () => {
+  const P = page();
+  await P.openView();
+  P.fire(P.button('New note'), 'click');
+  await settle();
+  const body = P.box().querySelector('.gz-nt-body');
+  const spot = P.doc.createElement('p');
+  body.append(spot);
+  // A selection that holds the ranges it is given, and a Range that remembers where it was set.
+  const held = [];
+  const sel = { get rangeCount() { return held.length; }, get anchorNode() { return held[0]?.startContainer ?? null; }, removeAllRanges() { held.length = 0; }, addRange(r) { held.push(r); }, getRangeAt: (i) => held[i] };
+  P.run('globalThis').getSelection = () => sel;
+  const range = () => ({ startContainer: null, startOffset: 0, setStart(node, offset) { this.startContainer = node; this.startOffset = offset; }, collapse() {}, cloneRange() { return { ...this }; } });
+  Object.assign(P.doc, { createRange: range, caretPositionFromPoint: (x, y) => (x === 40 && y === 50 ? { offsetNode: spot, offset: 2 } : null) });
+  assert.equal(P.doc.caretRangeFromPoint, undefined, 'no caretRangeFromPoint, as in Firefox');
+  const where = [];
+  P.doc.execCommand = (cmd) => { if (cmd === 'insertHTML') where.push([sel.getRangeAt(0)?.startContainer === spot, sel.getRangeAt(0)?.startOffset]); return true; };
+  const clip = (html) => ({ files: [], getData: (type) => (type === 'text/html' ? html : '') });
+  const dropped = P.fire(body, 'drop', { dataTransfer: clip('<p>dropped</p>'), clientX: 40, clientY: 50 });
+  assert.equal(dropped.defaultPrevented, true);
+  assert.deepEqual(where, [[true, 2]], 'inserted at the pointer');
+  // Pointer over nothing it can place: where the caret was, as before.
+  held.length = 0;
+  P.fire(body, 'drop', { dataTransfer: clip('<p>again</p>'), clientX: 1, clientY: 1 });
+  assert.equal(where.length, 2);
+});
+
 test('Share on a note saves it, then frames the extension share panel with a one-use ticket, out of the page\'s reach', async () => {
   const P = page();
   await P.openView();
