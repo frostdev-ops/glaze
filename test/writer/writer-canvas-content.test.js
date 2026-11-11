@@ -69,6 +69,18 @@ test('Canvas quiz: an essay whose frame keeps failing neither holds Submit Quiz 
   assert.ok(c.clicks.length === 1 && c.clicks[0] === submit, 'Submit Quiz goes on');
 });
 
+test('Canvas: a first frame that eventually opens after a timeout starts with the text still being edited in Canvas', async () => {
+  const c = await page({ fixture: 'assignment', ready: () => false, strict: true });
+  c.tick(15000); // Retry a frame that never stood in for the native editor.
+  const native = c.doc.querySelector('#submission_body_ifr').contentDocument.body;
+  native.innerHTML = '<p>My work, typed while Writer was loading.</p>';
+  await c.boot();
+  const init = c.ports.at(-1).sent.find((m) => m.type === 'init');
+  assert.equal(init.html, native.innerHTML, 'the visible native editor still owns these words');
+  c.emit({ type: 'change', html: '<p>My work, typed while Writer was loading. More.</p>', text: 'My work, typed while Writer was loading. More.' });
+  assert.equal(native.textContent, 'My work, typed while Writer was loading. More.');
+});
+
 // Canvas's autosave asks first (RestoreAutoSaveModal): whatever the student answers there is the box's text.
 test('Canvas: its restore dialog appearing after Writer opened hands the box back, so what Canvas restores stays', async () => {
   const c = await page({ fixture: 'assignment' });
