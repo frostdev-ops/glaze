@@ -107,6 +107,19 @@ test('while down: lines are held in order, up to 10 s a request and 1 MiB in all
   assert.deepEqual(P(r.glaze).map((m) => m.method || m.id), ['notifications/initialized', 'notifications/cancelled', 'tools/call']);
 });
 
+test('moving safe in-flight requests into the reconnect queue enforces its total byte limit', () => {
+  const s = make();
+  s.up(0, 'chrome');
+  const request = (id) => J({ id, method: 'tools/list', params: { extra: 'x'.repeat(Math.floor(S.HOLD * 0.6)) } });
+  const first = request(1), second = request(2);
+  s.fromApp(first, 0);
+  s.fromApp(second, 0);
+  const dropped = s.down(1);
+  assert.ok(s.held() <= S.HOLD, `held ${s.held()} bytes`);
+  assert.deepEqual(P(dropped.app).map((m) => [m.id, m.error.code]), [[2, S.AWAY]]);
+  assert.deepEqual(s.up(2, 'chrome').glaze, [first]);
+});
+
 test('ping while down is answered at once, without Glaze', () => {
   const s = legacy();
   s.fromApp(J({ id: 'p1', method: 'ping' }), 10);
