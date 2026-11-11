@@ -319,6 +319,30 @@ test("the list's slow planner answer never replaces a newer one another tab or t
   assert.equal(f.p.get().cache.mark, 'newer');
 });
 
+test("a planner answer asked for before a tick to Canvas, landing after it, does not take the tick away", async () => {
+  const f = feature({ holdPlanner: true });
+  const key = 'todo:https://canvas.test/3';
+  f.p.seed({ prefs: { ...O, sync: true }, cache: { key, at: Date.now() - 36e5, ...T.fetchRange(O, Date.now(), 'America/New_York'), items: [item()], grading: [], sums: {} } });
+  f.p.render(true);
+  // The planner request is out and Canvas answers it as it stood then: the item is not marked.
+  const raw = { plannable_type: 'assignment', plannable_id: 3, course_id: 25, plannable_date: new Date(Date.now() + 36e5).toISOString(), plannable: { title: 'Essay' } };
+  const ask = f.c.fetch;
+  f.c.fetch = (url, opts = {}) => (!opts.method && url.includes('/planner/items')
+    ? new Promise((res) => f.held.push(() => res({ ok: true, headers: { get: () => null }, text: async () => JSON.stringify([raw]) }))) : ask(url, opts));
+  const asked = f.p.refresh();
+  await settled();
+  assert.equal(f.held.length, 1, 'the planner request is out');
+  f.p.onChange({ target: tick(), isTrusted: true });
+  await settled();
+  assert.deepEqual(f.p.get().cache.items.map((i) => i.ov?.done), [true], 'ticked in Canvas');
+  while (f.held.length) { f.held.shift()(); await settled(); }
+  await asked;
+  await settled();
+  const marks = (items) => JSON.stringify(items.map((i) => [i.id, i.ov?.done])); // arrays from the VM are of another realm
+  assert.equal(marks(f.p.get().cache.items), '[["3",true]]', 'still ticked when the older answer lands');
+  assert.equal(marks(f.store.todoCache.items), '[["3",true]]', 'and stored so for the popup');
+});
+
 test("two tabs adding tasks at once both keep theirs (the worker's one queue)", async () => {
   const shared = { store: {}, waiting: [], turn: { last: Promise.resolve() } };
   const one = feature({ defer: true, shared }), two = feature({ defer: true, shared });
