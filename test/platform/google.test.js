@@ -1223,7 +1223,9 @@ test('the worker answers glaze:google from Settings only (pick from Glaze\'s own
   const at = src.indexOf("m?.type !== 'glaze:google'");
   assert.ok(at > 0);
   const body = src.slice(at, src.indexOf('return true;', at));
-  assert.match(body, /m\.op === 'pick' || m\.op === 'picked' \? googlePage\(s\) : fromEditor\(s\)/);
+  // Settings' own tab for what connects, disconnects or finishes a connection; the account's status from a frame of it too.
+  assert.match(body, /m\.op === 'pick' \|\| m\.op === 'picked' \? googlePage\(s\) : m\.op === 'status' \? fromEditor\(s\) : driveEditor\(s\)/);
+  assert.match(src, /const driveEditor = \(s\) => fromEditor\(s\) && s\.frameId === 0 && extensionOrigin\(s\);/);
   // Nothing about Google in any site's first script.
   const m = require('../../extension/manifest.json');
   for (const c of m.content_scripts) for (const f of c.js) assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8'), /GZ_GOOGLE|glaze:google|GZ_OAUTH|google-config/, f);
