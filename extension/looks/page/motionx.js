@@ -461,7 +461,7 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
   document.addEventListener('visibilitychange', () => { if (document.hidden) engine.end(); });
   addEventListener('pagehide', () => { live = false; off(); });
   addEventListener('pageshow', () => { live = true; sync(); });
-  // Ultra changes pages in place: a quiz may have come or gone.
+  // Ultra changes pages in place: a quiz may have come or gone. Without window.navigation, content-ultra.js syncQuiet says so.
   globalThis.navigation?.addEventListener('navigatesuccess', sync);
   // A mod's effect (glaze.effects.play, cleaned by the worker into GZ_MX.fx's form) at (x, y), as a Look's would play.
   const burst = async (f, x, y) => {
