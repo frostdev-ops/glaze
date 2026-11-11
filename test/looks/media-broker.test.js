@@ -53,6 +53,13 @@ test('only the editor\'s top frame puts, lists, keeps, drops and resets the file
   assert.equal(typeof media.run, 'function');
 });
 
+test('touch, an offer\'s heartbeat, is the editor\'s top frame only, like keep and drop', async () => {
+  const { media } = await rig();
+  const m = { op: 'touch', h: 'A'.repeat(43) };
+  assert.equal(media.allow(m, editor), true);
+  for (const s of [{ ...editor, frameId: 1 }, preview, page, { ...editor, id: 'another-extension' }, { id: 'glaze', frameId: 0, url: 'https://evil.example/options.html' }]) assert.equal(media.allow(m, s), false, JSON.stringify(s));
+});
+
 test('a page gets a Lottie file only for the address the worn Look names; the editor and its preview for the one they show', async () => {
   const r = await rig();
   const ask = (src, s) => r.ask({ type: 'glaze:lottie', src }, s);

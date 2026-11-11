@@ -133,6 +133,8 @@ const GZ_SHARE = (() => {
 
       }
     }
+    // A picture is loaded by the school's own page: one at an address on the student's network is not for someone else's code.
+    for (const [setting, u] of [['bg.image', clean.bg?.image], ['nav.u', clean.nav?.u]]) if (u && !X.publicImage(u)) fail("That theme code has a setting Glaze can't use ({setting}).", { setting });
     if (clean.navbar.brand === 'custom') clean.navbar.brand = 'glaze';
     return { colors: clean.colors, look: pick(clean.look, [...new Set([...Object.keys(look), ...SURFACES])]), bg: pick(clean.bg, Object.keys(bg)), nav: pick(clean.nav, Object.keys(nav)), navbar: pick(clean.navbar, Object.keys(navbar)), sidebar: pick(clean.sidebar, Object.keys(sidebar)), card: pick(cardClean, Object.keys(card)), cards: set, parts };
   };

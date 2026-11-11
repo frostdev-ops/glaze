@@ -312,6 +312,51 @@ test('launchers name node by the PATH entry that leads to it, so a Homebrew upgr
   assert.equal(I.context({ platform: 'darwin', env: { HOME: d, PATH: path.join(d, 'link') }, node: '/given/node' }).node, '/given/node');
 });
 
+test('launchers never name fnm\'s per-shell alias or a Linux session\'s runtime folder: they end at logout', { skip: posixOnly('POSIX symlinks') }, (t) => {
+  const d = scratch(t);
+  const node = path.join(mk(d, 'fnm', 'node-versions', 'v26.0.0', 'installation', 'bin'), 'node');
+  fs.writeFileSync(node, '');
+  const resolved = fs.realpathSync(node);
+  const alias = (...base) => { const bin = mk(d, ...base, 'fnm_multishells', '4242_1700000000', 'bin'); fs.symlinkSync(node, path.join(bin, 'node')); return bin; };
+  const shell = alias('state');
+  // Only the alias leads to this node: it is named as it stands, never by the per-shell folder.
+  for (const platform of ['darwin', 'linux']) assert.equal(I.stableNode(node, platform, { HOME: d, PATH: shell }), node, platform);
+  // A name that lasts, later in PATH, is still the one chosen.
+  fs.symlinkSync(node, path.join(mk(d, 'bin'), 'node'));
+  assert.equal(I.stableNode(node, 'darwin', { HOME: d, PATH: [shell, path.join(d, 'bin')].join(':') }), path.join(d, 'bin', 'node'));
+  // Given the alias itself, it names the real node behind it.
+  assert.equal(I.stableNode(path.join(shell, 'node'), 'darwin', { HOME: d, PATH: shell }), resolved);
+  // Linux puts a session's folders under XDG_RUNTIME_DIR (/run/user/<uid>), which is gone at logout too.
+  const run = mk(d, 'run', 'user', '1000');
+  const session = mk(run, 'tools', 'bin');
+  fs.symlinkSync(node, path.join(session, 'node'));
+  const env = { HOME: d, XDG_RUNTIME_DIR: run, PATH: session };
+  assert.equal(I.stableNode(node, 'linux', env), node);
+  assert.equal(I.stableNode(path.join(session, 'node'), 'linux', env), resolved);
+  // Elsewhere that folder is only a folder.
+  assert.equal(I.stableNode(node, 'darwin', env), path.join(session, 'node'));
+});
+
+test('setup resolves session aliases for discovered and fallback nodes too', { skip: posixOnly('POSIX symlinks') }, async (t) => {
+  for (const platform of ['darwin', 'linux']) for (const primary of [true, false]) await t.test(`${platform} ${primary ? 'discovered' : 'fallback'}`, async (t) => {
+    const home = scratch(t), durable = nodeIn(path.join(home, 'installed', 'bin'));
+    const runtime = mk(home, 'run');
+    const bin = platform === 'darwin' ? mk(home, 'fnm_multishells', '4242_1700000000', 'bin') : mk(runtime, 'tools', 'bin');
+    const alias = path.join(bin, 'node');
+    fs.symlinkSync(durable, alias);
+    const current = nodeIn(path.join(home, 'current'), primary ? (f) => fs.chmodSync(f, 0o775) : undefined);
+    const env = { HOME: home, PATH: bin, XDG_RUNTIME_DIR: runtime };
+    mk(B.table(platform, env).find((b) => b.id === 'chrome').data);
+    const opts = { platform, env, node: undefined, execPath: current, versions: { node: '22.11.0' }, src: PKG, list: [alias, durable], run: async () => ({ stdout: 'v22.11.0\n' }) };
+    await I.setup(opts);
+    const launcher = L.parse(fs.readFileSync(path.join(B.folder(platform, env).hosts, 'chrome'), 'utf8'));
+    assert.equal(launcher.node, primary ? durable : current, 'discovery names the installed node behind the alias');
+    assert.deepEqual(launcher.also, primary ? [] : [durable], 'fallbacks keep one durable path, without the session alias');
+    fs.rmSync(bin, { recursive: true }); // logout removes the alias; every named node must still exist
+    for (const n of [launcher.node, ...launcher.also]) assert.ok(fs.existsSync(n), n);
+  });
+});
+
 test('the .bat launcher setup writes runs node on the copied script through cmd, as Chromium starts it', { skip: windowsOnly('cmd.exe is Windows only; the sh launcher test covers POSIX') }, async (t) => {
   // %, ! and parentheses, which cmd would expand or split on outside quotes, and an apostrophe.
   const base = path.join(scratch(t), "Jo's (100%) !x!");

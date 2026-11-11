@@ -1,7 +1,7 @@
 // Google sign-in for Drive (background/google.js): the OAuth clients of Google Cloud project glaze-511715 (1071735898350), the
 // Picker's key, the scopes and the picker pages. Client ids and the browser key are public by design: the key is restricted
 // in Google Cloud to the Picker API and the picker pages' referrers. A client a flow signs in with set to PLACEHOLDER
-// makes the worker answer why: 'setup' (no Settings row, no oauth2 key or identity in the packages: scripts/oauth-manifest.js);
+// makes the worker answer why: 'setup' (no Settings row, no oauth2 key or identity in the packages: tools/build/oauth-manifest.js);
 // the key or project number unset, only Pick does. Worker only; classic script, module.exports for node.
 var GZ_GOOGLE_CONFIG = globalThis.GZ_GOOGLE_CONFIG || {
   // "Chrome extension" client of store item jmmaeoajomodnbnlmdikjooalmcilooh, shared with Calendar sync: Google Chrome's

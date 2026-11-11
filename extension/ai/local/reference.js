@@ -1,5 +1,5 @@
 // The local engine's ground truth: a CPU forward pass of LiquidAI's LFM3 (GGUF architecture `lfm3`) in Float32Array,
-// slow by design, for WebGPU kernels to be checked against. scripts/local-reference-check.js holds it to llama.cpp.
+// slow by design, for WebGPU kernels to be checked against. checks/ai/local-reference-check.js holds it to llama.cpp.
 // The graph is llama.cpp's src/models/lfm3.cpp and lfm-base.cpp (b11960) and HF's modeling_lfm3.py (LiquidAI/LFM3-1.7B
 // at ac2586a3), which agree. Per block, h the residual stream:
 //   a = op(rmsnorm(h)·attn_norm); h += rmsnorm(a)·post_attention_norm      (the post norms only when present)

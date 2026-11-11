@@ -220,6 +220,8 @@ test('adapters: notes come in sanitized, a Look only as a code Glaze accepts', a
   assert.equal(await look.clean('code', code), code);
   assert.equal(await look.clean('code', code.slice(0, -4)), undefined);
   assert.equal(await look.clean('code', 'glaze1:' + 'A'.repeat(50)), undefined);
+  const home = await L.encode(D.GZ_SANITIZE({ bg: { kind: 'image', image: 'https://192.168.1.1/x.png' } }));
+  assert.equal(await look.clean('code', home), undefined, 'a shared Look whose picture is on the receiver\'s own network is refused');
   assert.equal(await look.clean('name', 'Frost'), 'Frost');
   assert.equal(await look.clean('name', { x: 1 }), undefined);
 });

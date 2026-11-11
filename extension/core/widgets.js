@@ -575,20 +575,22 @@ var GZ_WIDGETS = globalThis.GZ_WIDGETS || (() => {
   const NOTES_MAX = 20000;
   const notesKey = (origin, uid) => `notes:${origin}/${uid}`;
   const NOTES_KEY = /^notes:https?:\/\/[a-z\d.-]+(?::\d+)?\/(\d+|_\d+_\d+)$/i; // a Canvas user id, or Ultra's _N_N
-  // A time ahead of the clock is from a clock that ran ahead and was set right, so it reads as older than any typing since:
-  // 1, the earliest time there is. Not 0, which is the time of no note at all: the tile takes a note only when its time is
-  // later than the one it shows (it starts at 0), so a note given 0 was never shown, and typing then replaced it unseen.
-  const cleanNote = (raw) => {
+  // A time ahead of this clock is from a clock that ran ahead (another computer's, or this one before it was set right): the
+  // note reads as made `ahead`, by default now, so a tile showing an older note takes it. A time that is no time at all
+  // reads as 1, the earliest there is: not 0, the time of no note, which the tile never takes (it starts at 0).
+  const cleanNote = (raw, ahead) => {
     const text = typeof raw?.text === 'string' ? raw.text.slice(0, NOTES_MAX) : '';
-    return { text, at: Number.isFinite(raw?.at) && raw.at > 0 && raw.at <= Date.now() ? raw.at : text ? 1 : 0 };
+    const now = Date.now();
+    return { text, at: Number.isFinite(raw?.at) && raw.at > 0 ? (raw.at <= now ? raw.at : ahead ?? now) : text ? 1 : 0 };
   };
   // In the worker's write queue (background/background.js 'glaze:notes'): m { key, text, at } is kept unless what's stored is
   // newer (another tab typed later), which comes back instead. An emptied note is kept as its time alone ({ text: '', at }),
   // as what-if's Clear all keeps its time: a text typed before the clearing that arrives after it is refused.
   const saveNote = async (m, local) => {
     if (typeof m?.key !== 'string' || !NOTES_KEY.test(m.key) || typeof m.text !== 'string' || !Number.isFinite(m.at)) return { ok: false, error: 'bad' };
-    const cur = cleanNote((await local.get([m.key]))[m.key]);
     const at = Math.min(m.at, Date.now()); // a clock that is ahead must not stamp a time that typing after it can't beat
+    // A stored time ahead of the clock counts as no later than this typing, which was made after the note came.
+    const cur = cleanNote((await local.get([m.key]))[m.key], Math.max(at, 1));
     if (cur.at > at) return { ok: true, kept: false, note: cur };
     const note = cleanNote({ text: m.text, at });
     return (await local.set({ [m.key]: note })) ? { ok: true, kept: true, note } : { ok: false, error: 'write' };

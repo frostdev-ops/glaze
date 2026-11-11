@@ -195,6 +195,83 @@ test('rotation: a favorite brings its parts with it, a built-in Look its own, an
   assert.ok(require('../../extension/content/defaults.js').GZ_LOOKS.some((L) => X.same(worn, require('../../extension/looks/lookset.js')(L))), JSON.stringify(worn)?.slice(0, 200));
 });
 
+test('rotation: two signed-in devices with one period and a shared sync turn the account\'s Look once per period, not once each', { timeout: 20000 }, async () => {
+  const G = require('../../extension/content/defaults.js');
+  const H = 36e5, t0 = 1e12, mode = '6h 08:00';
+  const settings = structuredClone(G.GZ_SANITIZE({ extras: { rotate: '6h' } }));
+  // One account (one sync area), two devices (each its own storage.local and rotation clock), and a clock the test sets.
+  const a = worker({}, settings);
+  const b = worker({}, settings);
+  const clock = (w) => { vm.runInContext('Date = class extends Date { static now() { return globalThis.now; } }', w.context); };
+  clock(a); clock(b);
+  const worn = [];
+  const seen = () => JSON.stringify([settings.colors, settings.look, settings.bg]);
+  let last = seen();
+  const ask = async (w, at) => {
+    a.context.now = b.context.now = at;
+    assert.ok((await w.send({ type: 'glaze:rotate' })).ok);
+    if (seen() !== last) { last = seen(); worn.push(at - t0); }
+  };
+  // A's clock starts at t0 and B's three hours later, at another place in the list; each asks every hour.
+  b.local.rotateState = { mode, at: t0 + 3 * H, i: 4 };
+  for (let h = 0; h <= 16; h++) {
+    await ask(a, t0 + h * H);
+    if (h >= 3) await ask(b, t0 + h * H);
+  }
+  assert.deepEqual(worn, [6 * H, 12 * H], 'the Look changes at each period\'s end, once');
+  assert.deepEqual(settings.rotateAt, { mode, at: t0 + 12 * H, i: 1 }, 'the last turn is kept where every device reads it');
+  assert.deepEqual([a.local.rotateState.i, b.local.rotateState.i], [1, 1], 'both devices are at the account\'s place');
+});
+
+test('rotation: a shared turn arriving during the sync read is not mistaken for a future clock', async () => {
+  const G = require('../../extension/content/defaults.js');
+  const H = 36e5, t0 = 1e12, mode = '6h 08:00';
+  const w = worker({ rotateState: { mode, at: t0, i: -1 } }, structuredClone(G.GZ_SANITIZE({ extras: { rotate: '6h' } })));
+  w.context.now = t0 + 6 * H;
+  vm.runInContext('Date = class extends Date { static now() { return globalThis.now; } }', w.context);
+  const get = w.context.chrome.storage.sync.get;
+  let delivered;
+  w.context.chrome.storage.sync.get = async (k) => {
+    if (k === L.SHARED && !delivered) {
+      // Another device turns while this device's storage read is in flight.
+      w.context.now += 20;
+      w.sync[L.SHARED] = delivered = { mode, at: w.context.now, i: 3 };
+    }
+    return get(k);
+  };
+  const theme = JSON.stringify([w.sync.colors, w.sync.look, w.sync.bg]);
+  assert.deepEqual(await w.send({ type: 'glaze:rotate' }), { ok: true });
+  assert.ok(delivered, 'the shared read actually delivered the other device\'s turn');
+  assert.deepEqual(w.local.rotateState, delivered, 'adopt the turn instead of wearing another Look');
+  assert.equal(JSON.stringify([w.sync.colors, w.sync.look, w.sync.bg]), theme);
+  assert.deepEqual(w.sync[L.SHARED], delivered, 'the delivered turn is not overwritten');
+});
+
+test('rotation: a shared turn made while a favorite decodes keeps its deadline even when it wears the same theme', { timeout: 10000 }, async () => {
+  const G = require('../../extension/content/defaults.js'), S = require('../../extension/sharing/share.js');
+  const H = 36e5, t0 = 1e12, mode = '6h 08:00';
+  const s = G.GZ_SANITIZE({ extras: { rotate: '6h' } }), code = await S.encode(s);
+  const original = { mode, at: t0, i: 0 };
+  const w = worker({ rotateState: original, rotateLooks: [code], lookFavorites: [{ code, name: 'Kept' }] }, { ...structuredClone(s), [L.SHARED]: { ...original } });
+  w.context.now = t0 + 6 * H;
+  vm.runInContext('Date = class extends Date { static now() { return globalThis.now; } }', w.context);
+  let finish, began;
+  w.context.decoding = new Promise((resolve) => { finish = resolve; });
+  const decoding = new Promise((resolve) => { began = resolve; });
+  w.context.began = began;
+  vm.runInContext('GZ_SHARE.decode = () => { globalThis.began(); return globalThis.decoding; };', w.context);
+  const turn = w.send({ type: 'glaze:rotate' });
+  await decoding;
+  // The other device's list has the same Look: the visible theme and lookX do not change, but its turn is newer.
+  const latest = { mode, at: w.context.now + 20, i: 0 };
+  w.sync[L.SHARED] = latest;
+  w.context.now = latest.at;
+  finish(await S.decode(code));
+  assert.deepEqual(await turn, { ok: false, error: 'changed' });
+  assert.deepEqual(w.sync[L.SHARED], latest, 'a delayed decode cannot move the shared deadline backwards');
+  assert.deepEqual(w.local.rotateState, original, 'the stale local turn is discarded');
+});
+
 // ---- the page -------------------------------------------------------------------------------------------------------
 test('rotation refuses legacy outside favorites that hide critical controls without restricting own Look storage', async () => {
   const G = require('../../extension/content/defaults.js'), X = require('../../extension/looks/lookparts.js'), S = require('../../extension/sharing/share.js');

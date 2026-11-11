@@ -267,18 +267,29 @@ test('notes: a time from a clock that ran ahead does not outlast it, so the typi
   assert.equal((await W.saveNote({ key, text: 'typed before', at: first.note.at - 1 }, local)).kept, false);
   const second = await W.saveNote({ key, text: 'typed after', at: Date.now() }, local);
   assert.deepEqual([second.kept, box[key].text], [true, 'typed after']);
-  // A time an earlier version stored ahead of the clock reads as older than any typing since, here and on the page, but not
-  // as no time at all: the tile takes a note once it has a time to beat (WID-2), so the note is shown instead of hidden.
+  // A note whose time is ahead of this clock (another computer's clock ran ahead) reads as now, here and on the page, so a tile
+  // that shows an older note takes it; and the typing after it, stamped when it was typed, still replaces it.
   box[key] = { text: 'stored ahead', at: ahead };
-  assert.deepEqual(W.cleanNote(box[key]), { text: 'stored ahead', at: 1 });
-  const third = await W.saveNote({ key, text: 'typed now', at: Date.now() }, local);
-  assert.deepEqual([third.kept, box[key].text], [true, 'typed now']);
+  const before = Date.now();
+  const read = W.cleanNote(box[key]);
+  assert.ok(read.text === 'stored ahead' && read.at >= before && read.at <= Date.now(), `clamped to now (${read.at - before} ms)`);
+  let shown = { text: 'older', at: Date.now() - 864e5 };
+  const newer = (x) => { if (x && x.at > shown.at) shown = x; }; // the tile's rule (core/page/widgets.js newer)
+  newer(W.cleanNote(box[key]));
+  assert.equal(shown.text, 'stored ahead', 'an open tile showing an older note takes the one from the fast clock');
+  const third = await W.saveNote({ key, text: 'typed after', at: Date.now() - 50 }, local);
+  assert.deepEqual([third.kept, box[key].text], [true, 'typed after'], 'typing made after it came is kept, however long its save waited');
 });
 
-test('notes: a note with no usable time still has one the tile can adopt; an emptied one has none to keep', () => {
+test('notes: a note with no usable time still has one the tile can adopt; one ahead of the clock is as new as now', () => {
   const ahead = Date.now() + 3 * 864e5;
-  for (const at of [ahead, undefined, null, NaN, -5, 0, 'x', Infinity]) assert.deepEqual(W.cleanNote({ text: 'Exam room 204', at }), { text: 'Exam room 204', at: 1 }, String(at));
-  assert.deepEqual(W.cleanNote({ text: '', at: ahead }), { text: '', at: 0 }, 'nothing to show, nothing to protect');
+  for (const at of [undefined, null, NaN, -5, 0, 'x', Infinity]) assert.deepEqual(W.cleanNote({ text: 'Exam room 204', at }), { text: 'Exam room 204', at: 1 }, String(at));
+  assert.deepEqual(W.cleanNote({ text: '', at: NaN }), { text: '', at: 0 }, 'nothing to show, nothing to protect');
+  const before = Date.now();
+  for (const text of ['Exam room 204', '']) {
+    const got = W.cleanNote({ text, at: ahead });
+    assert.ok(got.text === text && got.at >= before && got.at <= Date.now(), `${JSON.stringify(text)} ahead is now`);
+  }
   const past = Date.now() - 1000;
   assert.deepEqual(W.cleanNote({ text: 'kept', at: past }), { text: 'kept', at: past }, 'a real time stays');
   assert.deepEqual(W.cleanNote(null), { text: '', at: 0 });
