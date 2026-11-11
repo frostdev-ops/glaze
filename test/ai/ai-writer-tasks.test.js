@@ -642,6 +642,17 @@ test('writer.decide: a choice only among the candidates; apply only with one; ke
   assert.equal(D.task.input({ ...input, context: { kind: 'test' } }), null);
 });
 
+test('writer.decide sends the sentence, the flagged words and the candidates, never the course or assignment (PRIVACY.md, Feedback)', async () => {
+  const assignment = { title: 'Lab Report 2', description: 'About osmosis.', instructions: 'Report the lab in 600 words. '.repeat(400), rubric: 'Hypothesis stated clearly.' };
+  const input = { sentence: 'The cores lost there mass.', from: 15, to: 20, suggestions: ['their', 'they\'re'], context: { ...CONTEXT, kind: 'assignment', style: 'apa7', assignment } };
+  const { req } = await go(D.task, input, { json: { verdict: 'apply', choice: 'their' } });
+  const user = req.messages[1].content.map((p) => p.text).join('');
+  assert.deepEqual(req.fenced, { context: 0, data: 3 });
+  for (const gone of ['ENGL 2110', 'APA 7', 'Lab Report 2', 'About osmosis', 'Report the lab', 'Hypothesis stated', 'Morrison', 'Jordan Lee']) assert.ok(!user.includes(gone), gone);
+  assert.ok(fenced(user, 'The cores lost there mass.') && fenced(user, '["their","they\'re"]'));
+  assert.ok(user.length < 600, `${user.length} characters`);
+});
+
 // ---- the context --------------------------------------------------------------------------------------------------
 test('the page\'s context is bounded, its rich text made plain, and a test refused', () => {
   const posts = Array.from({ length: 30 }, (_, i) => ({ author: `P${i}`, text: 'x'.repeat(3000) }));
