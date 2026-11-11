@@ -182,9 +182,23 @@ test('a cancelled request is out of flight; a subscription is resent, its second
   assert.deepEqual(s.down(10).app, [], 'nothing for the cancelled call');
   const up = s.up(500, 'chrome');
   assert.deepEqual(up.glaze, [listen]);
-  assert.deepEqual(P(up.app), [{ jsonrpc: '2.0', method: 'notifications/tools/list_changed', params: { _meta: { 'io.modelcontextprotocol/subscriptionId': 'L' } } }]);
-  assert.deepEqual(s.fromGlaze(ack, 500).app, []);
+  assert.deepEqual(up.app, [], 'the subscription is restored only once Glaze acknowledges it');
+  assert.deepEqual(P(s.fromGlaze(ack, 500).app), [{ jsonrpc: '2.0', method: 'notifications/tools/list_changed', params: { _meta: { 'io.modelcontextprotocol/subscriptionId': 'L' } } }]);
   assert.deepEqual(s.fromGlaze(ack, 600).app, [ack], 'only the one');
+});
+
+test('a subscription cut off before its first acknowledgement still receives that acknowledgement after reconnect', () => {
+  const s = make();
+  s.up(0, 'chrome');
+  const listen = J({ id: 'L', method: 'subscriptions/listen', params: { notifications: { toolsListChanged: true } } });
+  const ack = J({ method: 'notifications/subscriptions/acknowledged', params: { _meta: { 'io.modelcontextprotocol/subscriptionId': 'L' } } });
+  s.fromApp(listen, 0);
+  s.down(1);
+  const up = s.up(2, 'chrome');
+  assert.deepEqual(up.glaze, [listen]);
+  assert.deepEqual(up.app, [], 'no event before the subscription is acknowledged');
+  const r = s.fromGlaze(ack, 3);
+  assert.deepEqual(r.app, [ack, J({ method: 'notifications/tools/list_changed', params: { _meta: { 'io.modelcontextprotocol/subscriptionId': 'L' } } })]);
 });
 
 test('tries: every 250 ms for 5 s, then doubling to 2 s; from 250 ms again after 30 s connected', () => {
