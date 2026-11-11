@@ -42,6 +42,17 @@ test('any other non-empty trust value is refused, and the message says what to p
   assert.throws(() => trustedCI('GLAZE_TRUST_SITE_CI', 'ok', commit), /GLAZE_TRUST_SITE_CI must name the commit/);
 });
 
+test('trust evidence cannot name a different longer SHA that contains the accepted abbreviation', async () => {
+  const { trustedCI } = await pub();
+  const samePrefix = commit.slice(0, 12) + '0'.repeat(28);
+  for (const name of ['GLAZE_TRUST_CI', 'GLAZE_TRUST_SITE_CI']) {
+    for (const value of [samePrefix, commit.slice(0, 13), `a${commit}`, `${commit}0`]) {
+      assert.throws(() => trustedCI(name, `runner evidence ${value}`, commit), /must name the commit/, value);
+    }
+    assert.equal(trustedCI(name, `commit=${commit.slice(0, 12)}; passed`, commit), `commit=${commit.slice(0, 12)}; passed`);
+  }
+});
+
 test('publishing refuses a trust value that does not name the source commit before it saves, pushes or tags anything', async () => {
   const { publishPublic } = await pub();
   let saved = 0;
