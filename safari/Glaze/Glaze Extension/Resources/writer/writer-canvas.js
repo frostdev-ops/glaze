@@ -74,25 +74,36 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
   const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const BLOCK = new Set('P DIV LI UL OL H1 H2 H3 H4 H5 H6 PRE BLOCKQUOTE TABLE TR'.split(' '));
   const SKIP = new Set('SCRIPT STYLE BUTTON SVG TEMPLATE NOSCRIPT IFRAME OBJECT'.split(' '));
-  // An element's text, a line a block, at most n characters → { text, cut }.
+  // An element's text, a line a block, at most n characters → { text, cut }. Bound copies before normalization too,
+  // and stop sparse trees after 4,096 nodes. Every budget omission remains visible to Feedback as incomplete material.
   const textOf = (el, n) => {
-    let out = '';
+    let out = '', cut = false, left = 4096;
+    const append = (s) => { const room = n * 2 + 1 - out.length; if (s.length > room) cut = true; out += s.slice(0, room); };
     const walk = (node, depth) => {
-      if (out.length > n * 2) return;
-      if (node.nodeType === 3) { out += node.textContent; return; }
+      if (left-- <= 0 || out.length > n * 2) { cut = true; return; }
+      if (node.nodeType === 3) {
+        const room = n * 2 + 1 - out.length;
+        const text = node.substringData ? node.substringData(0, room) : String(node.textContent).slice(0, room);
+        if (node.length > room) cut = true;
+        append(text); return;
+      }
       const tag = String(node.tagName || '').toUpperCase();
-      if (!tag || SKIP.has(tag) || depth > 60 || String(node.className).split(/\s+/).includes('screenreader-only')) return;
-      if (tag === 'BR') { out += '\n'; return; }
+      if (!tag || SKIP.has(tag) || String(node.className).split(/\s+/).includes('screenreader-only')) return;
+      if (depth > 60) { cut = true; return; }
+      if (tag === 'BR') { append('\n'); return; }
       const block = BLOCK.has(tag);
-      if (block) out += '\n';
-      for (const c of node.childNodes || node.children || []) walk(c, depth + 1);
-      if (block) out += '\n';
+      if (block) append('\n');
+      for (const c of node.childNodes || node.children || []) {
+        if (left <= 0 || out.length > n * 2) { cut = true; break; }
+        walk(c, depth + 1);
+      }
+      if (block) append('\n');
     };
     if (el) walk(el, 0);
     const all = out.split('\n').map(squash).filter(Boolean).join('\n');
-    return { text: all.slice(0, n), cut: all.length > n };
+    return { text: all.slice(0, n), cut: cut || all.length > n };
   };
-  const line = (el, n) => squash(el?.textContent).replace(/\s+/g, ' ').slice(0, n);
+  const line = (el, n) => textOf(el, n).text.replace(/\s+/g, ' ');
   const courseOf = (doc, id) => {
     const a = [...doc.querySelectorAll('#breadcrumbs a')].find((x) => /^\/courses\/(\d+)\/?$/.exec(x.getAttribute('href') || '')?.[1] === id);
     return { id, name: esc(line(a, LIMIT.name)) };
@@ -107,7 +118,7 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     if (!show) return {};
     const body = classic ? show.querySelector('[data-resource-type="assignment.body"]') || show.querySelector('.description.user_content') : show.querySelector('[data-testid="assignments-2-assignment-description"]');
     const title = line(classic ? show.querySelector('h1.title') : show.querySelector('[data-testid="assignment-student-header"] [data-testid="title"]'), LIMIT.title);
-    const stamp = classic ? squash(show.querySelector('.timestamp')?.textContent) : '';
+    const stamp = classic ? line(show.querySelector('.timestamp'), 12) : '';
     const due = classic ? (/^\d{9,11}$/.test(stamp) ? isoOf(Number(stamp) * 1000) : null) : isoOf(show.querySelector('time[data-testid="due-date"]')?.getAttribute('datetime') || '');
     const { text, cut } = textOf(body, LIMIT.prompt);
     const incomplete = cut || !!body?.querySelector(FILE);
