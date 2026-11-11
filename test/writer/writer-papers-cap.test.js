@@ -69,3 +69,25 @@ test('a refused document claims nothing in the file store, and a backup replay p
   assert.deepEqual(recordsOf(store.data), []);
   assert.equal(store.data.writerPapers.length, 2000);
 });
+
+test('a stored document dropped from an older build\'s full index is refused before claiming a replacement file', async () => {
+  const F = require('../../extension/documents/doc-files.js');
+  const { fakeIDB } = require('../helpers/fake-idb.cjs');
+  const { indexedDB, IDBKeyRange } = fakeIDB(), clock = { t: 1e12 };
+  const files = F.store(F.idb(indexedDB, 'glaze-docs', IDBKeyRange), { now: () => clock.t });
+  const store = memory(), P = PA.open(store, () => clock.t, { files }), k = PA.newKey();
+  const old = await files.put(new Uint8Array([1, 2, 3]), 'application/pdf');
+  await P.save(k, { kind: 'pdf', doc: null, file: old, size: old.size, pages: 1, title: 'Scan', named: true });
+  // Before this cap, 2,000 later saves dropped k's row while leaving its record and file stored.
+  store.data.writerPapers = Array.from({ length: PA.CAP.rows }, (_, i) => ({ key: PA.newKey(), kind: 'paper', title: `r${i}`, updated: 1 }));
+  const before = structuredClone(store.data);
+  const replacement = await files.put(new Uint8Array([4, 5, 6]), 'application/pdf');
+  await assert.rejects(P.save(k, { file: replacement, size: replacement.size }, { expectedKind: 'pdf' }), /too many documents/);
+  assert.deepEqual(store.data, before, 'the refusal leaves the record and index unchanged');
+  const disk = indexedDB.dbs.get('glaze-docs').get('files');
+  assert.deepEqual(disk.get(`o:${k}`), [old.hash], 'the refused file never becomes the document\'s');
+  clock.t += F.GRACE + 1;
+  await files.sweep({ live: new Set([old.hash]) });
+  assert.equal(disk.has(`f:${replacement.hash}`), false, 'the unused upload can be swept');
+  assert.equal(disk.has(`f:${old.hash}`), true, 'the saved file stays');
+});
