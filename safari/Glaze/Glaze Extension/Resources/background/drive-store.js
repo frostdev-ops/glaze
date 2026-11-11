@@ -786,6 +786,13 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
           if (at > got.at && !def.view && !MERGE[cat]) return over({ id: R.id }, at);
           return put(h, { area, key, cat, id: R.id, lsum, rsum: got.sum, at: got.at, seen: Math.max(at, got.at) }, null, got.value);
         }
+        // The replacement file holds the saved agreement, even when this device removed the whole key since it agreed.
+        if (got.value !== undefined && based(cat, key) && (await S.get(BASE + h))[BASE + h]?.sum === got.sum) {
+          const link = { area, key, cat, id: R.id, lsum: got.sum, rsum: got.sum, at: got.at, seen: got.at };
+          // Keep this agreement before the upload: a fenced retry must merge against it, including local deletions.
+          await put(h, link, null, got.value);
+          return over(link, at || now());
+        }
         // Gone here: Drive's value taken, unless this device deleted it later than that value's change (its time stamped while
         // bound, so it had the key): the deletion goes up, as a later change would.
         if (value === undefined) {
@@ -794,16 +801,8 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
           return;
         }
         if (got.value === undefined) return over({ id: R.id }, Math.max(at, got.at + 1) || now());
-        // First meeting, both hold it: Settings by time; the rest joined as Restore joins. A record merged item by item whose
-        // file holds the very value this device last agreed through another (its own let go for this one, or left in a
-        // Glaze/Data put in Drive's trash): this device's changes since go up as they are, its deletions too.
+        // First meeting, both hold it without a matching saved agreement: Settings by time; the rest joined as Restore joins.
         if (cat === 'settings') { if (got.at > at) return take(h, got, R, null, value); return over({ id: R.id }, at || now()); }
-        if (based(cat, key) && (await S.get(BASE + h))[BASE + h]?.sum === got.sum) {
-          const link = { area, key, cat, id: R.id, lsum: got.sum, rsum: got.sum, at: got.at, seen: got.at };
-          // Keep this agreement before the upload: a fenced retry must merge against it, including local deletions.
-          await put(h, link, null, got.value);
-          return over(link, at || now());
-        }
         return joinBoth(got, null, at);
       }
       // Its file gone or in Drive's trash: put back from here, unchanged since it last synced with the time of that change.
