@@ -495,6 +495,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
             if (SKIP.has(e?.why) || (t.owner?.snap && e?.why === 'quota')) {
               console.warn('Sync to Google Drive: passed over a transfer', slot, e.why);
               await dropMove(slot);
+              if (e.why === 'denied' && t.owner?.doc && t.owner.key) await mark(t.owner.key);
               if (e.why !== 'denied' && t.owner?.key) await held('dirty', async () => { const m = (await S.get(DIRTY))[DIRTY] || {}; if (m[t.owner.key]) { delete m[t.owner.key]; await S.set({ [DIRTY]: m }); } });
               if (t.owner?.snap || t.owner?.rec) await more?.failed?.(t.owner, e.why, hooks(folder));
               continue;
@@ -1057,7 +1058,7 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
       if (SKIP.has(e?.why)) {
         console.warn('Sync to Google Drive: passed over', h, e.why);
         const k = e.why === 'denied' && (key || (await docOf(h))?.key);
-        if (k && ((await S.get(DIRTY))[DIRTY] || {})[k]) await mark(k);
+        if (k) await mark(k);
         return;
       }
       if (e instanceof Fail ? e.why !== 'stale' : typeof e?.why === 'string') throw e;
