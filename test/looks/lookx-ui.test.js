@@ -247,6 +247,31 @@ test('rotation: a shared turn arriving during the sync read is not mistaken for 
   assert.deepEqual(w.sync[L.SHARED], delivered, 'the delivered turn is not overwritten');
 });
 
+test('rotation: a shared turn made while a favorite decodes keeps its deadline even when it wears the same theme', { timeout: 10000 }, async () => {
+  const G = require('../../extension/content/defaults.js'), S = require('../../extension/sharing/share.js');
+  const H = 36e5, t0 = 1e12, mode = '6h 08:00';
+  const s = G.GZ_SANITIZE({ extras: { rotate: '6h' } }), code = await S.encode(s);
+  const original = { mode, at: t0, i: 0 };
+  const w = worker({ rotateState: original, rotateLooks: [code], lookFavorites: [{ code, name: 'Kept' }] }, { ...structuredClone(s), [L.SHARED]: { ...original } });
+  w.context.now = t0 + 6 * H;
+  vm.runInContext('Date = class extends Date { static now() { return globalThis.now; } }', w.context);
+  let finish, began;
+  w.context.decoding = new Promise((resolve) => { finish = resolve; });
+  const decoding = new Promise((resolve) => { began = resolve; });
+  w.context.began = began;
+  vm.runInContext('GZ_SHARE.decode = () => { globalThis.began(); return globalThis.decoding; };', w.context);
+  const turn = w.send({ type: 'glaze:rotate' });
+  await decoding;
+  // The other device's list has the same Look: the visible theme and lookX do not change, but its turn is newer.
+  const latest = { mode, at: w.context.now + 20, i: 0 };
+  w.sync[L.SHARED] = latest;
+  w.context.now = latest.at;
+  finish(await S.decode(code));
+  assert.deepEqual(await turn, { ok: false, error: 'changed' });
+  assert.deepEqual(w.sync[L.SHARED], latest, 'a delayed decode cannot move the shared deadline backwards');
+  assert.deepEqual(w.local.rotateState, original, 'the stale local turn is discarded');
+});
+
 // ---- the page -------------------------------------------------------------------------------------------------------
 test('rotation refuses legacy outside favorites that hide critical controls without restricting own Look storage', async () => {
   const G = require('../../extension/content/defaults.js'), X = require('../../extension/looks/lookparts.js'), S = require('../../extension/sharing/share.js');
