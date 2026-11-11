@@ -38,3 +38,29 @@ test('the agent refuses a complete overlong stdin line before forwarding it', as
   assert.deepEqual(a.socket.writes, [], 'a newline in the same chunk cannot bypass the line limit');
   assert.equal(await a.run, 1);
 });
+
+test('a blocked app output pauses stdin even with no host, and drain releases it', async (t) => {
+  const a = await start(t, { connected: false });
+  a.stdout.accepting = false;
+  a.stdin.emit('data', Buffer.from('{"jsonrpc":"2.0","id":1,"method":"ping"}\n'));
+  assert.equal(a.stdout.writes.length, 1);
+  assert.equal(a.stdin.paused, true, 'local ping replies must respect app backpressure');
+  a.stdout.accepting = true;
+  a.stdout.emit('drain');
+  assert.equal(a.stdin.paused, false);
+});
+
+test('app output drain cannot resume a host socket while another app reply is still blocked', async (t) => {
+  const a = await start(t);
+  a.stdout.accepting = false;
+  a.socket.emit('data', Buffer.from('{"id":1,"result":{}}\n'));
+  assert.equal(a.socket.paused, true);
+  a.socket.accepting = false;
+  a.stdin.emit('data', Buffer.from('{"id":2,"method":"tools/list"}\n'));
+  a.socket.emit('drain');
+  assert.equal(a.stdin.paused, true, 'host drain alone cannot release blocked app output');
+  a.stdout.accepting = true;
+  a.stdout.emit('drain');
+  assert.equal(a.stdin.paused, false);
+  assert.equal(a.socket.paused, false);
+});
