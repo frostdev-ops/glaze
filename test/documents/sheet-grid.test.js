@@ -194,3 +194,18 @@ test('CSV delimiter detection counts separators outside quoted fields and embedd
     assert.equal(G.parseDelimited(text, G.sniff(text))[0].length, 2);
   }
 });
+
+// A hyphen before the number in a label (an ID, a course code) is part of the label, not a minus sign: the number counts up
+// and keeps its width, as Excel's fill does. A number cell's own sign still counts.
+test('fill series: a label\'s hyphen before its number stays in the label, the number counting up at its width', () => {
+  assert.deepEqual(vals(G.fill([s('INV-0001')], 3)), ['INV-0002', 'INV-0003', 'INV-0004']);
+  assert.deepEqual(vals(G.fill([s('CS-101')], 2)), ['CS-102', 'CS-103']);
+  assert.deepEqual(vals(G.fill([s('Lab-1')], 3)), ['Lab-2', 'Lab-3', 'Lab-4']);
+  assert.deepEqual(vals(G.fill([s('S-001')], 2)), ['S-002', 'S-003']);
+  assert.deepEqual(vals(G.fill([s('Q1-2020')], 2)), ['Q1-2021', 'Q1-2022']);
+  assert.deepEqual(vals(G.fill([s('item-09')], 2)), ['item-10', 'item-11']);
+  assert.deepEqual(vals(G.fill([s('A-1'), s('A-3')], 2)), ['A-5', 'A-7'], 'two cells: their step');
+  assert.deepEqual(vals(G.fill([s('HW-3')], 2, { back: true })), ['HW-2', 'HW-1']);
+  assert.deepEqual(vals(G.fill([n(-3)], 2)), [-3, -3], 'a single negative number copies');
+  assert.deepEqual(vals(G.fill([n(-3), n(-1)], 2)), [1, 3], 'negative numbers count by their step');
+});
