@@ -307,3 +307,30 @@ test('Safari\'s From Google Drive is disclosed while Safari offers Drive: its ta
   assert.match(picker, /Safari opens the page in a tab[^.]*`documents\/picked\.html`/);
   assert.match(picker, /session storage \(memory, never the token\)/);
 });
+
+// A permission or host the manifest asks for, and the policy does not name, is a promise the policy never made.
+test('every permission, optional permission and host in the manifest is named in PRIVACY.md\'s Permissions list, and offscreen and alarms in the summary too', () => {
+  const manifest = JSON.parse(read('manifest.json'));
+  const start = policy.indexOf('\n## Permissions');
+  assert.ok(start > 0, 'PRIVACY.md has a Permissions section');
+  const section = policy.slice(start + 1, policy.indexOf('\n## ', start + 1));
+  for (const permission of [...manifest.permissions, ...(manifest.optional_permissions || [])]) {
+    assert.ok(section.includes(`\`${permission}\``), `PRIVACY.md's Permissions list does not name \`${permission}\``);
+  }
+  const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const named = (host) => section.includes(host) || (host.endsWith('/*') && new RegExp(`${escape(host.slice(0, -2))}(?![\\w.*-])`).test(section));
+  for (const host of [...manifest.host_permissions, ...(manifest.optional_host_permissions || [])]) {
+    assert.ok(named(host), `PRIVACY.md's Permissions list does not name the host ${host}`);
+  }
+  // A content script's pages are hosts too: each distinct site is named, whichever of its paths the script runs on.
+  const sites = new Set(manifest.content_scripts.flatMap((script) => script.matches).map((match) => match.replace(/^https?:\/\//, '').split('/')[0]).filter((site) => site !== '*'));
+  for (const site of sites) assert.ok(section.includes(site), `PRIVACY.md's Permissions list does not name ${site}, where a content script runs`);
+  for (const permission of ['offscreen', 'alarms']) assert.ok(read('../docs/privacy.md').includes(`\`${permission}\``), `docs/privacy.md does not name \`${permission}\``);
+});
+
+test('PRIVACY.md says Ask Rime\'s saved memories are in backups and Sync to Google Drive, wherever it says where they stay', () => {
+  const memory = policy.slice(policy.indexOf('With **Memory** on (the default once Ask Rime is enabled)'), policy.indexOf('Saved memories are included in Glaze backups'));
+  assert.match(policy, /Saved memories are included in Glaze backups and in \*\*Sync to Google Drive\*\*/);
+  assert.doesNotMatch(memory, /These records stay on this device/, 'a flat "stay on this device" contradicts the backups paragraph');
+  assert.match(memory, /backups and Sync to Google Drive/);
+});
