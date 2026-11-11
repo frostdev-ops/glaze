@@ -633,3 +633,25 @@ test('a cell calling a function Glaze lacks shows the file\'s value until its in
   f.key('ArrowUp'); f.key('ArrowUp');
   assert.equal(note(), 'Glaze can’t calculate ERF');
 });
+
+// An undo or redo whose inverse is refused (here the codec locks it; the 250,000-cell cap or a sheet name taken since do the
+// same) keeps its step, so it can be tried again once the cause is gone.
+test('an undo or redo refused keeps its step for the next try', () => {
+  let locked = false;
+  const f = frame({ ctx: { GZ_SHEET_XLSX: { track() {}, locked: () => (locked ? 'locked' : null) } } });
+  const a1 = () => f.wb.sheets[0].rows.get(0)?.get(0)?.v;
+  f.type('12'); f.key('Enter'); f.key('ArrowUp');
+  locked = true;
+  f.key('z', { ctrlKey: true });
+  assert.equal(a1(), 12, 'refused');
+  assert.equal(f.el('gx-undo').disabled, false, 'the step is still there');
+  locked = false;
+  f.key('z', { ctrlKey: true });
+  assert.equal(a1(), undefined, 'undone on the next try');
+  locked = true;
+  f.key('y', { ctrlKey: true });
+  assert.equal(a1(), undefined, 'redo refused');
+  locked = false;
+  f.key('y', { ctrlKey: true });
+  assert.equal(a1(), 12, 'redone on the next try');
+});
