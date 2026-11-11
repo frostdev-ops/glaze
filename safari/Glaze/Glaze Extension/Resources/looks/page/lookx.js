@@ -457,7 +457,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     pointer = '';
   });
   addEventListener('pageshow', (e) => { live = true; if (e.persisted) { key = ''; sync(); } });
-  // Ultra changes pages in place: its stickers are the new path's.
+  // Ultra changes pages in place: its stickers are the new path's. Without window.navigation, content-ultra.js syncQuiet says so.
   const moved = () => { if (globalThis.GZ_LX) cursor(); if (key) stickers(); };
   globalThis.navigation?.addEventListener('navigatesuccess', moved);
   addEventListener('popstate', moved);

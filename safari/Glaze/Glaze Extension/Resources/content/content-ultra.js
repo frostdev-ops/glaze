@@ -7,6 +7,18 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const stored = (keys, cb) => (I.stored ? I.stored(keys, cb) : chrome.storage.local.get(keys, cb));
 
   // ---- the student's courses -------------------------------------------------------------------
+  // A key several tabs write (read, merge, set): one writer at a time. Web Locks hold the other tabs of this origin until the set
+  // lands (another site's tab is another origin and isn't held back); a queue orders this tab's own, which is all there is
+  // without Web Locks (as canvasNews in content-canvas.js).
+  const writing = new Map();
+  const update = (key, merge, more) => {
+    const write = () => new Promise((done) => {
+      try { chrome.storage.local.get(key, (r) => { try { chrome.storage.local.set({ [key]: merge(r?.[key]), ...more }, done); } catch { done(); } }); } catch { done(); } // extension reloaded under the tab
+    });
+    const run = (writing.get(key) || Promise.resolve()).then(() => (navigator.locks?.request ? navigator.locks.request(`glaze:${key}`, write).catch(write) : write()));
+    writing.set(key, run);
+    return run;
+  };
   // Every course and the color slot Ultra gives it, for the editor's course list and the tint on
   // pages that don't show the slot: from the membership list Ultra's own Courses page asks for, once
   // a page load and at most every ten minutes. Stored locally; nothing leaves the device. Each Ultra site has its own: two
@@ -21,12 +33,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
           if (!Object.keys(seen).length) return;
           for (const [id, c] of Object.entries(seen)) courseSlots[id] = c.slot;
           for (const m of ms) if (seen[m.courseId]) Object.assign(seen[m.courseId], { site: location.origin, code: String(m.course.displayId || '').slice(0, 80) });
-          try { chrome.storage.local.get('seenCourses', (r) => {
-            // Canvas's and Moodle's (keyed by site) and other Ultra sites' stay; this site's go, with any kept before Ultra's
-            // records named their site.
-            const kept = Object.fromEntries(Object.entries(r?.seenCourses || {}).filter(([k, c]) => k.includes(':') || (c?.site && c.site !== location.origin)));
-            chrome.storage.local.set({ seenCourses: { ...kept, ...seen }, [at]: Date.now(), courseSlots });
-          }); } catch { /* reloaded */ }
+          // Canvas's and Moodle's (keyed by site) and other Ultra sites' stay; this site's go, with any kept before Ultra's
+          // records named their site.
+          update('seenCourses', (all) => ({ ...Object.fromEntries(Object.entries(all || {}).filter(([k, c]) => k.includes(':') || (c?.site && c.site !== location.origin))), ...seen }), { [at]: Date.now(), courseSlots });
         });
       });
     } catch { /* extension reloaded under the tab */ }
@@ -274,9 +283,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     if (c.seenGrades || c.seenContent) renderNew();
   });
   // One course at a time, over what's stored: another tab may have recorded other courses since.
-  const keepSeen = (key, cid, v) => {
-    try { chrome.storage.local.get(key, (r) => chrome.storage.local.set({ [key]: { ...r?.[key], [cid]: v } })); } catch { /* extension reloaded under the tab */ }
-  };
+  const keepSeen = (key, cid, v) => { update(key, (all) => ({ ...all, [cid]: v })); };
   // [card selector, its course id, where the badge goes]. Course list cards, recent courses, Grades tiles.
   const COURSE_CARDS = [
     [CARD, (e) => e.id.slice(19), (e) => e.querySelector('h4[id^="course-name-"]')],
@@ -287,6 +294,12 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     if (!label) el.removeAttribute('data-gz-new');
     else if (el.getAttribute('data-gz-new') !== label) el.setAttribute('data-gz-new', label);
   };
+  // Where a count's click sends the next page to scroll. sessionStorage can throw (storage off, a sandboxed or partitioned frame,
+  // full): then there is no jump, and the click and the pass go on.
+  const JUMP = 'gz-new-jump';
+  const jumpKept = () => { try { return sessionStorage.getItem(JUMP); } catch { return null; } };
+  const jumpKeep = (v) => { try { sessionStorage.setItem(JUMP, v); } catch { /* the page opens without it */ } };
+  const jumpDrop = () => { try { sessionStorage.removeItem(JUMP); } catch { /* none kept */ } };
   // A count's click or key (content.js's listeners hand them here, KIND has what each opens).
   const openNew = (e) => {
     const pill = e.target instanceof Element && e.target.closest('.gz-new[role="link"]');
@@ -296,7 +309,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     if (e.type !== 'click' && e.type !== 'keydown') return;
     const { kind, cid } = pill.dataset;
     if (kind === 'inside') { jump = { under: pill.closest('[data-content-id]').dataset.contentId, at: Date.now(), opened: new Set() }; return renderNew(); }
-    sessionStorage.setItem('gz-new-jump', `${kind} ${cid}`);
+    jumpKeep(`${kind} ${cid}`);
     location.assign(`${location.origin}/ultra/courses/${cid}/${kind === 'items' ? 'outline' : 'grades'}`);
   };
   const glide = (el) => el?.scrollIntoView({ block: 'center', behavior: html.getAttribute('data-gz-motion') === 'off' ? 'auto' : 'smooth' });
@@ -317,8 +330,8 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
         if (JSON.stringify(now) !== JSON.stringify(seen[cid])) { seen[cid] = now; keepSeen('seenGrades', cid, now); }
         for (const el of document.querySelectorAll('[id^="course-student-grades-item-name-"]')) badge(el, set.has(el.id.slice(32)) && t('New'));
         // Arrived from a card's "N new": bring the first new grade into view, once.
-        const first = sessionStorage.getItem('gz-new-jump') === `grades ${cid}` && document.querySelector('[id^="course-student-grades-item-name-"][data-gz-new]');
-        if (first) { sessionStorage.removeItem('gz-new-jump'); glide(first.closest('li, tr, [role="row"]')); }
+        const first = jumpKept() === `grades ${cid}` && document.querySelector('[id^="course-student-grades-item-name-"][data-gz-new]');
+        if (first) { jumpDrop(); glide(first.closest('li, tr, [role="row"]')); }
       }
     }
     // Cards only count: nothing is marked seen until its gradebook is shown. Only on the Courses and
@@ -393,7 +406,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     // Arrived from a card's count, or a folder's count was clicked: unfold the folders down to the
     // newest new item (the highest id) and bring it into view. Folders are only unfolded, never opened,
     // and each at most once, so a slow one isn't folded back. Given up after ten seconds.
-    if (sessionStorage.getItem('gz-new-jump') === `items ${cid}`) { sessionStorage.removeItem('gz-new-jump'); jump = { under: null, at: Date.now(), opened: new Set() }; }
+    if (jumpKept() === `items ${cid}`) { jumpDrop(); jump = { under: null, at: Date.now(), opened: new Set() }; }
     if (!jump) return;
     const up = new Map(c.items.map((i) => [i.id, i.parentId]));
     const chain = (id) => { const a = []; for (let p = up.get(id); up.has(p); p = up.get(p)) a.unshift(p); return a; };
@@ -421,6 +434,17 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const sylHere = () => solo && I.settings.enhance.syllabus && onPath(/^\/ultra\/courses\/_\d+_\d+\/outline/);
   const syncSyl = () => loadIf(sylHere(), 'syllabus', 'GZ_SYL_UI', (s) => s.sync(I.observer && sylHere()));
   const syncInsights = () => loadIf(I.settings.enhance.insights && onPath(/^\/ultra\/course$/), 'insights', 'GZ_INSIGHTS_UI', (s) => s.sync());
+  // Ultra changes page in place by pushState, which fires no popstate, and a browser without window.navigation (Firefox before
+  // 147) says nothing else: content.js's pass is the notice. The Look's animations (looks/page/motionx.js) and the stickers and
+  // pointer (looks/page/lookx.js) stay off a quiz or a tool's page, so they hear it when the page crosses that line.
+  let quietWas = null;
+  const syncQuiet = () => {
+    const parts = [globalThis.GZ_MOTIONX, globalThis.GZ_LOOKX].filter(Boolean);
+    if (!parts.length) return;
+    const was = quietWas;
+    quietWas = !!globalThis.GZ_LX?.quiet(location.pathname, document);
+    if (was !== null && was !== quietWas) for (const m of parts) Promise.resolve(m.sync()).catch(() => {});
+  };
 
   // ---- code on demand ------------------------------------------------------------------------------
   // Notes, widgets and the pet: the Courses page's board, the tiles floating over every page, and the Dashboard (the
@@ -783,7 +807,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   return {
     fetch: (u, o) => (/\/users\/me$/.test(u) ? fetch(u, o) : need('courses/lmsq.js', () => globalThis.GZ_LMSQ).then(() => GZ_LMSQ.fetch(u, o), () => fetch(u, o))),
     paintNav, syncNav, record, tagCards: tagCourseCards, tagExtras: tagPage, gate, stop: () => { GZ_NAV.drop(); syncDashboard(); globalThis.GZ_STREAM_UI?.sync(false); globalThis.GZ_NAVBAR_UI?.sync(); globalThis.GZ_FOLDER_UI?.sync(false); cardsIO.disconnect(); onScreen.clear(); },
-    renderProgress, renderNew, renderCalc, syncSyl, syncInsights: () => (syncInsights(), syncTabs()), openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
+    renderProgress, renderNew, renderCalc, syncSyl, syncInsights: () => (syncInsights(), syncTabs(), syncQuiet()), openNew, paintCourses, tintOf, courseColor, nickOf, syncNames,
     unname: () => { for (const p of document.querySelectorAll('[data-gz-real]')) unname(p); },
     syncTodo, syncCardTasks, syncRemind: () => (syncRemind(), syncAhead()), syncWidgets,
     ctx: { canvasPeek: () => ({ me: meId, courses: memberships, books }), me, myCourses, courseItems, bookFor, courseColor, profile: page('profile'), canvasCourses: page('courses') },
