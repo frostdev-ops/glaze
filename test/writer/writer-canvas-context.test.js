@@ -110,8 +110,46 @@ test('teacher- and student-written text stays text: markup-like words are kept a
   b.append('Preview');
   d.replaceChildren(p, s, sr, b);
   const a = boxOf('assignment', body).context.assignment;
-  assert.equal(a.instructions, 'Write <img src=x onerror=alert(1)> as text.');
+  assert.equal(W.plain(a.instructions), 'Write <img src=x onerror=alert(1)> as text.');
+  assert.ok(!a.instructions.includes('<'), 'the rich-text context reader receives escaped text');
   for (const v of Object.values(boxOf('assignment', body).context.assignment)) assert.ok(v === null || typeof v === 'string' || Array.isArray(v), 'strings only');
+});
+
+test('literal tags and entities in Canvas text survive the AI context blocks and Feedback input unchanged', () => {
+  const literal = 'Discuss <strong>literal tags</strong>, <img src=x onerror=alert(1)>, &lt;code&gt; and &#60; as text.';
+  const body = drawn(load('thread'));
+  text(body, '[data-resource-type="discussion_topic.body"][data-resource-id="80"]', literal);
+  text(body, '[data-resource-type="discussion_topic.reply"][data-resource-id="102"]', literal);
+  text(body, '[data-entry-id="102"] [data-testid="author_name"]', 'Casey <C> &amp; Morgan');
+  const ctx = boxOf('thread', body).context, cleaned = W.clean(ctx);
+  assert.equal(cleaned.prompt, `Weekly discussion: counterarguments\n${literal}`);
+  assert.equal(cleaned.replyTo.text, literal);
+  assert.equal(cleaned.replyTo.author, 'Casey <C> &amp; Morgan');
+  assert.equal(W.blocks(cleaned).find((b) => b.label === 'post being answered').text, `Casey <C> &amp; Morgan:\n${literal}`);
+
+  for (const f of ['assignment', 'a2']) {
+    const body = drawn(load(f));
+    text(body, f === 'assignment' ? '#assignment_show .description.user_content' : '[data-testid="assignments-2-assignment-description"]', literal);
+    text(body, f === 'assignment' ? '#assignment_show h1.title' : '[data-testid="assignment-student-header"] [data-testid="title"]', '<HTML> &amp; writing');
+    const context = boxOf(f, body).context;
+    const feedback = require('../../extension/ai/tasks/writer-feedback.js').task.input({ text: 'My draft.', mode: 'compose', kind: 'assignment', context });
+    assert.ok(feedback, f);
+    assert.equal(feedback.context.assignment.instructions, literal, f);
+    assert.equal(feedback.context.assignment.title, '<HTML> &amp; writing', f);
+  }
+});
+
+test('escaped context keeps prompt targets near the end of the page text visible to the target parser', async () => {
+  const c = await page({ fixture: 'discussion', ready: () => false, scripts: ['writer/writer-target.js'] });
+  const literal = `${'& '.repeat(3500)}\nPost at least 250 words.`;
+  text(c.doc.body, '[data-resource-type="discussion_topic.body"][data-resource-id="80"]', literal);
+  c.ctx.GZ_WRITER.pass();
+  // The context was taken on mount, so open the replacement after the page drew its final prompt.
+  c.doc.querySelector('iframe.gz-writer').remove();
+  await c.boot(); await new Promise(setImmediate);
+  const context = c.ports.at(-1).sent.filter((m) => m.type === 'context').at(-1)?.context;
+  assert.equal(context?.requirements?.minWords, 250);
+  assert.ok(!context.prompt.text.includes('<'));
 });
 
 test('size bounds as Ultra\'s page reads have them: 20,000 characters of instructions or prompt, 4,000 of an entry, 120 of a name, 300 of a title', () => {
