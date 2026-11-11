@@ -19,13 +19,15 @@ const adapter = (base, { drawer = true, account = '_1_1', kept = {}, profile = n
     querySelector: () => null, matches: () => false });
   const links = drawer ? [link('/ultra/course', 'Courses'), link('/ultra/grades', 'Grades'), ...(profile ? [link('/ultra/profile', profile)] : []), link('#', 'Sign Out')] : [];
   const root = { querySelectorAll: () => links, closest: () => null };
-  const document = { querySelector: () => (drawer ? root : null), createTreeWalker: (a) => { let n = 0; return { nextNode: () => (n++ ? null : { data: a.label, parentElement: { closest: () => null } }) }; } };
+  const events = new Map();
+  const document = { addEventListener: (type, fn) => events.set(type, fn), querySelector: () => (drawer ? root : null), createTreeWalker: (a) => { let n = 0; return { nextNode: () => (n++ ? null : { data: a.label, parentElement: { closest: () => null } }) }; } };
   const location = { origin: SITE, href: `${SITE}/ultra/course`, pathname: '/ultra/course' };
   const ctx = vm.createContext({ document, location, URL, NodeFilter: { SHOW_TEXT: 4, FILTER_ACCEPT: 1, FILTER_REJECT: 2 },
     chrome: { storage: { local: { get: (k, cb) => cb(structuredClone(Object.fromEntries([k].flat().filter((x) => x in kept).map((x) => [x, kept[x]])))), set: (o) => Object.assign(kept, structuredClone(o)), remove: (k) => { for (const x of [k].flat()) delete kept[x]; } } } }, MutationObserver: class { observe() {} disconnect() {} },
     GZ_NAV: require('../../extension/navigation/nav.js') });
   const Ultra = vm.runInContext(`${src.slice(src.indexOf('function GZ_NAVBAR_ULTRA(X) {'), src.indexOf('if (typeof module'))}\nGZ_NAVBAR_ULTRA;`, ctx);
-  return { site: Ultra({ t: (s) => s, settings: () => ({ enhance: {} }), account: async () => account }), kept };
+  return { site: Ultra({ t: (s) => s, settings: () => ({ enhance: {} }), account: async () => (typeof account === 'function' ? account() : account) }), kept,
+    drawer: (on) => { drawer = on; }, refresh: (detail) => events.get('glaze:ultra-refresh')?.({ detail }) };
 };
 
 for (const [name, base] of [['a <base> on another origin', CDN], ['no <base>', `${SITE}/ultra/course`]]) {
@@ -68,4 +70,31 @@ test("Ultra's last-seen items are kept per student: another student's page witho
   const d = adapter(CDN, { kept: old });
   await settle(); d.site.read(); await settle();
   assert.deepEqual(Object.keys(old), [`navbarSeen:${SITE}:_1_1`]);
+});
+
+test("an Ultra identity refresh clears the previous student's navigation in a retained document", async () => {
+  let uid = '_1_1';
+  const a = adapter(CDN, { profile: 'Ada Lovelace', account: () => uid });
+  await settle(); a.site.read(); await settle();
+  assert.ok(a.kept[`navbarSeen:${SITE}:_1_1`].some((i) => i.label === 'Ada Lovelace'));
+  a.drawer(false);
+  uid = '_2_1';
+  a.refresh({ identity: true });
+  assert.ok(!plain(a.site.read()).some((i) => i.label === 'Ada Lovelace'), 'private items clear before the new identity answers');
+  await settle();
+  assert.ok(!plain(a.site.read()).some((i) => i.label === 'Ada Lovelace'), 'the new account never inherits the old cache');
+});
+
+test('an old Ultra account answer cannot load private navigation after identity invalidation', async () => {
+  let answer;
+  let current = new Promise((r) => { answer = r; });
+  const kept = { [`navbarSeen:${SITE}:_1_1`]: [{ id: 'profile', label: 'Ada Lovelace', path: '/ultra/profile' }] };
+  const a = adapter(CDN, { drawer: false, kept, account: () => current });
+  await settle();
+  current = Promise.resolve('_2_1');
+  a.refresh({ identity: true });
+  await settle();
+  answer('_1_1');
+  await settle();
+  assert.ok(!plain(a.site.read()).some((i) => i.label === 'Ada Lovelace'));
 });
