@@ -56,6 +56,13 @@ test('inside a quotation or a block quote, what is typed stays as typed', () => 
   assert.equal(e.text(), 'Quoted teh ');
 });
 
+test('single-quoted words stay as typed with Smart quotes on or off', () => {
+  assert.equal(typed("She wrote 'I saw teh "), 'She wrote ‘I saw teh ');
+  assert.equal(typed("She wrote 'I saw teh ", { allow: (c) => c !== 'smart' }), "She wrote 'I saw teh ");
+  assert.equal(typed("She wrote 'I saw it' and teh "), 'She wrote ‘I saw it’ and the ');
+  assert.equal(typed('We don’t need teh '), 'We don’t need the ', 'an apostrophe does not open a quotation');
+});
+
 test('with Smart quotes off a contraction gets a straight apostrophe, on a curly one', () => {
   assert.equal(typed('Take thats ', { allow: (c) => c !== 'smart' }), "Take that's ");
   assert.equal(typed('Take thats '), 'Take that’s ');
