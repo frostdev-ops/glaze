@@ -249,6 +249,17 @@ test('a code that would make the main navigation invisible is refused whole, as 
   } finally { if (was === undefined) delete globalThis.GZ_PARTS; else globalThis.GZ_PARTS = was; }
 });
 
+test('publicImage: a picture in someone else\'s code is at a public host, never an address on the student\'s own network', () => {
+  for (const u of [
+    'https://127.0.0.1/a.png', 'https://localhost/a.png', 'https://LOCALHOST:8080/a.png', 'https://10.0.0.5/logo.png', 'https://172.16.0.1/a.png', 'https://172.31.255.255/a.png',
+    'https://192.168.1.1/a.png', 'https://169.254.169.254/a.png', 'https://100.64.0.1/a.png', 'https://0.0.0.0/a.png', 'https://[::1]/a.png', 'https://[fd00::1]/a.png', 'https://[fe80::1]/a.png',
+    'https://[::ffff:127.0.0.1]/a.png', 'https://2130706433/a.png', 'https://0x7f.1/a.png', 'https://127.1/a.png', 'https://printer.local/a.png', 'https://nas.lan/a.png', 'https://app.localhost/a.png',
+    'https://192-168-1-1.example.com/a.png', 'https://10.0.0.1.nip.io/a.png', 'https://user:pw@127.0.0.1/a.png',
+    'http://cdn.example.com/a.png', 'javascript:alert(1)', 'data:image/png;base64,AAAA', 'not a url', '', null, undefined, 5, {},
+  ]) assert.equal(X.publicImage(u), false, String(u));
+  for (const u of ['https://cdn.example.com/a.png', 'https://images.example.co.uk/a/b.webp?x=1#y', 'https://cdn.example.com:8443/a.png', 'https://xn--bcher-kva.example/a.png', 'https://i.imgur.com/a.png']) assert.equal(X.publicImage(u), true, u);
+});
+
 test('every part at its largest still fits a code: under 48 KiB of JSON', () => {
   const stop = { at: 0, x: 200, y: 200, sc: 1.5, r: 180, kx: 30, ky: 30, o: 1, bl: 20, br: 2, sa: 2, hu: 180 };
   const ids = Array.from({ length: 192 }, (_, i) => `a${i}`);
