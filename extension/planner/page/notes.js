@@ -362,7 +362,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
       if (n && n.rev !== cur.rev && !cur.busy && clean()) openNote(cur.id, true);
       else if (n && !cur.ro) {
         Object.assign(cur, { folder: n.folder, course: n.course, cn: n.cn });
-        if (document.activeElement !== el.title && el.title && el.title.value !== n.title) { cur.title = n.title; el.title.value = n.title; }
+        if (!cur.titleDirty && document.activeElement !== el.title && el.title && el.title.value !== n.title) { cur.title = n.title; el.title.value = n.title; }
         syncMeta(n);
       }
     });
@@ -481,7 +481,8 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     cur.title = el.title.value;
     clearTimeout(titleWait);
     const c = cur;
-    titleWait = setTimeout(() => (c.rev ? metaChange({ title: c.title }, c) : save(c)), 500);
+    c.titleDirty = true; // typed and not yet sent: a change to the library meanwhile is not the title to show
+    titleWait = setTimeout(() => { c.titleDirty = false; return c.rev ? metaChange({ title: c.title }, c) : save(c); }, 500);
   };
 
   const newNote = (course = '') => {
@@ -600,6 +601,7 @@ var GZ_NOTES_UI = globalThis.GZ_NOTES_UI || (() => {
     const c = cur;
     if (!c || c.ro || c.saved == null) return true;
     clearTimeout(titleWait);
+    c.titleDirty = false;
     if (c.rev && c.title !== idx.notes[c.id]?.title && !(await metaChange({ title: c.title }, c))) return false;
     if (el.body?.isConnected && cur === c) c.pending = serialize();
     for (let i = 0; i < 5; i++) {
