@@ -506,7 +506,8 @@ const BROKER = {
       const kept = GZ_CATALOG.keptAll(lookFavorites);
       const list = GZ_LX.rotation(GZ_CATALOG.ids(rotateLooks, lookFavorites), GZ_LOOKS.map((L) => L.name), kept.map((f) => f.id));
       // The account's last turn (storage.sync, written with the Look it wore): a turn another device made is this device's own.
-      const r = GZ_LX.turn(rotateState, Date.now(), s.extras, list, m.now === true, (await sync.get(GZ_LX.SHARED))[GZ_LX.SHARED]);
+      const last = (await sync.get(GZ_LX.SHARED))[GZ_LX.SHARED];
+      const r = GZ_LX.turn(rotateState, Date.now(), s.extras, list, m.now === true, last);
       if (r.wear >= 0) {
         const L = GZ_LOOKS.find((l) => l.name === list[r.wear]);
         const lookX = (await sync.get('lookX')).lookX;
@@ -523,6 +524,8 @@ const BROKER = {
           const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
           if (!same(now.extras, s.extras) || !same(st, rotateState) || !same(GZ_HISTORY.theme(now), GZ_HISTORY.theme(s)) || !same((await sync.get('lookX')).lookX, lookX)) return { ok: false, error: 'changed' };
         }
+        // Another device can turn to the same Look while this one decodes: its shared deadline still wins.
+        if (JSON.stringify((await sync.get(GZ_LX.SHARED))[GZ_LX.SHARED]) !== JSON.stringify(last)) return { ok: false, error: 'changed' };
         // The Look's parts go in with it, in the same write: a built-in Look its own, and a code brings its own or none.
         if (patch && !await GZ_XPARTS.write({ sync, local }, (L ? GZ_LOOK_PARTS(L) : got?.parts) || null, { version: 2, ...patch, ...(r.state.turned && { [GZ_LX.SHARED]: GZ_LX.shared(r.state) }) })) return { ok: false };
         if (!patch) r.state.turned = false;
