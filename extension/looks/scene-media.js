@@ -3,7 +3,9 @@
 // otherwise; Lottie's player (vendor/lottie/, the official light build: no expressions, so no eval) is imported only for a
 // Lottie animation. Always muted, never with controls, drawn behind the page like the scenes. Motion off draws the first
 // frame and stops; a hidden tab pauses; a Glaze reloaded under the page keeps the last frame. What can't be shown (an
-// address that doesn't load, a host page's policy, a file that isn't on this computer) leaves the gradient: onFail says why.
+// address that doesn't load, a host page's policy, a file that isn't on this computer) leaves the gradient: onFail says why. A
+// load that fails the way a second try may pass (no answer, a storage read that threw, a fetch that didn't get through) is tried
+// again after 1 s, 5 s and 30 s first, and left to the next page view after that.
 //
 // start(host, live, onFail) → { update(o), draw(), stop() }. host is an empty element in the page; o is { x, ground, speed }:
 // x the Look's parts (GZ_CTX.parts()), ground the colour the dim fades toward, speed 0 for a still frame.
@@ -63,29 +65,45 @@ const filed = (r, type) => {
   const bytes = unb64(r.b64);
   return bytes && { bytes, mime: r.mime };
 };
+// Whether the worker's answer leaves a second try a chance: no answer (the worker waking), its own 'failed' (a storage read that
+// threw) or 'network' (a fetch that did not get through) may pass a moment later; 'missing' (the file is not here), a refusal or
+// a file past a limit never will. start() makes the second tries.
+const again = (r) => !r || r.error === 'failed' || r.error === 'network';
+const gone = (r) => Object.assign(new Error('file'), { why: 'file', again: again(r) });
 // A file kept on this computer, as bytes, from the worker that keeps it ('glaze:keptFile'). It was checked and named by its
 // SHA-256 when it was kept, and only the worker writes it, so it isn't hashed again on every page.
-const kept = async (h, type) => filed(await send({ type: 'glaze:keptFile', h }), type);
+const kept = async (h, type) => {
+  const r = await send({ type: 'glaze:keptFile', h });
+  const f = filed(r, type);
+  if (!f) throw gone(r);
+  return f;
+};
 const modFile = (src) => src.startsWith('mod:');
 const ask = (src) => (modFile(src) ? send({ type: 'glaze:modpage', op: 'media', src }).then((r) => (r?.ok && r.kind === 'lottie' ? r : { ok: false, error: 'missing' }))
   : send({ type: 'glaze:lottie', src }));
 // A mod's file, as bytes, of the kind the Look part says.
 const carried = async (src, type) => {
   const r = await send({ type: 'glaze:modpage', op: 'media', src });
-  return r?.kind === type ? filed(r, type) : null;
+  const f = r?.kind === type ? filed(r, type) : null;
+  if (!f) throw gone(r);
+  return f;
 };
 // A video or picture at an https address, as bytes: fetched and cleaned by the worker (looks/media.js remote), which refuses what
 // is past the limits a kept file has. why 'limits' tells the editor the file is too big, not that the link is wrong.
 const fetched = async (src, type) => {
   const r = await send({ type: 'glaze:remoteMedia', src, kind: type });
   const f = r?.type === type ? filed(r, type) : null;
-  if (!f) throw Object.assign(new Error('remote'), { why: ['big', 'type'].includes(r?.error) ? 'limits' : 'load' });
+  if (!f) throw Object.assign(new Error('remote'), { why: ['big', 'type'].includes(r?.error) ? 'limits' : 'load', again: again(r) });
   return f;
 };
 
 export const start = (host, live = () => true, onFail = () => {}) => {
   let key = '', spec = null, still = true, ground = '#000', view = null, dim = null, turn = 0;
   let stopped = false, failed = false, frozen = false;
+  // A try that failed the way a second may not (again) is made again after 1 s, 5 s and 30 s, then left to the next page view.
+  // The editor's preview says what went wrong at once instead.
+  const WAITS = /-extension:$/.test(location.protocol) ? [] : [1000, 5000, 30000];
+  let tries = 0, redo = 0;
   // Elements still loading for a build nobody waits for any more: let go of what they were fetching.
   const loose = new Map(), loading = new Set();
   const abandon = () => {
@@ -99,6 +117,7 @@ export const start = (host, live = () => true, onFail = () => {}) => {
   const mode = () => (!live() ? 'freeze' : still ? 'first' : document.hidden ? 'hold' : 'play');
   const teardown = () => {
     turn++;
+    clearTimeout(redo);
     abandon();
     view?.stop();
     view = null;
@@ -145,7 +164,6 @@ export const start = (host, live = () => true, onFail = () => {}) => {
   const source = async (s, type) => {
     if (s.src.startsWith('file:') || modFile(s.src)) {
       const f = modFile(s.src) ? await carried(s.src, type) : await kept(s.src.slice(5), type);
-      if (!f) throw Object.assign(new Error('file'), { why: 'file' });
       return { url: URL.createObjectURL(new Blob([f.bytes], { type: f.mime })), bytes: f.bytes, mime: f.mime, revoke: true };
     }
     if (!s.src.startsWith('https://')) throw new Error('bad');
@@ -222,7 +240,7 @@ export const start = (host, live = () => true, onFail = () => {}) => {
   };
   const lottie = async (s, mine) => {
     const [player, got] = await Promise.all([loadLottie(), ask(s.src)]);
-    if (!got?.ok) throw Object.assign(new Error('lottie'), { why: got?.error === 'missing' ? 'file' : 'load' });
+    if (!got?.ok) throw Object.assign(new Error('lottie'), { why: got?.error === 'missing' ? 'file' : 'load', again: again(got) });
     if (mine !== turn) throw new Error('stale');
     const box = layer('div');
     host.append(box); // it is measured as it is set up
@@ -292,7 +310,12 @@ export const start = (host, live = () => true, onFail = () => {}) => {
       tell({ gzMediaState: { state: 'ready' } });
       apply();
     } catch (e) {
-      if (mine === turn) fail(e?.why || 'load');
+      if (mine !== turn) return;
+      if (e?.again && tries < WAITS.length && !stopped && !failed && !frozen) {
+        redo = setTimeout(() => { if (mine === turn && !stopped && !failed) { if (live()) build(s); else freeze(); } }, WAITS[tries++]);
+        return;
+      }
+      fail(e?.why || 'load');
     }
   };
 
@@ -307,7 +330,7 @@ export const start = (host, live = () => true, onFail = () => {}) => {
       spec = s;
       // What loads: the kind, the address and whether it loops; a Lottie animation also its fit (set when it is made).
       const k = JSON.stringify([s.type, s.src, s.loop !== false, s.type === 'lottie' ? s.fit : null]);
-      if (k !== key) { key = k; abandon(); if (view) { view.stop(); view = null; } host.replaceChildren(); dim = null; build(s); } else { paint(); apply(); }
+      if (k !== key) { key = k; tries = 0; clearTimeout(redo); abandon(); if (view) { view.stop(); view = null; } host.replaceChildren(); dim = null; build(s); } else { paint(); apply(); }
     },
     draw: apply,
     stop() {
