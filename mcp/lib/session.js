@@ -94,14 +94,15 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
   const fromApp = (text, now) => {
     const r = out(), m = parse(text);
     const id = m && Object.hasOwn(m, 'id') && isId(m.id) ? m.id : undefined;
-    const method = m && typeof m.method === 'string' ? m.method : null;
+    const valid = m && m.jsonrpc === '2.0' && (!Object.hasOwn(m, 'id') || isId(m.id)) && (m.params === undefined || isObj(m.params));
+    const method = valid && typeof m.method === 'string' ? m.method : null;
     const p = m && isObj(m.params) ? m.params : {};
     const h = { text, id: method ? id : undefined, method, at: now, n: bytes(text) };
     if (method === 'subscriptions/listen') h.tools = isObj(p.notifications) && p.notifications.toolsListChanged === true;
     if (method === 'initialize' && h.id !== undefined) {
       h.params = m.params;
     }
-    if (method === 'notifications/cancelled' && isId(p.requestId)) {
+    if (method === 'notifications/cancelled' && h.id === undefined && isId(p.requestId)) {
       flight.delete(key(p.requestId));
       acks.delete(key(p.requestId));
       const i = held.findIndex((x) => x.id !== undefined && key(x.id) === key(p.requestId));
