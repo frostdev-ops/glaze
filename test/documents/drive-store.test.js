@@ -2134,3 +2134,32 @@ test('removing the last saved source merges with a source added on another devic
     for (const d of [a, b]) assert.deepEqual((await d.local.get(key))[key]?.sources, [added]);
   }
 });
+
+test('a fenced first-meeting retry keeps deletions made against the matching saved base', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock });
+  await a.local.set({ [TODO]: BASE3 }); await a.on();
+  const id = recFile(drive, 'local', TODO).meta.id;
+  let hidden = true, race = false;
+  const lag = { ...drive, fetch: async (u, i = {}) => {
+    if (race && u.includes('/upload/') && u.includes(`/${id}?`)) {
+      race = false;
+      assert.ok((await a.run({ push: true })).ok);
+    }
+    const r = await drive.fetch(u, i);
+    if (hidden && (i.method || 'GET') === 'GET' && new URL(u).pathname === '/drive/v3/files' && decodeURIComponent(u).includes("value='rec'")) {
+      const j = await r.json(); j.files = j.files.filter((f) => f.id !== id);
+      return new Response(JSON.stringify(j), { status: 200 });
+    }
+    return r;
+  } };
+  const b = device(lag, { clock });
+  await b.local.set({ [TODO]: BASE3 }); assert.ok((await b.on()).ok);
+  hidden = false;
+  await retask(b, clock, (v) => add(task(4, 'Four'))(drop('t2')(v)));
+  await retask(a, clock, add(task(5, 'Five')));
+  race = true;
+  assert.ok((await b.run({ full: true })).ok);
+  assert.equal(race, false, 'another device changed the adopted file before the fenced upload');
+  await settled(a, b);
+  for (const d of [a, b]) assert.deepEqual(await titles(d), ['Five', 'Four', 'One', 'Three']);
+});
