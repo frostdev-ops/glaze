@@ -107,6 +107,8 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
     const kind = (id) => (HERE.includes(id) ? id : CARDS[id] ? 'preset' : 'custom');
     const connected = (id) => (id === DEVICE ? offered() : id === OWN ? offers() : !!conns[id] && (kind(id) === 'custom' || !!conns[id].key));
     const bad = (id) => connected(id) && (tested[id] ? tested[id].state !== 'ready' && tested[id].reason === 'request-rejected' : refused(calls, id));
+    // A key kept for a host the browser doesn't hold (its prompt refused): this session's Connect or Test, else the worker's word.
+    const unreached = (id) => connected(id) && (tested[id] ? tested[id].reason === 'permission' : conns[id]?.reach === false);
     const label = (id) => (id === DEVICE ? deviceName() : providerName(id, t, conns));
     // The cards of the models on this computer, first: On this device, then Glaze's own.
     const here = () => [...(offered() ? [DEVICE] : []), ...(offers() ? [OWN] : [])];
@@ -160,7 +162,7 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
           fill.style?.setProperty?.('inline-size', pct(st.progress));
           bar.append(fill); b.append(bar);
         } else if (bad(id)) { tail.className = 'st bad'; tail.textContent = t('Key refused'); }
-        else if (st || HERE.includes(id) ? st?.state === 'ready' : connected(id) && (!tested[id] || tested[id].state === 'ready')) { tail.className = 'st ok'; tail.textContent = t('Connected'); }
+        else if (st || HERE.includes(id) ? st?.state === 'ready' : connected(id) && !unreached(id) && (!tested[id] || tested[id].state === 'ready')) { tail.className = 'st ok'; tail.textContent = t('Connected'); }
         return b;
       });
       if (s.mode === 'advanced') {
@@ -226,7 +228,9 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
           const masked = el('span', 'mono', conns[id].key);
           masked.setAttribute('dir', 'ltr');
           who.append(el('b', '', label(id)), masked);
-          line.append(mark(id), who, button('', t('Replace key'), () => { said = { replace: true }; render(); $('ai-key').focus?.(); }), button('', t('Remove'), () => remove(id)));
+          if (unreached(id)) { const allow = button('primary', t('Allow {host}', { host: iso(hostOf(S.PRESETS[id].base)) }), (e) => reachAgain(e, id, allow)); line.append(mark(id), who, allow); }
+          else line.append(mark(id), who);
+          line.append(button('', t('Replace key'), () => { said = { replace: true }; render(); $('ai-key').focus?.(); }), button('', t('Remove'), () => remove(id)));
           parts.push(line);
         } else parts.push(keyLine(id));
       } else parts.push(...endpoint(id));
@@ -367,6 +371,16 @@ var GZ_AIEDIT = globalThis.GZ_AIEDIT || (() => {
         // The models ai/settings.js suggests for a key that works, where nothing better is chosen.
         const ids = tested[id]?.state === 'ready' ? (catalogs[id]?.models || []).map((m) => m.id) : [];
         if (S.suggest(s, id, ids)) await write((cur) => S.suggest(cur, id, ids) || {});
+      })().catch(() => say(t('Could not save. Try again.'), true)).finally(() => { busy = false; });
+    };
+    // Allow: the kept key's host asked for again from the click, then checked.
+    const reachAgain = (e, id, from) => {
+      if (!e?.isTrusted || busy) return;
+      const base = S.PRESETS[id].base, asked = Promise.resolve(GZ_SITE.reach(base, from)).then((ok) => ok === true, () => false);
+      busy = true;
+      (async () => {
+        if (!await asked) { tested[id] = { state: 'unavailable', reason: 'permission' }; return say(t('Glaze isn’t allowed to reach {host}.', { host: iso(hostOf(base)) }), true); }
+        await check(id);
       })().catch(() => say(t('Could not save. Try again.'), true)).finally(() => { busy = false; });
     };
     const check = async (id) => {

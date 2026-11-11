@@ -31,7 +31,7 @@ const kept = (id, more = {}) => ({ provider: 'openai', base: AS.PRESETS[id].base
 // page({ ai, calls, conns, granted, device, providers, features, server }): Settings with the AI tab mounted.
 //   conns: the worker's kept connections; device(m, gesture): the device provider's worker side; server(url, init): the
 //   providers' servers.
-const page = ({ ai, calls, conns, granted = true, device, local: own, providers, features, embedded = false, save = true, shared, locks, server = SERVERS, ladder, gpu, deviceMemory } = {}) => {
+const page = ({ ai, calls, conns, unheld = false, granted = true, device, local: own, providers, features, embedded = false, save = true, shared, locks, server = SERVERS, ladder, gpu, deviceMemory } = {}) => {
   const ids = new Map(), sent = [], asked = [], reads = [], onChanged = shared?.listeners || [], onMessage = [], held = new Set(), vault = new Map(), fetched = [], docOn = {};
   if (conns) vault.set('connections', structuredClone(conns));
   const data = shared?.data || { ...(ai && { ai: structuredClone(ai) }), ...(calls && { aiCalls: structuredClone(calls) }) };
@@ -71,7 +71,7 @@ const page = ({ ai, calls, conns, granted = true, device, local: own, providers,
     fetch: async (url, init) => { fetched.push([url, init?.headers]); return server(url, init); },
     say: (m) => { for (const f of onMessage) f(m, { id: 'glaze' }); },
   };
-  if (conns) for (const c of Object.values(conns)) if (c.base) { const u = new URL(c.base); held.add(`${u.protocol}//${u.hostname}/*`); }
+  if (conns && !unheld) for (const c of Object.values(conns)) if (c.base) { const u = new URL(c.base); held.add(`${u.protocol}//${u.hostname}/*`); }
   const chrome = {
     runtime: {
       id: 'glaze', getManifest: () => ({ host_permissions: ['https://*.instructure.com/*'] }),
@@ -270,6 +270,19 @@ test('a refused host is said and checks nothing; the card isn\'t shown connected
   assert.ok(!p.ops().includes('test') && !p.ops().includes('models'), 'nothing is fetched without the host');
   assert.notEqual(p.card('OpenAI').children[2].className, 'st ok');
   assert.ok(!p.all().some((x) => String(x).includes(KEY)));
+});
+
+test('a key kept for a host the browser never granted isn\'t shown Connected after a reload; Allow asks for that host from the click, then checks it', async () => {
+  const p = await open({ ai: { on: true }, conns: { openai: kept('openai') }, unheld: true });
+  assert.notEqual(p.card('OpenAI').children[2].className, 'st ok');
+  assert.notEqual(p.card('OpenAI').children[2].textContent, 'Connected');
+  await p.click(p.card('OpenAI'));
+  const allow = p.button('Allow \u2068api.openai.com\u2069', p.$('ai-drawer'));
+  assert.ok(allow, JSON.stringify(p.walk(p.$('ai-drawer')).filter((x) => x.tagName === 'BUTTON').map(text)));
+  await p.click(allow);
+  assert.deepEqual(p.asked, [[['https://api.openai.com/*'], true]], 'one prompt, for that host, inside the click');
+  assert.ok(p.ops().includes('test'));
+  assert.deepEqual([p.card('OpenAI').children[2].className, p.card('OpenAI').children[2].textContent], ['st ok', 'Connected']);
 });
 
 test('a refused key is said on the drawer, its card and every model on it, never the server\'s words', async () => {

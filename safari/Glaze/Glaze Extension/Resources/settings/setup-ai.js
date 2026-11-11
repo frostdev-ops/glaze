@@ -21,12 +21,13 @@ var GZ_SETUP_AI = globalThis.GZ_SETUP_AI || (() => {
   const choiceOf = (s) => (!s?.on ? 'off' : [OWN, DEVICE].includes(s.model?.use) ? s.model.use : KEYED);
   const providerOf = (s) => (named(s?.model?.use) ? s.model.use : null);
   // What a choice writes over the stored settings: Off keeps the rest, as Settings' switch does; Rime or the browser's model
-  // is the overall model; a key keeps a named provider's model already chosen, else none until one connects.
-  const choose = (cur, choice) => (choice === 'off' ? { on: false } : choice === KEYED ? { on: true, ...(!named(cur.model.use) && { model: { ...NONE } }) }
+  // is the overall model; a key keeps a named provider's model already chosen, else none, and AI off, until a key works.
+  const choose = (cur, choice) => (choice === 'off' ? { on: false } : choice === KEYED ? (named(cur.model.use) ? { on: true } : { on: false, model: { ...NONE } })
     : { on: true, model: { use: choice, model: '' } });
   // A provider connected (ids: the models it lists): its model as Settings suggests for a first key (ai/settings.js
-  // suggest), over whatever was the overall one; one of its own already chosen stays.
-  const keyed = (cur, id, ids) => (choiceOf(cur) !== KEYED ? {} : cur.model.use === id && cur.model.model ? { on: true }
+  // suggest), over whatever was the overall one; one of its own already chosen stays. picked: Your key is this page's
+  // choice, AI still off until this key.
+  const keyed = (cur, id, ids, picked = false) => (choiceOf(cur) !== KEYED && !(picked && !cur.on) ? {} : cur.model.use === id && cur.model.model ? { on: true }
     : { on: true, ...(A().suggest({ ...cur, model: { ...NONE } }, id, ids) || { model: { use: id, model: '' } }) });
   const feature = (cur, f, on) => ({ features: { ...cur.features, [f]: on } });
   const pct = (x) => `${Math.round(x * 100)}%`;
@@ -38,12 +39,16 @@ var GZ_SETUP_AI = globalThis.GZ_SETUP_AI || (() => {
   // The browser's model is offered only where its status says it can be had.
   const offered = (st) => !!st && st.state !== 'unavailable';
   const label = (choice, t) => (choice === 'off' ? t('Off') : choice === KEYED ? t('Your key') : X().providerName(choice, t));
-  // The done step's row: [label, value, raw (a provider's own name)].
+  // The done step's row: [label, value, raw (a provider's own name)]; on with no model yet runs nothing.
   const summary = (s, t) => {
     const c = choiceOf(s), p = providerOf(s);
-    return [[t('AI'), c === KEYED && p ? X().CARDS[p][0] : label(c, t), c === KEYED && !!p]];
+    const needsModel = c === KEYED && (!s.model?.use || !s.model.model);
+    return [[t('AI'), needsModel ? t('Choose a model') : c === KEYED && p ? X().CARDS[p][0] : label(c, t), c === KEYED && !!p && !needsModel]];
   };
-  return { OWN, DEVICE, KEYED, CHOICES, FEATURES, choiceOf, providerOf, choose, keyed, feature, ownText, deviceText, offered, label, summary };
+  // A provider's key kept (conn: the worker's masked record) and its host held: the worker's reach, unless this page's own
+  // Connect (tested) has said since.
+  const connected = (conn, tested) => !!conn?.key && (tested ? tested.reason !== 'permission' : conn.reach !== false);
+  return { OWN, DEVICE, KEYED, CHOICES, FEATURES, choiceOf, providerOf, choose, keyed, feature, ownText, deviceText, offered, label, summary, connected };
 })();
 
 if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (globalThis.GZ_SETUP_PARTS ||= []).push({
@@ -62,7 +67,9 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (globalTh
     // and the browser's model's status; want: the provider picked for a key; note: what went wrong with it.
     let s = S.clean(), conns = {}, providers = [], ours = null, device = null, want = null, replacing = false, note = null;
     // intent: Rime picked before its state was known; its download starts once it is.
-    let busy = false, fetching = false, preparing = false, loaded = null, listed = false, intent = false;
+    // picked: the choice made on this page; Your key shows as chosen while AI stays off until a key works.
+    let busy = false, fetching = false, preparing = false, loaded = null, listed = false, intent = false, picked = null;
+    const current = () => (picked === KEYED && !s.on ? KEYED : G.choiceOf(s));
     const tested = {};
 
     // ---- storage.local ai, as Settings writes it -----------------------------------------------------------------------
@@ -213,7 +220,8 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (globalTh
       if (id === OWN && how && !ours) intent = true;
       if (start && how === 'now') start();
       else if (start && how === 'soon') soon = setTimeout(() => { if (G.choiceOf(s) === id) start(); }, 800);
-      if (G.choiceOf(s) === id) return;
+      if (current() === id) return;
+      picked = id;
       apply((cur) => G.choose(cur, id));
       if (id === OWN || id === DEVICE) keep(id);
       // A key again: the provider already connected comes back with it.
@@ -223,7 +231,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (globalTh
     };
     // The connection a model on this computer runs under, kept as Settings keeps it.
     const keep = async (id) => { await loaded; if (!conns[id]) send({ op: 'set', id, cfg: { provider: id } }).then((r) => { if (r.ok) conns[id] = { provider: id }; }); };
-    const connected = (id) => !!conns[id]?.key;
+    const connected = (id) => G.connected(conns[id], tested[id]);
     const bad = (id) => !!tested[id] && tested[id].state !== 'ready' && tested[id].reason === 'request-rejected';
     const provider = (id) => {
       want = id;
@@ -236,8 +244,8 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (globalTh
     const use = async (id) => {
       const r = await send({ op: 'models', id });
       const list = r.ok && Array.isArray(r.models) ? r.models.map((m) => m?.id).filter((x) => typeof x === 'string') : [];
-      if (G.choiceOf(s) !== KEYED || want !== id) return;
-      await write((cur) => G.keyed(cur, id, list));
+      if (current() !== KEYED || want !== id) return;
+      await write((cur) => G.keyed(cur, id, list, picked === KEYED));
     };
     const say = (text) => { note = text; render(); };
     const refusal = (r) => (r.reason === 'request-rejected' && [401, 403].includes(r.status) ? t('Key refused') : X.reason(r.reason || r.error, t));
@@ -340,13 +348,17 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (globalTh
     });
     // Read when the step first shows, and Rime's again on each show: a download started earlier may have gone on.
     const load = async () => { await connections(); await Promise.all([ownStatus(), deviceStatus()]); };
-    c.storage.onChanged.addListener((changes, area) => { if (area === 'local' && KEY in changes) { s = S.clean(changes[KEY].newValue); render(); } });
+    c.storage.onChanged.addListener((changes, area) => { if (area === 'local' && KEY in changes) {
+      const next = S.clean(changes[KEY].newValue);
+      if (s.on && !next.on) picked = null;
+      s = next; render();
+    } });
     store.get(KEY).then((r) => { s = S.clean(r?.[KEY]); render(); }, () => {});
 
     // ---- drawing -----------------------------------------------------------------------------------------------------------
     let orbShows = null;
     const render = () => {
-      const choice = G.choiceOf(s), here = G.offered(device) || choice === DEVICE;
+      const choice = current(), here = G.offered(device) || choice === DEVICE;
       root.dataset.on = String(s.on);
       root.dataset.choice = choice;
       if (orbShows !== choice) { orbShows = choice; orb.replaceChildren(icon(choice)); }

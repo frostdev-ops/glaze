@@ -648,6 +648,25 @@ test('a wake fires once its time comes, by its alarm or when the next school pag
   assert.deepEqual([s.wakes.length, s.monitors.length, s.fired.length, s.fired[0].id], [0, 0, 20, 'w-00000010']);
 });
 
+test('newly fired reminders cannot evict shown cards before claim or expiry, and delivery waits for room', async () => {
+  const first = { id: 'w-heldcard', what: 'wake', say: 'Finish the lab', at: T0 };
+  const store = { rimeWakes: { fired: [first] } }, env = wakesEnv(store);
+  assert.equal((await W.take(env, 'page:owner')).length, 1);
+  store.rimeWakes.wakes = Array.from({ length: W.LIMIT.wakes }, (_, i) => ({ id: `w-${String(i).padStart(8, '0')}`, say: `New ${i}`, at: T0, made: T0 - 1000 }));
+  await W.tick(env);
+  assert.ok(store.rimeWakes.fired.some((f) => f.id === first.id), 'new arrivals must not evict the card already visible');
+  assert.equal(store.rimeWakes.fired.filter((f) => !f.shown).length, W.LIMIT.fired);
+  assert.equal((await W.take(env, 'page:other')).length, W.LIMIT.fired - 1);
+  assert.equal(await W.peek(env), 0, 'no delivery while all shown slots are occupied');
+  assert.deepEqual(await W.take(env, 'page:third'), []);
+  assert.deepEqual(await W.claim(env, first.id, { to: 'page:owner' }), first);
+  assert.equal(await W.peek(env), 1);
+  assert.equal((await W.take(env, 'page:third')).length, 1);
+  env.at(T0 + W.LIMIT.hold);
+  await W.tick(env);
+  assert.deepEqual(store.rimeWakes.fired, [], 'expired shown cards are pruned by the alarm path too');
+});
+
 test('monitor due and submitted: Glaze\'s own to-do list, compared with what it read when the monitor was made', async () => {
   const lab = (o = {}) => C.planner({ id: 1, course: 25, name: 'BIO 1100', title: 'Lab report', at: '2026-10-16T03:59:00Z', ...o });
   const store = { todoCache: await C.canvasPlan('5', [lab()]) }, env = wakesEnv(store), ctx = { account: ACC, zone: 'UTC' };

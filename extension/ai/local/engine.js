@@ -527,7 +527,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
     // ctx: positions it holds now (grow() makes room for more, the sequence kept); chunk: tokens per forward step (a longer
     // feed goes in chunks).
     const createSession = async ({ ctx = 4096, chunk = 128 } = {}, life) => {
-      if (lost) fail(`device lost: ${lost.message}`);
+      if (lost) fail(`device lost: ${lost.message}`, 'lost');
       for (const [name, n] of Object.entries({ ctx, chunk })) {
         if (!Number.isInteger(n) || n < 1 || n > 0xffffffff) fail(`${name}: a positive u32 expected`);
       }
@@ -738,7 +738,7 @@ var GZ_AI_ENGINE = globalThis.GZ_AI_ENGINE || (() => {
       // page paint and a cancel land between small steps, and sizes the next step from this one's time).
       const forward = async (tokens, { logits = 'last', argmax = false, topK: k = 0, onRows, profile = false, signal, embeds = [], step = chunk, pace = null } = {}) => {
         if (life.closed()) fail('session destroyed');
-        if (lost) fail(`device lost: ${lost.message}`);
+        if (lost) fail(`device lost: ${lost.message}`, 'lost');
         if (busy) fail('a forward step is running');
         if (!tokens.length) fail('no tokens');
         if (pos + tokens.length > ctx) fail(`context of ${ctx} positions is full`);

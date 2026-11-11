@@ -252,7 +252,8 @@ GZ_UI.load().then((s) => {
         relayStatus(t('Relay saved for new sessions. Existing sessions keep their own server.')); return;
       }
       const origins = [server + '/*'];
-      if (!await chrome.permissions.contains({ origins }) && !await chrome.permissions.request({ origins })) return relayStatus(t('Host permission was not granted. No connection was made.'), true);
+      // Asked first, inside the click (Firefox refuses a request after an await); a host already held answers at once.
+      if (!await chrome.permissions.request({ origins })) return relayStatus(t('Host permission was not granted. No connection was made.'), true);
       relayStatus(t('Testing {server}…', { server }));
       const result = await relaySend('relayTest', server);
       const messages = { connected: 'Connected to {server}.', timeout: 'Connection to {server} timed out.', http: 'The relay returned HTTP {status}.', invalid: 'The server did not return a valid Glaze health response.', cancelled: 'Connection test cancelled.', network: 'Could not connect. Check the URL, TLS and relay availability; redirects are refused.' };

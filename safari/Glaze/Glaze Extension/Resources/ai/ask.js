@@ -8,7 +8,7 @@
 //     loop. run(task, input) → the task's checked output; call({ name, arguments, kind }) → { result, asked? }. A write the
 //     student didn't allow (asked isn't 'yes') ends it with no further run; a seventh call ends it as 'steps'.
 //   connect(port, env): the panel's port 'glaze:ask' (background/background.js checks its sender with the AI port's rules).
-//     page → { id, op: 'ask', question, attempt?, locale, history?, summary?, tools?, site?, text?, fired? }  { id, op: 'fired' }  { id, op: 'cancel' }
+//     page → { id, op: 'ask', question, attempt?, locale, history?, summary?, tools?, site?, text?, fired? }  { id, op: 'fired' }  { id, op: 'dismiss', fired }  { id, op: 'cancel' }
 //       { id, op: 'status' }; site: the school's LMS (canvas, ultra, moodle), its address the sender's; text: the page's
 //       visible words (page_highlight's check); fired: the id of a fired record 'fired' gave (its own turn at level 3).
 //       history: the panel's conversation so far, [{ question, answer }] (at most six), for study.help's follow-ups (a cloud
@@ -18,7 +18,7 @@
 //       'approve' (Glaze's approval window waits), 'keepalive', { id, type: 'phase', phase: 'reading' | 'thinking' } (the local
 //       host reading a long prompt, then past it), a step's detail (run_js's value or error, a place's title),
 //       { id, type: 'action', action: { kind: 'open' | 'highlight', … } } just before an answer's end (the panel performs them
-//       once it shows the answer); 'fired' → { id, type: 'end', fired: [{ id, what, watch?, say, at }] }.
+//       once it shows the answer); 'fired' → { id, type: 'end', fired: [{ id, what, watch?, say, at }] }; 'dismiss' → { id, type: 'end' } (the record forgotten).
 //       then { id, type: 'end', task, output (study.help's) | answer: { text } | declined: true, links? } or { id, type: 'error',
 //       error }; status → the broker's status for the feature 'ask'. A compaction's { id, type: 'summary', text, turns }
 //       follows an end, or precedes it with the fallback when the next question would drop older turns. The turns it folded
@@ -92,10 +92,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const MEMORY = () => (typeof GZ_AI_RIME_MEMORY !== 'undefined' ? GZ_AI_RIME_MEMORY : require('./agent/memory.js'));
   const RECALL = () => (typeof GZ_AI_RECALL !== 'undefined' ? GZ_AI_RECALL : require('./recall.js'));
   const SITES = ['canvas', 'ultra', 'moodle'];
-  // Fired records the panel was shown, by id, until the click that asks about one (or an hour).
-  const KEPT = new Map();
   let scopes = 0;
-  const prune = (now) => { for (const [k, v] of KEPT) if (v.until <= now) KEPT.delete(k); };
   const FEATURE = 'ask', APP = 'Ask Rime';
   // question: agent.tools' own; attempt: study.help's; tools: offered at once (training offered three to six, and Glaze's own
   // model's 4,096-token window can't hold all twelve); material: what an agent answer is measured against.
@@ -615,7 +612,6 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
   const connect = (port, env) => {
     let closed = false, current = null, seq = 0;
     const scope = typeof env.scope === 'string' ? `page:${env.scope}` : `port:${++scopes}`;
-    const firedKey = (id) => `${scope}|${id}`;
     // The same bound as the AI broker: a stalled renderer must not park every later message, including Stop.
     const allowed = (what) => {
       let timer;
@@ -898,14 +894,11 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         local: env.local, tab: account && env.own.tab ? (op, a) => env.own.tab(account, op, a, { signal }) : undefined };
     };
 
-    // Wakes and monitors that fired, for the panel to show on this page; kept here by id (an hour) for the click that asks.
+    // Wakes and monitors that fired, for the panel to show on this page; the store keeps each for this page (an hour) until
+    // the click that asks about it or dismisses it (wakes.js claim), so a worker that unloaded in between still has it.
     const fired = async (m) => {
       if (!(await env.own.wakes.on())) return post({ id: m.id, type: 'end', fired: [] });
-      const list = await WAKES().take(env.own.wakes);
-      const now = env.now();
-      prune(now);
-      for (const f of list) KEPT.set(firedKey(f.id), { record: f, until: now + 36e5 });
-      while (KEPT.size > 200) KEPT.delete(KEPT.keys().next().value);
+      const list = await WAKES().take(env.own.wakes, scope);
       post({ id: m.id, type: 'end', fired: list.map((f) => ({ id: f.id, what: f.what, ...(f.watch && { watch: f.watch }), say: f.say || '', at: f.at })) });
     };
 
@@ -1069,11 +1062,10 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         level = await env.level?.().catch(() => 1) ?? 1;
         if (signal.aborted) throw cancelled();
         // A fired record the student asked about: its own turn for a model trained on it; else the say as any question.
-        prune(env.now());
-        const kept = m.fired !== undefined ? KEPT.get(firedKey(m.fired))?.record : undefined;
+        const kept = m.fired !== undefined ? await WAKES().claim(env.own.wakes, m.fired, { to: scope, now: env.now() }) ?? undefined : undefined;
+        if (signal.aborted) throw cancelled();
         if (level >= 3 && m.fired !== undefined && (!kept || (kept.say && kept.say !== question))) throw R().error('request');
         const record = kept && level >= 3 ? kept : undefined;
-        if (record) KEPT.delete(firedKey(m.fired));
         const explicitMemory = !record && memoryQuestion(question);
         const memoryOn = await memoryState('on'), capable = await memoryState('capable');
         if (explicitMemory && !memoryOn) return fail('off', 'memory');
@@ -1225,6 +1217,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         if (m.op === 'status') return void status(m);
         if (m.op === 'ask') return void ask(m);
         if (m.op === 'fired') return void fired(m).catch((e) => post({ id: m.id, type: 'error', error: R().code(e) }));
+        if (m.op === 'dismiss') return void (typeof m.fired === 'string' ? WAKES().claim(env.own.wakes, m.fired, { to: scope, now: env.now() }) : Promise.resolve())
+          .then(() => post({ id: m.id, type: 'end' }), (e) => post({ id: m.id, type: 'error', error: R().code(e) }));
         if (m.op === 'carry') return void (async () => post({ id: m.id, type: 'end', marks: await live() ? await arrival(env, true) : [] }))().catch(() => post({ id: m.id, type: 'end', marks: [] }));
         post({ id: m.id, type: 'error', error: 'request' });
       }).catch(() => {});

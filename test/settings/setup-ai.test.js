@@ -85,7 +85,8 @@ test('a choice writes what Settings would, and turns no feature on', () => {
   assert.deepEqual(G.choose(fresh, 'off'), { on: false });
   assert.deepEqual(G.choose(fresh, 'local'), { on: true, model: { use: 'local', model: '' } });
   assert.deepEqual(G.choose(fresh, 'device'), { on: true, model: { use: 'device', model: '' } });
-  assert.deepEqual(G.choose(on({ model: { use: 'local', model: '' } }), 'key'), { on: true, model: { use: null, model: '' } }, 'a key leaves Rime');
+  assert.deepEqual(G.choose(fresh, 'key'), { on: false, model: { use: null, model: '' } }, 'a key turns AI on only once it works');
+  assert.deepEqual(G.choose(on({ model: { use: 'local', model: '' } }), 'key'), { on: false, model: { use: null, model: '' } }, 'a key leaves Rime, AI off until it works');
   assert.deepEqual(G.choose(on({ model: { use: 'openai', model: 'gpt-5' } }), 'key'), { on: true }, 'a provider already chosen stays');
   for (const c of G.CHOICES) {
     const s = S.clean({ ...fresh, ...G.choose(fresh, c) });
@@ -103,6 +104,18 @@ test('a provider connected becomes the model as Settings suggests it while the k
   assert.deepEqual(p.models.completion, { use: 'openai', model: 'gpt-5-mini' });
   assert.deepEqual(G.keyed(on({ model: { use: 'openai', model: 'gpt-4.1' } }), 'openai', ids), { on: true }, 'one of its own already chosen stays');
   assert.deepEqual(G.keyed(on({}), 'openai', ['nothing-known']), { on: true, model: { use: 'openai', model: '' } }, 'no suggestion: the provider, its model to choose in Settings');
+  // Your key picked on this page (AI still off until now): the key that works turns it on.
+  const picked = S.clean({ ...S.clean(), ...G.choose(S.clean(), 'key') });
+  assert.deepEqual(G.keyed(picked, 'openai', ids, true).model, { use: 'openai', model: 'gpt-5' });
+  assert.equal(G.keyed(picked, 'openai', ids, true).on, true);
+});
+
+test('a provider whose key is kept but whose host the browser refused is not connected', () => {
+  assert.equal(G.connected({ key: 'sk-p••••6789' }), true);
+  assert.equal(G.connected({ key: 'sk-p••••6789', reach: false }), false, 'the worker says its host is not held');
+  assert.equal(G.connected({ key: 'sk-p••••6789' }, { state: 'unavailable', reason: 'permission' }), false, 'refused this session');
+  assert.equal(G.connected({ key: 'sk-p••••6789', reach: false }, { state: 'ready' }), true, 'allowed since');
+  assert.equal(G.connected(undefined), false);
 });
 
 test('a delayed provider catalog cannot replace a newer local or off choice', () => {
@@ -128,7 +141,39 @@ test('the cards\' words and the done step\'s row', () => {
   assert.deepEqual(G.summary(on({ model: { use: 'local', model: '' } }), t), [['AI', 'Rime', false]]);
   assert.deepEqual(G.summary(on({ model: { use: 'device', model: '' } }), t), [['AI', 'Chrome on-device AI', false]]);
   assert.deepEqual(G.summary(on({ model: { use: 'openai', model: 'gpt-5' } }), t), [['AI', 'OpenAI', true]]);
-  assert.deepEqual(G.summary(on({}), t), [['AI', 'Your key', false]]);
+  assert.deepEqual(G.summary(S.clean({ ...S.clean(), ...G.choose(S.clean(), 'key') }), t), [['AI', 'Off', false]], 'Your key picked, none connected: AI is off');
+  assert.deepEqual(G.summary(on({}), t), [['AI', 'Choose a model', false]], 'on with no model: nothing runs yet');
+});
+
+test('the done step asks for a model when a named provider has no selected model', () => {
+  const patch = G.keyed(on({}), 'openai', ['unknown-model']);
+  const selected = S.clean({ ...on({}), ...patch });
+  assert.equal(selected.on, true);
+  assert.equal(selected.model.model, '');
+  assert.deepEqual(G.summary(selected, t), [['AI', 'Choose a model', false]]);
+});
+
+test('a delayed setup catalog cannot turn AI back on after another settings page turns it off', async () => {
+  const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/settings/setup-ai.js'), 'utf8');
+  const listeners = [], ctx = { G, S, KEY: S.KEY, KEYED: 'key', render() {}, c: { storage: { onChanged: { addListener: (f) => listeners.push(f) } } } };
+  let resolve;
+  ctx.send = () => new Promise((r) => { resolve = r; });
+  vm.runInNewContext(`
+    let s = S.clean({ on: true, model: { use: 'openai', model: 'gpt-5' } }), picked = KEYED, want = 'openai';
+    ${source.slice(source.indexOf('const current = '), source.indexOf('const tested = '))}
+    const write = async (patch) => { s = S.clean({ ...s, ...patch(s) }); };
+    ${source.slice(source.indexOf('const use = async'), source.indexOf('const say = '))}
+    ${source.slice(source.indexOf('c.storage.onChanged.addListener'), source.indexOf('store.get(KEY).then', source.indexOf('c.storage.onChanged.addListener')))}
+    globalThis.start = () => use('openai');
+    globalThis.settings = () => s;
+  `, ctx);
+  const pending = ctx.start();
+  const before = ctx.settings(), off = { ...before, on: false };
+  listeners[0]({ [S.KEY]: { oldValue: before, newValue: off } }, 'local');
+  resolve({ ok: true, models: [{ id: 'gpt-5' }] });
+  await pending;
+  assert.equal(ctx.settings().on, false, 'the latest Off choice wins over the earlier key choice');
 });
 
 test('the page loads what the step needs before it, fetches nothing itself, and asks for a host only from Connect', () => {

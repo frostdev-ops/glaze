@@ -677,6 +677,9 @@ test('reminders and watches that fired show as cards on the page; Ask Rime on on
   assert.equal(tray.querySelectorAll('.gz-ask-fired-card').length, 1, 'the card asked is gone');
   P.doc.fire(tray.querySelector('.gz-ask-fired-no'), 'click');
   assert.equal(P.doc.getElementById('gz-ask-fired'), null);
+  await settle(20);
+  // Dismiss lets the worker forget the record it keeps for this page (ai/agent/wakes.js claim).
+  assert.deepEqual(P.posted.filter((m) => m.op === 'dismiss').map((m) => m.fired), [list[1].id]);
 });
 
 

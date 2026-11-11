@@ -193,12 +193,18 @@ var GZ_AI_TASK_STUDY_HELP = globalThis.GZ_AI_TASK_STUDY_HELP || (() => {
   // Single letters the problem uses as variables: beside a digit, an operator or a bracket (3x, f(x), a + b). A letter
   // that is also a word (a, I, y, à…) counts only touching one.
   const LETTER = /(?<![\p{L}_])[a-zA-Zα-ωθ](?![\p{L}_])/gu, WORDS1 = new Set(['a', 'A', 'I', 'e', 'o', 'y', 'u', 'à', 'é']);
+  // Each letter looks only at the characters beside it, past any spaces: a space run is crossed by at most the letters on
+  // its two ends, so the whole text is read in linear time.
+  const BEFORE = /[\d+\-−*/^=(×·]/, AFTER = /[\d+\-−*/^=)²³(×·]/, SPACE = /\s/;
   const variables = (s) => {
     const t = String(s), out = new Set();
     for (const m of t.matchAll(LETTER)) {
-      const v = m[0], before = t.slice(0, m.index), after = t.slice(m.index + 1);
-      const tight = /[\d+\-−*/^=(×·]$/.test(before) || /^[\d+\-−*/^=)²³(×·]/.test(after);
-      const near = /[\d+\-−*/^=(×·]\s*$/.test(before) || /^\s*[\d+\-−*/^=)²³(×·]/.test(after);
+      const v = m[0], at = m.index, end = at + v.length;
+      let i = at - 1, j = end;
+      while (i >= 0 && SPACE.test(t[i])) i--;
+      while (j < t.length && SPACE.test(t[j])) j++;
+      const tight = (at > 0 && BEFORE.test(t[at - 1])) || (end < t.length && AFTER.test(t[end]));
+      const near = (i >= 0 && BEFORE.test(t[i])) || (j < t.length && AFTER.test(t[j]));
       if (WORDS1.has(v) ? tight : near) out.add(v);
     }
     return out;

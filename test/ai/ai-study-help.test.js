@@ -351,3 +351,16 @@ test('social sentences requested as coursework still face the copyable-answer ru
     assert.equal(why(i, kind, reply), 'speaks', `${kind}: ${question}`);
   }
 });
+
+test('hands() reads long math-like material in time that grows with its length, not its square', () => {
+  const unit = '3x + 2y = 7; ';
+  const time = (n, runs) => {
+    const inp = { question: 'Help me with these.', material: unit.repeat(Math.ceil(n / unit.length)) };
+    let best = Infinity;
+    for (let i = 0; i < runs; i++) { const t0 = process.hrtime.bigint(); H.hands('Try isolating one variable first.', inp); best = Math.min(best, Number(process.hrtime.bigint() - t0) / 1e6); }
+    return best;
+  };
+  time(2000, 2); // warm the regular expressions
+  const small = time(6500, 3), large = time(65000, 2);
+  assert.ok(large < 30 * Math.max(small, 1), `10× the material took ${(large / small).toFixed(1)}× the time (${small.toFixed(1)} ms, ${large.toFixed(1)} ms)`);
+});

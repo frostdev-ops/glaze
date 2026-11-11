@@ -157,20 +157,39 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
     criteria: r.criteria.map((c) => ({ ...c, detail: text(c.detail || ''), cells: (c.cells || []).map((x) => ({ ...x, detail: text(x.detail || '') })) })) });
   const assignment = async (go, a) => {
     const x = X(), ultra = x.site === 'ultra', ok = ultra ? BB : ID;
-    if (!ok.test(a.course || '') || !ok.test(a.assignment || '')) return no('args');
+    if (!ok.test(a.course || '') || !ok.test(a.assignment || '') || (a.column !== undefined && (!ultra || !BB.test(a.column)))) return no('args');
     await libs(['courses/rubric.js', 'GZ_RUBRIC_LIB'], ['writer/writer-context-assignment.js', 'GZ_WRITER_CONTEXT_ASSIGNMENT'], ...(ultra ? [['courses/ultra.js', 'GZ_ULTRA']] : []));
     const R = GZ_RUBRIC_LIB, W = GZ_WRITER_CONTEXT_ASSIGNMENT, uid = String(await x.account());
     if (ultra) {
       // Writer's own read of an assignment (build), from the course's content item, gradebook row and rubric column; the
       // rubric as it shows before an attempt, so no evaluation is asked for.
-      const reader = GZ_ULTRA.read({ origin: go.origin, signal: go.signal, live: go, maxPages: 3, maxRequests: 8 });
+      const reader = GZ_ULTRA.read({ origin: go.origin, signal: go.signal, live: go, maxPages: 3, maxRequests: 9 });
+      // The planner's gradebook column: resolve its content item and retain the metadata even without a joined row.
+      let content = a.assignment, column = null;
+      const readColumn = async () => {
+        let col;
+        try { col = await reader.get(`/learn/api/v1/courses/${a.course}/gradebook/columns/${a.column}`); } catch (e) { if (/^HTTP (403|404)$/.test(e.message)) return null; throw e; }
+        return col?.id === a.column && BB.test(col?.contentId || '') && (col.courseId == null || col.courseId === a.course) ? col : null;
+      };
+      if (a.column && a.assignment === a.column) {
+        column = await readColumn();
+        if (!column) return no('none');
+        content = column.contentId;
+      }
       let rows = null;
-      const c = await W.build({ school: location.host, path: `/ultra/courses/${a.course}/assessment/${a.assignment}/attempt`, url: '', origin: location.origin,
-        uid: async () => uid, me: async () => null, courses: () => x.myCourses(), rows: async () => (rows = await reader.grades(a.course, uid)), get: (u) => reader.get(u), R, instructions: async () => '' });
+      const c = await W.build({ school: location.host, path: `/ultra/courses/${a.course}/assessment/${content}/attempt`, url: '', origin: location.origin,
+        uid: async () => uid, me: async () => null, courses: () => x.myCourses(), rows: async () => {
+          rows = await reader.grades(a.course, uid).catch((e) => { if (!a.column) throw e; return []; });
+          if (a.column && !rows.some((r) => r?.column?.contentId === content)) {
+            column ||= await readColumn();
+            if (column?.contentId === content) rows = [...rows, { courseId: a.course, columnId: column.id, column }];
+          }
+          return rows;
+        }, get: (u) => reader.get(u), R, instructions: async () => '' });
       const s = c?.assignment;
       if (!go()) return no('late');
       if (!s || (!s.title && !s.instructions && !s.description && !s.rubric)) return no('none');
-      const col = (Array.isArray(rows) ? rows : []).map((r) => r?.column).find((k) => k?.contentId === a.assignment);
+      const col = (Array.isArray(rows) ? rows : []).map((r) => r?.column).find((k) => k?.contentId === content);
       return { ok: true, title: s.title, due: Date.parse(s.due) || null, points: Number.isFinite(col?.possible) ? col.possible : null, instructions: s.instructions, description: s.description,
         files: s.files.map((f) => f.name), rubric: s.rubric && plain(s.rubric), incomplete: s.incomplete === true };
     }

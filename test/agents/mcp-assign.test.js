@@ -125,6 +125,70 @@ test('assignment_read on Ultra: as Writer reads it, the rubric of an item never 
   assert.ok(f.files.length > 0 && f.files.every((n) => typeof n === 'string' && !n.includes('/')), JSON.stringify(f));
 });
 
+test('Ultra: a to-do item with no gradebook row is listed, and the ids todo_list and assignments_list give are read', async () => {
+  const U = require('../../extension/courses/ultra.js'), L = require('../../extension/planner/todo.js');
+  const ST = require('../../extension/agents/tools-study.js');
+  const todo = C.load('ultra-todo.json'), [one] = todo.futureDueItems, cal = C.load('ultra-calendar-items.json').results[1];
+  // Essay 2's column (_810_1, content _7_1) on the To Do, and a calendar entry for a column no row or To Do names.
+  todo.futureDueItems = [...todo.futureDueItems, { ...one, title: 'Essay 2', column: { ...one.column, id: '_810_1', contentId: '_7_1', courseId: '_101_1' } }];
+  const calendar = [{ ...cal, itemSourceId: '_811_1', calendarId: '_101_1', title: 'Essay 2 (calendar)' }];
+  const at = C.NOW - 60e3, key = `todo:${UL}`, data = {};
+  const cache = { key, at, start: new Date(at - 8 * 864e5).toISOString(), end: new Date(at + 30 * 864e5).toISOString(), teach: true, progress: true,
+    items: U.due({ todo: [todo], calendar, names: { _101_1: 'BIO 1100', _102_1: 'ENG 1100' }, now: at }).map((i) => ({ ...i, url: C.ULTRA + i.url })), complete: true, grading: [], sums: {} };
+  assert.ok((await L.change({ key, cache }, { local: H.writerArea(data) })).ok);
+  const plan = store({ todoCache: data.todoCache });
+  const listed = await reg({}).get('assignments_list').run({}, plan.ctx(UL));
+  const ids = listed.items.map((i) => i.assignment).sort();
+  assert.deepEqual(ids, ['_703_1', '_706_1', '_713_1', '_7_1', '_811_1'], JSON.stringify(listed.items));
+  // The reader takes each: the content id, To Do's column id (todo_list's id), and a column known only by its id.
+  const r = T.registry(); ST.register(r, {});
+  const todoIds = (await r.get('todo_list').run({}, plan.ctx(UL))).items.map((i) => i.id);
+  assert.ok(todoIds.includes('_810_1') && todoIds.includes('_811_1'), JSON.stringify(todoIds));
+  const routes = { '/learn/api/v1/courses/_101_1/gradebook/columns/_811_1': { ...COLUMN, id: '_811_1' } };
+  for (const assignment of ['_7_1', '_810_1', '_811_1']) {
+    const read = await reg({ tabs: tabsOf([ultraTab(ULTRA_ROWS, { routes })]).tabs }).get('assignment_read').run({ course: '_101_1', assignment }, plan.ctx(UL));
+    assert.equal(read.title, 'Essay 2: Memory in Beloved', `${assignment}: ${JSON.stringify(read)}`);
+    assert.equal(read.assignment, assignment);
+  }
+});
+
+test('Ultra reads column metadata and the rubric even when its gradebook has no joined row', async () => {
+  const column = { ...ULTRA_ROWS.results.find((r) => r.column?.contentId === '_7_1').column, ...COLUMN };
+  for (const content of ['', '_7_1']) {
+    const plan = store({ todoCache: { key: `todo:${UL}`, items: [{ type: 'assignment', cid: '_101_1', id: '_810_1', aid: '_810_1', content }] } });
+    for (const assignment of content ? ['_7_1', '_810_1'] : ['_810_1']) {
+      const tab = ultraTab({ results: [] }, { routes: { '/learn/api/v1/courses/_101_1/gradebook/columns/_810_1': column } });
+      const r = await reg({ tabs: tabsOf([tab]).tabs }).get('assignment_read').run({ course: '_101_1', assignment }, plan.ctx(UL));
+      assert.equal(r.title, 'Essay 2: Memory in Beloved', JSON.stringify(r));
+      assert.equal(r.due, Date.parse(column.dueDate));
+      assert.equal(r.points, column.possible);
+      assert.equal(r.rubric?.title, 'Synthetic points rubric');
+      assert.equal(r.incomplete, undefined);
+      assert.ok(!tab.page.asked.some((x) => x.url.includes('/gradebook/attempts/')));
+    }
+  }
+});
+
+test('Ultra content reads still use joined rows when the column endpoint is unavailable', async () => {
+  const plan = store({ todoCache: { key: `todo:${UL}`, items: [{ type: 'assignment', cid: '_101_1', id: '_810_1', aid: '_810_1', content: '_7_1' }] } });
+  const tab = ultraTab(ULTRA_ROWS, { routes: { '/learn/api/v1/courses/_101_1/gradebook/columns/_810_1': () => H.json({}, 403) } });
+  const r = await reg({ tabs: tabsOf([tab]).tabs }).get('assignment_read').run({ course: '_101_1', assignment: '_7_1' }, plan.ctx(UL));
+  assert.equal(r.title, 'Essay 2: Memory in Beloved', JSON.stringify(r));
+  assert.match(r.instructions, /Write 1,200 words/);
+  assert.equal(r.points, 100);
+});
+
+test('Ultra reads use their resolved column when the gradebook rows cannot be read', async () => {
+  const column = { ...ULTRA_ROWS.results.find((r) => r.column?.contentId === '_7_1').column, ...COLUMN };
+  const plan = store({ todoCache: { key: `todo:${UL}`, items: [{ type: 'assignment', cid: '_101_1', id: '_810_1', aid: '_810_1', content: '' }] } });
+  const tab = ultraTab(() => H.json({}, 403), { routes: { '/learn/api/v1/courses/_101_1/gradebook/columns/_810_1': column } });
+  const r = await reg({ tabs: tabsOf([tab]).tabs }).get('assignment_read').run({ course: '_101_1', assignment: '_810_1' }, plan.ctx(UL));
+  assert.equal(r.title, column.columnName, JSON.stringify(r));
+  assert.equal(r.due, Date.parse(column.dueDate));
+  assert.equal(r.points, column.possible);
+  assert.equal(r.rubric?.title, 'Synthetic points rubric');
+});
+
 test('no tab: Glaze\'s last read, dated; none kept, or an assignment the site doesn\'t have, says so', async () => {
   const { s, ctx } = store();
   const run = (tabs, args = { course: '25', assignment: '171' }, c = ctx(A)) => reg({ tabs }).get('assignment_read').run(args, c);

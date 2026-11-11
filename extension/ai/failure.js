@@ -33,6 +33,8 @@ var GZ_AI_FAILURE = globalThis.GZ_AI_FAILURE || (() => {
     hardware: 'This computer’s graphics can’t run Glaze’s on-device model.',
     engine: 'Glaze’s on-device model could not start.',
     host: 'Glaze’s on-device model stopped. Try again.',
+    lost: 'The graphics card reset while Glaze’s on-device model ran. Try again.',
+    memory: 'Glaze’s on-device model ran out of graphics memory. Try again with less text.',
     quota: 'There isn’t enough free space for the model.',
     network: 'The download lost its connection. Try again.',
     pictures: 'Picture reading isn’t downloaded. Download it in Settings → AI.',

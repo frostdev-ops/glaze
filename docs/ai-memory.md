@@ -4,9 +4,11 @@ Settings → AI → Memory controls Ask Rime's saved memories and course cache. 
 It can be turned off without deleting existing records. Management controls remain available while AI is off.
 
 Saved memories are short Markdown records, each with an independent identity and revision. Rime may save a useful fact
-or preference from the current user's message. An exact supporting excerpt establishes where it came from; the model
-still has to select and summarize it faithfully. A saved-memory receipt appears only after storage succeeds. The user
-can edit or delete it without a model request. Manually edited records resist later automatic replacement.
+or preference from the current user's message. An exact supporting excerpt establishes where it came from. A save is
+kept only when that excerpt is whole words of the message and every meaningful word of the saved text is the user's own
+(an English plural, -ed or -ing form counts as the word); a paraphrase or a save in another language is refused, so
+nothing is remembered in words the user did not use. A saved-memory receipt appears only after storage succeeds. The
+user can edit or delete it without a model request. Manually edited records resist later automatic replacement.
 
 The course cache contains excerpts from successful assignment, announcement, content, syllabus and discussion reads.
 Only the supported reader's known fields are retained. Discussion classmates' posts, personal drafts and arbitrary

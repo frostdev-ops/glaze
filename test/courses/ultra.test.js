@@ -231,6 +231,20 @@ test('draft submission status keeps its timestamp out of lateness and Insights w
   assert.equal(excepted(row.columnId), false);
 });
 
+test('due items with no gradebook row: To Do\'s own column names the content item, and a test is a quiz', () => {
+  const todo = clone(load('todo'));
+  const all = [...todo.overdueItems, ...todo.dueTodayItems, ...todo.futureDueItems];
+  const by = Object.fromEntries(U.due({ todo: [todo], now: NOW }).map((i) => [i.id, i]));
+  for (const t of all) {
+    assert.equal(by[t.column.id].content, t.column.contentId, t.title);
+    assert.equal(by[t.column.id].url, `/ultra/redirect?redirectType=nautilus&courseId=${t.column.courseId}&contentId=${t.column.contentId}`);
+  }
+  // The same column a joined row would carry, so a test reads as one without its row.
+  all[1].column.assessmentSubtype = 'Test';
+  const [quiz] = U.due({ todo: [todo], now: NOW }).filter((i) => i.id === all[1].column.id);
+  assert.deepEqual([quiz.type, quiz.content], ['quiz', all[1].column.contentId]);
+});
+
 test('due items: To Do and the calendar as planner items, twins deduped, joined by column id only', () => {
   const calendar = clone(load('calendar-items').results);
   // An item no gradebook row has: a calendar entry with no grade state. Titled like a real column, it still joins nothing.

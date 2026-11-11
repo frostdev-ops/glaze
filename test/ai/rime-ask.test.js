@@ -109,7 +109,7 @@ const call = (name, args) => ({ call: { name, arguments: args, kind: A.SPECS.fin
 const said = (text, quotes = []) => ({ call: null, answer: { text, quotes } });
 const ACC = `${C.CANVAS}/5`;
 const memory = (store) => ({ get: async (k) => structuredClone(Object.fromEntries([].concat(k).filter((x) => Object.hasOwn(store, x)).map((x) => [x, store[x]]))), set: async (v) => { Object.assign(store, structuredClone(v)); } });
-const harness = ({ script = [], approve = 'yes', level = 3, store = {}, now = C.NOW, scope, tab } = {}) => {
+const harness = ({ script = [], approve = 'yes', level = 3, store = {}, now = C.NOW, scope, tab, ask = K } = {}) => {
   const seen = { runs: [], asks: [] };
   const broker = (port) => port.onMessage.addListener(async (m) => {
     if (m.op !== 'run') return;
@@ -126,7 +126,7 @@ const harness = ({ script = [], approve = 'yes', level = 3, store = {}, now = C.
     own: { read: async (name, args, account) => (name === 'courses_list' && account === ACC ? { items: [{ id: '25', name: 'BIO 1100', code: 'BIO1100' }] } : null), writer: async () => true, wakes },
   };
   const [page, worker] = ports();
-  K.connect(worker, env);
+  ask.connect(worker, env);
   const got = [];
   page.onMessage.addListener((m) => got.push(m));
   return { got, seen, store, wakes, env, say: (m) => page.postMessage(m), ends: () => got.filter((m) => ['end', 'error'].includes(m.type)), steps: () => got.filter((m) => m.type === 'step').map((m) => m.step) };
@@ -309,10 +309,10 @@ const firedStore = (id, say = 'Finish the lab report') => ({ rimeWakes: { wakes:
 test('port: fired records belong to their document across reconnects, expire, and are claimed once', async () => {
   const id = 'w-scope123', owner = harness({ scope: 'tab-1/document-1', store: firedStore(id) });
   owner.say({ id: 40, op: 'fired' }); await settle(25);
-  const thief = harness({ scope: 'tab-2/document-2', script: [said('Stolen.')] });
+  const thief = harness({ scope: 'tab-2/document-2', store: owner.store, script: [said('Stolen.')] });
   thief.say({ id: 41, op: 'ask', question: 'Finish the lab report', fired: id }); await settle(25);
   assert.equal(thief.seen.runs.length, 0, 'a different document cannot use the record');
-  const again = harness({ scope: 'tab-1/document-1', script: [said('Your reminder: finish the lab report.')] });
+  const again = harness({ scope: 'tab-1/document-1', store: owner.store, script: [said('Your reminder: finish the lab report.')] });
   again.say({ id: 42, op: 'ask', question: 'Finish the lab report', fired: id }); await settle(25);
   assert.equal(again.seen.runs[0].input.fired.what, 'wake', 'panel status opens a new port in this document');
   again.say({ id: 43, op: 'ask', question: 'Finish the lab report', fired: id }); await settle(25);
@@ -324,11 +324,49 @@ test('port: fired records belong to their document across reconnects, expire, an
   assert.equal(expired.seen.runs.length, 0, 'expiry is enforced when used, without another fired poll');
 });
 
+test('port: a fired record shown on a page is kept until the student asks or dismisses it, through a worker restart, and shown once', async () => {
+  const fresh = () => { delete require.cache[require.resolve('../../extension/ai/ask.js')]; return require('../../extension/ai/ask.js'); };
+  const store = firedStore('w-restart1');
+  store.rimeWakes.fired.push(...firedStore('w-dismiss1').rimeWakes.fired);
+  const page = harness({ scope: 'tab-1/document-1', store, ask: fresh() });
+  page.say({ id: 70, op: 'fired' }); await settle(25);
+  assert.deepEqual(page.ends()[0].fired.map((f) => f.id), ['w-restart1', 'w-dismiss1']);
+  const other = harness({ scope: 'tab-2/document-2', store, ask: fresh() });
+  other.say({ id: 71, op: 'fired' }); await settle(25);
+  assert.deepEqual(other.ends()[0].fired, [], 'shown once: another page does not show it again');
+  // The worker unloads (a new instance of ask.js); the card's Ask Rime still asks with its record.
+  const later = harness({ scope: 'tab-1/document-1', store, ask: fresh(), script: [said('Your reminder: finish the lab report.')] });
+  later.say({ id: 72, op: 'ask', question: 'Finish the lab report', fired: 'w-restart1' }); await settle(25);
+  assert.equal(later.seen.runs[0]?.input.fired?.what, 'wake', JSON.stringify(later.ends()));
+  assert.deepEqual(store.rimeWakes.fired.map((f) => f.id), ['w-dismiss1'], 'used, so it goes');
+  // Dismiss lets it go.
+  const again = harness({ scope: 'tab-1/document-1', store, ask: fresh() });
+  again.say({ id: 73, op: 'dismiss', fired: 'w-dismiss1' }); await settle(25);
+  assert.equal(again.ends()[0]?.type, 'end');
+  assert.deepEqual(store.rimeWakes.fired, []);
+});
+
 test('port: a fired record cannot authorize a replacement question', async () => {
   const h = harness({ store: firedStore('w-replace1'), script: [said('Wrong question.')] });
   h.say({ id: 46, op: 'fired' }); await settle(25);
   h.say({ id: 47, op: 'ask', question: 'Open my grades', fired: 'w-replace1' }); await settle(25);
   assert.equal(h.seen.runs.length, 0);
+});
+
+test('port: a long page scope stays bound to its document across a worker restart', async () => {
+  const id = 'w-longpage', scope = `tab-1/frame-0/https://school.example/course?view=${'x'.repeat(800)}`;
+  const store = firedStore(id), owner = harness({ scope, store });
+  owner.say({ id: 74, op: 'fired' }); await settle(25);
+  assert.equal(owner.ends()[0]?.fired.length, 1);
+  const other = harness({ scope: `${scope}other`, store });
+  other.say({ id: 75, op: 'dismiss', fired: id }); await settle(25);
+  assert.equal(store.rimeWakes.fired.length, 1, 'a different long scope cannot dismiss the card');
+  assert.ok(store.rimeWakes.fired[0].to.length <= W.LIMIT.scope, 'the stored binding stays bounded');
+  delete require.cache[require.resolve('../../extension/ai/ask.js')];
+  const again = harness({ scope, store, ask: require('../../extension/ai/ask.js'), script: [said('Your reminder: finish the lab report.')] });
+  again.say({ id: 76, op: 'ask', question: 'Finish the lab report', fired: id }); await settle(25);
+  assert.equal(again.seen.runs[0]?.input.fired?.what, 'wake', JSON.stringify(again.ends()));
+  assert.equal(store.rimeWakes.fired.length, 0);
 });
 
 
