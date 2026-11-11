@@ -55,6 +55,15 @@ jobs:
       - name: MCP and agent tests
         run: node ${{ matrix.node == 18 && '--experimental-global-webcrypto' || '' }} --test test/agents/mcp-*.test.js test/*/agent-*.test.js
 
+      # "18" is the newest 18.x; the helper's engines take 18.0 too, which lacks APIs later 18s have (buffer.isUtf8 is 18.14).
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: matrix.node == 18
+        with:
+          node-version: 18.0.0
+      - name: The helper on Node 18.0.0
+        if: matrix.node == 18
+        run: node mcp/scripts/smoke-node.js
+
       # As browser.yml installs it: scripts off, every package and both builds checked against their pins before any of
       # it runs. No --with-deps: on Windows it only adds a media pack.
       - name: Install the pinned Playwright
