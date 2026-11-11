@@ -153,6 +153,29 @@ test('the done step asks for a model when a named provider has no selected model
   assert.deepEqual(G.summary(selected, t), [['AI', 'Choose a model', false]]);
 });
 
+test('a delayed setup catalog cannot turn AI back on after another settings page turns it off', async () => {
+  const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/settings/setup-ai.js'), 'utf8');
+  const listeners = [], ctx = { G, S, KEY: S.KEY, KEYED: 'key', render() {}, c: { storage: { onChanged: { addListener: (f) => listeners.push(f) } } } };
+  let resolve;
+  ctx.send = () => new Promise((r) => { resolve = r; });
+  vm.runInNewContext(`
+    let s = S.clean({ on: true, model: { use: 'openai', model: 'gpt-5' } }), picked = KEYED, want = 'openai';
+    ${source.slice(source.indexOf('const current = '), source.indexOf('const tested = '))}
+    const write = async (patch) => { s = S.clean({ ...s, ...patch(s) }); };
+    ${source.slice(source.indexOf('const use = async'), source.indexOf('const say = '))}
+    ${source.slice(source.indexOf('c.storage.onChanged.addListener'), source.indexOf('store.get(KEY).then', source.indexOf('c.storage.onChanged.addListener')))}
+    globalThis.start = () => use('openai');
+    globalThis.settings = () => s;
+  `, ctx);
+  const pending = ctx.start();
+  const before = ctx.settings(), off = { ...before, on: false };
+  listeners[0]({ [S.KEY]: { oldValue: before, newValue: off } }, 'local');
+  resolve({ ok: true, models: [{ id: 'gpt-5' }] });
+  await pending;
+  assert.equal(ctx.settings().on, false, 'the latest Off choice wins over the earlier key choice');
+});
+
 test('the page loads what the step needs before it, fetches nothing itself, and asks for a host only from Connect', () => {
   const fs = require('node:fs'), path = require('node:path');
   const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension/settings', f), 'utf8');
