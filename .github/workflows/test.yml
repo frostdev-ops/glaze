@@ -1,10 +1,17 @@
 name: test
+# A branch with a pull request is tested by the pull request, once: pushes run only on the branches nothing else covers.
+# workflow_dispatch runs any branch by hand.
 on:
   push:
-    tags-ignore: ['v*']
+    branches: [main, dev/firefox]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+# A newer push to a pull request replaces its older run; pushes to main and dev/firefox each keep theirs.
+concurrency:
+  group: test-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   test:
     runs-on: ubuntu-latest

@@ -10,7 +10,7 @@ if [ "$(uname)" != Darwin ]; then
   exit 1
 fi
 
-tools/build/package.sh
+tools/build/package.sh --allow-dirty
 version=$(node -p 'require("./extension/manifest.json").version')
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT

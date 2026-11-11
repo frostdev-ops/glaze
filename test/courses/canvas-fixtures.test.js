@@ -21,10 +21,13 @@ test('the fixtures are safe to commit: no code, no session, no tokens, Glaze off
     assert.doesNotMatch(html, /<meta[^>]+name="csrf/i, `${f}: the CSRF meta tag is still there`);
     assert.doesNotMatch(html, /eyJ[\w-]{8,}\.[\w-]{8,}\./, `${f}: an unredacted JWT`);
     // A secret parameter's value is the placeholder exactly: nothing of the original may follow it.
-    assert.doesNotMatch(html, /(?:[?&]|%3F|%26)(?:amp;)?(?:verifier|sf_verifier|access_token|token|session_token|authenticity_token|_csrf_token)(?:=|%3D)(?!REDACTED(?:[&"'\s<#]|%26|$))/i, `${f}: an unredacted token or file verifier`);
+    assert.doesNotMatch(html, /(?:[?&]|%3F|%26)(?:amp;)?(?:verifier|sf_verifier|access_token|token|session_token|authenticity_token|_csrf_token|sesskey|logintoken|api_key|key|code|client_secret|x-amz-signature|x-amz-credential|x-amz-security-token|policy|signature|key-pair-id)(?:=|%3D)(?!REDACTED(?:[&"'\s<#]|%26|$))/i, `${f}: an unredacted token, key, code, signature or file verifier`);
+    assert.doesNotMatch(html, /"sesskey"\s*:\s*"(?!REDACTED")[^"]/, `${f}: Moodle's session key in M.cfg`);
+    assert.doesNotMatch(html, /"(?:email|login_id|sis_user_id)"\s*:\s*(?:"(?!REDACTED")[^"]|\d)/, `${f}: the signed-in student's email or ids in ENV`);
+    assert.doesNotMatch(html, /\bBearer\s+(?!REDACTED\b)[\w.~+/=-]{8,}/, `${f}: a bearer token`);
     assert.doesNotMatch(html, /(?:\/|%2F)feeds(?:\/|%2F)[\w-]+(?:\/|%2F)(?!REDACTED(?:\.|%2E|["'\s<?#&]|$))/i, `${f}: a feed address with its code`);
     assert.doesNotMatch(html, /_normandy_session|canvas_session|_csrf_token=|pseudonym_session\[|"csrf_token"|login_session/i, `${f}: a session or CSRF id`);
-    assert.doesNotMatch(html, /name="authenticity_token"[^>]*value="[^"]/, `${f}: a form still carries its authenticity token`);
+    assert.doesNotMatch(html, /name="authenticity_token"[^>]*value="(?!REDACTED")[^"]/, `${f}: a form still carries its authenticity token`);
     assert.doesNotMatch(html, /\sdata-gz-|\sid="gz-/, `${f}: captured with Glaze on`);
   }
 });
@@ -65,11 +68,86 @@ test('the capture scrubber takes whole secrets out, wherever they sit', () => {
   for (const [, want] of cases) assert.equal(redact(want), want, `idempotent: ${want}`);
 });
 
+test('the capture scrubber also takes out discussion feed codes, CSRF and session keys, the student\'s identity, signed-URL and API secrets, and bearer tokens', () => {
+  const { redact } = require('../../tools/dev/redact.js');
+  const cases = [
+    // A topic's feed address holds the topic id, then the enrollment code: the code goes, the id stays.
+    ['href="/feeds/topics/1234/enrollment_Q9zAbC.atom"', 'href="/feeds/topics/1234/REDACTED.atom"'],
+    ['%2Ffeeds%2Ftopics%2F1234%2Fenrollment_Q9zAbC%2Eatom', '%2Ffeeds%2Ftopics%2F1234%2FREDACTED%2Eatom'],
+    ['/feeds/topics/1234/enrollment_Q9zAbC.rss', '/feeds/topics/1234/REDACTED.rss'],
+    ['/feeds/topics/1234/user_Q9zAbC.atom', '/feeds/topics/1234/REDACTED.atom'],
+    ['/feeds/topics/1234.atom', '/feeds/topics/REDACTED.atom'],
+    // The CSRF token in the page head and in forms, whichever way round the attributes are written.
+    ['<meta name="csrf-token" content="a1b2+c3/d4==">', '<meta name="csrf-token" content="REDACTED">'],
+    ['<meta content="a1b2+c3/d4==" name="csrf-token" />', '<meta content="REDACTED" name="csrf-token" />'],
+    ['<meta name="csrf-param" content="authenticity_token">', '<meta name="csrf-param" content="authenticity_token">'],
+    ['<meta name="viewport" content="width=device-width">', '<meta name="viewport" content="width=device-width">'],
+    ['<input type="hidden" name="authenticity_token" value="Zm9vYmFy+/==" autocomplete="off" />', '<input type="hidden" name="authenticity_token" value="REDACTED" autocomplete="off" />'],
+    ['<input value="Zm9vYmFy" type="hidden" name="authenticity_token">', '<input value="REDACTED" type="hidden" name="authenticity_token">'],
+    ['<input type="hidden" name="authenticity_token" value="" autocomplete="off">', '<input type="hidden" name="authenticity_token" value="" autocomplete="off">'],
+    ['<input type="hidden" name="utf8" value="\u2713">', '<input type="hidden" name="utf8" value="\u2713">'],
+    // Moodle's page configuration.
+    ['M.cfg = {"wwwroot":"http:\\/\\/h","sesskey":"AbC123xyz","themerev":"-1"};', 'M.cfg = {"wwwroot":"http:\\/\\/h","sesskey":"REDACTED","themerev":"-1"};'],
+    // Canvas's ENV.current_user.
+    ['"current_user":{"id":"7","display_name":"Sam","email":"sam@school.edu","login_id":"sam01","sis_user_id":"S-4421","avatar_image_url":"/a.png"}',
+      '"current_user":{"id":"7","display_name":"Sam","email":"REDACTED","login_id":"REDACTED","sis_user_id":"REDACTED","avatar_image_url":"/a.png"}'],
+    ['"sis_user_id":4421,"email":null', '"sis_user_id":"REDACTED","email":null'],
+    // Signed URLs: S3 and CloudFront.
+    ['https://b.s3.amazonaws.com/f?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAEXAMPLE%2F20260101%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260101T000000Z&X-Amz-Signature=deadbeef0123&X-Amz-Security-Token=IQoJb3',
+      'https://b.s3.amazonaws.com/f?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=REDACTED&X-Amz-Date=20260101T000000Z&X-Amz-Signature=REDACTED&X-Amz-Security-Token=REDACTED'],
+    ['href="https://d1.cloudfront.net/f.pdf?Policy=eyJTdGF0ZW1lbnQiOltdfQ__&amp;Signature=ab~cd-ef_&amp;Key-Pair-Id=APKAEXAMPLE"',
+      'href="https://d1.cloudfront.net/f.pdf?Policy=REDACTED&amp;Signature=REDACTED&amp;Key-Pair-Id=REDACTED"'],
+    ['url=https%3A%2F%2Fb.s3.amazonaws.com%2Ff%3Fx%3D1%26X-Amz-Signature%3Ddeadbeef%26y%3D2', 'url=https%3A%2F%2Fb.s3.amazonaws.com%2Ff%3Fx%3D1%26X-Amz-Signature%3DREDACTED%26y%3D2'],
+    // API keys, OAuth codes and client secrets.
+    ['/api?api_key=AIzaSy123&key=k-1&code=4%2F0AbC&client_secret=s3cr3t&state=ok', '/api?api_key=REDACTED&key=REDACTED&code=REDACTED&client_secret=REDACTED&state=ok'],
+    ['<a href="/login/oauth2/callback?code=abc123&amp;state=x">', '<a href="/login/oauth2/callback?code=REDACTED&amp;state=x">'],
+    ['url=http%3A%2F%2Fh%2Ff%3Fkey%3DSECRET%26y%3D1', 'url=http%3A%2F%2Fh%2Ff%3Fkey%3DREDACTED%26y%3D1'],
+    ['/search?keyword=x&codeblock=1&course_code=BIO&keys=1', '/search?keyword=x&codeblock=1&course_code=BIO&keys=1'],
+    // Bearer tokens in a header dump or JSON.
+    ['Authorization: Bearer abc.def-ghi_123~+/=', 'Authorization: Bearer REDACTED'],
+    ['{"Authorization":"Bearer 1~AbCdEfGh1234567890"}', '{"Authorization":"Bearer REDACTED"}'],
+  ];
+  for (const [raw, want] of cases) assert.equal(redact(raw), want, raw);
+  for (const [, want] of cases) assert.equal(redact(want), want, `idempotent: ${want}`);
+});
+
 test('a fixture is scrubbed whole, its provenance note included', () => {
   const { fixture } = require('../../tools/dev/redact.js');
   const out = fixture('/courses/1/files/2/download?verifier=SECRET1', '<html><a href="/x?token=SECRET2">x</a></html>');
   assert.match(out, /^<!-- Glaze test fixture: \/courses\/1\/files\/2\/download\?verifier=REDACTED /);
   assert.doesNotMatch(out, /SECRET/);
+});
+
+test('the scrubber removes complete JSON strings even when the identity contains escaped quotes', () => {
+  const { redact } = require('../../tools/dev/redact.js');
+  const raw = JSON.stringify({ current_user: { email: '"sam.private"@school.edu', login_id: 'sam"private', sis_user_id: 'id\\"private' } });
+  const want = JSON.stringify({ current_user: { email: 'REDACTED', login_id: 'REDACTED', sis_user_id: 'REDACTED' } });
+  assert.equal(redact(raw), want);
+  assert.equal(redact(want), want);
+});
+
+test('CSRF redaction reads the real HTML attributes and preserves unrelated attributes', () => {
+  const { redact } = require('../../tools/dev/redact.js');
+  const cases = [
+    ['<meta name="csrf-token" data-content="metadata" content="SECRET">', '<meta name="csrf-token" data-content="metadata" content="REDACTED">'],
+    ['<input name="authenticity_token" data-value="metadata" value="SECRET">', '<input name="authenticity_token" data-value="metadata" value="REDACTED">'],
+    ['<meta name = "csrf-token" content = "SECRET">', '<meta name = "csrf-token" content = "REDACTED">'],
+    ['<input value="secret\'tail" name="authenticity_token">', '<input value="REDACTED" name="authenticity_token">'],
+    ['<meta data-name="csrf-token" name="description" content="ordinary text">', '<meta data-name="csrf-token" name="description" content="ordinary text">'],
+    ['<meta name="csrf-token-label" content="ordinary text">', '<meta name="csrf-token-label" content="ordinary text">'],
+  ];
+  for (const [raw, want] of cases) {
+    assert.equal(redact(raw), want, raw);
+    assert.equal(redact(want), want, `idempotent: ${want}`);
+  }
+});
+
+test('a pretty-printed Authorization header cannot expose its bearer token', () => {
+  const { redact } = require('../../tools/dev/redact.js');
+  const raw = '{\n  "Authorization":\n        "Bearer SECRET-bearer-token"\n}';
+  const want = raw.replace('SECRET-bearer-token', 'REDACTED');
+  assert.equal(redact(raw), want);
+  assert.equal(redact(want), want);
 });
 
 // Addresses outside the local Canvas named in a fixture's provenance note, each on purpose: where it came from.

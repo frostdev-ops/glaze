@@ -64,7 +64,7 @@ test('every Safari release script checks its staged resources against the projec
 test('the Safari staging drops code mods\' sandbox and keeps everything else bundled', () => {
   const dist = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-safari-stage-'));
   try {
-    execFileSync('bash', ['../tools/build/package.sh'], { cwd: root, env: { ...process.env, DIST: dist }, stdio: 'pipe' });
+    execFileSync('bash', ['../tools/build/package.sh', '--allow-dirty'], { cwd: root, env: { ...process.env, DIST: dist }, stdio: 'pipe' });
     const stage = path.join(dist, 'Resources');
     execFileSync('unzip', ['-q', path.join(dist, `glaze-v${m.version}.zip`), '-d', stage]);
     assert.ok(fs.existsSync(path.join(stage, 'mods/host.html')), 'the Chrome package has them');
@@ -117,7 +117,7 @@ test('the Safari drop list names only packaged files, and nothing Safari loads n
 test('the Safari staging drops Glaze\'s own model\'s engine and host and keeps the worker\'s imports', () => {
   const dist = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-safari-stage-'));
   try {
-    execFileSync('bash', ['../tools/build/package.sh'], { cwd: root, env: { ...process.env, DIST: dist }, stdio: 'pipe' });
+    execFileSync('bash', ['../tools/build/package.sh', '--allow-dirty'], { cwd: root, env: { ...process.env, DIST: dist }, stdio: 'pipe' });
     const stage = path.join(dist, 'Resources');
     execFileSync('unzip', ['-q', path.join(dist, `glaze-v${m.version}.zip`), '-d', stage]);
     execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), path.join(stage, 'manifest.json')]);

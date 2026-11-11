@@ -15,7 +15,7 @@ test('DMG staging is repeatable and isolates Sparkle from the checked-in Mac/iOS
   const projectPath = path.join(__dirname, '../../safari/Glaze/Glaze.xcodeproj/project.pbxproj');
   const original = fs.readFileSync(projectPath);
   try {
-    assert.equal(run('sh', ['../tools/build/package.sh']).status, 0);
+    assert.equal(run('sh', ['../tools/build/package.sh', '--allow-dirty']).status, 0);
     for (let attempt = 0; attempt < 2; attempt++) {
       const result = run('python3', ['../tools/build/stage-safari-dmg.py', temp], { env: { ...process.env, SAFARI_UPDATE_PUBLIC_KEY: 'REPLACE_WITH_SPARKLE_EDDSA_PUBLIC_KEY' } });
       assert.equal(result.status, 0, result.stderr);

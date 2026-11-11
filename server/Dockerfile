@@ -9,7 +9,10 @@
 # Without it, files go to /data/blobs. Backup: docker exec glaze-relay node relay.js --backup /data/backup.db
 # On a bridge network instead, the proxy's address inside the container is the bridge gateway: set TRUSTED_PROXIES to
 # exactly that address, never to a whole range other containers share.
-FROM node:24-alpine
+# Node 26, the major CI tests on, pinned by digest: a moved tag can't change what runs on the server. Resolved 2026-11-11
+# (node 26.13.0, linux/amd64 and arm64). To move the pin, run `docker buildx imagetools inspect node:26-alpine`, put its
+# Digest after the @, and run the relay's tests (test/sharing) on that Node first.
+FROM node:26-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216
 WORKDIR /app
 COPY relay.js .
 RUN mkdir /data && chown node /data
@@ -17,4 +20,7 @@ USER node
 ENV HOST=127.0.0.1 PORT=8787 DB=/data/share.db BLOBS=/data/blobs IP_HEADER=x-real-ip NODE_OPTIONS=--disable-warning=ExperimentalWarning
 EXPOSE 8787
 VOLUME /data
+# The relay's own /health on HOST (loopback for a wildcard bind); a relay that lost its lease answers 503.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "const h=process.env.HOST||'127.0.0.1'; const host=h==='0.0.0.0'?'127.0.0.1':h==='::'?'[::1]':h.includes(':')?'['+h+']':h; fetch('http://'+host+':'+process.env.PORT+'/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
 CMD ["node", "relay.js"]

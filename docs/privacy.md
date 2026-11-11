@@ -41,7 +41,10 @@ you goes with it. It then runs on this device, so what you give it stays there. 
 model is offered, opening Rime's card in Settings → AI, or the setup guide's AI step, asks `huggingface.co` for the signed list of Rime models, at most
 once a day and never with Data Saver on; nothing about you is sent. While it is downloaded, Glaze checks
 `huggingface.co` for a signed list of Rime models about once a day and downloads updates from there and its CDN; nothing
-about you is sent. **Update automatically** in the card's Advanced section turns that off.
+about you is sent. **Update automatically** in the card's Advanced section turns that off. On Chrome and Edge the model
+runs in a hidden extension page (the `offscreen` permission) that closes after five minutes unused and reads nothing from
+any page; the daily check uses the `alarms` permission, which also wakes Glaze for the reminders and watches you approve
+in Ask Rime.
 
 [Ask Rime](../PRIVACY.md#ask-rime) (Settings → AI → Ask Rime, off by default) sends your question, and your work when
 you add it, to the model you chose for it. For a question about your own courses it also sends what Glaze reads to
@@ -55,7 +58,7 @@ lets you turn this off, view, edit, delete, clear and export records, even while
 records. Saved memories join Glaze backups and existing Google Drive sync when enabled; the course cache and search
 index stay on this device. Records are separated by school account and have no timed expiry. Deletion removes active
 content and keeps a small marker against restoration; earlier exported/backed-up copies and an open conversation remain
-separate. A reminder or watch you approve is kept on this device until shown or cancelled.
+separate. A reminder or watch you approve is kept on this device until shown or cancelled; an alarm wakes Glaze for it, and it shows only inside Glaze, never as a notification.
 
 [Agent access](../PRIVACY.md#agent-access) (Settings → AI → Agents) is off by default. Apps on this computer connect
 through a local helper: `glaze-mcp`, or the downloaded Glaze Mac app on Safari. Glaze asks you to allow each app

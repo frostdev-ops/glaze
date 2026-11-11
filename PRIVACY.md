@@ -195,8 +195,9 @@ the file's name and type, never its address. Ask Rime's switch is that tool acce
 it needs no Agents pairing and doesn't turn agent access on. Marking a to-do done waits for your OK in
 Glaze's window, worded by Glaze, never by the model. The conversation itself goes when the page or panel closes.
 With **Memory** on (the default once Ask Rime is enabled), Rime can save useful preferences and facts from your messages
-as short Markdown records with a supporting excerpt, timestamps and a revision. These records stay on this device,
-separated by school account, until you edit or delete them in **Settings → AI → Memory** or the chat's memory controls.
+as short Markdown records with a supporting excerpt, timestamps and a revision. These records are kept on this device,
+separated by school account, until you edit or delete them in **Settings → AI → Memory** or the chat's memory controls;
+backups and Sync to Google Drive carry them too, as described below.
 Glaze also retains bounded excerpts from successful course reads, with the source, when it was read and whether it was
 partial. This course cache stays on this device; it has no timed expiry and can be cleared in Memory settings.
 Forgetting a specific course source suppresses it until the course cache is cleared; new verified reads can then refill
@@ -1266,6 +1267,16 @@ A site you add is kept in a list in the extension's local storage (`canvas`, `mo
 - `declarativeContent` (Chrome and Edge) — to put a dot on Glaze's toolbar icon on pages that look like Canvas, Moodle or
   Blackboard Ultra. The browser matches the page against Glaze's rules itself and does not report those rule matches to Glaze.
   Chrome shows no warning for it.
+- `offscreen` (Chrome and Edge) — only after you choose Rime, Glaze's own model, in Settings → AI and click Download: a
+  hidden extension page runs the model on this computer with WebGPU, in a worker of its own, and keeps it loaded between
+  requests; it closes after five minutes unused. It reads nothing from any page. Firefox runs the model in a worker of
+  Glaze's background page instead, and the Safari package leaves the permission out.
+- `alarms` — to wake Glaze at a time. While a Rime model is downloaded (Chrome and Firefox), a daily alarm, and one a few
+  minutes after the browser starts, check `huggingface.co` for Frostdev's signed list of Rime models (see Network
+  requests). For an Ask Rime reminder or watch you approved, an alarm wakes Glaze at the time you chose, or every 30
+  minutes while a watch waits, to compare course data Glaze already keeps on this device; that fetches and sends nothing,
+  and what fires is shown inside Glaze on your next school page, never as a notification. **Settings → AI → Ask Rime →
+  Reminders and watches** turns those off.
 - `scripting` — to start Glaze from the first page you open on a site you allowed, to run the popup's check in its tab,
   and, with All sites, to run that check on https pages.
 - Host access to `https://*.instructure.com/*`, `https://*.blackboard.com/*` and `https://*.moodlecloud.com/*` — to apply

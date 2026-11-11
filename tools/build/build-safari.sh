@@ -18,7 +18,8 @@ if [ -e "$out/build/Glaze.app" ] || [ -L "$out/build/Glaze.app" ]; then
   echo "build-safari: $out/build/Glaze.app must be removed with a Safari data backup before building." >&2
   exit 1
 fi
-tools/build/package.sh
+# Local builds from a working tree are how the owner tries a change; the release path builds a clean checkout.
+tools/build/package.sh --allow-dirty
 
 # Build from a copy, so the checked-in project's native code and any local Xcode edits stay as they are.
 stage=$(mktemp -d)

@@ -4,10 +4,13 @@
 # imports, listed in order, and importScripts becomes a no-op. Google Calendar sync needs Chrome's identity API,
 # so its oauth2 key goes, as in Safari; identity stays only for Drive's web sign-in, once its client is real
 # (tools/build/oauth-manifest.js). DIST: the folder the zips go in (default dist).
+# A release package needs a clean dev/firefox checkout, untracked files included (tools/release/clean-source.sh);
+# --development packages any tree as it stands, for local checks.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 cd "$root"
+. "$root/tools/release/clean-source.sh"
 development=false
 case "${1:-}" in
   '') ;;
@@ -16,19 +19,24 @@ case "${1:-}" in
 esac
 branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
 commit=$(git rev-parse --verify HEAD 2>/dev/null || printf unknown)
+# Edits and untracked files both make it dirty; a tree git can't read counts as dirty too.
 dirty=false
-git diff --quiet HEAD -- 2>/dev/null || dirty=true
+status=$(git status --porcelain --untracked-files=all 2>/dev/null) || status=unreadable
+[ -z "$status" ] || dirty=true
+allow=
 if [ "$development" = false ]; then
-  if [ "$branch" != dev/firefox ] || [ "$dirty" = true ]; then
+  if [ "$branch" != dev/firefox ]; then
     echo 'Firefox release packages require a clean dev/firefox checkout. Use --development only for local checks.' >&2
     exit 1
   fi
+  glaze_require_clean "$root" package-firefox 'Use --development only for local checks.'
 else
+  allow=--allow-dirty
   echo 'Building a Firefox development package; do not upload it to a store.' >&2
 fi
 dist=${DIST:-dist}
 version=$(node -p 'require("./extension/manifest.json").version')
-DIST=$dist tools/build/package.sh >/dev/null
+DIST=$dist tools/build/package.sh $allow >/dev/null
 
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT

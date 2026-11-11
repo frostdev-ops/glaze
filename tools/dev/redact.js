@@ -1,13 +1,33 @@
 // What tools/dev/canvas-shots.js --html takes out of a captured page before it becomes a test fixture: anything that
 // would let someone act as the student. Plain node, no dependencies, so test/courses/canvas-fixtures.test.js can check it.
 
-// Query values that unlock something: file verifiers, tokens. The whole value goes. In a plain query it ends at the next
+// Query values that unlock something: file verifiers, tokens, API keys, OAuth codes and secrets, and what signs a URL (S3's
+// X-Amz-*, CloudFront's Policy, Signature and Key-Pair-Id). The whole value goes. In a plain query it ends at the next
 // & (an encoded %26 there is part of the value); inside an encoded URL (a file preview's ?url=…%3Fverifier%3D…) at %26.
-const NAMES = '(?:verifier|sf_verifier|access_token|token|session_token|authenticity_token|_csrf_token|sesskey|logintoken)';
+const NAMES = '(?:verifier|sf_verifier|access_token|token|session_token|authenticity_token|_csrf_token|sesskey|logintoken|api_key|key|code|client_secret|x-amz-signature|x-amz-credential|x-amz-security-token|policy|signature|key-pair-id)';
 const SECRET_PARAM = new RegExp(`([?&](?:amp;)?${NAMES}=)[^&"'\\s<#]+`, 'gi');
 const SECRET_ENCODED = new RegExp(`((?:%3F|%26)${NAMES}%3D)(?:(?!%26)[^&"'\\s<#])+`, 'gi');
 // Feed addresses (calendar .ics, announcement and discussion Atom) carry a capability in their path, not a parameter.
-const FEED = /((?:\/|%2F)feeds(?:\/|%2F)[\w-]+(?:\/|%2F))[\w-]+((?:\.|%2E)(?:atom|ics|rss|xml))?/gi;
+// A topic's feed address has the topic's id before the code (/feeds/topics/<id>/enrollment_<code>.atom): the id stays.
+const FEED = /((?:\/|%2F)feeds(?:\/|%2F)(?:topics(?:\/|%2F)[\w-]+|[\w-]+)(?:\/|%2F))[\w-]+((?:\.|%2E)(?:atom|ics|rss|xml))?/gi;
+// The CSRF token in the page head and the authenticity token in a form: the tag's value goes, in either attribute order.
+// An empty value (the capture already emptied it) stays as it is.
+const META = /<meta\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi;
+const INPUT = /<input\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi;
+const ATTRIBUTE = /(\s+)([^\s"'<>/=]+)(\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
+const secretTag = (tag, name, attribute) => {
+  const named = [...tag.matchAll(ATTRIBUTE)].find((m) => m[2].toLowerCase() === 'name');
+  if (!named || (named[4] ?? named[5] ?? named[6]).toLowerCase() !== name) return tag;
+  return tag.replace(ATTRIBUTE, (all, space, key, equal, double, single, bare) => {
+    if (key.toLowerCase() !== attribute || !(double ?? single ?? bare)) return all;
+    const quote = single === undefined ? '"' : "'";
+    return `${space}${key}${equal}${quote}REDACTED${quote}`;
+  });
+};
+// Moodle's M.cfg and Canvas's ENV.current_user, as JSON in a script: the session key, and who the student is.
+const SESSKEY = /("sesskey"\s*:\s*)"[^"]+"/g;
+const IDENTITY = /("(?:email|login_id|sis_user_id)"\s*:\s*)(?:"(?:\\.|[^"\\])+"|\d+)/g;
+const BEARER = /(Authorization[\s"':=,]+Bearer\s+)[^\s"'<&]+/gi;
 const JWT = /eyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]+/g;
 // Inlined pictures are bytes, not markup: dropped.
 const DATA_URI = /(data:[\w/+.-]+;base64,)[A-Za-z0-9+/=]{200,}/g;
@@ -16,6 +36,11 @@ const redact = (html) => html
   .replace(SECRET_PARAM, '$1REDACTED')
   .replace(SECRET_ENCODED, '$1REDACTED')
   .replace(FEED, '$1REDACTED$2')
+  .replace(META, (tag) => secretTag(tag, 'csrf-token', 'content'))
+  .replace(INPUT, (tag) => secretTag(tag, 'authenticity_token', 'value'))
+  .replace(SESSKEY, '$1"REDACTED"')
+  .replace(IDENTITY, '$1"REDACTED"')
+  .replace(BEARER, '$1REDACTED')
   .replace(JWT, 'REDACTED_JWT')
   .replace(DATA_URI, '$1');
 

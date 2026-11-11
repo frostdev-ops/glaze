@@ -1,4 +1,9 @@
 // The public half of store-release.mjs. All writes use frozen sources and saved artifacts.
+// GitHub's hosted runners can't always run our suite, so two gates accept our own runner's passing evidence instead of a
+// workflow run. Each value must name the commit it vouches for (its full SHA or first 12 characters as a complete hex token in the
+// text); any other non-empty value is refused. Unset, the release waits for the workflow.
+//   GLAZE_TRUST_CI       the source commit being released: stands in for this repository's package.yml run only.
+//   GLAZE_TRUST_SITE_CI  the website commit (public.siteCommit, shown when it is refused): stands in for frostdev.io's site.yml.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -82,7 +87,17 @@ export const publicStores = stores => stores.includes('chrome') && stores.includ
 export function storeAssets(manifest) {
   return ['chrome', 'firefox', 'mcpb'].map(key => { if (!manifest.files[key]) throw new Error(`Artifact ${key} is required`); return manifest.files[key]; });
 }
+// The evidence text a trust variable gives for `commit`, null when the variable is unset (wait for the workflow), and an
+// error when it is set to anything that doesn't name that commit.
+export function trustedCI(name, value, commit) {
+  if (value === undefined || value === '') return null;
+  const full = String(commit || '').toLowerCase();
+  const text = String(value).toLowerCase();
+  if (/^[0-9a-f]{40}$/.test(full) && new RegExp(`(?:^|[^0-9a-f])(?:${full}|${full.slice(0, 12)})(?![0-9a-f])`).test(text)) return value;
+  throw new Error(`${name} must name the commit ${full.slice(0, 12)}: put its full SHA or its first 12 characters in the value, for example ${name}="runner evidence ${full.slice(0, 12)}". Unset it to wait for GitHub's run.`);
+}
 export function publicPreflight(opt, env, root, manifest) {
+  trustedCI('GLAZE_TRUST_CI', env.GLAZE_TRUST_CI, manifest.sourceCommit);
   if (!publicStores(opt.stores)) throw new Error('A full release needs both Chrome and Firefox packages. Use build/submit for store-only work.');
   if (!/^\d+\.\d+\.\d+$/.test(manifest.version)) throw new Error('Public releases require a stable major.minor.patch version.');
   for (const bin of ['gh', 'git', 'curl', 'ssh', 'rsync', 'xcodebuild', 'xcrun', 'lipo', 'python3']) command('/usr/bin/which', [bin], root, env);
@@ -238,12 +253,13 @@ function publishSource(manifest, root, env) {
 export async function publishPublic(context) {
   const { manifest, save, out, root, env, run } = context;
   const state = manifest.public;
+  // Checked before anything is saved, pushed or tagged: see the header.
+  const packageTrust = trustedCI('GLAZE_TRUST_CI', env.GLAZE_TRUST_CI, manifest.sourceCommit);
   if (state) { state.complete = false; save(); }
   verifyPublic(manifest, out, root, env);
   const tag = publishSource(manifest, root, env);
-  // GLAZE_TRUST_CI names our own runner's passing evidence for this commit when GitHub's hosted runners can't run the
-  // suite (shallow history, their node layout); it is recorded in place of the package.yml run.
-  state.packageCI = env.GLAZE_TRUST_CI ? `trusted: ${env.GLAZE_TRUST_CI}` : await workflow(repo, 'package.yml', manifest.sourceCommit, root, env); save();
+  // Recorded in place of the package.yml run when GitHub's hosted runners can't run the suite.
+  state.packageCI = packageTrust ? `trusted: ${packageTrust}` : await workflow(repo, 'package.yml', manifest.sourceCommit, root, env); save();
   const notes = path.join(out, 'public/release-notes.md'); fs.writeFileSync(notes, manifest.notes + '\n');
   let release = releaseInfo(tag, root, env);
   if (!release) {
@@ -316,14 +332,16 @@ async function publishWebsiteWith({ manifest, save, out, root, env, run }, bare)
     state.siteCommit = git(['rev-parse', 'HEAD'], site, env); save();
   }
   if (git(['rev-parse', 'HEAD'], site, env) !== state.siteCommit || git(['status', '--porcelain', '--untracked-files=all'], site, env)) throw new Error('The saved website candidate changed. Review it before resuming.');
+  // Refused before the website is pushed: GLAZE_TRUST_SITE_CI must name this website commit (see the header).
+  const siteTrust = trustedCI('GLAZE_TRUST_SITE_CI', env.GLAZE_TRUST_SITE_CI, state.siteCommit);
   git(['fetch', '--quiet', 'origin', 'main'], site, env);
   const remote = git(['rev-parse', 'origin/main'], site, env);
   if (remote !== state.siteCommit) {
     if (!contains(remote, state.siteCommit, site, env)) throw new Error('Website main advanced. Review the new main, discard the generated website clone and clear public.siteCommit in release.json, then resume to rebuild and validate integration.');
     git(['push', 'origin', `${state.siteCommit}:refs/heads/main`], site, env);
   }
-  // The site's own check, gallery tests and build ran above (logs/website-*.log); GLAZE_TRUST_CI accepts them in place of site.yml.
-  state.websiteCI = env.GLAZE_TRUST_CI ? `trusted: ${env.GLAZE_TRUST_CI}; local website check, gallery tests, build and output check` : await workflow(siteRepo, 'site.yml', state.siteCommit, root, env); save();
+  // The site's own check, gallery tests and build ran above (logs/website-*.log); GLAZE_TRUST_SITE_CI accepts them in place of site.yml.
+  state.websiteCI = siteTrust ? `trusted: ${siteTrust}; local website check, gallery tests, build and output check` : await workflow(siteRepo, 'site.yml', state.siteCommit, root, env); save();
   // deploy stages, activates atomically, and verifies origin/public routes with rollback on failure.
   // A previous successful activation can be verified without trying to create its existing stage again.
   let staged = false;

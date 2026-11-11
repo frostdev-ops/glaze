@@ -9,6 +9,11 @@ on:
 # from is in its comment): a moved tag cannot change what runs. To update one, resolve the new tag and replace both.
 permissions: {}
 
+# A release build is never cancelled: a second push of the same tag waits for the first.
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # A release zip is built only from a tag whose browser checks pass.
   browser:

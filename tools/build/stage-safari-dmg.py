@@ -134,6 +134,15 @@ tree.write(storyboard, encoding='UTF-8', xml_declaration=True)
 info = project / 'Glaze/Info.plist'
 with info.open('rb') as f:
     i = plistlib.load(f)
+# SURequireSignedFeed (Sparkle 2.9+, with SUVerifyUpdateBeforeExtraction) stays off, decided 2026-11-11. Today an update is
+# trusted by its DMG's EdDSA signature, which tools/release/safari-appcast.sh makes with the Keychain key; the feed itself is
+# unsigned, so frostdev.io could offer an older signed build. The only documented feed signer is generate_appcast, which
+# this pipeline does not use (the appcast tool writes the feed itself so that it keeps every earlier entry, which
+# public-release.mjs checks). Turning it on takes: the appcast tool appending the block Sparkle 2.10 reads after the final
+# feed bytes, `<!-- sparkle-signatures:\nedSignature: <sign_update -p of the bytes before it>\nlength: <their size>\n-->`;
+# the website copy staying byte-for-byte; and a real Sparkle 2.10.0 client taking an update from a staged signed feed, because
+# an app that requires one ignores any feed signed wrongly (SUSignedFeedFailureExpirationInterval, 20 days, is the only way
+# out) and none of that can be tried without Sparkle's tools and the Keychain key. Only builds that carry it are protected.
 i.update(SUFeedURL='https://frostdev.io/projects/glaze/appcast.xml',
          SUPublicEDKey=public_key,
          SUEnableAutomaticChecks=True, SUAutomaticallyUpdate=True, SUEnableSystemProfiling=False,

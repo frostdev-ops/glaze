@@ -349,7 +349,7 @@ main{margin-left:200px;padding:20px}article{display:inline-block;width:240px;hei
     // ========= the package Firefox and Safari get: no sandbox, no code mods' files =========
     const dist = path.join(tmp, 'dist'), stage = path.join(tmp, 'stage');
     fs.mkdirSync(dist);
-    execFileSync('sh', [path.join(__dirname, '../../tools/build/package.sh')], { cwd: ext, env: { ...process.env, DIST: dist }, stdio: 'pipe' });
+    execFileSync('sh', [path.join(__dirname, '../../tools/build/package.sh'), '--allow-dirty'], { cwd: ext, env: { ...process.env, DIST: dist }, stdio: 'pipe' });
     execFileSync('unzip', ['-q', path.join(dist, fs.readdirSync(dist).find((f) => f.endsWith('.zip'))), '-d', stage]);
     execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), path.join(stage, 'manifest.json')]);
     ok(!fs.existsSync(path.join(stage, 'mods/host.html')) && !fs.existsSync(path.join(stage, 'mods/boot.js')) && !fs.existsSync(path.join(stage, 'mods/page/mods.js')) && fs.existsSync(path.join(stage, 'mods/page/modwidgets.js')) && fs.existsSync(path.join(stage, 'mods/page/modui.js'))
