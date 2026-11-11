@@ -237,7 +237,6 @@ test('a kept file that is missing, the wrong kind or not an answer is not shown'
   const h = env().sha(bytes);
   for (const [why, ask, media] of [
     ['missing', answer(h, { ok: false, error: 'missing' }), { type: 'video', src: `file:${h}` }],
-    ['no worker', async () => null, { type: 'video', src: `file:${h}` }],
     ['a picture where a video was asked for', kept({ h, t: 'image/webp', bytes }), { type: 'video', src: `file:${h}` }],
     ['a type nobody plays', kept({ h, t: 'text/html', bytes }), { type: 'video', src: `file:${h}` }],
     ['an answer that is not one', answer(h, { ok: true, mime: 'video/webm' }), { type: 'video', src: `file:${h}` }],
@@ -282,10 +281,8 @@ test('an address the worker refuses leaves the gradient, and says whether the fi
   for (const [why, ask, want] of [
     ['over the byte cap', remote({ ok: false, error: 'big' }), 'limits'],
     ['over a side, frame or pixel cap, or not that kind of file', remote({ ok: false, error: 'type' }), 'limits'],
-    ['offline or redirected', remote({ ok: false, error: 'network' }), 'load'],
     ['not an address it may fetch', remote({ ok: false, error: 'bad' }), 'load'],
     ['not this page', remote({ ok: false, error: 'sender' }), 'load'],
-    ['no worker', async () => null, 'load'],
     ['the wrong kind back', remote(wire('image', 'image/webp')), 'load'],
     ['a type nobody plays', remote(wire('video', 'text/html')), 'load'],
     ['no bytes', remote({ ok: true, type: 'video', mime: 'video/webm' }), 'load'],
@@ -296,6 +293,104 @@ test('an address the worker refuses leaves the gradient, and says whether the fi
     await settle();
     assert.deepEqual([why, r.fails, r.e.blobs.length, given(r.e)], [why, [want], 0, []]);
   }
+});
+
+// ---- a file that fails to load once is tried again ------------------------------------------------------------------------------
+// A storage read that threw, a fetch that did not get through, or no answer at all (the worker waking) may pass a moment later; a file
+// that is not here, an address the worker refuses or a file past a limit never will.
+const waits = (r) => r.e.timers.filter((t) => !t.dead && !t.ran).map((t) => t.ms);
+const RETRY = [
+  ['a kept video, the worker\'s storage read threw', () => { const h = env().sha(bytes); return { media: { type: 'video', src: `file:${h}` }, good: { ok: true, mime: 'video/webm', b64: Buffer.from(bytes).toString('base64') }, bad: { ok: false, error: 'failed' }, type: 'glaze:keptFile', why: 'file' }; }],
+  ['a kept video, no answer', () => { const h = env().sha(bytes); return { media: { type: 'video', src: `file:${h}` }, good: { ok: true, mime: 'video/webm', b64: Buffer.from(bytes).toString('base64') }, bad: null, type: 'glaze:keptFile', why: 'file' }; }],
+  ['a video at an address, the fetch failed', () => ({ media: { type: 'video', src: URL1 }, good: wire('video', 'video/webm'), bad: { ok: false, error: 'network' }, type: 'glaze:remoteMedia', why: 'load' })],
+  ['a picture at an address, no answer', () => ({ media: { type: 'image', src: 'https://cdn.example.com/a.webp' }, good: wire('image', 'image/webp'), bad: null, type: 'glaze:remoteMedia', why: 'load' })],
+  ['a Lottie file, the fetch failed', () => ({ media: { type: 'lottie', src: 'https://cdn.example.com/a.json' }, good: { ok: true, json: { w: 10, h: 10 }, canvases: 1 }, bad: { ok: false, error: 'network' }, type: 'glaze:lottie', why: 'load' })],
+  ['a kept Lottie file, no answer', () => ({ media: { type: 'lottie', src: 'file:' + 'A'.repeat(43) }, good: { ok: true, json: { w: 10, h: 10 }, canvases: 1 }, bad: null, type: 'glaze:lottie', why: 'load' })],
+];
+// An ask that answers `first` for the first `n` times and `then` after.
+const flaky = (type, first, n, then) => { let k = 0; return async (m) => (m.type === type ? (k++ < n ? first : then) : { ok: false, error: 'bad' }); };
+
+test('a file that failed to load once is tried again after 1 s, 5 s and 30 s, and shows when one try passes', async () => {
+  for (const [why, make] of RETRY) {
+    const c = make();
+    const r = rig({ ask: flaky(c.type, c.bad, 2, c.good) });
+    r.scene.update(o(c.media));
+    await settle();
+    assert.deepEqual([why, r.fails, waits(r)], [why, [], [1000]], 'the gradient stays, the reason is not given yet, one wait is set');
+    r.e.tick();
+    await settle();
+    assert.deepEqual([why, r.fails, waits(r)], [why, [], [5000]]);
+    r.e.tick();
+    await settle();
+    if (c.media.type === 'video') kinds(r.e, 'video')[0].fire('loadeddata');
+    if (c.media.type === 'image') await settle();
+    await settle();
+    assert.deepEqual([why, r.fails, waits(r), r.e.messages.length], [why, [], [], 3], 'the third try passed: it is up, nothing more is waiting');
+    assert.ok(r.host.children.length > 0, why);
+  }
+});
+
+test('a file that fails every time is given up after three more tries, with the reason, and is not asked again on its own', async () => {
+  for (const [why, make] of RETRY) {
+    const c = make();
+    const r = rig({ ask: flaky(c.type, c.bad, Infinity, null) });
+    r.scene.update(o(c.media));
+    const seen = [];
+    for (let i = 0; i < 4; i++) {
+      await settle();
+      seen.push(waits(r));
+      r.e.tick();
+    }
+    await settle();
+    assert.deepEqual([why, seen, r.fails, waits(r), r.e.messages.length], [why, [[1000], [5000], [30000], []], [c.why], [], 4], 'one try and three more');
+    r.scene.update(o(c.media));
+    await settle();
+    assert.deepEqual([r.fails.length, r.e.messages.length], [1, 4], 'a later update with the same file does not start it over');
+  }
+});
+
+test('what a retry cannot fix fails at once: not here, refused, past a limit, not that kind of file', async () => {
+  const h = env().sha(bytes);
+  for (const [why, type, bad, media, want] of [
+    ['kept, missing', 'glaze:keptFile', { ok: false, error: 'missing' }, { type: 'video', src: `file:${h}` }, 'file'],
+    ['kept, refused', 'glaze:keptFile', { ok: false, error: 'sender' }, { type: 'video', src: `file:${h}` }, 'file'],
+    ['address, not allowed', 'glaze:remoteMedia', { ok: false, error: 'bad' }, { type: 'video', src: URL1 }, 'load'],
+    ['address, too big', 'glaze:remoteMedia', { ok: false, error: 'big' }, { type: 'video', src: URL1 }, 'limits'],
+    ['address, not that kind', 'glaze:remoteMedia', { ok: false, error: 'type' }, { type: 'video', src: URL1 }, 'limits'],
+    ['Lottie, missing', 'glaze:lottie', { ok: false, error: 'missing' }, { type: 'lottie', src: 'file:' + 'A'.repeat(43) }, 'file'],
+    ['Lottie, refused', 'glaze:lottie', { ok: false, error: 'type' }, { type: 'lottie', src: 'https://cdn.example.com/a.json' }, 'load'],
+  ]) {
+    const r = rig({ ask: flaky(type, bad, Infinity, null) });
+    r.scene.update(o(media));
+    await settle();
+    assert.deepEqual([why, r.fails, waits(r), r.e.messages.length], [why, [want], [], 1]);
+  }
+});
+
+test('the editor\'s preview says a failed load at once; a retry is not waited for', async () => {
+  const c = RETRY[2][1]();
+  const r = rig({ preview: true, ask: flaky(c.type, c.bad, Infinity, null) });
+  r.scene.update(o(c.media));
+  await settle();
+  assert.deepEqual([r.fails, waits(r)], [['load'], []]);
+  assert.deepEqual(plain(r.e.posted), [[{ gzMediaState: { state: 'failed', why: 'load' } }, 'chrome-extension://glaze']]);
+});
+
+test('a retry waiting is dropped when the Look changes its file, or the scene stops', async () => {
+  const c = RETRY[2][1]();
+  const r = rig({ ask: flaky(c.type, c.bad, Infinity, null) });
+  r.scene.update(o(c.media));
+  await settle();
+  assert.deepEqual(waits(r), [1000]);
+  r.scene.update(o({ type: 'video', src: 'https://cdn.example.com/other.webm' }));
+  await settle();
+  assert.deepEqual(waits(r), [1000], 'the old wait is cancelled; the new file has its own, from the start');
+  assert.equal(r.e.timers.filter((t) => t.dead).length, 1);
+  const before = r.e.messages.length;
+  r.scene.stop();
+  r.e.tick();
+  await settle();
+  assert.deepEqual([r.e.messages.length, r.fails], [before, []], 'stopped: nothing is asked again, and nothing is told');
 });
 
 test('the editor\'s preview is told when an address broke a limit', async () => {
@@ -494,7 +589,6 @@ test('Lottie follows a resize with a debounced resize of its canvas, and is dest
 test('Lottie that the worker refuses, or whose player will not load, leaves the gradient', async () => {
   for (const [why, ask, want] of [
     ['refused', async () => ({ ok: false, error: 'type' }), 'load'],
-    ['no answer', async () => null, 'load'],
     ['the file is not here', async () => ({ ok: false, error: 'missing' }), 'file'],
   ]) {
     const r = rig({ ask });
