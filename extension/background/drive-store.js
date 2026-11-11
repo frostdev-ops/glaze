@@ -275,8 +275,9 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (!hs.has(task.id) && xi[k]) hi[k] = xi[k];
         if (!xs.has(task.id) && hi[k]) xi[k] = hi[k];
       }
-      const items = Object.fromEntries(byId(Object.entries(B.items), Object.entries(hi), Object.entries(xi), ([k]) => k, (x, [k, y], [, z]) => [k, item(x?.[1], y, z)])
-        .filter(([k]) => !k.startsWith('task:') || ids.has(k)));
+      const keys = new Set([...Object.keys(B.items), ...Object.keys(hi), ...Object.keys(xi)]);
+      const items = Object.fromEntries([...keys].filter((k) => !k.startsWith('task:') || ids.has(k))
+        .map((k) => [k, item(B.items[k], hi[k] || {}, xi[k] || {})]).filter(([, v]) => Object.keys(v).length));
       if (tasks.length > 500 || Object.keys(items).length > 2000) throw new Fail('bad');
       return L.todo().clean({ tasks, items });
     }
