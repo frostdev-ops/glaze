@@ -630,6 +630,25 @@ test('Duplicate makes "<title> (copy)" and opens it', async () => {
   assert.equal(P.box().querySelector('.gz-nt-title').value, 'Week 3 (copy)', 'the copy is what opens');
 });
 
+test('a title typed, then left, is saved as typed when the library changes elsewhere inside its half second', async () => {
+  const P = page();
+  await P.seed([{ id: id(1), title: 'Note A', course: '7', html: '<p>A text</p>' }]);
+  await P.openView();
+  P.fire(P.items().find((e) => /Note A/.test(e.textContent)), 'click');
+  await settle();
+  const title = P.box().querySelector('.gz-nt-title');
+  assert.equal(title.value, 'Note A');
+  // Typed, and focus has gone to the body (the field is not the active element).
+  title.value = 'Renamed A';
+  P.fire(title, 'input');
+  // Another tab saves a different note: the library's index changes before the title's own save.
+  await P.seed([{ id: id(2), title: 'Note B', course: '7', html: '<p>B text</p>' }]);
+  assert.equal(title.value, 'Renamed A', 'the field keeps what was typed');
+  await wait(700);
+  const titles = P.sent.filter((m) => m.op === 'meta' && 'title' in m && m.id === id(1)).map((m) => m.title);
+  assert.deepEqual(titles, ['Renamed A'], 'and so does what is saved');
+});
+
 test('the Course notes button costs the first script nothing: the worker registers it only while Notes is on', async () => {
   const changed = [];
   let registered = [];
