@@ -303,7 +303,11 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   // A citation names a source in parentheses ("(Morrison 42)", "(Grady et al., 2019, p. 4)", "(“Capybara” 2)"), or names
   // it in the sentence with only its page or year in parentheses ("Morrison argues … (42)", "Grady et al. (2019)"), or, in
   // Chicago papers, sits in a footnote ("Zadie Smith, Swing Time …", "Smith, Swing Time, 320.").
-  const NAME = String.raw`[\p{Lu}][\p{L}'’.-]*(?:\s+(?:de|van|von|da|del|la|le|di)\s+[\p{Lu}][\p{L}'’-]*)?`;
+  // A family name as an entry gives it: "O’Malley", "D’Angelo", "al-Rashid", and the particles before it ("van der
+  // Berg", "De la Cruz" at a sentence's start). A possessive ("Smith’s") is that name too (bare()).
+  const PARTICLE = `(?:${'van von der den de des del della di da das do dos du la le ter ten bin ibn al el'.split(' ').map((w) => `[${w[0]}${w[0].toUpperCase()}]${w.slice(1)}`).join('|')})`;
+  const NAME = String.raw`(?:${PARTICLE}\s+)*(?:(?:al|el)-)?[\p{Lu}][\p{L}'’.-]*`;
+  const bare = (n) => n.replace(/(?:’s|'s)$/u, '');
   const PAGE = String.raw`(?:(?:pp?\.|para\.|ch\.)\s*)?(?:[\dxivlc]+(?:\s*[-–]\s*[\dxivlc]+)?(?:,\s*\d+(?:[-–]\d+)?)*)`;
   const YEAR = String.raw`(?:\d{4}[a-z]?|n\.d\.)`;
   const PART = {
@@ -322,14 +326,15 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     return [...new Set(out.filter(Boolean))];
   };
   const matchIds = (nameText, sources) => {
-    const n = S().fold(nameText.replace(/\bet al\.?/, '').replace(/[“”"‘’']/g, ''));
+    // Quotation marks around a title go; an apostrophe inside a name folds as keysOf folds it.
+    const n = S().fold(bare(nameText.replace(/\bet al\.?/, '').trim()).replace(/^[“"‘']+|[”"’']+$/g, ''));
     if (!n) return [];
     return sources.filter((s) => keysOf(s).some((k) => n === k)).map((s) => s.id);
   };
   // Parentheses that point inside a text or give a date, not a source: "(Figure 2)", "(Act 3)", "(May 1945)". One list,
   // writer-compose.js's count reads it too.
   const INSIDE = /^(?:fig(?:ure)?s?|tables?|chapters?|ch|parts?|pages?|weeks?|sections?|appendix|appendices|steps?|units?|modules?|questions?|exhibits?|lessons?|days?|vol(?:ume)?s?|acts?|scenes?|lines?|notes?|book|verse|slides?|problems?|exercises?|items?|level|grade|room|period|session|episode|season|january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec|spring|summer|autumn|fall|winter)\.?$/i;
-  const looksNamed = (t) => /^[“"‘]?[\p{Lu}]/u.test(t) && !/[\p{Sc}\p{Sm}@#%*\\/]/u.test(t) && !/^(see|e\.g|i\.e|cf|qtd|figure|fig|table|chapter|ch|vol|para|line|lines|version|in|on|during|since|before|after|born)\b/i.test(t);
+  const looksNamed = (t) => new RegExp(String.raw`^[“"‘]?(?:${PARTICLE}\s+)*(?:(?:al|el)-)?\p{Lu}`, 'u').test(t) && !/[\p{Sc}\p{Sm}@#%*\\/]/u.test(t) && !/^(see|e\.g|i\.e|cf|qtd|figure|fig|table|chapter|ch|vol|para|line|lines|version|in|on|during|since|before|after|born)\b/i.test(t);
   // → [{ from, to, text, name, sep, page, year, ids, kind: 'paren'|'narrative'|'note', fix? }] over a string's offsets.
   const findIn = (text, sources, k) => {
     const out = [];
@@ -362,7 +367,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
       const before = text.slice(start, c.from);
       if (k === 'apa7') {
         const n = [...before.matchAll(new RegExp(String.raw`(${NAME}(?:\s+(?:and|&)\s+${NAME}|\s+et\s+al\.)?)(?:’s|'s)?\s*$`, 'gu'))].at(-1);
-        if (n && c.year) { c.name = n[1]; c.ids = matchIds(n[1], sources); c.from = start + n.index; continue; }
+        if (n && c.year) { c.name = bare(n[1]); c.ids = matchIds(n[1], sources); c.from = start + n.index; continue; }
       }
       const words = [...before.matchAll(new RegExp(NAME, 'gu'))].reverse();
       for (const w of words) { const ids = matchIds(w[0].replace(/(’s|'s)$/, ''), sources); if (ids.length) { c.name = w[0].replace(/(’s|'s)$/, ''); c.ids = ids; break; } }
@@ -380,7 +385,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   // A footnote's first name: "Zadie Smith, Swing Time …" → Smith; "Smith, Swing Time, 320." → Smith; "“Yale Facts.”" → title;
   // "For a contrasting view, see Smith, …" → Smith. '' for a note that names no one (an explanatory note, "Translation mine.").
   const SEE = String.raw`(?:see also|see|cf\.|compare)(?:,?\s+(?:e\.g\.|for example),?)?\s+`;
-  const named = (head) => { const ws = head.split(/\s+/); return ws.length <= 6 && ws.every((w) => /^(?:de|van|von|da|del|la|le|di|and|&)$/.test(w) || /^\p{Lu}[\p{L}\p{M}'’.-]*$/u.test(w)); };
+  const named = (head) => { const ws = head.split(/\s+/); return ws.length <= 6 && ws.every((w) => new RegExp(`^(?:${PARTICLE}|and|&)$`).test(w) || /^(?:(?:al|el)-)?\p{Lu}[\p{L}\p{M}'’.-]*$/u.test(w)); };
   const noteName = (text) => {
     const lead = (t) => {
       t = t.trim().replace(/^\d+\.\s*/, '').replace(new RegExp(`^${SEE}`, 'i'), '');
@@ -388,7 +393,10 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
       const head = t.split(/,|\s\(/)[0].replace(/\s+et al\.?$/, '').trim();
       if (!named(head)) return '';
       const ws = head.split(/\s+(?:and|&)\s+/)[0].split(/\s+/);
-      return ws.length > 1 && !/[a-z]/.test(ws.at(-1)[0]) ? ws.at(-1) : head;
+      // "Hans van der Berg" → "van der Berg": the last word and the particles before it.
+      let i = ws.length - 1;
+      while (i > 1 && new RegExp(`^${PARTICLE}$`).test(ws[i - 1])) i--;
+      return ws.length > 1 && !/[a-z]/.test(ws.at(-1)[0]) && !new RegExp(`^${PARTICLE}$`).test(ws[0]) ? ws.slice(i).join(' ') : head;
     };
     const m = new RegExp(`(?:^|[\\s,;(])${SEE}`, 'i').exec(text);
     return lead(text) || (m ? lead(text.slice(m.index + m[0].length)) : '');
@@ -409,8 +417,9 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     if (k === 'apa7') for (const m of T.text.matchAll(NARRATIVE_APA)) {
       if (found.some((c) => c.from <= m.index + m[0].length && c.to >= m.index && c.ids.length)) continue;
       const at = m.index + m[0].indexOf('(');
-      const c = found.find((x) => x.from === at && x.kind === 'narrative');
-      const entry = { from: m.index, to: m.index + m[0].length, text: m[0], name: m[1], year: m[2], page: m[3] || '', kind: 'narrative', ids: matchIds(m[1], all) };
+      // The same citation as a year found in parentheses, whose start already moved back to the name.
+      const c = found.find((x) => (x.from === at || x.from === m.index) && x.kind === 'narrative');
+      const entry = { from: m.index, to: m.index + m[0].length, text: m[0], name: bare(m[1]), year: m[2], page: m[3] || '', kind: 'narrative', ids: matchIds(m[1], all) };
       entry.at = [T.posAt(entry.from), T.posAt(entry.to)];
       if (c) Object.assign(c, entry); else found.push(entry);
     }
