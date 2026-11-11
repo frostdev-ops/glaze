@@ -1072,7 +1072,8 @@ html[data-gz-navbar][data-gz-footer] .inner-wrap > :where(.routed-page):is(.rout
 .course-color-9, .stream-panel-activity-card[data-gz-course-slot="9"] { --gz-course-raw: #ca22ad; --gz-pick: var(--gz-pick-9); }
 .course-color-10, .stream-panel-activity-card[data-gz-course-slot="10"] { --gz-course-raw: #157afb; --gz-pick: var(--gz-pick-10); }
 [class*="course-color-"], .stream-panel-activity-card[data-gz-course-slot] { --gz-course: var(--gz-pick, var(--gz-course-raw)); }
-@supports (color: oklab(from red l 0 0)) { [class*="course-color-"], .stream-panel-activity-card[data-gz-course-slot] { --gz-course: var(--gz-pick, color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0))); } }
+/* Toned where relative colours are read; the ten slot classes by name, which files them (a [class*=] is tried on every element). */
+@supports (color: oklab(from red l 0 0)) { .course-color-1, .course-color-2, .course-color-3, .course-color-4, .course-color-5, .course-color-6, .course-color-7, .course-color-8, .course-color-9, .course-color-10, .stream-panel-activity-card[data-gz-course-slot] { --gz-course: var(--gz-pick, color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0))); } }
 html[data-gz-raw-courses] [class*="course-color-"], html[data-gz-raw-courses] .stream-panel-activity-card[data-gz-course-slot] { --gz-course: var(--gz-pick, var(--gz-course-raw)); }
 [class*="course-color-"]::before, .element-card.element-card-deadline[class*="course-color-"]::after,
 .calendar-wrapper .event-dot[class*="course-color-"] { background-color: var(--gz-course) !important; }
@@ -1356,11 +1357,18 @@ html[data-gz-dark-theme] #site-wrap .bb-editor-container.is-read-only img:not([d
    black and navy turn light and a colour that already read is left alone. A text fill, so the element's own colour stays the
    source; highlights and what sits in them keep the dark ink the highlight rule below gives. Before Chrome 119 the ink again. */
 @supports (color: oklch(from red l c h)) {
-  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root) :is(.bb-editor-container.is-read-only, .bbml-content) :is([style^="color"], [style*=";color"], [style*=" color"], font[color]):not(:is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])), :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) *) { -webkit-text-fill-color: oklch(from currentColor max(l, 0.78) c h); }
-  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root) :is(.bb-editor-container.is-read-only, .bbml-content) :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) { -webkit-text-fill-color: currentColor; }
+  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root) :is(.bb-editor-container.is-read-only, .bbml-content) [style^="color"]:not(:is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])), :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) *),
+  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root) :is(.bb-editor-container.is-read-only, .bbml-content) [style*=";color"]:not(:is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])), :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) *),
+  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root) :is(.bb-editor-container.is-read-only, .bbml-content) [style*=" color"]:not(:is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])), :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) *),
+  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root) :is(.bb-editor-container.is-read-only, .bbml-content) font[color]:not(:is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])), :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) *) { -webkit-text-fill-color: oklch(from currentColor max(l, 0.78) c h); }
+  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root) :is(.bb-editor-container.is-read-only, .bbml-content) mark,
+  html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root) :is(.bb-editor-container.is-read-only, .bbml-content) :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light]) { -webkit-text-fill-color: currentColor; }
 }
 @supports not (color: oklch(from red l c h)) {
-  :where(html[data-gz-dark-theme]) :where(#site-wrap, .MuiModal-root) :where(.bb-editor-container.is-read-only, .bbml-content) :where([style^="color"], [style*=";color"], [style*=" color"], font[color]) { color: inherit !important; }
+  :where(html[data-gz-dark-theme]) :where(#site-wrap, .MuiModal-root) :where(.bb-editor-container.is-read-only, .bbml-content) [style^="color"],
+  :where(html[data-gz-dark-theme]) :where(#site-wrap, .MuiModal-root) :where(.bb-editor-container.is-read-only, .bbml-content) [style*=";color"],
+  :where(html[data-gz-dark-theme]) :where(#site-wrap, .MuiModal-root) :where(.bb-editor-container.is-read-only, .bbml-content) [style*=" color"],
+  :where(html[data-gz-dark-theme]) :where(#site-wrap, .MuiModal-root) :where(.bb-editor-container.is-read-only, .bbml-content) font[color] { color: inherit !important; }
 }
 /* An instructor's highlight (an inline background, or <mark>) keeps its colour, light as highlighters are, but the words
    in it took the palette's ink: light on yellow, about 1:1, on a dark palette. There they take the ground's dark instead.

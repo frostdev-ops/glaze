@@ -16,8 +16,8 @@ const dark = (c) => C.brightness(C.parse(c['--gz-surface'])) < 0.5;
 
 test('surfaces.css derives --gz-on-soft: the bright accent on a light palette, the accent on a dark one', () => {
   const css = fs.readFileSync(path.join(root, 'looks/page/surfaces.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.ok(/:root[^{]*\{[^}]*--gz-on-soft:\s*var\(--gz-accent\)/.test(css), 'a plain value where light-dark() is not read');
-  assert.ok(/@supports\s*\(color:\s*light-dark\(red, red\)\)\s*\{[^{}]*:root[^{}]*\{[^}]*--gz-on-soft:\s*light-dark\(var\(--gz-accent-hi\), var\(--gz-accent\)\)/.test(css), 'light-dark(accent-hi, accent) under @supports');
+  assert.ok(/(?:^|\n)html[^{]*\{[^}]*--gz-on-soft:\s*var\(--gz-accent\)/.test(css), 'a plain value where light-dark() is not read');
+  assert.ok(/@supports\s*\(color:\s*light-dark\(red, red\)\)\s*\{[^{}]*html[^{}]*\{[^}]*--gz-on-soft:\s*light-dark\(var\(--gz-accent-hi\), var\(--gz-accent\)\)/.test(css), 'light-dark(accent-hi, accent) under @supports');
 });
 
 test('no rule sets accent text on an accent-soft fill', () => {

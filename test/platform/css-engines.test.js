@@ -57,7 +57,9 @@ test('a course colour has a plain value outside the @supports that tones it', ()
     assert.ok(decls.length, `${f} tones --gz-course`);
     for (const d of decls) {
       const selector = d.headers.at(-1);
-      const plain = declarations(read(f)).filter((p) => p.headers.at(-1) === selector && !p.headers.some((h) => h.startsWith('@')) && /^--gz-course\s*:/.test(p.text));
+      // theme.css tones the ten slot classes by name (a [class*=] it keeps for the plain value is tried on every element).
+      const covers = (h) => h === selector || (f === 'content/theme.css' && h.startsWith('[class*="course-color-"]') && selector.startsWith('.course-color-1,'));
+      const plain = declarations(read(f)).filter((p) => covers(p.headers.at(-1)) && !p.headers.some((h) => h.startsWith('@')) && /^--gz-course\s*:/.test(p.text));
       assert.ok(plain.length && plain.every((p) => !/\bfrom\b|light-dark/.test(p.text)), `${f}: ${selector} sets --gz-course plain first`);
     }
   }
