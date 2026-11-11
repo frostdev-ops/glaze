@@ -56,7 +56,7 @@ test('printed, the background layers and the floating Glaze chrome are off, only
   const rules = printRules('looks/page/surfaces.css');
   const hidden = rules.filter(([, body]) => /display:\s*none\s*!important/.test(body)).flatMap(([sel]) => parts(sel));
   for (const want of ['html[data-gz-bg]::before', '#gz-scene', '#gz-read', '#gz-boot', '#gz-cmd', '#gz-keys', '#gz-cm', '#gz-peek', '#gz-mk', '#gz-doc-tools', '.gz-tip']) assert.ok(hidden.includes(want), `${want} is hidden`);
-  for (const [sel] of rules) for (const p of parts(sel)) assert.ok(/^(html\[data-gz-|#gz-|\.gz-)/.test(p), `${p} only matches what Glaze put on the page`);
+  for (const [sel] of rules) for (const p of parts(sel)) assert.ok(/^(html\[data-gz-|html \[data-gz-course-look="dark"\]|#gz-|\.gz-)/.test(p), `${p} only matches what Glaze put on the page`);
 });
 
 test('each site\'s own sheet keeps no room for Glaze\'s bar on paper, Moodle\'s gutter included', () => {
