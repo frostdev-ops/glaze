@@ -31,7 +31,8 @@ const WIN = process.platform === 'win32';
 const KEY = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwg6V59kbwSugyMQtni6v0phfh3fhoQ4H2ObTO6z5I2unB5HrIq3tmLrRbd4aUTWinhwEm4EtaDqQUk1Zi7XiUy38CkdBzDEgHBhvP56zKeb5V8FI5JIVO63To3L1PG+pHxolewxCCL5sgrqqVG7D+gSzM9oKPMOkNkvwFKHxum0ct9rzTLtwxwWrKwk1fcmd9DN60IfndPMVjxsfzH7MSpuBOSiAfIvzxBnLTUkM6ZrzfFgdo8nRbmVmezsVWoWu9njJsKz7G5W6LIqKgdgKQEYtcE9h13HqBGEhvpNgTsT9rJQknaK32o3W8G1g/9rvE2t7G9ZfxRWc44acKvWyXwIDAQAB';
 const ID = 'meaciahlgdfilnbfbfameicmlhodilnb';
 const KEYS = { chromium: `HKCU\\Software\\Chromium\\NativeMessagingHosts\\${HOST}`, chrome: `HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\${HOST}` };
-const LINES = ['{"jsonrpc":"2.0","id":1,"method":"ping"}', '{"jsonrpc":"2.0","id":2,"method":"echo","params":{"text":"é😀 second"}}'];
+// Neither is a ping: the agent answers one itself until it has a host (mcp/lib/session.js), and these are written at once.
+const LINES = ['{"jsonrpc":"2.0","id":1,"method":"echo","params":{"text":"first"}}', '{"jsonrpc":"2.0","id":2,"method":"echo","params":{"text":"é😀 second"}}'];
 
 const args = process.argv.slice(2), dry = args.includes('--dry');
 if (WIN && !/^(true|1)$/i.test(process.env.CI || '') && !args.includes('--allow-registry')) {
