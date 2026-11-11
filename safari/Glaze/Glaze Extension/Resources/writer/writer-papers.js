@@ -195,7 +195,7 @@ var GZ_WRITER_PAPERS = globalThis.GZ_WRITER_PAPERS || (() => {
       const written = Object.keys(parts || {}), dropped = [...(drop || [])];
       if ([...written, ...dropped].some((n) => typeof n !== 'string' || !PART_NAME.test(n)) || (packed && typeof packed.gz !== 'string')) throw new Error('no such part');
       const prev = (await get(PAPER + k)) || null, t = now();
-      if (!prev && await crowded(k)) throw new Error('too many documents');
+      if (await crowded(k)) throw new Error('too many documents');
       if (expectedRevision !== undefined && (prev?.revision || 0) !== expectedRevision) throw new Error('document changed in another tab');
       if (expectedKind && (prev?.kind || 'paper') !== expectedKind) throw new Error('document kind changed');
       if (expectedFile !== undefined && !sameFile(prev?.file, expectedFile)) throw new Error('document changed in another tab');
