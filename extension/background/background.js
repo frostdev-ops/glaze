@@ -524,6 +524,8 @@ const BROKER = {
           const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
           if (!same(now.extras, s.extras) || !same(st, rotateState) || !same(GZ_HISTORY.theme(now), GZ_HISTORY.theme(s)) || !same((await sync.get('lookX')).lookX, lookX)) return { ok: false, error: 'changed' };
         }
+        // Another device can turn to the same Look while this one decodes: its shared deadline still wins.
+        if (JSON.stringify((await sync.get(GZ_LX.SHARED))[GZ_LX.SHARED]) !== JSON.stringify(last)) return { ok: false, error: 'changed' };
         // The Look's parts go in with it, in the same write: a built-in Look its own, and a code brings its own or none.
         if (patch && !await GZ_XPARTS.write({ sync, local }, (L ? GZ_LOOK_PARTS(L) : got?.parts) || null, { version: 2, ...patch, ...(r.state.turned && { [GZ_LX.SHARED]: GZ_LX.shared(r.state) }) })) return { ok: false };
         if (!patch) r.state.turned = false;
