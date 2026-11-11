@@ -856,7 +856,8 @@ html [data-region="course-content"][data-gz-course-look="light"] { --gz-on-soft:
 /* A card's course color, toned as canvas.css and theme.css tone theirs: Moodle's own (--gz-course-raw, courses/page/moodle.js) is
    70% itself and 30% a grey as light as the muted ink, mixed in OKLab; data-gz-raw-courses (toning off) keeps Moodle's. A
    color picked for the course is the card's --gz-course as is. */
-html [data-region="course-content"][style*="--gz-course-raw"] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); }
+html [data-region="course-content"][style*="--gz-course-raw"] { --gz-course: var(--gz-course-raw); }
+@supports (color: oklab(from red l 0 0)) { html [data-region="course-content"][style*="--gz-course-raw"] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); } }
 html[data-gz-raw-courses] [data-region="course-content"][style*="--gz-course-raw"] { --gz-course: var(--gz-course-raw); }
 
 /* Glaze navigation: keep Moodle's links alive, replace its 60px header room, and leave content drawers usable.

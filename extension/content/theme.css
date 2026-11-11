@@ -1071,7 +1071,8 @@ html[data-gz-navbar][data-gz-footer] .inner-wrap > :where(.routed-page):is(.rout
 .course-color-8, .stream-panel-activity-card[data-gz-course-slot="8"] { --gz-course-raw: #22c7cc; --gz-pick: var(--gz-pick-8); }
 .course-color-9, .stream-panel-activity-card[data-gz-course-slot="9"] { --gz-course-raw: #ca22ad; --gz-pick: var(--gz-pick-9); }
 .course-color-10, .stream-panel-activity-card[data-gz-course-slot="10"] { --gz-course-raw: #157afb; --gz-pick: var(--gz-pick-10); }
-[class*="course-color-"], .stream-panel-activity-card[data-gz-course-slot] { --gz-course: var(--gz-pick, color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0))); }
+[class*="course-color-"], .stream-panel-activity-card[data-gz-course-slot] { --gz-course: var(--gz-pick, var(--gz-course-raw)); }
+@supports (color: oklab(from red l 0 0)) { [class*="course-color-"], .stream-panel-activity-card[data-gz-course-slot] { --gz-course: var(--gz-pick, color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0))); } }
 html[data-gz-raw-courses] [class*="course-color-"], html[data-gz-raw-courses] .stream-panel-activity-card[data-gz-course-slot] { --gz-course: var(--gz-pick, var(--gz-course-raw)); }
 [class*="course-color-"]::before, .element-card.element-card-deadline[class*="course-color-"]::after,
 .calendar-wrapper .event-dot[class*="course-color-"] { background-color: var(--gz-course) !important; }

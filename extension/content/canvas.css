@@ -813,9 +813,13 @@ html :is([data-cid~="IconButton"], [data-cid~="Button"]):is([disabled], [aria-di
       Canvas's inline value is never overwritten, only overridden here, so a re-read is always Canvas's).
       The [style*=] guards leave Canvas's own color showing until it has.
    Course picks (settings.courses.colors) are Ultra's for now. */
-html { --gz-course: color-mix(in oklab, currentColor 70%, oklab(from var(--gz-ink-muted) l 0 0)); }
+/* A browser that can't read a relative colour gets the course's own colour: inside the value it would make --gz-course invalid,
+   and every use of it unset. The same goes for the oklch() titles below. */
+html { --gz-course: currentColor; }
+@supports (color: oklab(from red l 0 0)) { html { --gz-course: color-mix(in oklab, currentColor 70%, oklab(from var(--gz-ink-muted) l 0 0)); } }
 html[data-gz-raw-courses] { --gz-course: currentColor; }
-:is(.ic-DashboardCard, .planner-grouping)[style*="--gz-course-raw"] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); }
+:is(.ic-DashboardCard, .planner-grouping)[style*="--gz-course-raw"] { --gz-course: var(--gz-course-raw); }
+@supports (color: oklab(from red l 0 0)) { :is(.ic-DashboardCard, .planner-grouping)[style*="--gz-course-raw"] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); } }
 html[data-gz-raw-courses] :is(.ic-DashboardCard, .planner-grouping)[style*="--gz-course-raw"] { --gz-course: var(--gz-course-raw); }
 /* Calendar: the chips of the month and week grids (restyled in the calendar section above; here they take the
    toned color), the swatches of the sidebar's checked calendars (an unchecked one is Canvas's grey), the agenda's lines. */
@@ -832,15 +836,19 @@ html[data-gz-raw-courses] :is(.ic-DashboardCard, .planner-grouping)[style*="--gz
    is Canvas's own color sunk toward the ground instead, so it keeps its hue and sits in the palette. */
 html[data-gz-dark-theme]:not([data-gz-raw-courses]) #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header_hero { background-color: var(--gz-card-c, color-mix(in oklab, var(--gz-course-raw) 62%, var(--gz-surface-paint-2, var(--gz-surface-2)))) !important; }
 /* Only title lightness changes; the course hue and its hero colour stay Canvas's own. */
-#application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: oklch(from var(--gz-course) min(l, 0.48) c h) !important; }
-html[data-gz-dark-theme] #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: oklch(from var(--gz-course) max(l, 0.72) c h) !important; }
+@supports (color: oklch(from red l c h)) {
+  #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: oklch(from var(--gz-course) min(l, 0.48) c h) !important; }
+  html[data-gz-dark-theme] #application .ic-DashboardCard[style*="--gz-course-raw"] .ic-DashboardCard__header-title span { color: oklch(from var(--gz-course) max(l, 0.72) c h) !important; }
+}
 /* List view (the planner): the group's banner and edge, and the icon (the avatar, for a personal to-do) of each item. */
 #application .planner-grouping[style*="--gz-course-raw"] > ol { border-color: var(--gz-course) !important; }
 #application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__overlay"] { background-color: var(--gz-course) !important; }
 #application .planner-grouping[style*="--gz-course-raw"] :is([class*="PlannerItem-styles__icon"], [class*="PlannerItem-styles__avatar"]) { color: var(--gz-course) !important; }
 /* The group's title is Canvas's brand blue whatever the course (3.8:1 on a dark band): the course's hue, at a lightness that reads, as on a card. */
-#application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__title"] { color: oklch(from var(--gz-course) min(l, 0.48) c h); }
-html[data-gz-dark-theme] #application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__title"] { color: oklch(from var(--gz-course) max(l, 0.72) c h); }
+@supports (color: oklch(from red l c h)) {
+  #application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__title"] { color: oklch(from var(--gz-course) min(l, 0.48) c h); }
+  html[data-gz-dark-theme] #application .planner-grouping[style*="--gz-course-raw"] [class*="Grouping-styles__title"] { color: oklch(from var(--gz-course) max(l, 0.72) c h); }
+}
 /* Its long titles fade out under a white gradient, a bright line along the band on a dark palette. */
 html[data-gz-dark-theme] #application [class*="Grouping-styles__title"]::after { display: none; }
 /* InstUI's pills (Missing, Late, Excused) print their state in its mid tone, 3.8:1 on a dark panel. The pill carries the colour
@@ -1512,7 +1520,8 @@ html .ic-DashboardCard > .gz-cm-btn { width: 32px; height: 32px; }
 .ic-DashboardCard > .gz-cm-btn svg { display: none; }
 .ic-DashboardCard > .gz-cm-btn::before { content: ""; width: 4px; height: 18px; background: radial-gradient(circle closest-side, currentColor 85%, transparent) 0 0 / 4px 6px repeat-y; }
 html .ic-DashboardCard > .gz-cm-btn { color: var(--gz-ink-muted); opacity: 0.85; }
-[data-gz-course-color] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); }
+[data-gz-course-color] { --gz-course: var(--gz-course-raw); }
+@supports (color: oklab(from red l 0 0)) { [data-gz-course-color] { --gz-course: color-mix(in oklab, var(--gz-course-raw) 70%, oklab(from var(--gz-ink-muted) l 0 0)); } }
 html[data-gz-raw-courses] [data-gz-course-color] { --gz-course: var(--gz-course-raw); }
 #section-tabs[data-gz-course-color] { border-inline-start: 3px solid var(--gz-course); padding-inline-start: 10px; }
 #breadcrumbs [data-gz-course-color], #content :is(a, span)[data-gz-course-color] { text-decoration-color: var(--gz-course); border-block-end: 2px solid var(--gz-course); }
