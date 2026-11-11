@@ -2080,3 +2080,16 @@ test('a device joining keeps the bibliography entries each side removed from its
     assert.deepEqual([...(v.removed || [])].sort(), ['s-bib-a1', 's-bib-b2'], `${d === a ? 'A' : 'B'} keeps both removals`);
   }
 });
+
+test('an equal first meeting keeps the agreed value for later task deletions and additions', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') }, a = device(drive, { clock }), b = device(drive, { clock });
+  await a.local.set({ [TODO]: BASE3 });
+  assert.ok((await a.on()).ok);
+  await b.local.set({ [TODO]: BASE3 });
+  assert.ok((await b.on()).ok);
+  await retask(a, clock, drop('t2'));
+  await retask(b, clock, add(task(4, 'Four')));
+  assert.ok((await a.run({ push: true })).ok);
+  await settled(b, a);
+  for (const d of [a, b]) assert.deepEqual(await titles(d), ['Four', 'One', 'Three']);
+});
