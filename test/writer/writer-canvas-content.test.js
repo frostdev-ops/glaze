@@ -50,6 +50,23 @@ test('Canvas quiz: an essay whose frame keeps failing neither holds Submit Quiz 
   assert.ok(c.clicks.length === 1 && c.clicks[0] === submit, 'Submit Quiz goes on');
 });
 
+// Canvas's autosave asks first (RestoreAutoSaveModal): whatever the student answers there is the box's text.
+test('Canvas: its restore dialog appearing after Writer opened hands the box back, so what Canvas restores stays', async () => {
+  const c = await page({ fixture: 'assignment' });
+  const frame = c.ports.at(-1), native = c.doc.querySelector('#submission_body_ifr').contentDocument.body;
+  c.emit({ type: 'change', html: '<p>Typed in Writer.</p>', text: 'Typed in Writer.' });
+  const dialog = c.doc.createElement('div');
+  dialog.setAttribute('data-testid', 'RCE_RestoreAutoSaveModal');
+  c.doc.body.append(dialog);
+  c.ctx.GZ_WRITER.pass();
+  assert.ok(!c.doc.querySelector('iframe.gz-writer'), 'Canvas\'s editor is back, with its dialog');
+  native.innerHTML = '<p>Restored by Canvas.</p>';
+  for (const o of c.observers) if (o.target) o.fn();
+  c.emit({ type: 'change', html: '<p>Typed in Writer, and more.</p>', text: 'Typed in Writer, and more.' }, frame);
+  c.ctx.GZ_WRITER.pass();
+  assert.equal(native.textContent, 'Restored by Canvas.');
+});
+
 test('Canvas: a shortcut can retry after the frame flush times out', async () => {
   const c = await page();
   c.emit({ type: 'change', html: '<p>Send this reply once.</p>', text: 'Send this reply once.' });
