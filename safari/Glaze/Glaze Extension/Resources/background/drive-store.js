@@ -479,6 +479,11 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     };
     // base: Drive's value as r.rsum sums it (a record merged item by item keeps it, driveSyncBase), written with the link.
     const put = async (h, r, was, base) => {
+      if (base === undefined && based(r.cat, r.key)) {
+        const b = (await S.get(BASE + h))[BASE + h];
+        // Invalidate before changing the link, so an interrupted write cannot leave an older base eligible for adoption.
+        if (b && b.sum !== r.rsum) await S.remove(BASE + h);
+      }
       await S.set({ [REC + h]: r, ...(r.id && { [FILE + r.id]: `r:${h}` }), ...(base !== undefined && r.rsum && based(r.cat, r.key) && { [BASE + h]: { sum: r.rsum, value: base } }) });
       if (was?.id && was.id !== r.id) await S.remove(FILE + was.id);
     };
