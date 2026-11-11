@@ -708,3 +708,31 @@ test('a failed grades overview is asked again, not kept as no totals for the pag
   await settle();
   assert.equal(p.asked.length, 2, 'a read that worked is kept');
 });
+
+test('passes share a grades-overview retry while its response is pending', async () => {
+  const status = { overview: 503 };
+  const p = page({ cards: [['16']], status });
+  let now = Date.now();
+  p.context.Date = class extends Date { static now() { return now; } };
+  p.api.cards();
+  await settle();
+  assert.equal(p.asked.length, 1);
+  now += 61000;
+  status.overview = 200;
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  const fetch = p.context.fetch;
+  p.context.fetch = async (...args) => { const response = await fetch(...args); await pending; return response; };
+  p.api.cards();
+  await settle();
+  p.api.cards();
+  p.api.cards();
+  await settle();
+  const requests = p.asked.length;
+  release();
+  await settle();
+  assert.equal(requests, 2, 'only the original failure and one pending retry');
+  p.api.cards();
+  await settle();
+  assert.equal(p.asked.length, 2, 'the successful retry stays cached');
+});
