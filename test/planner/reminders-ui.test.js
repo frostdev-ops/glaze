@@ -54,7 +54,7 @@ const world = (dueIn, { cacheAge = 0, at: clock } = {}) => {
   const Clock = class extends Date { static now() { return w.now(); } };
   // A tab's own hold: its answers wait for its release(). failConfirm: the worker can't keep its acknowledgements.
   // gs: a stored Gradescope record (planner/gradescope.js), with enhance.gradescope on.
-  w.tab = ({ hidden = false, pathname = '/courses/25/assignments', enhance = {}, cards = false, hold = false, gs = null } = {}) => {
+  w.tab = ({ hidden = false, pathname = '/courses/25/assignments', enhance = {}, cards = false, hold = false, gs = null, planner = null } = {}) => {
     if (gs) box.gradescope = structuredClone(gs);
     const changed = [];
     const own = { hold, waiting: [], failConfirm: false };
@@ -72,7 +72,9 @@ const world = (dueIn, { cacheAge = 0, at: clock } = {}) => {
     const c = {
       console, URL, Intl, Date: Clock, Set, Map, JSON, Promise, Error, Math, Object, Array, String, Number, crypto,
       document, location, navigator: {}, addEventListener() {},
-      fetch: async (u) => { fetched.push(u); throw new Error('offline'); },
+      // planner: (url) => Canvas's planner items, as it answers; none: the site doesn't answer.
+      fetch: async (u) => { fetched.push(u); if (planner) return { ok: true, headers: { get: () => null }, text: async () => JSON.stringify(planner(u)) }; throw new Error('offline'); },
+      ...(planner && { GZ_CANVAS_DUE_WEEK: () => [] }),
       setTimeout: (f, ms) => { timers.push({ f, ms }); return timers.length; }, clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].cleared = true; },
       setInterval: () => { throw new Error('no intervals'); },
       GZ_SANITIZE: D.GZ_SANITIZE, GZ_I18N: { locale: () => 'en' }, GZ_TODO: T, GZ_REMIND: R, GZ_CLASSES: C,
@@ -138,6 +140,41 @@ test('one toast for what came due, in one tab, and one timer to the next reminde
   await settle();
   assert.equal(b.toast(), null);
   assert.equal(Object.keys(w.box[KEY].seen).length, 1);
+});
+
+test('a reminder from a planner answer over two minutes old asks the site once first: work handed in since gets none', async () => {
+  const handedIn = () => ({ plannable_type: 'assignment', plannable_id: 7, course_id: 25, plannable_date: new Date(NOW + 2 * 36e5).toISOString(), html_url: '/courses/25/assignments/7',
+    plannable: { title: 'Lab report' }, submissions: { submitted: true } });
+  // Five minutes old, and Canvas now says it is handed in: asked, and no toast.
+  const w = world(2 * 36e5, { cacheAge: 5 * 6e4 });
+  const a = w.tab({ planner: handedIn });
+  a.ui.sync(true);
+  await settle();
+  assert.equal(a.fetched.filter((u) => u.includes('/planner/items')).length, 1, 'asked once');
+  assert.equal(a.toast(), null, 'no reminder for work handed in');
+  assert.equal(a.ops('claim').length, 0, 'and none claimed');
+  // The same age and still open: asked, then the reminder, once.
+  const open = world(2 * 36e5, { cacheAge: 5 * 6e4 });
+  const b = open.tab({ planner: () => [{ ...handedIn(), submissions: { submitted: false } }] });
+  b.ui.sync(true);
+  await settle();
+  assert.equal(b.fetched.length, 1);
+  assert.match(b.toast()?.text || '', /Due .*Lab report/);
+  assert.equal(b.ops('confirm').length, 1);
+  // Under two minutes old: no request, the reminder as before.
+  const fresh = world(2 * 36e5, { cacheAge: 6e4 });
+  const c = fresh.tab({ planner: handedIn });
+  c.ui.sync(true);
+  await settle();
+  assert.equal(c.fetched.length, 0);
+  assert.match(c.toast()?.text || '', /Lab report/);
+  // The site can't be reached: the kept answer's reminder still comes, and the request isn't repeated.
+  const down = world(2 * 36e5, { cacheAge: 5 * 6e4 });
+  const d = down.tab();
+  d.ui.sync(true);
+  await settle();
+  assert.equal(d.fetched.length, 1);
+  assert.match(d.toast()?.text || '', /Lab report/);
 });
 
 test('a hidden tab waits, and shows it once it is looked at; a reminder still to come arms one timeout', async () => {
