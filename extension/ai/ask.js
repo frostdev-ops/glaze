@@ -19,7 +19,7 @@
 //       host reading a long prompt, then past it), a step's detail (run_js's value or error, a place's title),
 //       { id, type: 'action', action: { kind: 'open' | 'highlight', … } } just before an answer's end (the panel performs them
 //       once it shows the answer); 'fired' → { id, type: 'end', fired: [{ id, what, watch?, say, at }] }.
-//       then { id, type: 'end', task, output (study.help's) | answer: { text } | declined: true } or { id, type: 'error',
+//       then { id, type: 'end', task, output (study.help's) | answer: { text } | declined: true, links? } or { id, type: 'error',
 //       error }; status → the broker's status for the feature 'ask'. A compaction's { id, type: 'summary', text, turns }
 //       follows an end, or precedes it with the fallback when the next question would drop older turns. The turns it folded
 //       are of the ones that question carried and itself; the panel sends that summary (summary)
@@ -537,7 +537,7 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       // Results that would overflow the window: those the model has used become digests, the latest never.
       if (measure && steps.length > 1) {
         const fit = await measure('agent.tools', inputOf());
-        if (fit && fit.used + fit.reserve > fit.window) for (const s of steps.slice(0, -1)) if (!s.digested) Object.assign(s, { result: digest(s.result), digested: true });
+        if (fit && fit.used + fit.reserve > fit.window) for (const s of steps.slice(0, -1)) if (!s.digested) Object.assign(s, { full: s.result, result: digest(s.result), digested: true });
       }
       // An answer that fails its check after results came back gets one corrective turn naming the rule (FIX); if that fails
       // too, Glaze's own list from the results (built), when they hold one. The error says why (its code, the steps, the raw).
@@ -945,7 +945,8 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
       const documents = []; // private read provenance; never added to the public current/task schema
       // An answer's links: the page's own site, or an address this turn's results hold (agent-tools' links()).
       const origin = (() => { try { return new URL(current.page.url).origin; } catch { return ''; } })();
-      const linked = (text, results) => AT().links(text, { results, origin });
+      const linked = (text, results) => AT().linked(text, { results, origin });
+      const held = (steps) => steps.map((s) => s.full ?? s.result);
       const validate = async () => {
         if (signal.aborted) throw cancelled();
         if (active?.valid && !await F().wait(() => active.valid(), signal)) throw R().error('changed');
@@ -1164,9 +1165,15 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
           const past = level >= 3 ? [...(CHAT.summary ? [{ question: 'Earlier in this chat', answer: CHAT.summary }] : []), ...retained(open)].slice(-Math.floor(LIMIT.turns * scale())) : history;
           let output = await run('study.help', { question, ...(attempt && { attempt }), subject: r.subject, locale, ...studyContext, ...inRecall, ...(past.length && { history: past }), ...(material && { material }), ...(records && { records }) });
           await memoryCurrent();
-          if (isObj(output) && typeof output.reply === 'string') output = { ...output, reply: linked(output.reply, (seen?.steps || []).map((s) => s.result)) };
+          let links = [];
+          if (isObj(output)) {
+            const read = held(seen?.steps || []), reply = typeof output.reply === 'string' ? linked(output.reply, read) : null;
+            const followUp = typeof output.followUp === 'string' ? linked(output.followUp, read) : null;
+            if (reply) links = reply.links;
+            output = { ...output, ...(reply && { reply: reply.text }), ...(followUp && { followUp: followUp.text }) };
+          }
           if (level >= 3 && isObj(output)) void compact({ id, open, turn: { question, answer: [output.reply, output.followUp].filter((x) => typeof x === 'string' && x).join('\n\n') }, locale, tools, zone }).catch(() => {});
-          post({ id, type: 'end', task: r.task, output });
+          post({ id, type: 'end', task: r.task, output, links });
           return;
         }
         const reader = { question, tools: r.tools, steps: [], now: env.now(), zone, locale, first: true, ...inCurrent, ...inRecall,
@@ -1191,9 +1198,9 @@ var GZ_AI_ASK = globalThis.GZ_AI_ASK || (() => {
         await memoryCurrent();
         for (const a of current.actions) { const { action, ...rest } = a; post({ id, type: 'action', action: { kind: action, ...rest } }); }
         // A built answer also carries the failed answer it replaced and its code, to this panel only (never Activity).
-        const text = linked(res.answer.text, [...res.steps.map((s) => s.result), ...(record ? [record] : [])]);
+        const { text, links } = linked(res.answer.text, [...held(res.steps), ...(record ? [record] : [])]);
         if (level >= 3) void compact({ id, open, turn: { question, answer: text }, locale, tools, zone }).catch(() => {});
-        post({ id, type: 'end', task: r.task, answer: { text, ...(res.built && { built: true }) }, ...(res.built && { ...(res.why && { why: res.why }), ...(res.raw && { raw: res.raw.slice(0, 2000) }) }) });
+        post({ id, type: 'end', task: r.task, answer: { text, ...(res.built && { built: true }) }, links, ...(res.built && { ...(res.why && { why: res.why }), ...(res.raw && { raw: res.raw.slice(0, 2000) }) }) });
       } catch (e) {
         // { id, type: 'error', error, why?, steps?, raw? }: the check's code, the tool steps run, and the model's raw answer
         // (to this panel only; Activity keeps the code, never the answer).

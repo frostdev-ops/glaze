@@ -81,8 +81,10 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
 
   // ---- markdown: the subset a chat writes, as elements (ported from the agent chat's renderer) ------------------------------
   // Inline: code, bold, italic, strike and links: code first, so its content is literal. Words stay words: markup in them
-  // is text. A link only to https, opened apart from the page; any other is its label.
+  // is text. A link only to an https address the worker allowed (links: the school site or a tool's result, see
+  // agent-tools' linked()), opened apart from the page; any other is its label.
   const INLINE = /(\\[\\`*_[\]~])|(`[^`]+`)|(\*\*(?:\\.|[^*\\])+\*\*)|(__(?:\\.|[^_\\])+__)|(\*(?:\\.|[^*\\\n])+\*)|(_(?:\\.|[^_\\\n])+_)|(~~(?:\\.|[^~\\])+~~)|(\[[^\]]+\]\([^)\s]+\))/;
+  let allowed = new Set();
   const inline = (text, into) => {
     let rest = text;
     for (let m; (m = INLINE.exec(rest));) {
@@ -95,7 +97,7 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       else if (tok[0] === '[') {
         const cut = tok.indexOf(']('), label = tok.slice(1, cut), href = tok.slice(cut + 2, -1);
         let safe = false;
-        try { safe = /^https:\/\//i.test(href) && new URL(href).protocol === 'https:'; } catch { /* not a link */ }
+        try { safe = allowed.has(href) && /^https:\/\//i.test(href) && new URL(href).protocol === 'https:'; } catch { /* not a link */ }
         const n = safe ? make('a', { href, target: '_blank', rel: 'noopener noreferrer' }) : make('span');
         inline(label, n);
         into.append(n);
@@ -105,7 +107,8 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
     if (rest) into.append(rest);
   };
   // Blocks: fenced code, headings, rules, tables, lists, quotes, paragraphs. → [element].
-  const markdown = (src) => {
+  const markdown = (src, links = []) => {
+    allowed = new Set(Array.isArray(links) ? links.filter((l) => typeof l === 'string') : []);
     const out = [], lines = String(src || '').replace(/\r/g, '').split('\n'), para = [];
     const flush = () => { if (!para.length) return; const p = make('p', { dir: 'auto' }); inline(para.join('\n'), p); out.push(p); para.length = 0; };
     const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
@@ -573,9 +576,9 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
       };
       reveals.set(li, requestAnimationFrame(tick));
     };
-    const answer = (text, follow_ = '') => {
+    const answer = (text, follow_ = '', links = []) => {
       const body = make('div', { className: 'gz-ask-body' });
-      const md = make('div', { className: 'gz-ask-text gz-ask-md', dir: 'auto' }, ...markdown(text));
+      const md = make('div', { className: 'gz-ask-text gz-ask-md', dir: 'auto' }, ...markdown(text, links));
       const parts = [md];
       body.append(md);
       if (follow_) { const f = make('p', { className: 'gz-ask-text gz-ask-follow', textContent: follow_, dir: 'auto' }); body.append(f); parts.push(f); }
@@ -754,10 +757,10 @@ var GZ_ASK_CHAT = globalThis.GZ_ASK_CHAT || (() => {
         if (end.declined) { const text = t('Nothing was changed.'); remember(text, answer(text)); }
         else if (end.task === 'study.help') {
           const reply = String(end.output?.reply || ''), more = String(end.output?.followUp || '');
-          const li = answer(reply, more);
+          const li = answer(reply, more, end.links);
           remember(more ? `${reply}\n\n${more}` : reply, li);
         } else {
-          const li = answer(String(end.answer?.text || ''));
+          const li = answer(String(end.answer?.text || ''), '', end.links);
           // Glaze's own answer (built from the results), drawn as any is, its detail under it.
           if (end.answer?.built === true) {
             li.dataset.built = '';
