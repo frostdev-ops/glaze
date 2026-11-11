@@ -389,10 +389,13 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const KINDS = { spelling: 'spelling', grammar: 'grammar', punctuation: 'grammar', style: 'style', clarity: 'style' };
   let reviewing = false;
   // Offsets of a run's text (S.text of the doc it read) → positions now, or null when those words have changed since.
-  const placer = (doc, m) => {
+  // edit: a range a suggestion replaces, so never one holding a footnote mark or picture.
+  const placer = (doc, m, edit = false) => {
     const tx = S.text(doc);
     return (start, end, quote) => {
-      const from = m.map(tx.posAt(start), 1), to = m.map(tx.posAt(end), -1), v = view();
+      const at = edit ? tx.range(start, end) : { from: tx.posAt(start), to: tx.posAt(end, -1) };
+      if (!at) return null;
+      const from = m.map(at.from, 1), to = m.map(at.to, -1), v = view();
       return v && to > from && v.state.doc.textBetween(from, to, '\n') === quote ? { from, to } : null;
     };
   };
@@ -410,7 +413,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     render();
     try {
       if (end.type !== 'end' || !Array.isArray(end.output?.issues)) { say(t("AI couldn't check it.")); return; }
-      const place = placer(doc, tr.m);
+      const place = placer(doc, tr.m, true);
       const issues = end.output.issues.map((i, n) => { const at = place(i.start, i.end, i.quote); return at && { ...at, source: 'ai', kind: KINDS[i.kind] || 'style', message: i.message, suggestions: i.suggestions, sure: false, id: `ai-${n}-${at.from}` }; }).filter(Boolean);
       globalThis.GZ_WRITER_ISSUES?.set('ai', issues);
       say(issues.length ? t('AI found {n} issues.', { n: issues.length }) : t('AI found no issues.'));

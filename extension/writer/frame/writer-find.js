@@ -69,7 +69,7 @@ var GZ_WRITER_FIND = globalThis.GZ_WRITER_FIND || (() => {
   const rewrite = (content, parts, text) => {
     const { paper, parse, serialize, inline } = S(), note = parse(paper, `<div>${content}</div>`), map = S().text(note);
     const tr = new (PM().transform.Transform)(note);
-    for (const p of [...parts].sort((a, b) => b.start - a.start)) swap(tr, map.posAt(p.start), map.posAt(p.end), text);
+    for (const p of [...parts].sort((a, b) => b.start - a.start)) swap(tr, map.posAt(p.start), map.posAt(p.end, -1), text);
     const html = serialize(paper, tr.doc);
     return inline(html);
   };

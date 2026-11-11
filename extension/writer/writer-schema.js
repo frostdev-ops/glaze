@@ -3097,9 +3097,12 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       return false;
     });
     const last = (key, v) => { let lo = 0, hi = runs.length - 1, hit = -1; while (lo <= hi) { const mid = (lo + hi) >> 1; if (runs[mid][key] <= v) { hit = mid; lo = mid + 1; } else hi = mid - 1; } return hit; };
-    const posAt = (i) => {
+    // assoc < 0 (a range's end): an offset where a footnote mark or picture begins stays before it.
+    const posAt = (i, assoc = 1) => {
       if (!runs.length) return 0;
-      const r = runs[Math.max(0, last('start', clamp(i, 0, out.length)))];
+      let k = Math.max(0, last('start', clamp(i, 0, out.length)));
+      if (assoc < 0) while (k > 0 && runs[k - 1].end >= i) k--;
+      const r = runs[k];
       return r.pos + clamp(i - r.start, 0, r.end - r.start);
     };
     const offsetAt = (pos) => {
@@ -3108,7 +3111,16 @@ var GZ_WRITER_SCHEMA = globalThis.GZ_WRITER_SCHEMA || (() => {
       const r = runs[k];
       return r.start + clamp(pos - r.pos, 0, r.end - r.start);
     };
-    return { text: out, runs, posAt, offsetAt };
+    // The positions offsets start–end cover, for an edit, or null when they are not text of the paper or hold a footnote
+    // mark or picture (replacing them would delete it).
+    const range = (start, end) => {
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start || end > out.length) return null;
+      const from = posAt(start), to = posAt(end, -1);
+      let leaf = false;
+      if (to > from) doc.nodesBetween(from, to, (n) => { if (n.isInline && !n.isText && n.type.name !== 'hard_break') leaf = true; return !leaf; });
+      return to > from && !leaf ? { from, to } : null;
+    };
+    return { text: out, runs, posAt, offsetAt, range };
   };
 
   const compose = make(false), paperSchema = make(true), canvasSchema = make('canvas'), plainSchema = make('plain');
