@@ -124,3 +124,13 @@ test('export: a continued list in a style of its own counts on in the list befor
   assert.deepEqual(back.map((n) => [n.attrs.styles, n.attrs.continue]), [['upper-roman', false], [null, true]]);
   assert.deepEqual(back[1].content.content.map((li) => li.attrs.start), [null, 5]);
 });
+
+test('a continued list can return to the original numbering style after an override', async () => {
+  const parts = exported(doc('<ol data-styles="upper-roman"><li>a</li><li>b</li></ol><p>x</p>'
+    + '<ol data-continue="true"><li>c</li></ol><p>y</p>'
+    + '<ol data-styles="upper-roman" data-continue="true"><li>d</li></ol>'));
+  const back = (await imported(parts)).content.content.filter((n) => n.type.name === 'ordered_list');
+  assert.deepEqual(back.map((n) => [n.attrs.styles, n.attrs.continue]), [
+    ['upper-roman', false], [null, true], ['upper-roman', true],
+  ]);
+});
