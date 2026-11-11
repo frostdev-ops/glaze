@@ -1,6 +1,6 @@
 // The public half of store-release.mjs. All writes use frozen sources and saved artifacts.
 // GitHub's hosted runners can't always run our suite, so two gates accept our own runner's passing evidence instead of a
-// workflow run. Each value must name the commit it vouches for (its full SHA or first 12 characters somewhere in the
+// workflow run. Each value must name the commit it vouches for (its full SHA or first 12 characters as a complete hex token in the
 // text); any other non-empty value is refused. Unset, the release waits for the workflow.
 //   GLAZE_TRUST_CI       the source commit being released: stands in for this repository's package.yml run only.
 //   GLAZE_TRUST_SITE_CI  the website commit (public.siteCommit, shown when it is refused): stands in for frostdev.io's site.yml.
@@ -93,7 +93,7 @@ export function trustedCI(name, value, commit) {
   if (value === undefined || value === '') return null;
   const full = String(commit || '').toLowerCase();
   const text = String(value).toLowerCase();
-  if (full && (text.includes(full) || text.includes(full.slice(0, 12)))) return value;
+  if (/^[0-9a-f]{40}$/.test(full) && new RegExp(`(?:^|[^0-9a-f])(?:${full}|${full.slice(0, 12)})(?![0-9a-f])`).test(text)) return value;
   throw new Error(`${name} must name the commit ${full.slice(0, 12)}: put its full SHA or its first 12 characters in the value, for example ${name}="runner evidence ${full.slice(0, 12)}". Unset it to wait for GitHub's run.`);
 }
 export function publicPreflight(opt, env, root, manifest) {
