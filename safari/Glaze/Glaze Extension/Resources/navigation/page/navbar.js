@@ -1152,7 +1152,10 @@ function GZ_NAVBAR_ULTRA(X) {
     const path = location.pathname.replace(/\/$/, ''), own = href.replace(/\/$/, '');
     return path === own || path.startsWith(`${own}/`) || (id === 'course' && path.startsWith('/ultra/courses/'));
   };
-  const current = (a, id) => a.matches('.Mui-selected, .active, [aria-current]:not([aria-current="false"])') || here(new URL(a.href).pathname, id);
+  // A link's address on the site: Ultra's <base href> is its CDN, so a.href would be the CDN's. Its own attribute, against the
+  // page's address; Sign Out's '#' is no page: one address on every page, so a route doesn't change the item.
+  const addr = (a) => { const h = a.getAttribute('href'); try { return h === '#' ? `${location.origin}/ultra/#` : new URL(h, location.href).href; } catch { return ''; } };
+  const current = (a, id) => a.matches('.Mui-selected, .active, [aria-current]:not([aria-current="false"])') || (!!addr(a) && here(new URL(addr(a)).pathname, id));
   const watch = () => {
     const root = rootOf();
     const scope = root?.closest('.MuiDrawer-paper') || root;
@@ -1183,8 +1186,7 @@ function GZ_NAVBAR_ULTRA(X) {
         if (!id || ids.has(id)) return null;
         ids.add(id);
         const b = a.querySelector('.MuiBadge-badge:not(.MuiBadge-invisible)');
-        // Sign Out's '#' is no page: one address on every page, so a route doesn't change the item.
-        return { id, label: labelOf(a), href: a.getAttribute('href') === '#' ? `${location.origin}/ultra/#` : a.href, active: current(a, id), badge: b?.textContent.trim() || '' };
+        return { id, label: labelOf(a), href: addr(a), active: current(a, id), badge: b?.textContent.trim() || '' };
       }).filter(Boolean);
       if (live.length) { keep(live); return (last = live); }
       const list = seen?.length ? seen : USUAL.map(([id, label]) => ({ id, label: X.t(label), path: `/ultra/${id}` }));

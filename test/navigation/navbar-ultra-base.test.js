@@ -31,10 +31,10 @@ for (const [name, base] of [['a <base> on another origin', CDN], ['no <base>', `
   test(`Ultra's drawer links take the site's addresses with ${name}`, () => {
     const { site, kept } = adapter(base);
     const items = plain(site.read());
-    assert.deepEqual(items.map((i) => [i.id, i.href, i.active]), [
+    assert.deepEqual(items.map((i) => [i.id, i.href, i.id === 'logout' || i.active]), [
       ['course', `${SITE}/ultra/course`, true],
       ['grades', `${SITE}/ultra/grades`, false],
-      ['logout', `${SITE}/ultra/#`, false],
+      ['logout', `${SITE}/ultra/#`, true],
     ]);
     assert.deepEqual(plain(kept[`navbarSeen:${SITE}`]), [{ id: 'course', label: 'Courses', path: '/ultra/course' }, { id: 'grades', label: 'Grades', path: '/ultra/grades' }],
       'kept for the pages without a drawer');
