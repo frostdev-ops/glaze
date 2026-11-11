@@ -27,3 +27,25 @@ test('a correctly ordered list page is never "Entries go in alphabetical order" 
     assert.ok(rules(withEntries(id, ['Smith, A. Four.', 'Adams, J. One.']), id).includes('list-order'), `${id}: misordered`);
   }
 });
+
+const withBody = (id, text) => {
+  const json = FX.papers[id](), at = F.read(S.paper.nodeFromJSON(json), ST.FORMATS[id]).end;
+  json.content.splice(at, 0, P(text));
+  return S.paper.nodeFromJSON(json);
+};
+const cards = (doc, id, rule) => F.check(doc, ST.FORMATS[id]).issues.filter((i) => i.rule === rule);
+// CMOS 17 14.1–14.6: notes-bibliography papers cite sources in notes; a parenthetical that points inside the paper
+// (CMOS 3.9 figure and table callouts, "(see Table 2)"), a note to the reader ("(emphasis added)", CMOS 13.60) or a name
+// the sentence runs on through is no citation. APA 7 §8.11 likewise.
+test('Chicago: figure, table and chapter callouts and run-on names are not citations to move into notes (CMOS 14.1, 3.9, 13.60)', () => {
+  for (const text of ['As shown (Figure 3), rates rose.', 'Rates rose (Table 2).', 'This is covered later (Chapter 4).', 'Rates rose (see Table 2).', 'He “never” left (emphasis added).', 'The mission (Apollo 11) landed in July.', 'Rates rose (Fig. 3).'])
+    assert.deepEqual(cards(withBody('chicago17', text), 'chicago17', 'cite-note'), [], text);
+  const real = cards(withBody('chicago17', 'Time swings (Smith 42).'), 'chicago17', 'cite-note');
+  assert.equal(real.length, 1, 'an author and page is still a citation');
+  assert.equal(real[0].fix.note, 'Smith, 42.');
+});
+test('APA: a label or a run-on name with a number is not a citation missing its comma (APA 8.11)', () => {
+  for (const text of ['As shown (Figure 2019), rates rose.', 'The tournament (Euro 2020) drew crowds.', 'Rates rose (Table 2020).'])
+    assert.deepEqual(cards(withBody('apa7', text), 'apa7', 'cite-shape'), [], text);
+  assert.deepEqual(cards(withBody('apa7', 'Rates rose (Smith 2020).'), 'apa7', 'cite-shape').map((i) => i.suggestions), [['(Smith, 2020)']]);
+});
