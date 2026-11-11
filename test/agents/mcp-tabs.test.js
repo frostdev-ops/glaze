@@ -123,6 +123,44 @@ test('Ultra: the planner read through courses/ultra.js in the tab, from Ultra\'s
   assert.ok(tab.page.loaded.includes('courses/ultra.js'));
 });
 
+// Ultra's planner through the real worker: its publish carries the site's lease (glaze:ultraMine begin), so the worker's
+// guard keeps it, and a site reset between the read and the publish is still refused.
+const ultraRoutes = (hook) => {
+  const fx = (n) => C.load(`ultra-${n}.json`);
+  return {
+    '/learn/api/v1/users/me': { id: C.ULTRA_UID },
+    [`/learn/api/v1/users/${C.ULTRA_UID}/memberships`]: fx('memberships'),
+    '/learn/api/v1/calendars/todo/studentItems': async () => { await hook?.(); return fx('todo'); },
+    '/learn/api/v1/calendars/calendarItems': fx('calendar-items'),
+    '^/learn/api/v1/courses/_\\d+_\\d+/gradebook/grades': fx('grades-status'),
+  };
+};
+test('Ultra through the worker: the tab\'s planner publish carries the site\'s lease and is kept; source tab', async () => {
+  const tab = H.tab({ id: 6, url: `${C.ULTRA}/ultra/course`, site: 'ultra', uid: C.ULTRA_UID, store: {}, routes: ultraRoutes() });
+  const env = await H.boot({ local: { ultra: [C.ULTRA] }, tabs: [tab] });
+  try {
+    await H.conn(env.w);
+    assert.deepEqual({ ...await vm.runInContext(`mcpRefresh(${JSON.stringify(UL)}, 'courses', {})`, env.w.context) }, { ok: true, source: 'tab' });
+    const put = tab.page.sent.find((m) => m.type === 'glaze:todo');
+    assert.match(put.cache.epoch, /^[\w-]+\/$/, 'the lease the worker handed out');
+    assert.equal(env.store.local.todoCache.key, `todo:${UL}`);
+    assert.ok(env.store.local.todoCache.items.length > 0);
+  } finally { await H.off(env); }
+});
+test('Ultra through the worker: a site reset during the read leaves the kept planner as it was', async () => {
+  let env;
+  const tab = H.tab({ id: 7, url: `${C.ULTRA}/ultra/course`, site: 'ultra', uid: C.ULTRA_UID, store: {},
+    routes: ultraRoutes(() => vm.runInContext(`purgeUltra(${JSON.stringify(C.ULTRA)}, true, true)`, env.w.context)) });
+  env = await H.boot({ local: { ultra: [C.ULTRA] }, tabs: [tab] });
+  try {
+    await H.conn(env.w);
+    assert.deepEqual({ ...await vm.runInContext(`mcpRefresh(${JSON.stringify(UL)}, 'courses', {})`, env.w.context) }, { ok: false, source: 'tab' });
+    const put = tab.page.sent.find((m) => m.type === 'glaze:todo');
+    assert.match(put?.cache.epoch || '', /^[\w-]+\/$/, 'it read and published under the lease it took before the reset');
+    assert.equal(env.store.local.todoCache, undefined, 'the worker refused it');
+  } finally { await H.off(env); }
+});
+
 test('grades: Insights read afresh only while it is on and the account keeps a record; a cleared record stays cleared', async () => {
   const store = {};
   const old = Date.now() - 864e5;
