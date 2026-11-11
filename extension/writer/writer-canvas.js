@@ -72,8 +72,10 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
   const ready = (ed) => {
     const root = rootOf(ed), box = root?.querySelector('.tox-tinymce');
     if (!root || !box || !frameOf(ed) || ed.style?.display !== 'none' || box.style?.display === 'none' || ed.parentElement?.style?.display === 'none') return false;
-    return !top(ed).querySelector(RESTORE);
+    return !restoring(ed);
   };
+  // Canvas's restore-autosave dialog is open for the page's one Rich Content Editor (it may come after Writer opened).
+  const restoring = (ed) => !plain(ed) && !!top(ed).querySelector(RESTORE);
 
   // A quick look before a frame opens: a box holding what Canvas's dialect in Writer can't keep stays Canvas's (colours,
   // sizes, h2, tables, pictures, embeds, maths, mentions, file links). It passes everything Writer writes and TinyMCE's own
@@ -170,7 +172,7 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     return { editor, container: containerOf(editor), root: rootOf(editor), kind, mode: modeOf(kind), send: sendOf(editor, kind), context: contextOf(editor, kind), identity: identity(editor) };
   }).filter(Boolean);
 
-  return { EDITOR, INBOX, KINDS, NATIVE, HOLD, TOOLS, drafts, kept, focus, focuses, errorsOf, boxes, kindOf, rootOf, containerOf, identity, sendOf, sends, enabled, contextOf, canEdit, editable, read, write, watch, attemptAt, paragraphs, linesOf };
+  return { EDITOR, INBOX, KINDS, NATIVE, HOLD, TOOLS, drafts, kept, restoring, focus, focuses, errorsOf, boxes, kindOf, rootOf, containerOf, identity, sendOf, sends, enabled, contextOf, canEdit, editable, read, write, watch, attemptAt, paragraphs, linesOf };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_CANVAS;
 GZ_WRITER_CANVAS;

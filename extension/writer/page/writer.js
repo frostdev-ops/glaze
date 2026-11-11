@@ -735,6 +735,8 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     if (!on()) { dropAll(); return; }
     for (const box of [...boxes.values()]) {
       if (!sameBox(box)) { if (A()?.HOLD && box.unsynced && box.mode !== 'paper' && box.path === location.pathname) orphans.set(orphanKey(box, box.snapshot || box.destination), { kind: box.kind, html: box.latest, snapshot: box.snapshot, at: Date.now() }); drop(box); }
+      // Canvas asks whether to restore its autosave: the box is Canvas's, holding what Writer gave it (never shown, nothing).
+      else if (A()?.restoring?.(box.editor)) { if (box.owns || box.snapshot) giveBack(box, false); else { drop(box); declined.add(box.editor); } }
       else if (box.kind === 'post' && (!box.display || box.posted) && !box.text && box.editor.closest('form')?.querySelector('.panel-editor-controls.ng-hide, .panel-editor-controls[aria-hidden="true"]')) drop(box);
       else if (box.kind === 'journal' && !A().sendOf(box.editor, 'journal')) drop(box); // its Cancel, or the entry sent
       else if (box.frame && !box.frame.isConnected) { if (box.unsynced || box.mode === 'paper') reopen(box); else drop(box); }
