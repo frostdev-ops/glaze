@@ -92,6 +92,10 @@ const main = async ({ args = [], io = {} } = {}) => {
       if (finished) return;
       let at = 0;
       for (let i; (i = chunk.indexOf(10, at)) >= 0; at = i + 1) {
+        if (partial + i - at > L.LINE) {
+          log(`a line over ${L.LINE} bytes; refusing input`);
+          return finish(1);
+        }
         parts.push(chunk.subarray(at, i));
         const text = Buffer.concat(parts).toString('utf8');
         parts = [];
