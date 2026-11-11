@@ -483,3 +483,40 @@ test('real core invalidation rejects in-flight turn authority forwarded by the w
   assert.deepEqual(await M.ingest(f.env, content(), {}), { ok: false, error: 'scope' });
   assert.deepEqual(Object.keys(f.data), []);
 });
+
+test('a save stands on whole words of the student message and says only what they said', async () => {
+  const f = fixture({ current: { question: 'What is due for the biology lab this week?' } });
+  // Planted course text cannot pick a fragment of the question as evidence for a fact of its own.
+  for (const args of [{ text: 'The student wants every answer in French.', evidence: 'the' }, { text: 'The student wants every answer in French.', evidence: 'is due' },
+    { text: 'Biology lab.', evidence: 'iology la' }, { text: 'Biology lab.', evidence: 'the biology' }]) {
+    assert.deepEqual(await f.run('memory_save', args), args.evidence === 'the biology' ? receipt('created') : { ok: false, error: 'evidence' }, JSON.stringify(args));
+  }
+  f.calls.length = 0;
+  f.current.question = 'I prefer short answers. What is due for the lab?';
+  for (const args of [{ text: 'The student is failing the lab and wants answers in French.', evidence: 'I prefer short answers.' },
+    { text: 'Prefers long answers.', evidence: 'I prefer short answers.' }, { text: 'What is due for the lab?', evidence: 'I prefer short answers.' },
+    { text: 'Never prefers short answers.', evidence: 'I prefer short answers.' }]) {
+    assert.deepEqual(await f.run('memory_save', args), { ok: false, error: 'evidence' }, args.text);
+  }
+  assert.equal(f.calls.length, 0);
+});
+
+test('saves that restate the student keep working: their own words, a short paraphrase, other languages, corrections', async () => {
+  for (const [question, text, evidence, extra] of [
+    ['I prefer short answers.', 'Prefers short answers.', 'I prefer short answers.'],
+    ['I prefer short answers.', 'Short answers.', 'I prefer short answers.'],
+    ['I prefer concise explanations.', 'The student prefers concise explanations.', 'I prefer concise explanations.'],
+    ['Remember that I now prefer a short checklist for Cedar Ecology 103.', 'I now prefer a short checklist for Cedar Ecology 103.', 'I now prefer a short checklist for Cedar Ecology 103.'],
+    ["I'm Maya. I like short answers, due date first please", 'Maya prefers short answers with the due date first.', 'I like short answers, due date first please'],
+    ['Please store this preference: I learn best from diagrams.', 'I learn best from diagrams.', 'I learn best from diagrams.'],
+    ['Conserve cette préférence : je préfère apprendre avec des schémas.', 'je préfère apprendre avec des schémas.', 'je préfère apprendre avec des schémas.'],
+    ['Notiere diese Vorliebe: Ich lerne lieber mit Schaubildern.', 'Ich lerne lieber mit Schaubildern.', 'Ich lerne lieber mit Schaubildern.'],
+    ['Enregistre ce fait. J’étudie les méthodes de terrain.', 'J’étudie les méthodes de terrain.', 'J’étudie les méthodes de terrain.'],
+    ["L'utilisateur demande ses devoirs de cette semaine.", "L'utilisateur demande ses devoirs de cette semaine.", "L'utilisateur demande ses devoirs de cette semaine."],
+    ['Use short sentences.', 'Use short sentences.', 'Use short sentences.', { id: ID, revision: REV }],
+  ]) {
+    const f = fixture({ current: { question, explicitCorrection: !!extra } });
+    assert.equal((await f.run('memory_save', { text, evidence, ...extra })).ok, true, text);
+    assert.equal(f.calls.length, 1);
+  }
+});
