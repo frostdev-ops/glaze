@@ -21,7 +21,7 @@ const VOCAB = (() => {
 const TOK = (() => { const t = K.load(VOCAB); for (const n of K.GLAZE_TOKENS) t.add(n); return t; })();
 
 // fault: what the next engine's decode throws from now on ('lost' stays, as engine.js's flag does), or null.
-const setup = () => {
+const setup = ({ reserve = false } = {}) => {
   const log = { loads: 0, released: 0 };
   const state = { fault: null };
   const E = {
@@ -31,6 +31,9 @@ const setup = () => {
       let i = 0, dead = null;
       return {
         context: 16000,
+        ...(reserve && { reserve: async () => {
+          if (state.fault) { const reason = state.fault; state.fault = null; throw Object.assign(new Error('context growth failed'), { reason }); }
+        } }),
         prefill: async () => { i = 0; }, snapshot: async () => ({ drop() {} }), restore: async () => {},
         decode: async () => {
           if (!dead && state.fault) { dead = state.fault; if (dead === 'memory') state.fault = null; }
@@ -47,7 +50,7 @@ const setup = () => {
     gpu: () => ({}), setTimeout: (f, ms) => { const t = setTimeout(f, ms); t.unref?.(); return t; },
     post: (m) => { posted.push(m); if (m.type === 'done' || m.type === 'error') waiters.get(m.id)?.(m); } });
   let seq = 0;
-  const run = () => { const id = ++seq; const p = new Promise((r) => waiters.set(id, r)); host.handle({ id, op: 'run', model: 'm', parts: [{ text: 'hi' }], stable: 0, sampler: {}, maxTokens: 8 }); return p; };
+  const run = (op = 'run') => { const id = ++seq; const p = new Promise((r) => waiters.set(id, r)); host.handle({ id, op, model: 'm', parts: [{ text: 'hi' }], stable: 0, sampler: {}, maxTokens: 8 }); return p; };
   return { host, log, state, run };
 };
 
@@ -66,6 +69,20 @@ for (const reason of ['lost', 'memory']) {
     const next = await t.run();
     assert.equal(next.type, 'done', JSON.stringify(next));
     assert.equal(t.log.loads, 2, 'loaded again');
+  });
+}
+
+for (const op of ['run', 'warm']) {
+  test(`${op}: an out-of-memory context growth releases the loaded engine and keeps the memory reason`, async () => {
+    const t = setup({ reserve: true });
+    assert.equal((await t.run()).type, 'done');
+    t.state.fault = 'memory';
+    const failed = await t.run(op);
+    assert.deepEqual(failed.error, { category: 'provider-unavailable', reason: 'memory' });
+    assert.equal(t.log.released, 1);
+    assert.equal(t.host.loaded, null);
+    assert.equal((await t.run()).type, 'done');
+    assert.equal(t.log.loads, 2);
   });
 }
 
