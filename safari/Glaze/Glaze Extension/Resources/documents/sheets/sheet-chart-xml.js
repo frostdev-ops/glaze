@@ -144,8 +144,10 @@ var GZ_SHEET_CHART_XML = globalThis.GZ_SHEET_CHART_XML || (() => {
       const rid = attr(ref, 'id');
       const nv = all(frame, 'cNvPr')[0];
       const from = marker(kid(a, 'from')), to = marker(kid(a, 'to'));
-      // Kept in the list, so the others keep their place (ids, spans); charts() leaves it out.
-      if (from === false || to === false) { out.push({ kind, rid, broken: true }); continue; }
+      // A marker without its cell, or one its kind needs missing (two-cell: from and to; one-cell: from and ext; absolute:
+      // pos and ext). Kept in the list, so the others keep their place (ids, spans); charts() leaves it out.
+      const needs = kind === 'twoCellAnchor' ? [from, to] : kind === 'oneCellAnchor' ? [from, kid(a, 'ext')] : [kid(a, 'pos'), kid(a, 'ext')];
+      if (needs.some((x) => !x)) { out.push({ kind, rid, broken: true }); continue; }
       out.push({ kind, rid, ex: /chartex/i.test(data.a.uri || '') || /^cx:/.test(ref.name), name: nv?.a.name || '', descr: nv?.a.descr || '',
         from, to, ext: extOf(kid(a, 'ext')), pos: kid(a, 'pos') && { x: num(kid(a, 'pos').a.x, 0) / EMU, y: num(kid(a, 'pos').a.y, 0) / EMU }, editAs: a.a.editAs || null });
     }
