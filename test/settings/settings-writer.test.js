@@ -374,3 +374,78 @@ test('each Clear… confirms and reports what it clears: a course’s papers, Do
   assert.deepEqual(await refused(documents), ['Clear documents?', 'Clear documents', 'Some documents could not be cleared. Try again.', true]);
   assert.deepEqual(await refused(all), ['Clear all papers and documents?', 'Clear all', 'Some papers and documents could not be cleared. Try again.', true]);
 });
+
+// Clear all papers and documents: every row of the Documents index goes, whatever its kind, Trash's too, with the parts, versions
+// and files each holds (audit 2026-11-11 A8 #1: only rows of kind paper went, and the message said everything had).
+const clearAllWorld = async ({ busy = () => false } = {}) => {
+  const vm = require('node:vm'), WE = require('../../extension/settings/editor-writer.js'), PA = require('../../extension/writer/writer-papers.js'), F = require('../../extension/documents/doc-files.js');
+  const { fakeIDB } = require('../helpers/fake-idb.cjs');
+  globalThis.GZ_WRITER_STYLES ||= require('../../extension/writer/writer-styles.js');
+  const data = {}, copy = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+  const local = { data, get: async (k) => (typeof k === 'string' ? { [k]: copy(data[k]) } : Object.fromEntries([].concat(k).map((x) => [x, copy(data[x])]))),
+    set: async (o) => { for (const [k, v] of Object.entries(o)) data[k] = copy(v); }, remove: async (ks) => { for (const k of [].concat(ks)) delete data[k]; } };
+  const { indexedDB, IDBKeyRange } = fakeIDB(), clock = { t: 1e12 };
+  const files = F.store(F.idb(indexedDB, 'glaze-docs', IDBKeyRange), { now: () => clock.t });
+  const P = PA.open(local, () => clock.t, { versions: () => 40, files, busy });
+  const stored = () => [...indexedDB.dbs.get('glaze-docs').get('files').keys()].filter((k) => k.startsWith('f:'));
+  const put = (n, type) => files.put(Uint8Array.from({ length: n }, (_, i) => (i * 7 + n) & 255), type);
+  const paper = 'bb.school.test|_9_1|_101_1|_7_1', sheet = PA.newKey(), pdf = PA.newKey(), deck = PA.newKey(), binned = PA.newKey();
+  const f1 = await put(300, 'application/pdf'), f2 = await put(400, 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+  await P.save(paper, { kind: 'paper', doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Essay' }] }] }, courseName: 'ENG 101', title: 'Essay' });
+  await P.save(sheet, { kind: 'sheet', book: { sheets: [] }, title: 'Grades', named: true }, { parts: { '0:0': { rows: { 0: ['91'] } } }, changed: true, version: { gz: 'x', reason: 'auto', cells: 1 } });
+  await P.save(pdf, { kind: 'pdf', doc: null, file: f1, size: f1.size, pages: 1, title: 'Scanned ID', named: true }, { reason: 'import' });
+  await P.save(deck, { kind: 'slides', doc: null, file: f2, size: f2.size, ext: '.pptx', slides: 1, title: 'Deck', named: true }, { reason: 'import' });
+  await P.save(binned, { kind: 'sheet', book: { sheets: [] }, title: 'Old grades', named: true }, { parts: { '0:0': { rows: { 0: ['77'] } } }, changed: true });
+  await P.trash(binned);
+  clock.t += F.HOLD + 1; // a file let go within HOLD of its put waits for a later call; these were put "long ago"
+  const keys = [paper, sheet, pdf, deck, binned];
+  // Settings' papers code with stand-ins for the page; each removal redraws, as storage.onChanged does there.
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/settings/editor-writer.js'), 'utf8');
+  const from = source.indexOf('    const drawPapers = '), to = source.indexOf("    $('writer-clear-all').addEventListener", from);
+  const nodes = new Map(), hints = [], $ = (id) => {
+    if (!nodes.has(id)) nodes.set(id, { textContent: '', on: {}, replaceChildren() {}, showModal() {}, focus() {}, addEventListener(type, fn) { this.on[type] = fn; } });
+    return nodes.get(id);
+  };
+  const p = await vm.runInNewContext(`(async () => { let courses, everything; ${source.slice(from, to)} await drawPapers(); return { ask, everything: () => everything, courses: () => courses }; })()`, {
+    $, el: () => ({ setAttribute() {}, addEventListener() {}, append() {} }), papers: () => P, byCourse: WE.byCourse, allKeys: WE.allKeys,
+    t: (k, v = {}) => k.replace(/\{(\w+)\}/g, (s, x) => (x in v ? v[x] : s)), away: () => false, o: { hint: (m, err) => hints.push([m, err]) }, console: { error() {} },
+  });
+  const clearAll = async () => { p.ask(p.everything()); $('writer-clear').returnValue = 'ok'; await $('writer-clear').on.close(); for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
+  const left = () => Object.keys(data).filter((k) => /^writer(Paper|Versions|Sheet):/.test(k)).sort();
+  return { P, keys, data, files, stored, hints, $, p, clearAll, left, paper, sheet, pdf, deck, binned, WE };
+};
+
+test('Clear all counts and removes every document of every kind, Trash too, with its parts, versions and files', async () => {
+  const w = await clearAllWorld();
+  assert.equal((await w.P.list()).length, 5);
+  assert.equal(w.stored().length, 2, 'the PDF and the deck are in the file store');
+  assert.deepEqual(w.WE.allKeys(await w.P.list()).sort(), [...w.keys].sort(), 'Clear all names all five');
+  assert.deepEqual(w.p.courses().map((c) => [c.name, c.keys.length]), [['ENG 101', 1]], 'the list by course stays papers by course');
+  w.p.ask(w.p.everything());
+  assert.match(w.$('writer-clear-note').textContent, /^5 papers and documents\./, 'the dialog counts what it will delete');
+  w.$('writer-clear').returnValue = 'cancel';
+  await w.$('writer-clear').on.close();
+  assert.equal((await w.P.list()).length, 5, 'Cancel removes nothing');
+  await w.clearAll();
+  assert.deepEqual(w.hints.at(-1), ['Papers and documents cleared.', false]);
+  assert.deepEqual(await w.P.list(), [], 'the index is empty');
+  assert.deepEqual(w.left(), [], 'no record, version list or sheet band is left');
+  assert.deepEqual(w.stored(), [], 'no file is left in the file store');
+  assert.equal(w.$('writer-clear-all').disabled, true);
+});
+
+test('Clear all that cannot remove one document says so, and the others still go', async () => {
+  let busy = false;
+  const w = await clearAllWorld({ busy: async (k) => busy && k === w.pdf });
+  busy = true;
+  await w.clearAll();
+  assert.deepEqual(w.hints.at(-1), ['Some papers and documents could not be cleared. Try again.', true]);
+  assert.deepEqual((await w.P.list()).map((r) => r.key), [w.pdf], 'the refused one is still listed');
+  assert.deepEqual(w.left().filter((k) => k.startsWith('writerPaper:')), [`writerPaper:${w.pdf}`]);
+  assert.equal(w.stored().length, 1, 'only its file stays');
+  busy = false;
+  await w.clearAll();
+  assert.deepEqual(w.hints.at(-1), ['Papers and documents cleared.', false]);
+  assert.deepEqual(w.left(), []);
+  assert.deepEqual(w.stored(), []);
+});
