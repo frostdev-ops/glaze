@@ -284,6 +284,15 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     box.port.postMessage({ type: 'init', site: X.site, mode: box.mode, kind: box.kind, askOwner: box.askOwner, html: box.latest, selection, placeholder: ed.getAttribute('data-placeholder') || '', look: l, context: box.context, locale: X.locale(), ...(offer && { offer }) });
     if (box.carried) { box.carried = false; sync(box, box.latest, null); }
     if (X.site === 'ultra' && ['post', 'reply', 'message', 'journal'].includes(box.kind)) X.need('writer/writer-context-discussion.js', () => globalThis.GZ_WRITER_CONTEXT_DISCUSSION).then(() => globalThis.GZ_WRITER_CONTEXT_DISCUSSION?.watch(box, X), () => {});
+    // A Canvas reply's targets, as Ultra's discussions have theirs: what its prompt states (writer/writer-target.js), for the
+    // compose bar's ring. The rest of its context came with the box (writer/writer-canvas.js contextOf).
+    const target = X.site === 'canvas' && !box.context?.requirements && box.context?.prompt?.text && A().targetOf?.(box);
+    if (target) X.need('writer/writer-target.js', () => globalThis.GZ_WRITER_TARGET).then(() => {
+      const T = globalThis.GZ_WRITER_TARGET;
+      if (!T || boxes.get(ed) !== box || !box.port) return;
+      box.context = { ...box.context, requirements: T.forKind(T.parse(box.context.prompt.text, { lang: X.locale?.() }), target) };
+      box.port.postMessage({ type: 'context', context: box.context });
+    }, () => {});
     if (X.site === 'ultra' && box.kind === 'reply') X.need('writer/page/writer-quote.js', () => globalThis.GZ_WRITER_QUOTE).then(() => globalThis.GZ_WRITER_QUOTE?.arm(box), () => {});
     box.display ||= [box.root.style.getPropertyValue('display'), box.root.style.getPropertyPriority('display')];
     box.root.style.setProperty('display', 'none', 'important');
