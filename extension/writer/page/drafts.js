@@ -455,7 +455,7 @@ var GZ_DRAFT_UI = globalThis.GZ_DRAFT_UI || (() => {
   const ready = async (ed) => {
     // A Canvas Rich Content Editor has Canvas's own autosave to restore from; nothing of Glaze's is waiting there.
     if (!ctx.settings().enhance.drafts) return true;
-    if (rce(ed)) { loadAccount(); return true; } // Writer offers what is kept of it (offer)
+    if (rce(ed)) { rceId(ctx.draftAt(ed)); loadAccount(); return true; } // cache the attempt before Canvas can retire it
     await loadAccount();
     const key = account && draftKey(ed);
     // A new Inbox message with no course, recipients or subject yet has no copy to offer: Writer takes it.
