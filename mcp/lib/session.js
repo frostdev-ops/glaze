@@ -72,6 +72,14 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
     init = { params: p, version: v };
     return line({ id, result: { protocolVersion: v, capabilities: { tools: { listChanged: true } }, serverInfo: { name: 'glaze', title: 'Glaze', version } } });
   };
+  const expire = (r, now) => {
+    held = held.filter((h) => {
+      if (h.id === undefined || now - h.at < WAIT) return true;
+      size -= h.n;
+      r.app.push(h.method === 'initialize' && !ever && !(init && init.version) ? answer(h.id, h.params) : away(h.id));
+      return false;
+    });
+  };
   // Once Glaze is back and knows the app again: what the app had sent, then a nudge to list the tools afresh.
   const resume = (r) => {
     const known = !!(init && init.version && ready);
@@ -112,6 +120,7 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
     const r = out(), m = parse(text);
     if (m && !Object.hasOwn(m, 'method') && Object.hasOwn(m, 'id') && (Object.hasOwn(m, 'result') || Object.hasOwn(m, 'error'))) {
       if (replaying && m.id === REPLAY) {
+        expire(r, now);
         replaying = false;
         if (m.error) return { ...r, fatal: `Glaze refused this app's initialize again: ${isObj(m.error) && typeof m.error.message === 'string' ? m.error.message : 'an error'}` };
         const v = isObj(m.result) ? m.result.protocolVersion : undefined;
@@ -154,10 +163,11 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
 
   const up = (now, name) => {
     const r = out();
+    if (typeof name === 'string' && name) where = name;
+    expire(r, now);
     live = true;
     ever = true;
     since = now;
-    if (typeof name === 'string' && name) where = name;
     for (const h of held) if (h.again && h.method === 'subscriptions/listen') acks.add(key(h.id));
     if (init && init.version) {
       replaying = true;
@@ -171,12 +181,7 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
   const tick = (now) => {
     const r = out();
     if (live && !replaying) return r;
-    held = held.filter((h) => {
-      if (h.id === undefined || now - h.at < WAIT) return true;
-      size -= h.n;
-      r.app.push(h.method === 'initialize' && !ever && !(init && init.version) ? answer(h.id, h.params) : away(h.id));
-      return false;
-    });
+    expire(r, now);
     return r;
   };
 
