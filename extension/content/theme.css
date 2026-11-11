@@ -1356,6 +1356,7 @@ html[data-gz-dark-theme] #site-wrap .bb-editor-container.is-read-only img:not([d
    a dark Look it is lifted, in its own hue, to OKLCH lightness 0.78 or more (6.3:1 and up on every built-in dark surface), so
    black and navy turn light and a colour that already read is left alone. A text fill, so the element's own colour stays the
    source; highlights and what sits in them keep the dark ink the highlight rule below gives. Before Chrome 119 the ink again. */
+@media screen {
 @supports (color: oklch(from red l c h)) {
   html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root, .MuiPopper-root) :is(.bb-editor-container.is-read-only, .bbml-content) [style^="color"]:not(:is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])), :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) *),
   html[data-gz-dark-theme] :is(#site-wrap, .MuiModal-root, .MuiPopper-root) :is(.bb-editor-container.is-read-only, .bbml-content) [style*=";color"]:not(:is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])), :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) *),
@@ -1377,6 +1378,7 @@ html[data-gz-dark-theme] #site-wrap .bb-editor-container.is-read-only img:not([d
 html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml-content) :where(mark):is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])),
 html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml-content) :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light]),
 html[data-gz-dark-theme] #site-wrap :is(.bb-editor-container.is-read-only, .bbml-content) :is(mark, :is(span, font, strong, b, em, i, u)[style*="background"]:not([style*="transparent" i], [data-gz-light])) a { color: var(--gz-surface-2) !important; }
+}
 
 /* ---- rich text editor (submissions, replies, messages): toolbar, text and word count as one
    card, with the accent ring while you type ---- */
