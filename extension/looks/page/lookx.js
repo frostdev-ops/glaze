@@ -460,7 +460,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   // Ultra changes pages in place: its stickers are the new path's. Where there is no window.navigation (Firefox before 147) and
   // pushState fires no popstate, content.js's pass says so through route(), as a quiz or a tool's page comes or goes.
   let was = null; // whether the page was a quiz or a tool's at the last sync or move
-  const moved = () => { was = quiz(); if (globalThis.GZ_LX) cursor(); if (key) stickers(); };
+  const moved = () => { was = quiz(); if (globalThis.GZ_LX) { cursor(); stickers(); } };
   globalThis.navigation?.addEventListener('navigatesuccess', moved);
   addEventListener('popstate', moved);
   const route = () => { if (was !== null && quiz() !== was) moved(); };
