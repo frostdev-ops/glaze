@@ -95,7 +95,9 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
   const LISTS = [...DAYS, ...MONTHS];
   const caseOf = (s) => (s === s.toUpperCase() ? 'up' : s === s.toLowerCase() ? 'low' : 'cap');
   const inCase = (s, k) => (k === 'up' ? s.toUpperCase() : k === 'low' ? s : s[0].toUpperCase() + s.slice(1));
-  const TAIL = /^(.*?)(-?\d+)(\D*)$/;
+  // A text label's last number. A hyphen joined to the text before it (INV-0001, CS-101, Q1-2020) is the label's; one at
+  // the start or after a space (Item -2) is the number's sign.
+  const TAIL = /^(.*?)((?:(?<=^|\s)-)?\d+)(\D*)$/;
   const steady = (xs) => xs.every((x, i) => i === 0 || Math.abs(x - xs[i - 1] - (xs[1] - xs[0])) < 1e-12);
   // A source column or row (cells or null) and how many cells come after it. o: back (up or left: the series runs the other
   // way, the nearest cell first), dr and dc (one step of the fill's way, for moving formulas), isDate(cell). → [{ cell, from }]
