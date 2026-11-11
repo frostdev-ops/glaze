@@ -3,6 +3,8 @@
 # gcloud mints a short-lived token by impersonating the publisher's service account: no key file.
 # Listing text, screenshots and privacy answers are not in the API; edit those in the dashboard.
 #   sh tools/release/publish-chrome.sh [zip]     CWS_NO_PUBLISH=1 uploads without submitting.
+# The token goes to curl on its standard input, never as an argument (`ps` shows arguments to every user). An upload the
+# store still reports as in progress after CWS_STATUS_TIMEOUT seconds (default 600, ten minutes) stops the script.
 # With no zip it packages a fresh checkout of the committed HEAD (as CI does for a tag) and refuses a working tree with
 # uncommitted or untracked files, so it packages the same committed sources as the tag build. ZIP timestamps can differ;
 # recovery publication must attach these exact local bytes and their matching checksum to the draft GitHub release.
@@ -31,16 +33,24 @@ token=$(gcloud auth print-access-token --verbosity=error --impersonate-service-a
   --scopes=https://www.googleapis.com/auth/chromewebstore)
 api="https://chromewebstore.googleapis.com"
 path="publishers/$publisher/items/$item"
-call() { curl -sS --fail-with-body -H "Authorization: Bearer $token" "$@"; }
+case "$token" in ''|*[!A-Za-z0-9._~+/=-]*) echo "publish-chrome: gcloud gave no usable access token" >&2; exit 1 ;; esac
+# printf is a shell builtin and curl reads the header as config from stdin: the token is in no process's arguments.
+call() { printf 'header = "Authorization: Bearer %s"\n' "$token" | curl -sS --fail-with-body --config - "$@"; }
 field() { python3 -c 'import json,sys; print(json.load(sys.stdin).get(sys.argv[1], ""))' "$1"; }
 
-echo "Uploading $zip to $item…"
+echo "Uploading $zip to ${item}…"
 reply=$(call -X POST -H 'Content-Type: application/zip' --data-binary "@$zip" "$api/upload/v2/$path:upload") || { printf '%s\n' "$reply" >&2; exit 1; }
 state=$(printf '%s' "$reply" | field uploadState)
-# Large or busy uploads finish asynchronously.
+# Large or busy uploads finish asynchronously; the store gets CWS_STATUS_TIMEOUT seconds (ten minutes) to finish one.
+limit=${CWS_STATUS_TIMEOUT:-600}
+deadline=$(( $(date +%s) + limit ))
 while [ "$state" = IN_PROGRESS ] || [ "$state" = UPLOAD_IN_PROGRESS ]; do
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    echo "publish-chrome: the upload is still $state after $limit seconds. Check the item in the Developer Dashboard, then submit it there or run this again." >&2
+    exit 1
+  fi
   sleep 5
-  state=$(call "$api/v2/$path:fetchStatus" | field lastAsyncUploadState)
+  state=$(call --max-time 120 "$api/v2/$path:fetchStatus" | field lastAsyncUploadState)
 done
 if [ "$state" != SUCCEEDED ]; then
   echo "publish-chrome: upload $state" >&2
