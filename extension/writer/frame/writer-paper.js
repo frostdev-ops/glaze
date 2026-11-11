@@ -11,7 +11,7 @@
 // sends that text. Notes, page breaks, pictures, fonts and colours stay in the paper, for the full view's .docx.
 // Classic script after writer.js; the paper libraries load only when a paper opens. module.exports (project) for node.
 var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
-  const LIBS = ['writer/writer-styles.js', 'writer/writer-paginate.js', 'writer/writer-format.js', 'writer/writer-outline.js', 'writer/writer-papers.js', 'writer/writer-submit.js'];
+  const LIBS = ['writer/writer-sources.js', 'writer/writer-styles.js', 'writer/writer-paginate.js', 'writer/writer-format.js', 'writer/writer-outline.js', 'writer/writer-papers.js', 'writer/writer-submit.js'];
   const DOCX = ['writer/writer-color.js', 'core/zip.js', 'core/doctext.js', 'writer/writer-docx.js', 'writer/writer-objects-docx.js'];
   const GAP = 26.4; // between pages, in page px (22px at 100%)
   const PX100 = 80 / 96; // 100% shows an inch as 80px, as the mockup does
@@ -677,7 +677,8 @@ var GZ_WRITER_PAPER = globalThis.GZ_WRITER_PAPER || (() => {
       else if (x.op === 'page-break') tr.insert(x.at, n.page_break.create());
       else if (x.op === 'hanging') for (const at of x.at) { const node = s.doc.nodeAt(at); if (node) tr.setNodeMarkup(at, null, { ...node.attrs, first: null, indent: 0 }); }
       else if (x.op === 'sort') {
-        const part = tops.slice(x.from, x.to), sorted = [...part].sort((a, b) => a.node.textContent.trim().replace(/^[^\p{L}\p{N}]+/u, '').localeCompare(b.node.textContent.trim().replace(/^[^\p{L}\p{N}]+/u, ''), 'en', { sensitivity: 'base' }));
+        // The check's own order (writer-sources.js order), so a sorted list is one the check passes.
+        const part = tops.slice(x.from, x.to), sorted = GZ_WRITER_SOURCES.order(part.map((p) => p.node.textContent.trim())).map((k) => part[k]);
         tr.replaceWith(part[0].pos, part.at(-1).pos + part.at(-1).node.nodeSize, sorted.map((p) => p.node));
       } else if (x.op === 'title-repeat') tr.insert(x.at, para(x.title, { align: 'center' }, format.title.bold));
       else if (x.op === 'to-note') {

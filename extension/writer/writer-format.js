@@ -6,6 +6,7 @@
 // Classic script; module.exports for node.
 var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
   const ST = () => (typeof GZ_WRITER_STYLES !== 'undefined' ? GZ_WRITER_STYLES : require('./writer-styles.js'));
+  const SRC = () => (typeof GZ_WRITER_SOURCES !== 'undefined' ? GZ_WRITER_SOURCES : require('./writer-sources.js'));
 
   // ---- making a paper
   const BLOCK = { align: null, indent: 0, line: null, first: null };
@@ -276,8 +277,7 @@ var GZ_WRITER_FORMAT = globalThis.GZ_WRITER_FORMAT || (() => {
       const entries = tops.slice(list.from, list.to).filter((x) => x.node.textContent.trim());
       const flat = entries.filter((x) => x.node.attrs.first != null && x.node.attrs.first >= 0);
       if (flat.length) add('list', 'list-hanging', flat[0].pos + 1, flat.at(-1).pos + flat.at(-1).node.nodeSize - 1, 'Entries take a hanging indent', { fix: { op: 'hanging', at: flat.map((x) => x.pos) } });
-      const keys = entries.map((x) => x.node.textContent.trim().replace(/^[^\p{L}\p{N}]+/u, '').toLowerCase());
-      if (keys.some((k, i) => i && k.localeCompare(keys[i - 1]) < 0)) add('list', 'list-order', entries[0].pos + 1, entries.at(-1).pos + entries.at(-1).node.nodeSize - 1, 'Entries go in alphabetical order', { fix: { op: 'sort', from: list.from, to: list.to } });
+      if (SRC().disorder(entries.map((x) => x.node.textContent.trim())) > 0) add('list', 'list-order', entries[0].pos + 1, entries.at(-1).pos + entries.at(-1).node.nodeSize - 1, 'Entries go in alphabetical order', { fix: { op: 'sort', from: list.from, to: list.to } });
       const bold = t.node.content.content.some((c) => c.isText) && t.node.content.content.every((c) => !c.isText || c.marks.some((m) => m.type.name === 'bold'));
       if (f.list.bold && !bold) add('list', 'list-bold', s.from, s.to, '{title} is bold', { vars: { title: f.list.title }, fix: { op: 'mark', mark: 'bold' } });
       if (!f.list.bold && bold) add('list', 'list-plain', s.from, s.to, "{title} isn't bold", { vars: { title: f.list.title }, fix: { op: 'unmark', mark: 'bold' } });

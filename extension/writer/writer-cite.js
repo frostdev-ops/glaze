@@ -479,10 +479,8 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     }
     // Typed entries that no citation names, and the typed list's order.
     if (typed?.entries.length) {
-      const keys = typed.entries.map((e) => fold(article(e.text.replace(/^[“"‘']/, ''))));
-      for (let i = 1; i < keys.length; i++) {
-        if (keys[i] < keys[i - 1]) { issues.push(ISSUE(T.posAt(typed.entries[i].from), T.posAt(typed.entries[i].to), t('{list} is out of order', { list: typed.title }), { title: typed.title })); break; }
-      }
+      const i = S().disorder(typed.entries.map((e) => e.text));
+      if (i > 0) issues.push(ISSUE(T.posAt(typed.entries[i].from), T.posAt(typed.entries[i].to), t('{list} is out of order', { list: typed.title }), { title: typed.title }));
     }
     for (const s of all) {
       if (used.has(s.id)) continue;

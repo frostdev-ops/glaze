@@ -148,7 +148,9 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
   };
 
   // The same work twice: one DOI, ISBN or address, or one title, first name and year.
-  const fold = (v) => String(v || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/<\/?i>/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  // Letters NFKD leaves whole file as their base letters (Æ as ae, Ø as o, Ł as l).
+  const LETTERS = { æ: 'ae', ø: 'o', ł: 'l', đ: 'd', ð: 'd', þ: 'th', œ: 'oe', ß: 'ss', ı: 'i', ħ: 'h', ŧ: 't' };
+  const fold = (v) => String(v || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[æøłđðþœßıħŧ]/g, (c) => LETTERS[c]).replace(/<\/?i>/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
   const where = (u) => { try { const x = new URL(u); return `${x.hostname.replace(/^www\./, '')}${x.pathname.replace(/\/+$/, '')}${x.search}`; } catch { return ''; } };
   const lead = (s) => { const n = (s.author || s.editor || [])[0]; return fold(n ? n.family || n.literal : ''); };
   const year = (s) => s.issued?.['date-parts']?.[0]?.[0] || '';
@@ -171,6 +173,26 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
   const replace = (list, raw) => { const s = normalize(raw); return s ? list.map((x) => (x.id === s.id ? s : x)) : list; };
   const remove = (list, id) => list.filter((x) => x.id !== id);
   const dedupe = (list) => (Array.isArray(list) ? list : []).reduce((acc, s) => add(acc, s).sources, []);
+
+  // ---- a reference list's order ------------------------------------------------------------------------------------
+  // APA 7 9.44–9.48, MLA 9 5.124–5.126, CMOS 17 14.66 and 16.58: letter by letter by an entry's first element (the
+  // surname, a group's name, a title without A, An or The), so nothing precedes something (Brown before Browning). Only
+  // that element is compared: what orders one author's works differs by style, so it is never flagged.
+  const head = (text) => fold(String(text || '').replace(/^[^\p{L}\p{N}]+/u, '').replace(/^(?:a|an|the)\s+/i, '').split(',')[0]).replace(/\s+/g, '');
+  // "———." and "---." stand for the entry before's author.
+  const repeated = (text) => /^\s*[-—–_]{2,}/.test(String(text || ''));
+  // texts → the index of the first entry out of order, or -1.
+  const disorder = (texts) => {
+    let prev = null;
+    for (let i = 0; i < texts.length; i++) { if (repeated(texts[i])) continue; const k = head(texts[i]); if (prev !== null && k < prev) return i; prev = k; }
+    return -1;
+  };
+  // texts → their indices in order; a repeated-author entry stays after the one before it, and equal heads keep their order.
+  const order = (texts) => {
+    const groups = [];
+    texts.forEach((t, i) => { if (repeated(t) && groups.length) groups.at(-1).at.push(i); else groups.push({ key: head(t), at: [i] }); });
+    return groups.map((g, i) => ({ ...g, i })).sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : a.i - b.i)).flatMap((g) => g.at);
+  };
 
   // ---- storage ------------------------------------------------------------------------------------------------------
   const PREFIX = 'writer:sources:';
@@ -196,7 +218,7 @@ var GZ_WRITER_SOURCES = globalThis.GZ_WRITER_SOURCES || (() => {
     return Promise.resolve(sources.length || removed.length ? a.set({ [k]: { sources, ...(removed.length && { removed }), at: Date.now() } }) : a.remove(k)).then(() => true, () => false);
   };
 
-  return { TYPES, MAX, normalize, add, replace, remove, dedupe, same, name: parseName, names, showName, date, showDate, today, doi, isbn, url, key, keyOf, load, loadState, save, PREFIX, fold, rich };
+  return { TYPES, MAX, normalize, add, replace, remove, dedupe, same, name: parseName, names, showName, date, showDate, today, doi, isbn, url, key, keyOf, load, loadState, save, PREFIX, fold, rich, disorder, order };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SOURCES;
