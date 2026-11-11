@@ -692,6 +692,9 @@ test('Open from Documents at the cap says Documents is full; with room, a failed
   crowd(local, DOC);
   assert.equal(await f.$.fromDocs(DOC, 'New document'), null);
   assert.deepEqual(toasts.slice(-1), [FULL]);
+  // The cap refused the last save, and a document that is gone is another failure: it keeps its own line.
+  assert.equal(await f.$.fromDocs('doc:11111111-2222-4333-8444-555555555555', 'Gone'), null);
+  assert.deepEqual(toasts.slice(-1), ['Not saved. Try again in a moment.']);
   const roomy = await capped({ room: true });
   assert.equal(await roomy.f.$.fromDocs(DOC, 'Gone'), null);
   assert.deepEqual(roomy.toasts, ['Not saved. Try again in a moment.']);
