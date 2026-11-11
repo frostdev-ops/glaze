@@ -845,7 +845,7 @@ BROKER.mods = {
 BROKER_FILES.media = ['../looks/media.js'];
 globalThis.addEventListener?.('install', () => importScripts('../looks/media.js'));
 BROKER.media = {
-  allow: (m, s) => fromEditor(s) && trustedFrame(s, 'settings') && ['put', 'list', 'drop', 'keep', 'reset'].includes(m.op),
+  allow: (m, s) => fromEditor(s) && trustedFrame(s, 'settings') && ['put', 'list', 'drop', 'keep', 'touch', 'reset'].includes(m.op),
   run: async (m, area) => {
     const store = { ...area, files: MEDIA_FILES };
     // Settings can open before the update event finishes, or after a failed migration. Discover legacy files there too.
@@ -1499,18 +1499,20 @@ chrome.storage.onChanged.addListener((changes, area) => {
     mediaHistory.add(left);
     before = null;
     serial(async () => {
-      const was = await left;
-      const [now, { lookHistory }] = await Promise.all([chrome.storage.sync.get(null), chrome.storage.local.get('lookHistory')]);
-      const at = Date.now();
-      // Each theme with the parts it wore (lookX). The theme left, whose parts were in this computer's local storage, can
-      // no longer be told apart from the new ones: it isn't added again, having been recorded when it was worn.
-      const local = brokerArea('local');
-      const [wasParts, nowParts] = await Promise.all([GZ_XPARTS.fromStored(was.lookX, local), GZ_XPARTS.fromStored(now.lookX, local)]);
-      const list = GZ_HISTORY.entries(lookHistory);
-      // An editor checkpoint captured edits made during this burst. Keep it ahead of the older burst origin.
-      const prior = wasParts === undefined || list[0]?.at >= started ? list : GZ_HISTORY.add(list, { ...was, parts: wasParts }, at);
-      await chrome.storage.local.set({ lookHistory: GZ_HISTORY.add(prior, { ...now, parts: nowParts ?? null }, at) });
-      mediaHistory.delete(left);
+      // A recording that fails still lets go of the files it held: one snapshot kept here would stop every later sweep.
+      try {
+        const was = await left;
+        const [now, { lookHistory }] = await Promise.all([chrome.storage.sync.get(null), chrome.storage.local.get('lookHistory')]);
+        const at = Date.now();
+        // Each theme with the parts it wore (lookX). The theme left, whose parts were in this computer's local storage, can
+        // no longer be told apart from the new ones: it isn't added again, having been recorded when it was worn.
+        const local = brokerArea('local');
+        const [wasParts, nowParts] = await Promise.all([GZ_XPARTS.fromStored(was.lookX, local), GZ_XPARTS.fromStored(now.lookX, local)]);
+        const list = GZ_HISTORY.entries(lookHistory);
+        // An editor checkpoint captured edits made during this burst. Keep it ahead of the older burst origin.
+        const prior = wasParts === undefined || list[0]?.at >= started ? list : GZ_HISTORY.add(list, { ...was, parts: wasParts }, at);
+        await chrome.storage.local.set({ lookHistory: GZ_HISTORY.add(prior, { ...now, parts: nowParts ?? null }, at) });
+      } finally { mediaHistory.delete(left); }
       sweepMedia();
     });
   }, 4000);
