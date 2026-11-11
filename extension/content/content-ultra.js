@@ -7,6 +7,18 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const stored = (keys, cb) => (I.stored ? I.stored(keys, cb) : chrome.storage.local.get(keys, cb));
 
   // ---- the student's courses -------------------------------------------------------------------
+  // A key several tabs write (read, merge, set): one writer at a time. Web Locks hold the other tabs of this origin until the set
+  // lands (another site's tab is another origin and isn't held back); a queue orders this tab's own, which is all there is
+  // without Web Locks (as canvasNews in content-canvas.js).
+  const writing = new Map();
+  const update = (key, merge, more) => {
+    const write = () => new Promise((done) => {
+      try { chrome.storage.local.get(key, (r) => { try { chrome.storage.local.set({ [key]: merge(r?.[key]), ...more }, done); } catch { done(); } }); } catch { done(); } // extension reloaded under the tab
+    });
+    const run = (writing.get(key) || Promise.resolve()).then(() => (navigator.locks?.request ? navigator.locks.request(`glaze:${key}`, write).catch(write) : write()));
+    writing.set(key, run);
+    return run;
+  };
   // Every course and the color slot Ultra gives it, for the editor's course list and the tint on
   // pages that don't show the slot: from the membership list Ultra's own Courses page asks for, once
   // a page load and at most every ten minutes. Stored locally; nothing leaves the device. Each Ultra site has its own: two
@@ -21,12 +33,9 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
           if (!Object.keys(seen).length) return;
           for (const [id, c] of Object.entries(seen)) courseSlots[id] = c.slot;
           for (const m of ms) if (seen[m.courseId]) Object.assign(seen[m.courseId], { site: location.origin, code: String(m.course.displayId || '').slice(0, 80) });
-          try { chrome.storage.local.get('seenCourses', (r) => {
-            // Canvas's and Moodle's (keyed by site) and other Ultra sites' stay; this site's go, with any kept before Ultra's
-            // records named their site.
-            const kept = Object.fromEntries(Object.entries(r?.seenCourses || {}).filter(([k, c]) => k.includes(':') || (c?.site && c.site !== location.origin)));
-            chrome.storage.local.set({ seenCourses: { ...kept, ...seen }, [at]: Date.now(), courseSlots });
-          }); } catch { /* reloaded */ }
+          // Canvas's and Moodle's (keyed by site) and other Ultra sites' stay; this site's go, with any kept before Ultra's
+          // records named their site.
+          update('seenCourses', (all) => ({ ...Object.fromEntries(Object.entries(all || {}).filter(([k, c]) => k.includes(':') || (c?.site && c.site !== location.origin))), ...seen }), { [at]: Date.now(), courseSlots });
         });
       });
     } catch { /* extension reloaded under the tab */ }
@@ -274,9 +283,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     if (c.seenGrades || c.seenContent) renderNew();
   });
   // One course at a time, over what's stored: another tab may have recorded other courses since.
-  const keepSeen = (key, cid, v) => {
-    try { chrome.storage.local.get(key, (r) => chrome.storage.local.set({ [key]: { ...r?.[key], [cid]: v } })); } catch { /* extension reloaded under the tab */ }
-  };
+  const keepSeen = (key, cid, v) => { update(key, (all) => ({ ...all, [cid]: v })); };
   // [card selector, its course id, where the badge goes]. Course list cards, recent courses, Grades tiles.
   const COURSE_CARDS = [
     [CARD, (e) => e.id.slice(19), (e) => e.querySelector('h4[id^="course-name-"]')],
