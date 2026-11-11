@@ -995,3 +995,30 @@ test('a sheet of thousands of overlapping full-width columns opens at once, and 
   const real = await X.read(synthetic({ 'xl/worksheets/sheet1.xml': SHEET1.replace('</cols>', '<col min="6" max="16384" style="3"/></cols>') }));
   assert.deepEqual(M.getSheet(real, 'One').keep.colAttrs.get(16383), { style: '3' });
 });
+
+// A part whose XML stops before its root closes (a producer that wrote a valid zip around half a sheet): the reader lists it
+// and the workbook still writes, instead of reading as a clean empty sheet and throwing from the next write().
+const cutLookup = async (cut) => {
+  const z = require('../../extension/core/doctext.js').unzip(fs.readFileSync(path.join(DIR, 'lookup.xlsx')));
+  const sheet = await z.text('xl/worksheets/sheet2.xml');
+  return pack(Object.fromEntries(await Promise.all(z.names.map(async (n) => [n, n === 'xl/worksheets/sheet2.xml' ? sheet.slice(0, cut) : await z.bytes(n)]))));
+};
+
+test('a sheet part cut inside its root tag or its data lists a part problem for that sheet', async () => {
+  for (const cut of [120, 300, 2000]) {
+    const wb = await X.read(await cutLookup(cut));
+    assert.deepEqual(wb.keep.problems.map((p) => [p.sheet ?? null, p.code]), [['Data', 'part']], `cut at ${cut}`);
+    assert.match(wb.keep.problems[0].message, /Data: .*ends before/, `cut at ${cut}`);
+  }
+  const whole = await X.read(await cutLookup(1e6));
+  assert.deepEqual(whole.keep.problems, [], 'the whole part reads clean');
+});
+
+test('a workbook with a sheet part cut inside its root tag or its data still writes, and the file reads back clean', async () => {
+  for (const cut of [120, 300, 2000]) {
+    const wb = await X.read(await cutLookup(cut));
+    const again = await X.read(await X.write(wb));
+    assert.deepEqual(again.sheets.map((s) => s.name), wb.sheets.map((s) => s.name), `cut at ${cut}`);
+    assert.deepEqual(again.keep.problems, [], `cut at ${cut}`);
+  }
+});
