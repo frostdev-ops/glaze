@@ -2253,6 +2253,8 @@
   "This loop never reaches its end: count up with `<` and `i++` or `i += n`, down with `>` and `i--` or `i -= n`.": "Diese Schleife erreicht nie ihr Ende: Zähle mit `<` und `i++` oder `i += n` aufwärts, mit `>` und `i--` oder `i -= n` abwärts.",
   "A loop of {n} passes is more than a background can afford (limit {limit}).": "Eine Schleife mit {n} Durchläufen ist für einen Hintergrund zu aufwendig (Grenze: {limit}).",
   "Loop counters must stay within -32767..32767, including the final increment, to avoid integer overflow.": "Schleifenzähler müssen innerhalb von -32767..32767 bleiben, einschließlich des letzten Zählschritts, um einen Ganzzahlüberlauf zu vermeiden.",
+  "Can't tell how big this array is. Write its size as a whole number (or a #define or const int that is one).": "Die Größe dieses Arrays ist nicht erkennbar. Schreibe sie als ganze Zahl (oder als #define oder const int mit ganzzahligem Wert).",
+  "An array of {n} elements is more than a background can afford (limit {limit}).": "Ein Array mit {n} Elementen ist für einen Hintergrund zu aufwendig (Grenze: {limit}).",
   "The shader is not text.": "Der Shader ist kein Text.",
   "The shader is {n} characters; the limit is {limit}.": "Der Shader hat {n} Zeichen; die Grenze liegt bei {limit}.",
   "Only plain ASCII is allowed (found character code {code} at column {column}).": "Nur reines ASCII ist erlaubt (Zeichencode {code} in Spalte {column} gefunden).",

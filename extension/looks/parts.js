@@ -112,6 +112,11 @@ var GZ_PARTS = globalThis.GZ_PARTS || (() => {
   // a part that can't take the action refuse the rule (null); numbers are clamped and rounded.
   const MAX = 64;
   const LABEL_MAX = 60;
+  // The three main navigations (hide: false) hold the school's own links, so what would take them away as surely as `hide` is
+  // held up too: their opacity keeps a floor and their text can't be set in their own background colour (both colours go, the rest of the rule
+  // stays). No style key sets
+  // visibility or a size, so a rule can't reach those.
+  const NAV_FADE_MIN = 50;
   const TOKENS = new Set(D.GZ_COLORS.map(([v]) => v.slice(5)));
   const colour = (v) => (typeof v === 'string' && (TOKENS.has(v) || /^#[0-9a-f]{6}$/i.test(v)) ? v.toLowerCase() : null);
   const num = (lo, hi) => (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : null);
@@ -142,6 +147,10 @@ var GZ_PARTS = globalThis.GZ_PARTS || (() => {
       const c = part.st.includes(k) ? STYLE[k](v) : null;
       if (c === null) return null;
       st[k] = c;
+    }
+    if (!part.hide) {
+      if (Object.hasOwn(st, 'o')) st.o = Math.max(st.o, NAV_FADE_MIN);
+      if (st.fg !== undefined && st.fg === st.bg) { delete st.fg; delete st.bg; }
     }
     return Object.keys(st).length ? { ...out, st } : null;
   };
@@ -174,15 +183,17 @@ var GZ_PARTS = globalThis.GZ_PARTS || (() => {
       else if (r.do === 'label') s.t = r.t;
       else s.move = { to: r.to, at: r.at };
     }
-    // Each part's style as the CSS variables looks/page/rules.css reads, and the fonts to load.
-    for (const s of out.values()) {
+    // Each part's style as the CSS variables looks/page/rules.css reads, and the fonts to load. A main navigation whose text and
+    // background two rules set to one colour keeps neither (one rule can't, see clean).
+    for (const [name, s] of out) {
+      if (!PARTS.get(name).hide && s.st.fg !== undefined && s.st.fg === s.st.bg) { delete s.st.fg; delete s.st.bg; }
       s.vars = Object.fromEntries(Object.entries(s.st).map(([k, v]) => [`--gz-r-${k}`, value(k, v)]));
       s.fonts = s.st.f ? [s.st.f] : [];
     }
     return out;
   };
 
-  return { PARTS, BOARD, BOX, TEXT, MAX, LABEL_MAX, STEPS, has, get, list, clean, rules, plan, value };
+  return { PARTS, BOARD, BOX, TEXT, MAX, LABEL_MAX, NAV_FADE_MIN, STEPS, has, get, list, clean, rules, plan, value };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_PARTS; else GZ_PARTS;

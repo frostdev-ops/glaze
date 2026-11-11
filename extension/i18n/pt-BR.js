@@ -2253,6 +2253,8 @@
   "This loop never reaches its end: count up with `<` and `i++` or `i += n`, down with `>` and `i--` or `i -= n`.": "Este laço nunca chega ao fim: conte para cima com `<` e `i++` ou `i += n`, e para baixo com `>` e `i--` ou `i -= n`.",
   "A loop of {n} passes is more than a background can afford (limit {limit}).": "Um laço de {n} repetições é pesado demais para um fundo (limite: {limit}).",
   "Loop counters must stay within -32767..32767, including the final increment, to avoid integer overflow.": "Os contadores dos laços devem permanecer em -32767..32767, incluindo o incremento final, para evitar estouro de inteiros.",
+  "Can't tell how big this array is. Write its size as a whole number (or a #define or const int that is one).": "Não é possível determinar o tamanho deste array. Escreva-o como um número inteiro (ou um #define ou const int de valor inteiro).",
+  "An array of {n} elements is more than a background can afford (limit {limit}).": "Um array de {n} elementos é pesado demais para um fundo (limite: {limit}).",
   "The shader is not text.": "O shader não é texto.",
   "The shader is {n} characters; the limit is {limit}.": "O shader tem {n} caracteres; o limite é {limit}.",
   "Only plain ASCII is allowed (found character code {code} at column {column}).": "Somente ASCII simples é permitido (código de caractere {code} encontrado na coluna {column}).",

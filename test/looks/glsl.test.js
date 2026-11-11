@@ -188,12 +188,114 @@ test('cost: nested loops multiply, helpers and built-in operations count, 4,096 
   ok('a plain helper chain', 'float a(float x) { return x * 2.; }\nfloat b(float x) { return a(x) + a(x + 1.); }\nvec4 scene(vec2 uv) { return vec4(b(uv.x)); }');
 });
 
+// A shader in a shared Look is untrusted and the compiler that runs it may accept what ANGLE's ESSL 1.00 rules refuse, so the
+// checker itself refuses every loop it cannot count (while, do) and every array it cannot size.
+const body = (s) => `vec4 scene(vec2 uv) { float x = 0.; int i = 0; ${s} return vec4(x); }`;
+const NO_LOOP = /Can't tell how many times/;
+
+test('while and do-while loops are refused outright, however they are written or hidden', () => {
+  bad('while', body('while (i < 100000) { x += sin(x); i++; }'), NO_LOOP);
+  bad('a small while', body('while (i < 3) { x += .1; i++; }'), NO_LOOP);
+  bad('do-while', body('do { x += sin(x); i++; } while (i < 100000);'), NO_LOOP);
+  bad('an empty do-while', body('do {} while (i < 100000);'), NO_LOOP);
+  bad('loops inside a do-while', body('do { for (int a = 0; a < 200; a++) for (int b = 0; b < 200; b++) x += sin(x); i++; } while (i < 3);'), NO_LOOP);
+  bad('while with a one-statement body', body('while (i < 100000) i++;'), NO_LOOP);
+  bad('while inside a for', body('for (int k = 0; k < 4; k++) { while (i < 100000) i++; }'), NO_LOOP);
+  bad('while in a helper nobody calls', `float f(float x) { int i = 0; while (i < 100000) i++; return x; }\n${MIN}`, NO_LOOP);
+  // Hidden behind comments, macros and white space.
+  bad('after a block comment', body('/* a loop */ while (i < 100000) i++;'), NO_LOOP);
+  bad('after a line comment', body('// loop\n while (i < 100000) i++;'), NO_LOOP);
+  bad('a comment inside the head', body('while /* n */ (i < 100000) i++;'), NO_LOOP);
+  bad('do with a comment', body('do /* x */ { i++; } /* y */ while (i < 100000);'), NO_LOOP);
+  bad('tabs', body('while\t\t(i < 100000)\ti++;'), NO_LOOP);
+  bad('new lines', body('while\n\n(i < 100000)\n{\ni++;\n}'), NO_LOOP);
+  bad('carriage returns', body('while\r\n(i < 100000)\r{ i++; }'), NO_LOOP);
+  bad('no space before the paren', body('while(i<100000)i++;'), NO_LOOP);
+  bad('do glued to its brace', body('do{i++;}while(i<100000);'), NO_LOOP);
+  bad('a macro for while', `#define W while\n${body('W (i < 100000) i++;')}`, NO_LOOP);
+  bad('a macro for do', `#define D do\n${body('D { i++; } while (i < 100000);')}`, NO_LOOP);
+  bad('a macro for the whole loop', `#define L do { i++; } while (i < 100000);\n${body('L')}`, NO_LOOP);
+  bad('a macro behind a comment', `/* hi */ #define W while // go\n${body('W (i < 100000) i++;')}`, NO_LOOP);
+  bad('a spaced directive', `  #  define   W   while\n${body('W (i < 100000) i++;')}`, NO_LOOP);
+  assert.equal(bad('the line of the loop', `// a\n// b\n${body('\n\nwhile (i < 3) i++;')}`, NO_LOOP)[0].line, 5);
+  // Words that only contain the keywords are names, not loops.
+  ok('names that contain while or do', 'vec4 scene(vec2 uv) { float domain = 1., whiled = 2., do_it = 3., undo = 4., whilex = 5.; return vec4(domain + whiled + do_it + undo + whilex); }');
+  ok('keywords in comments', `// while (true) {} do { } while (1);\n/* while */\n${MIN}`);
+  ok('a for loop is still fine', body('for (int k = 0; k < 8; k++) x += .1;'));
+});
+
+test('arrays: at most 64 elements, with a size the checker can read, priced where they are declared', () => {
+  const BIG = /array of 65,535 elements/;
+  bad('a local array', body('float a[65535]; a[0] = 1.; x = a[0];'), BIG);
+  bad('a vec4 array', body('vec4 big[100000]; x = big[0].x;'), /array of 100,000 elements/);
+  bad('a global array', `float a[65535];\n${MIN}`, BIG);
+  bad('65 elements', body('float a[65]; x = a[0];'), /array of 65 elements/);
+  ok('64 elements', body('float a[64]; a[0] = 1.; x = a[63];'));
+  ok('a small array, indexed', body('float w[5]; for (int k = 0; k < 5; k++) w[k] = float(k); for (int k = 0; k < 5; k++) x += w[k]; ')) ;
+  bad('a #define size', `#define N 65535\n${body('float a[N]; x = a[0];')}`, BIG);
+  bad('a const int size', `const int N = 65535;\n${body('float a[N]; x = a[0];')}`, BIG);
+  ok('a #define size that is small', `#define N 8\n${body('float a[N]; x = a[0];')}`);
+  bad('a size behind a comment', body('float a[/* n */ 65535]; x = a[0];'), BIG);
+  bad('a size with white space', body('float a[\n\t65535\r\n]; x = a[0];'), BIG);
+  bad('a qualified declaration', body('const float a[65535] = float[65535](0.); x = a[0];'), BIG);
+  bad('a precision-qualified declaration', body('highp float a[65535]; x = a[0];'), BIG);
+  bad('a second declarator', body('float b = 1., a[65535]; x = a[0] + b;'), BIG);
+  bad('a struct member', `struct S { float a[65535]; };\n${MIN}`, BIG);
+  bad('a function parameter', `float f(float a[65535]) { return a[0]; }\n${MIN}`, BIG);
+  bad('a mat4 array', body('mat4 m[50000]; x = m[0][0][0];'), /array of 50,000 elements/);
+  // Sizes the checker cannot read are refused, as loop bounds are: ANGLE accepts each as a constant expression.
+  const CANT = /Can't tell how big this array is/;
+  for (const [name, size] of [['int(1e5)', 'int(1e5)'], ['a product', '256 * 256'], ['a sum', '60000 + 5000'], ['parentheses', '(65535)'], ['empty', '']]) bad(name, body(`float a[${size}]; x = a[0];`), CANT);
+  bad('a const made of consts', `const int K = 300;\nconst int K2 = K * K;\n${body('float a[K2]; x = a[0];')}`, CANT);
+  bad('an unreadable second declarator', body('float b = 1., a[int(1e5)]; x = a[0] + b;'), CANT);
+  bad('an unreadable size in a struct list', `struct S { float b, a[int(1e5)]; };\n${MIN}`, CANT);
+  // Indexing is not declaring.
+  ok('indexing with an expression', body('float a[8]; int j = 2; a[j + 1] = 1.; x = a[j * 2] + a[int(x)] + a[(j)] + a[j];'));
+  ok('indexing after return and else', 'float f(float a[4], int j) { if (j > 0) return a[j]; else return a[j + 1]; }\nvec4 scene(vec2 uv) { return vec4(uv, 0., 1.); }');
+  ok('a vector component by index', body('vec3 v = vec3(1.); x = v[1] + v[int(x)];'));
+  ok('arguments that are indexed', body('float a[4]; float b[4]; x = max(a[0], b[int(x)]); vec2 p = vec2(a[1], b[i]);'));
+  // Priced like a loop: the elements a declaration makes are work per pass.
+  assert.equal(G.estimate('vec4 scene(vec2 uv) { float a[10]; return vec4(1.); }') - G.estimate('vec4 scene(vec2 uv) { float a; return vec4(1.); }'), 10);
+  bad('a big array in a nested loop', body('for (int a = 0; a < 64; a++) for (int b = 0; b < 8; b++) { float w[64]; x += w[0]; }'), /Too heavy/);
+  ok('the same loops without the array', body('for (int a = 0; a < 64; a++) for (int b = 0; b < 8; b++) { float w; x += w; }'));
+});
+
+test('array bounds cannot borrow a smaller constant from another scope or declarator', () => {
+  for (const declaration of ['const int unused = 0, N = 65535;', 'const highp int N = 65535;']) {
+    bad(declaration, `const int N = 1;\nfloat helper() { ${declaration} float a[N]; return a[0]; }\n${MIN}`, /unique name|array of|Can't tell how big/);
+  }
+  ok('a precision-qualified constant', `const highp int N = 8;\n${body('float a[N]; x = a[0];')}`);
+  ok('constants in one declaration', `const int A = 4, N = A;\n${body('float a[N]; x = a[0];')}`);
+});
+
+test('inline struct instance arrays are sized and priced like named-type arrays', () => {
+  for (const declaration of ['struct S { float v; } a[65535];', 'struct { float v; } a[65535];', 'struct S { float v; } a, b[65535];']) {
+    bad(declaration, body(declaration), /array of 65,535 elements/);
+  }
+  bad('an unreadable inline struct array', body('struct S { float v; } a[int(1e5)];'), /Can't tell how big this array is/);
+  const array = body('for (int k = 0; k < 256; k++) { struct S { float v; } a[64]; x += a[0].v; }');
+  bad('inline struct arrays count on every pass', array, /Too heavy/);
+  ok('a small inline struct array', body('struct S { float v; } a[4]; a[0].v = 1.; x = a[0].v;'));
+  ok('a struct member index is not a declaration', body('struct S { float a[4]; }; S s; x = s.a[int(x)];'));
+});
+
+test('global arrays and array parameters contribute their elements to the first frame cost', () => {
+  const global = (n) => `float a${n ? `[${n}]` : ''};\n${MIN}`;
+  assert.equal(G.estimate(global(10)) - G.estimate(global(0)), 10);
+  const parameter = (n) => `float f(float a${n ? `[${n}]` : ''}) { return 1.; }\nvec4 scene(vec2 uv) { float a${n ? `[${n}]` : ''}; return vec4(f(a)); }`;
+  assert.equal(G.estimate(parameter(10)) - G.estimate(parameter(0)), 20, 'the local declaration and the called parameter each count');
+  const globals = Array.from({ length: 65 }, (_, i) => `float a${i}[64];`).join('\n');
+  bad('many global arrays', `${globals}\n${MIN}`, /Too heavy/);
+  ok('a small global array', global(4));
+});
+
 test('the checker stays fast on hostile 8 KiB inputs, and never throws', () => {
   const cases = {
     spaces: ' '.repeat(8192), semis: ';'.repeat(8192), braces: '{;'.repeat(4096), open_braces: '{'.repeat(8192), floats: 'float '.repeat(1365),
     comment_open: '/*'.repeat(4096), hashes: '# '.repeat(4096), for_open: 'for (int i = 0; i < 1; i++;'.repeat(300), parens: '('.repeat(8000),
     scene_sig: 'vec4 scene( vec2 ' + ' '.repeat(8000) + ')', defines: '#define A 1\n'.repeat(700), uniform_words: 'uniform '.repeat(1000),
     calls: 'float a(float x) { return a(x); }\n'.repeat(200) + MIN, protos: 'float f(float x); '.repeat(450) + MIN,
+    array_declarators: `float a = 1.${',b[1]'.repeat(1600)};\n${MIN}`, struct_declarators: `struct S { float a${',b[1]'.repeat(1600)}; };\n${MIN}`, deep_index: `float a[1${'['.repeat(2000)}${']'.repeat(2000)}];\n${MIN}`, whiles: `${'while(1){}'.repeat(800)}${MIN}`,
     typed_calls: 'a b(a b(a b(a b('.repeat(500) + MIN, deep_blocks: `vec4 scene(vec2 uv) ${'{'.repeat(3000)}${'}'.repeat(3000)}`,
   };
   for (const [name, src] of Object.entries(cases)) {

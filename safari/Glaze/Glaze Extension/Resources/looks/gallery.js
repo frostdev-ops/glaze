@@ -8,8 +8,10 @@ document.addEventListener('click', (e) => {
   const a = e.target.closest?.('a[data-glaze-use], a[data-glaze-mod]');
   // isTrusted: a real click, not one the page's own script made.
   if (!a || !e.isTrusted || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-  e.preventDefault();
   const { code, name, author, id, hash } = a.dataset;
   const m = a.hasAttribute('data-glaze-mod') ? { galleryMod: { id, hash } } : { gallery: { code, name, author } };
-  chrome.runtime.sendMessage(m, () => void chrome.runtime.lastError);
+  // Glaze updated under an open tab: this script is orphaned and sendMessage throws. Then the click stays the page's own, whose
+  // fallback copies the exact code; only a click Glaze took is cancelled.
+  try { chrome.runtime.sendMessage(m, () => void chrome.runtime.lastError); } catch { return; }
+  e.preventDefault();
 });

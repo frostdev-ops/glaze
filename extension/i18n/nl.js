@@ -2253,6 +2253,8 @@
   "This loop never reaches its end: count up with `<` and `i++` or `i += n`, down with `>` and `i--` or `i -= n`.": "Deze lus bereikt nooit het einde: tel omhoog met `<` en `i++` of `i += n`, en omlaag met `>` en `i--` of `i -= n`.",
   "A loop of {n} passes is more than a background can afford (limit {limit}).": "Een lus met {n} herhalingen is te zwaar voor een achtergrond (limiet: {limit}).",
   "Loop counters must stay within -32767..32767, including the final increment, to avoid integer overflow.": "Lustellers moeten binnen -32767..32767 blijven, ook na de laatste verhoging, om overloop van gehele getallen te voorkomen.",
+  "Can't tell how big this array is. Write its size as a whole number (or a #define or const int that is one).": "De grootte van deze array is niet te bepalen. Schrijf haar als een geheel getal (of een #define of const int met een gehele waarde).",
+  "An array of {n} elements is more than a background can afford (limit {limit}).": "Een array van {n} elementen is te zwaar voor een achtergrond (limiet: {limit}).",
   "The shader is not text.": "De shader is geen tekst.",
   "The shader is {n} characters; the limit is {limit}.": "De shader bevat {n} tekens; de limiet is {limit}.",
   "Only plain ASCII is allowed (found character code {code} at column {column}).": "Alleen gewone ASCII is toegestaan (tekencode {code} gevonden in kolom {column}).",

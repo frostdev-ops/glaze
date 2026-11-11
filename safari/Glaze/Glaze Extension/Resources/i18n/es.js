@@ -2253,6 +2253,8 @@
   "This loop never reaches its end: count up with `<` and `i++` or `i += n`, down with `>` and `i--` or `i -= n`.": "Este bucle nunca llega al final: cuenta hacia arriba con `<` e `i++` o `i += n`, y hacia abajo con `>` e `i--` o `i -= n`.",
   "A loop of {n} passes is more than a background can afford (limit {limit}).": "Un bucle de {n} iteraciones es demasiado costoso para un fondo (límite: {limit}).",
   "Loop counters must stay within -32767..32767, including the final increment, to avoid integer overflow.": "Los contadores de bucle deben permanecer entre -32767..32767, incluido el incremento final, para evitar el desbordamiento de enteros.",
+  "Can't tell how big this array is. Write its size as a whole number (or a #define or const int that is one).": "No se puede determinar el tamaño de este array. Escríbelo como un número entero (o un #define o const int con un valor entero).",
+  "An array of {n} elements is more than a background can afford (limit {limit}).": "Un array de {n} elementos es demasiado costoso para un fondo (límite: {limit}).",
   "The shader is not text.": "El shader no es texto.",
   "The shader is {n} characters; the limit is {limit}.": "El shader tiene {n} caracteres; el límite es {limit}.",
   "Only plain ASCII is allowed (found character code {code} at column {column}).": "Solo se permite ASCII simple (se encontró el código de carácter {code} en la columna {column}).",
