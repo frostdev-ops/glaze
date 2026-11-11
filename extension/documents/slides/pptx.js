@@ -671,11 +671,18 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
     const ph = kid(nvOf(node), 'nvPr', 'ph');
     return ph ? { type: at(ph, 'type') || 'obj', idx: num(at(ph, 'idx'), 0) } : null;
   };
-  const phsOf = (tree) => (kid(tree, 'cSld', 'spTree')?.kids || []).filter((n) => SHAPES.has(n.n)).map((node) => ({ node, ph: phOf(node) })).filter((x) => x.ph);
+  // A part's placeholders, indexed as findPh looks them up; each key keeps the first in document order.
+  const phsOf = (tree) => {
+    const list = (kid(tree, 'cSld', 'spTree')?.kids || []).filter((n) => SHAPES.has(n.n)).map((node) => ({ node, ph: phOf(node) })).filter((x) => x.ph);
+    const byIdx = new Map(), byType = new Map(), byBase = new Map();
+    const first = (map, k, x) => { if (!map.has(k)) map.set(k, x); };
+    for (const x of list) { const b = baseType(x.ph.type); first(byIdx, `${b}:${x.ph.idx}`, x); first(byType, x.ph.type, x); first(byBase, b, x); }
+    return { byIdx, byType, byBase };
+  };
   // By idx among placeholders of the same kind (title, body, date, …), then by type: LibreOffice writes its title and
   // its body both with idx omitted (0), as <p:ph type="title"/> and <p:ph/>.
-  const findPh = (list, ph, byIdx) => (byIdx && list.find((x) => x.ph.idx === ph.idx && baseType(x.ph.type) === baseType(ph.type)))
-    || list.find((x) => x.ph.type === ph.type) || list.find((x) => baseType(x.ph.type) === baseType(ph.type)) || null;
+  const findPh = (phs, ph, byIdx) => (byIdx && phs.byIdx.get(`${baseType(ph.type)}:${ph.idx}`))
+    || phs.byType.get(ph.type) || phs.byBase.get(baseType(ph.type)) || null;
   const styleKind = (t) => (t === 'title' || t === 'ctrTitle' ? 'titleStyle' : t === 'dt' || t === 'ftr' || t === 'sldNum' || t === 'hdr' ? 'otherStyle' : 'bodyStyle');
   // What a slide's shape inherits from: the layout's placeholder of its idx (else of its type), and the master's of that
   // one's type. list runs master → layout → shape, each with its part's relationships.
@@ -909,14 +916,20 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
     if (pr) return fillOf(pr, X) ?? null;
     return styleFill(kid(bg, 'bgRef'), X) ?? null;
   };
-  const notesOf = (tree, X) => {
+  // A notes part's body paragraphs, each a list of text and null for the slide's number: read once per part, as many
+  // slides can share one.
+  const notesLines = (tree) => {
     const lines = [];
     for (const node of kid(tree, 'cSld', 'spTree')?.kids || []) {
       if (node.n !== 'sp' || phOf(node)?.type !== 'body') continue;
       for (const p of kids(kid(node, 'txBody'), 'p')) {
-        lines.push(p.kids.map((k) => (k.n === 'br' ? '\n' : k.n === 'fld' && at(k, 'type') === 'slidenum' ? String(X.number) : k.n === 'r' || k.n === 'fld' ? kid(k, 't')?.text ?? '' : '')).join(''));
+        lines.push(p.kids.map((k) => (k.n === 'br' ? '\n' : k.n === 'fld' && at(k, 'type') === 'slidenum' ? null : k.n === 'r' || k.n === 'fld' ? kid(k, 't')?.text ?? '' : '')));
       }
     }
+    return lines;
+  };
+  const notesOf = (parts, X) => {
+    const lines = parts.map((p) => p.map((x) => x ?? String(X.number)).join(''));
     while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
     return X.take(lines.join('\n')) ?? '';
   };
@@ -997,6 +1010,12 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
       }
       return layouts.get(path);
     };
+    const notesKept = new Map();
+    const notesFor = (path) => {
+      if (!path) return Promise.resolve(null);
+      if (!notesKept.has(path)) notesKept.set(path, xml(path).then((t) => t && notesLines(t)));
+      return notesKept.get(path);
+    };
     const chartTitles = new Map();
     const chartsOf = async (rels) => {
       const out = new Map();
@@ -1043,7 +1062,7 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
       await add(tree, 'slide', rels);
       const title = slide.shapes.find((s) => s.from === 'slide' && (s.placeholder === 'title' || s.placeholder === 'ctrTitle') && s.text);
       slide.title = title ? plain(title.text) : '';
-      const notes = await xml(typed(rels, 'notesSlide'));
+      const notes = await notesFor(typed(rels, 'notesSlide'));
       if (notes) slide.notes = notesOf(notes, S);
     }
 
@@ -1058,13 +1077,20 @@ var GZ_PPTX = globalThis.GZ_PPTX || (() => {
 
   // A picture's bytes for the viewer's blob: URL, within the archive's limits; null for anything that isn't a picture the
   // viewer draws.
-  const mediaBytes = async (bytes, path, opts = {}) => {
-    if (!mimeOf(path)) return null;
-    const b = await D().unzip(bytes, { limits: { ...opts.limits, duplicates: true } }).bytes(path);
-    return b && b.slice();
+  // pictures(bytes) → (path) → those bytes: the archive opened once, on the first picture asked for, for every picture of
+  // one drawing (the viewer's open, a card's slide 1). Drop the reader once drawn: it holds what it has inflated.
+  const pictures = (bytes, opts = {}) => {
+    let z = null;
+    return async (path) => {
+      if (!mimeOf(path)) return null;
+      z ||= D().unzip(bytes, { limits: { ...opts.limits, duplicates: true } });
+      const b = await z.bytes(path);
+      return b && b.slice();
+    };
   };
+  const mediaBytes = (bytes, path, opts = {}) => pictures(bytes, opts)(path);
 
-  return { read, media: mediaBytes, LIMITS };
+  return { read, media: mediaBytes, pictures, LIMITS };
 })();
 
 if (typeof module !== 'undefined') module.exports = GZ_PPTX; else GZ_PPTX;

@@ -196,7 +196,7 @@ test('uncached card thumbnails do not retain blob URLs and read only listed medi
     document: { createElement: () => ({ replaceChildren() {} }) },
     GZ_PPTX: {
       read: async () => ({ size: { w: 1 }, slides: [slide], media: [{ path: 'ppt/media/a.png', mime: 'image/png' }] }),
-      media: async (_, p) => { reads.push(p); return new Uint8Array([1]); },
+      pictures: () => async (p) => { reads.push(p); return new Uint8Array([1]); },
     },
     GZ_SLIDES_RENDER: { px: (w) => w, stage: (_, __, o) => { painted(o.media); return {}; } },
   });
