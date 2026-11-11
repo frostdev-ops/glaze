@@ -520,3 +520,60 @@ test('saves that restate the student keep working: their own words, a short para
     assert.equal(f.calls.length, 1);
   }
 });
+
+test('short names and subjects remain usable as meaningful memory evidence', async () => {
+  for (const [question, text, evidence] of [
+    ['I prefer AI.', 'The student prefers AI.', 'AI'],
+    ["I'm Jo.", 'The student is Jo.', 'Jo'],
+    ['I study CS.', 'I study CS.', 'CS'],
+  ]) {
+    const f = fixture({ current: { question } });
+    assert.equal((await f.run('memory_save', { text, evidence })).ok, true, text);
+    assert.equal(f.calls.length, 1);
+  }
+});
+
+test('short content words cannot be invented in saved text', async () => {
+  for (const [question, text, evidence] of [
+    ['I prefer diagrams.', 'The student prefers AI diagrams.', 'diagrams'],
+    ['I study CS.', 'I study CS in NY.', 'I study CS.'],
+  ]) {
+    const f = fixture({ current: { question } });
+    assert.deepEqual(await f.run('memory_save', { text, evidence }), { ok: false, error: 'evidence' }, text);
+    assert.equal(f.calls.length, 0);
+  }
+});
+
+test('contracted negations cannot be invented in saved text', async () => {
+  for (const [question, text, evidence] of [
+    ['I can study Friday.', "I can't study Friday.", 'I can study Friday.'],
+    ['I can study Friday.', 'I can’t study Friday.', 'I can study Friday.'],
+  ]) {
+    const f = fixture({ current: { question } });
+    assert.deepEqual(await f.run('memory_save', { text, evidence }), { ok: false, error: 'evidence' }, text);
+    assert.equal(f.calls.length, 0);
+  }
+});
+
+test('ordinary endings of three-letter roots remain supported in memory restatements', async () => {
+  for (const [question, text] of [
+    ['I use diagrams.', 'Uses diagrams.'],
+    ['I run before class.', 'Runs before class.'],
+    ['I get distracted.', 'Gets distracted.'],
+  ]) {
+    const f = fixture({ current: { question } });
+    assert.equal((await f.run('memory_save', { text, evidence: question })).ok, true, text);
+    assert.equal(f.calls.length, 1);
+  }
+});
+
+test('evidence boundaries include Unicode letters outside the basic multilingual plane', async () => {
+  for (const [question, text] of [
+    ['I prefer 𝕒short answers.', 'Answers.'],
+    ['I prefer short answers𝕒.', 'Short.'],
+  ]) {
+    const f = fixture({ current: { question } });
+    assert.deepEqual(await f.run('memory_save', { text, evidence: 'short answers' }), { ok: false, error: 'evidence' }, question);
+    assert.equal(f.calls.length, 0);
+  }
+});
