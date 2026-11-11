@@ -2163,3 +2163,18 @@ test('a fenced first-meeting retry keeps deletions made against the matching sav
   await settled(a, b);
   for (const d of [a, b]) assert.deepEqual(await titles(d), ['Five', 'Four', 'One', 'Three']);
 });
+
+test('a tombstone agreement invalidates the older base before meeting a replacement record', async () => {
+  const { drive, clock, devs: [a] } = await linked({ [TODO]: BASE3 }, 1);
+  const file = recFile(drive, 'local', TODO), meta = structuredClone(file.meta), bytes = Buffer.from(file.bytes);
+  clock.t += 1000; await a.local.remove(TODO);
+  assert.ok((await a.run({ push: true })).ok);
+  assert.equal(body(file).deleted, true);
+  // An offline device restored an older copy after the agreed tombstone's file was deleted for good.
+  drive.remove(file.meta.id);
+  const replacement = drive.seed(meta, bytes);
+  clock.t += 1000; await a.local.set({ [TODO]: tasks(task(4, 'Four')) });
+  assert.ok((await a.run({ full: true })).ok);
+  assert.deepEqual(await titles(a), ['Four', 'One', 'Three', 'Two'], 'a different agreement cannot lend its old base to this first meeting');
+  assert.deepEqual(body(replacement).value.tasks.map((x) => x.title).sort(), ['Four', 'One', 'Three', 'Two']);
+});
