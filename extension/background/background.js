@@ -1561,9 +1561,11 @@ let catalogTurn = Promise.resolve();
 const catalogue = () => (catalogTurn = catalogTurn.then(async () => {
   const local = chrome.storage.local, { lookFavorites, [GZ_CATALOG.KEY]: was } = await local.get(['lookFavorites', GZ_CATALOG.KEY]);
   if (!was && !GZ_HISTORY.favorites(lookFavorites).length) return;
-  if (was?.sig === GZ_CATALOG.sig(lookFavorites ?? null)) return;
-  const cat = await GZ_CATALOG.build(lookFavorites, (code) => GZ_SHARE.decode(code).then((g) => (GZ_XPARTS.outside(g.parts).length ? null : g)), was);
-  await local.set({ [GZ_CATALOG.KEY]: cat });
+  // Earlier catalogues admitted private picture hosts. Recheck their codes once, even if no favorite changed.
+  const checked = was?.publicImages === true;
+  if (checked && was.sig === GZ_CATALOG.sig(lookFavorites ?? null)) return;
+  const cat = await GZ_CATALOG.build(lookFavorites, (code) => GZ_SHARE.decode(code).then((g) => (GZ_XPARTS.outside(g.parts).length ? null : g)), checked ? was : null);
+  await local.set({ [GZ_CATALOG.KEY]: { ...cat, publicImages: true } });
 }).catch(console.warn));
 
 // Canvas on a school's own domain (canvas.school.edu) can't be matched by address, nor can Moodle off MoodleCloud. Once the student
