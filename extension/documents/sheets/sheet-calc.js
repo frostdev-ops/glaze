@@ -379,7 +379,8 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
 
   const invoke = (def, args, ctx) => {
     if (!def.errors) for (let i = 0; i < args.length; i++) if (isErr(args[i]) && kindAt(def, i) === 'v') return args[i];
-    try { return def.fn(args, ctx); } catch (e) { if (isErr(e)) return e; throw e; }
+    // A fault inside a function (a RangeError past JavaScript's string limit, a bug) is its cell's #VALUE!, never the workbook's.
+    try { return def.fn(args, ctx); } catch (e) { return isErr(e) ? e : ERR.VALUE; }
   };
   const call = (n, ctx) => {
     const def = REGISTRY.get(n.name);
@@ -761,7 +762,7 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
       const ctx = new Ctx(this, node.sheet, node.r, node.c, node.array);
       const needs = (this.needs = new Set());
       let v;
-      try { v = settle(evaluate(node.ast, ctx, true), ctx); } finally { this.needs = null; }
+      try { v = settle(evaluate(node.ast, ctx, true), ctx); } catch (e) { v = isErr(e) ? e : ERR.VALUE; } finally { this.needs = null; }
       if (needs.size) return needs;
       node.result = v;
       this.store(node, v);
