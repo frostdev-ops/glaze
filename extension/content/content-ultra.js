@@ -7,17 +7,6 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const stored = (keys, cb) => (I.stored ? I.stored(keys, cb) : chrome.storage.local.get(keys, cb));
 
   // ---- the student's courses -------------------------------------------------------------------
-  // A key several tabs write: one writer at a time. Web Locks hold this origin's other tabs until the set lands (not another site's),
-  // a queue this tab's own, all there is without them (as canvasNews, content-canvas.js).
-  const writing = new Map();
-  const update = (key, merge, more) => {
-    const write = () => new Promise((done) => {
-      try { chrome.storage.local.get(key, (r) => { try { chrome.storage.local.set({ [key]: merge(r?.[key]), ...more }, done); } catch { done(); } }); } catch { done(); } // extension reloaded under the tab
-    });
-    const run = (writing.get(key) || Promise.resolve()).then(() => (globalThis.navigator?.locks?.request ? navigator.locks.request(`glaze:${key}`, write).catch(write) : write()));
-    writing.set(key, run);
-    return run;
-  };
   // Every course and the color slot Ultra gives it, for the editor's course list and the tint on
   // pages that don't show the slot: from the membership list Ultra's own Courses page asks for, once
   // a page load and at most every ten minutes. Stored locally; nothing leaves the device. Each Ultra site has its own: two
@@ -38,6 +27,18 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
         });
       });
     } catch { /* extension reloaded under the tab */ }
+  };
+
+  // A key several tabs write: one writer at a time. Web Locks hold this origin's other tabs until the set lands (not another site's),
+  // a queue this tab's own, all there is without them (as canvasNews, content-canvas.js).
+  const writing = new Map();
+  const update = (key, merge, more) => {
+    const write = () => new Promise((done) => {
+      try { chrome.storage.local.get(key, (r) => { try { chrome.storage.local.set({ [key]: merge(r?.[key]), ...more }, done); } catch { done(); } }); } catch { done(); } // extension reloaded under the tab
+    });
+    const run = (writing.get(key) || Promise.resolve()).then(() => (globalThis.navigator?.locks?.request ? navigator.locks.request(`glaze:${key}`, write).catch(write) : write()));
+    writing.set(key, run);
+    return run;
   };
 
   // ---- the gradebook --------------------------------------------------------------------------

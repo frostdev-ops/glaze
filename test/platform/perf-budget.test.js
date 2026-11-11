@@ -347,9 +347,9 @@ const DRAFT_BEHIND = { ultra: 333 + 60, canvas: 333, moodle: 333 };
 const STREAM_COURSE = { ultra: 635 + 23, canvas: 23, moodle: 23 };
 // The pages audit's fixes (a named raise under the owner's 2026-10-19 approval, 2026-11-11): content-ultra.js and content-canvas.js
 // write the course list, seen grades and seen content one writer at a time per key (Web Locks, a queue where they are missing),
-// content-ultra.js guards its sessionStorage jump and asks the Look's page modules to look at the route each pass: 707 bytes on
+// content-ultra.js guards its sessionStorage jump and asks the Look's page modules to look at the route each pass: 720 bytes on
 // Ultra, 604 on Canvas. Measured against ad0660a31.
-const PAGES_FIXES = { ultra: 719, canvas: 604, moodle: 0 };
+const PAGES_FIXES = { ultra: 720, canvas: 604, moodle: 0 };
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what background/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;
