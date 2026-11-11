@@ -94,13 +94,15 @@ var GZ_GLSL = globalThis.GZ_GLSL || (() => {
     const [A, AL] = tokens(author);
     const T = [...P, ...A], L = [...PL.map(() => 0), ...AL];
 
-    const fns = new Map(); // name -> [[from, to)] token ranges of its bodies (overloads: the dearest counts)
+    const fns = new Map(); // name -> [body start, body end, parameters start, parameters end] (overloads: the dearest counts)
+    const functionRanges = [];
     const close = (i, open, shut) => { let d = 0; do { if (T[i] === open) d++; else if (T[i] === shut) d--; i++; } while (d > 0 && i < T.length); return i; };
     for (let i = 1, d = 0; i < T.length; i++) {
       if (T[i] === '{') d++; else if (T[i] === '}') d--;
       else if (d === 0 && T[i + 1] === '(' && isId(T[i]) && isId(T[i - 1])) {
         const j = close(i + 1, '(', ')');
-        if (T[j] === '{') { const k = close(j, '{', '}'); fns.set(T[i], [...(fns.get(T[i]) || []), [j + 1, k - 1]]); i = k - 1; }
+        if (T[j] === '{') { const k = close(j, '{', '}'); functionRanges.push([i + 1, k]); fns.set(T[i], [...(fns.get(T[i]) || []), [j + 1, k - 1, i + 1, j]]); i = k - 1; }
+        else functionRanges.push([i + 1, j]); // a prototype does not allocate its parameters
       }
     }
 
@@ -138,12 +140,13 @@ var GZ_GLSL = globalThis.GZ_GLSL || (() => {
       else if (!depth && (t === ';' || t === '{' || t === '}')) { start = k + 1; inline = structEnds.has(k); }
     }
 
+    const elements = (from, to) => { let n = 0; for (let q = from; q < to; q++) n += sized.get(q) || 0; return n; };
     const memo = new Map(), open = new Set();
     const cost = (name) => {
       if (memo.has(name)) return memo.get(name);
       if (open.has(name)) return Infinity; // recursion: the compiler refuses it, and this is not a number
       open.add(name);
-      const c = Math.max(0, ...fns.get(name).map(([a, b]) => run(a, b)));
+      const c = Math.max(0, ...fns.get(name).map(([a, b, p, q]) => elements(p, q) + run(a, b)));
       open.delete(name);
       memo.set(name, c);
       return c;
@@ -188,15 +191,15 @@ var GZ_GLSL = globalThis.GZ_GLSL || (() => {
           if (T[i] === '(' || T[i] === '{') p++; else if (T[i] === ')' || T[i] === '}') p--;
           else if (T[i] === ';' && p <= 0) { i++; break; }
         }
-        let elements = 0;
-        for (let q = s; q < i; q++) elements += sized.get(q) || 0;
-        return work(T.slice(s, i)) + elements;
+        return work(T.slice(s, i)) + elements(s, i);
       };
       let sum = 0;
       while (i < to) sum += stmt();
       return sum;
     };
-    return { errors, cost: fns.has('scene') ? cost('scene') : 0 };
+    let globals = 0;
+    for (const [k, n] of sized) if (!functionRanges.some(([a, b]) => k >= a && k < b)) globals += n;
+    return { errors, cost: globals + (fns.has('scene') ? cost('scene') : 0) };
   };
   const estimate = (src) => analyze(src).cost;
 
