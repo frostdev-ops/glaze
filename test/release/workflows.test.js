@@ -178,10 +178,10 @@ test('the gate runs only checks that need no school, local LMS or network', () =
 });
 
 
-test('release tags run the browser gate once while other pushes keep their test workflow', () => {
+test('release tags run the browser gate once: test.yml takes branch pushes only, package.yml the tags', () => {
   const trigger = read('test.yml').split(/^jobs:/m)[0];
-  assert.match(trigger, /^    tags-ignore: \['v\*'\]$/m);
-  assert.doesNotMatch(trigger, /^    (branches|branches-ignore|tags):/m);
+  assert.doesNotMatch(trigger, /^    (tags|tags-ignore|branches-ignore):/m, 'a branches filter never matches a tag');
+  assert.match(trigger, /^    branches: \[main, dev\/firefox\]$/m);
   assert.match(read('package.yml'), /^    tags: \['v\*'\]$/m);
 });
 
@@ -192,4 +192,23 @@ test('fork checks receive no secrets and release artifacts stay within the gated
   assert.match(release, /^          name: chrome-zip$/m);
   for (const job of jobsOf(read('package.yml'))) assert.doesNotMatch(job.lines.join('\n'), /^    if:/m, 'gate dependencies must not be overridden');
   assert.doesNotMatch(read('package.yml').split(/^jobs:/m)[0], /workflow_dispatch|pull_request/);
+});
+
+// ---- concurrency, and one test run per commit ----
+const head = (f) => read(f).split(/^jobs:/m)[0];
+
+test('test.yml and package.yml each name a concurrency group; only superseded pull request runs are cancelled', () => {
+  assert.match(head('test.yml'), /^concurrency:\n  group: test-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}\n  cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}$/m);
+  assert.match(head('package.yml'), /^concurrency:\n  group: package-\$\{\{ github\.ref \}\}\n  cancel-in-progress: false$/m, 'a release build is never cancelled');
+});
+
+test('a same-repository branch with a pull request is tested once: pushes run on main and dev/firefox, pull requests on every branch', () => {
+  const on = head('test.yml').split(/^permissions:/m)[0];
+  const push = on.match(/^  push:\n((?:    .*\n)+)/m)?.[1] || '';
+  assert.match(push, /^    branches: \[main, dev\/firefox\]$/m);
+  assert.doesNotMatch(push, /\*/, 'no branch pattern that also matches a pull request\'s branch');
+  assert.doesNotMatch(push, /tags-ignore/, 'a branch filter never matches a tag');
+  assert.match(on, /^  pull_request:\s*$/m);
+  assert.match(on, /^  workflow_dispatch:\s*$/m, 'a branch without a pull request can still be run by hand');
+  assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../../docs/development.md'), 'utf8'), /runs on every push and pull request/);
 });
