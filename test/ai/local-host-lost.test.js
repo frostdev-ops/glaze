@@ -21,23 +21,27 @@ const VOCAB = (() => {
 const TOK = (() => { const t = K.load(VOCAB); for (const n of K.GLAZE_TOKENS) t.add(n); return t; })();
 
 // fault: what the next engine's decode throws from now on ('lost' stays, as engine.js's flag does), or null.
-const setup = ({ reserve = false } = {}) => {
+const setup = ({ reserve = false, reuse = false } = {}) => {
   const log = { loads: 0, released: 0 };
-  const state = { fault: null };
+  const state = { fault: null, onFault: null, aheadFault: null };
   const E = {
     load: async () => {
       log.loads++;
       const ids = [...TOK.encode('ok')];
-      let i = 0, dead = null;
+      let i = 0, dead = null, extensions = 0;
       return {
         context: 16000,
         ...(reserve && { reserve: async () => {
           if (state.fault) { const reason = state.fault; state.fault = null; throw Object.assign(new Error('context growth failed'), { reason }); }
         } }),
+        ...(reuse && { reserve: async () => {}, common: () => 0, extend: async (ids) => {
+          if (++extensions === 2 && state.aheadFault) { const reason = state.aheadFault; state.aheadFault = null; throw Object.assign(new Error('read-ahead failed'), { reason }); }
+          return { fed: ids.length };
+        } }),
         prefill: async () => { i = 0; }, snapshot: async () => ({ drop() {} }), restore: async () => {},
         decode: async () => {
           if (!dead && state.fault) { dead = state.fault; if (dead === 'memory') state.fault = null; }
-          if (dead) { const e = Object.assign(new Error(dead === 'lost' ? 'engine: device lost: gone' : 'engine: out of memory'), { reason: dead }); if (dead === 'memory') dead = null; throw e; }
+          if (dead) { state.onFault?.(); const e = Object.assign(new Error(dead === 'lost' ? 'engine: device lost: gone' : 'engine: out of memory'), { reason: dead }); if (dead === 'memory') dead = null; throw e; }
           return i < ids.length ? ids[i++] : TOK.eos;
         },
         release: () => { log.released++; },
@@ -50,7 +54,7 @@ const setup = ({ reserve = false } = {}) => {
     gpu: () => ({}), setTimeout: (f, ms) => { const t = setTimeout(f, ms); t.unref?.(); return t; },
     post: (m) => { posted.push(m); if (m.type === 'done' || m.type === 'error') waiters.get(m.id)?.(m); } });
   let seq = 0;
-  const run = (op = 'run') => { const id = ++seq; const p = new Promise((r) => waiters.set(id, r)); host.handle({ id, op, model: 'm', parts: [{ text: 'hi' }], stable: 0, sampler: {}, maxTokens: 8 }); return p; };
+  const run = (op = 'run', more = {}) => { const id = ++seq; const p = new Promise((r) => waiters.set(id, r)); host.handle({ id, op, model: 'm', parts: [{ text: 'hi' }], stable: 0, sampler: {}, maxTokens: 8, ...more }); return p; };
   return { host, log, state, run };
 };
 
@@ -79,6 +83,33 @@ for (const op of ['run', 'warm']) {
     t.state.fault = 'memory';
     const failed = await t.run(op);
     assert.deepEqual(failed.error, { category: 'provider-unavailable', reason: 'memory' });
+    assert.equal(t.log.released, 1);
+    assert.equal(t.host.loaded, null);
+    assert.equal((await t.run()).type, 'done');
+    assert.equal(t.log.loads, 2);
+  });
+}
+
+for (const reason of ['lost', 'memory']) {
+  test(`a cancellation during a '${reason}' failure still releases the dead engine`, async () => {
+    const t = setup();
+    assert.equal((await t.run()).type, 'done');
+    t.state.fault = reason;
+    t.state.onFault = () => t.host.handle({ id: 2, op: 'cancel' });
+    assert.deepEqual((await t.run()).error, { category: 'cancelled' });
+    assert.equal(t.log.released, 1);
+    assert.equal(t.host.loaded, null);
+    t.state.fault = null;
+    t.state.onFault = null;
+    assert.equal((await t.run()).type, 'done');
+    assert.equal(t.log.loads, 2);
+  });
+
+  test(`a '${reason}' failure in background read-ahead releases the engine before the next run`, async () => {
+    const t = setup({ reuse: true });
+    t.state.aheadFault = reason;
+    assert.equal((await t.run('run', { parts: [{ text: 'hi' }, { special: '<think>' }], think: { budget: 0, close: [{ special: '</think>' }], after: [] } })).type, 'done');
+    await new Promise(setImmediate);
     assert.equal(t.log.released, 1);
     assert.equal(t.host.loaded, null);
     assert.equal((await t.run()).type, 'done');
