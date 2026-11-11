@@ -649,6 +649,32 @@ test('a title typed, then left, is saved as typed when the library changes elsew
   assert.deepEqual(titles, ['Renamed A'], 'and so does what is saved');
 });
 
+test('a remote body revision during the title debounce keeps the typed title and then loads the new body', async () => {
+  const P = page();
+  await P.seed([{ id: id(1), title: 'Note A', course: '7', html: '<p>A text</p>' }]);
+  await P.openView();
+  P.fire(P.items().find((e) => /Note A/.test(e.textContent)), 'click');
+  await settle();
+  const timers = [];
+  const globals = P.run('globalThis');
+  const nativeTimeout = globals.setTimeout;
+  globals.setTimeout = (f, ms, ...args) => ms === 500 ? timers.push(f) : nativeTimeout(f, ms, ...args);
+  const title = P.box().querySelector('.gz-nt-title');
+  title.value = 'Renamed A';
+  P.fire(title, 'input');
+  P.box().querySelector('.gz-nt-body').focus();
+  await P.seed([{ id: id(1), base: 1, sid: 'remote-revision', title: 'Note A', course: '7', html: '<p>Updated elsewhere</p>' }]);
+  await settle();
+  assert.equal(P.box().querySelector('.gz-nt-title').value, 'Renamed A', 'a body refresh cannot discard the unsent title');
+  assert.equal(timers.length, 1);
+  await timers[0]();
+  await wait(10);
+  await settle();
+  assert.deepEqual(P.sent.filter((m) => m.op === 'meta' && 'title' in m).map((m) => m.title), ['Renamed A']);
+  assert.equal(P.box().querySelector('.gz-nt-title').value, 'Renamed A');
+  assert.match(P.box().querySelector('.gz-nt-body').textContent, /Updated elsewhere/, 'the remote body is loaded after the title is saved');
+});
+
 test('the Course notes button costs the first script nothing: the worker registers it only while Notes is on', async () => {
   const changed = [];
   let registered = [];
