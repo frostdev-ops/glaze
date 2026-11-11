@@ -22,7 +22,7 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
   const KINDS = ['assignment', 'reply', 'message', 'test', 'unknown'];
   const ASSIGNMENT = /^\/courses\/\d+\/assignments\/\d+\/?$/;
   const QUIZ = /^\/courses\/\d+\/quizzes\/\d+\/take(?:\/questions\/\d+)?\/?$/;
-  const TOPIC = /^\/(?:courses|groups)\/\d+\/discussion_topics\/\d+\/?$/;
+  const TOPIC = /^\/(?:courses|groups)\/\d+\/discussion_topics\/(\d+)\/?$/;
   const kindOf = (ed, { path = '' } = {}) => {
     if (plain(ed)) return /^\/conversations\/?$/.test(path) ? 'message' : 'unknown';
     if (ed?.closest?.(EDITOR) !== ed) return 'unknown';
@@ -57,12 +57,95 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
   // The Inbox keeps Send enabled under its sending modal. Canvas's modal stack hides the underlying compose dialog.
   const busy = (ed) => plain(ed) && !!ed.closest('[aria-hidden="true"], [inert]');
 
-  // What the box answers: for now, whether a reply is to an announcement (its breadcrumb goes to the course's Announcements).
-  const contextOf = (ed, kind) => {
-    if (kind !== 'reply') return {};
-    const crumbs = top(ed).querySelectorAll('#breadcrumbs a');
-    return [...crumbs].some((a) => /^\/(?:courses|groups)\/\d+\/announcements\/?$/.test(a.getAttribute('href') || '')) ? { announcement: true } : {};
+  // What the box answers, the frame's `context` in the shape Ultra's has (writer/writer-context-assignment.js,
+  // writer-context-discussion.js), read off the page Canvas drew, with no request: an assignment's title, due date and
+  // description (its instructions); a reply's topic (its title and message, the prompt) and, for a reply to an entry, that
+  // entry alone with its author; and whether a reply is to an announcement (its breadcrumb goes to the course's
+  // Announcements). The Inbox gets none (a private thread is no course material) and a quiz page never builds one.
+  // Text only, as Ultra's page reads take it: block by block, scripts, buttons and screen-reader-only words left out, within
+  // LIMIT. Files the description links to aren't read (Ultra's reads stay Ultra's): the assignment says it is incomplete.
+  // Seen on the local Canvas: the topic and entry bodies' data-resource-type/-id, the entry's author_name, the classic
+  // page's #assignment_show (h1.title, its description, the hidden .timestamp), Assignments 2's title, description and
+  // due-date testids. Not seen live, and gating nothing: announcement.reply, and a description's file link (data-api-returntype).
+  const LIMIT = { prompt: 20000, post: 4000, name: 120, title: 300 };
+  const squash = (s) => String(s ?? '').replace(/[ \t ]+/g, ' ').trim();
+  // The AI context readers accept rich text. Escape the page's already-extracted text once, after bounding it, so
+  // literal tags and entity spellings survive their HTML-to-text pass. Transport size is at most five times LIMIT.
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const BLOCK = new Set('P DIV LI UL OL H1 H2 H3 H4 H5 H6 PRE BLOCKQUOTE TABLE TR'.split(' '));
+  const SKIP = new Set('SCRIPT STYLE BUTTON SVG TEMPLATE NOSCRIPT IFRAME OBJECT'.split(' '));
+  // An element's text, a line a block, at most n characters → { text, cut }. Bound copies before normalization too,
+  // and stop sparse trees after 4,096 nodes. Every budget omission remains visible to Feedback as incomplete material.
+  const textOf = (el, n) => {
+    let out = '', cut = false, left = 4096;
+    const append = (s) => { const room = n * 2 + 1 - out.length; if (s.length > room) cut = true; out += s.slice(0, room); };
+    const walk = (node, depth) => {
+      if (left-- <= 0 || out.length > n * 2) { cut = true; return; }
+      if (node.nodeType === 3) {
+        const room = n * 2 + 1 - out.length;
+        const text = node.substringData ? node.substringData(0, room) : String(node.textContent).slice(0, room);
+        if (node.length > room) cut = true;
+        append(text); return;
+      }
+      const tag = String(node.tagName || '').toUpperCase();
+      if (!tag || SKIP.has(tag) || String(node.className).split(/\s+/).includes('screenreader-only')) return;
+      if (depth > 60) { cut = true; return; }
+      if (tag === 'BR') { append('\n'); return; }
+      const block = BLOCK.has(tag);
+      if (block) append('\n');
+      for (const c of node.childNodes || node.children || []) {
+        if (left <= 0 || out.length > n * 2) { cut = true; break; }
+        walk(c, depth + 1);
+      }
+      if (block) append('\n');
+    };
+    if (el) walk(el, 0);
+    const all = out.split('\n').map(squash).filter(Boolean).join('\n');
+    return { text: all.slice(0, n), cut: cut || all.length > n };
   };
+  const line = (el, n) => textOf(el, n).text.replace(/\s+/g, ' ');
+  const courseOf = (doc, id) => {
+    const a = [...doc.querySelectorAll('#breadcrumbs a')].find((x) => /^\/courses\/(\d+)\/?$/.exec(x.getAttribute('href') || '')?.[1] === id);
+    return { id, name: esc(line(a, LIMIT.name)) };
+  };
+  const isoOf = (v) => { const t = new Date(v); return Number.isFinite(t.getTime()) ? t.toISOString() : null; };
+  const FILE = 'a[data-api-returntype="File"], a[href*="/files/"]';
+  // Canvas permits data-* attributes in authored HTML. Only Canvas's own markers, outside any authored body, identify
+  // the topic or entry: a classmate's post must never impersonate the one this box answers.
+  const pageElement = (doc, selector) => [...doc.querySelectorAll(selector)].find((el) => !el.parentElement?.closest('.user_content')) || null;
+  const assignmentOf = (doc, ed, course) => {
+    const classic = ed.id === 'submission_body', show = classic ? doc.querySelector('#assignment_show') : doc.querySelector('[data-testid="assignments-2-student-view"]');
+    if (!show) return {};
+    const body = classic ? show.querySelector('[data-resource-type="assignment.body"]') || show.querySelector('.description.user_content') : show.querySelector('[data-testid="assignments-2-assignment-description"]');
+    const title = line(classic ? show.querySelector('h1.title') : show.querySelector('[data-testid="assignment-student-header"] [data-testid="title"]'), LIMIT.title);
+    const stamp = classic ? line(show.querySelector('.timestamp'), 12) : '';
+    const due = classic ? (/^\d{9,11}$/.test(stamp) ? isoOf(Number(stamp) * 1000) : null) : isoOf(show.querySelector('time[data-testid="due-date"]')?.getAttribute('datetime') || '');
+    const { text, cut } = textOf(body, LIMIT.prompt);
+    const incomplete = cut || !!body?.querySelector(FILE);
+    return { kind: 'assignment', course, assignment: { title: esc(title), due, instructions: esc(text), description: '', rubric: null, files: [], ...(incomplete && { incomplete: true }) } };
+  };
+  const replyOf = (doc, ed, course, topic) => {
+    const body = pageElement(doc, `[data-resource-type="discussion_topic.body"][data-resource-id="${topic}"], [data-resource-type="announcement.body"][data-resource-id="${topic}"]`);
+    const title = line(pageElement(doc, '[data-testid="discussion-topic-container"] h1[data-testid="message_title"] [aria-hidden="true"]'), LIMIT.title);
+    const prompt = [title, textOf(body, LIMIT.prompt).text].filter(Boolean).join('\n').slice(0, LIMIT.prompt);
+    const entry = /^message-body-(\d+)$/.exec(ed.id)?.[1];
+    const said = entry ? textOf(pageElement(doc, `[data-resource-type="discussion_topic.reply"][data-resource-id="${entry}"], [data-resource-type="announcement.reply"][data-resource-id="${entry}"]`), LIMIT.post).text : '';
+    const replyTo = said ? { id: entry, author: esc(line(pageElement(doc, `[data-entry-id="${entry}"] [data-testid="author_name"]`), LIMIT.name)), text: esc(said) } : null;
+    const announcement = [...doc.querySelectorAll('#breadcrumbs a')].some((a) => /^\/(?:courses|groups)\/\d+\/announcements\/?$/.test(a.getAttribute('href') || ''));
+    return { kind: 'reply', course, prompt: prompt ? { text: esc(prompt) } : null, requirements: null, thread: [], replyTo, ...(announcement && { announcement: true }) };
+  };
+  const contextOf = (ed, kind, { path = '' } = {}) => {
+    if (QUIZ.test(path) || kind === 'test' || !ed) return {};
+    const doc = top(ed), course = /^\/courses\/(\d+)\//.exec(path)?.[1];
+    const at = course ? courseOf(doc, course) : null;
+    if (kind === 'assignment' && ASSIGNMENT.test(path)) return assignmentOf(doc, ed, at);
+    const topic = TOPIC.exec(path)?.[1];
+    if (kind === 'reply' && topic) return replyOf(doc, ed, at, topic);
+    return {};
+  };
+  // Which of the prompt's targets a reply answers to (writer/writer-target.js forKind): a reply to the topic is Canvas's
+  // own post on it, a reply to an entry a reply. Only replies have targets, as on Ultra only discussions do.
+  const targetOf = (box) => (box?.kind !== 'reply' ? null : box.identity === 'message-body-root' ? 'post' : 'reply');
   // A textarea id is stable while Canvas keeps the box; a reply's names its entry.
   const identity = (ed) => String(ed.id || '');
 
@@ -108,7 +191,6 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     : !!bodyOf(ed) && bodyOf(ed).getAttribute('contenteditable') !== 'false' && editable(read(ed).html);
 
   // The Inbox's text as Writer's plain document holds it: a paragraph a line. Its text is what that HTML reads as.
-  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const paragraphs = (value) => String(value ?? '').replace(/\r\n?/g, '\n').split('\n').map((l) => (l ? `<p>${esc(l)}</p>` : '<p><br></p>')).join('');
   const ENTITY = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
   const linesOf = (html) => String(html ?? '').split(/<\/p>/i).filter((p, i, all) => i < all.length - 1 || p.trim())
@@ -171,10 +253,10 @@ var GZ_WRITER_CANVAS = globalThis.GZ_WRITER_CANVAS || (() => {
     const kind = kindOf(editor, at);
     if (kind === 'unknown') return null;
     if (plain(editor) ? !canEdit(editor) || !rootOf(editor) : !ready(editor) || !canEdit(editor)) return null;
-    return { editor, container: containerOf(editor), root: rootOf(editor), kind, mode: modeOf(kind), send: sendOf(editor, kind), context: contextOf(editor, kind), identity: identity(editor) };
+    return { editor, container: containerOf(editor), root: rootOf(editor), kind, mode: modeOf(kind), send: sendOf(editor, kind), context: contextOf(editor, kind, at), identity: identity(editor) };
   }).filter(Boolean);
 
-  return { EDITOR, INBOX, KINDS, NATIVE, HOLD, TOOLS, drafts, kept, restoring, busy, focus, focuses, errorsOf, boxes, kindOf, rootOf, containerOf, identity, sendOf, sends, enabled, contextOf, canEdit, editable, read, write, watch, attemptAt, paragraphs, linesOf };
+  return { EDITOR, INBOX, KINDS, NATIVE, HOLD, TOOLS, drafts, kept, restoring, busy, focus, focuses, errorsOf, boxes, kindOf, rootOf, containerOf, identity, sendOf, sends, enabled, contextOf, targetOf, canEdit, editable, read, write, watch, attemptAt, paragraphs, linesOf };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_CANVAS;
 GZ_WRITER_CANVAS;

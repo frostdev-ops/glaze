@@ -45,7 +45,7 @@ test('the classic assignment: Text Entry is an assignment in compose, sent by it
   assert.ok(box.root.className.includes('rce-wrapper') && box.root.contains(box.editor) && !box.root.contains(box.send));
   assert.equal(box.send.getAttribute('type'), 'submit');
   assert.ok(box.send.closest('form#submit_online_text_entry_form'));
-  assert.deepEqual(box.context, {});
+  assert.equal(box.context.kind, 'assignment', 'what it answers: test/writer/writer-canvas-context.test.js');
   assert.equal(box.identity, 'submission_body');
   assert.equal(C.enabled(box.send), true);
   box.send.setAttribute('aria-disabled', 'true');
@@ -83,7 +83,7 @@ test('discussion, thread and announcement replies are replies sent by their Repl
     const [box] = boxes;
     assert.equal(box.send.getAttribute('data-testid'), 'DiscussionEdit-submit', p);
     assert.ok(box.send.closest('[data-testid="DiscussionEdit-container"]').contains(box.editor), p);
-    assert.deepEqual(box.context, p === 'announcement' ? { announcement: true } : {}, p);
+    assert.equal(box.context.announcement, p === 'announcement' ? true : undefined, p);
     assert.equal(box.identity, id);
   }
 });
