@@ -8,7 +8,7 @@ const path = require('node:path');
 
 const root = path.join(__dirname, '../../extension');
 // The checks and tools by file name, wherever their area put them: checks/<area>/ or tools/<kind>/.
-const SCRIPTS = new Map(['checks', 'tools'].flatMap((top) => fs.readdirSync(path.join(root, '..', top)).flatMap((d) => fs.readdirSync(path.join(root, '..', top, d)).map((f) => [f, path.join(root, '..', top, d, f)]))));
+const SCRIPTS = new Map(['checks', 'tools'].flatMap((top) => fs.readdirSync(path.join(root, '..', top), { withFileTypes: true }).filter((e) => e.isDirectory()).flatMap(({ name: d }) => fs.readdirSync(path.join(root, '..', top, d)).map((f) => [f, path.join(root, '..', top, d, f)]))));
 const scriptFile = (f) => SCRIPTS.get(f);
 const scratch = () => fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-check-env-'));
 

@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const checks = path.join(__dirname, '../../checks'), tools = path.join(__dirname, '../../tools/dev');
 
 test('every browser check waits before launching', () => {
-  for (const file of fs.readdirSync(checks).flatMap((a) => fs.readdirSync(path.join(checks, a)).map((f) => `${a}/${f}`)).filter((f) => f.endsWith('-check.js'))) {
+  for (const file of fs.readdirSync(checks, { withFileTypes: true }).filter((e) => e.isDirectory()).flatMap(({ name: a }) => fs.readdirSync(path.join(checks, a)).map((f) => `${a}/${f}`)).filter((f) => f.endsWith('-check.js'))) {
     const lines = fs.readFileSync(path.join(checks, file), 'utf8').split('\n');
     lines.forEach((line, i) => {
       if (/chromium\.launch|launchPersistentContext/.test(line)) {
