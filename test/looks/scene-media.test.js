@@ -306,6 +306,12 @@ const RETRY = [
   ['a picture at an address, no answer', () => ({ media: { type: 'image', src: 'https://cdn.example.com/a.webp' }, good: wire('image', 'image/webp'), bad: null, type: 'glaze:remoteMedia', why: 'load' })],
   ['a Lottie file, the fetch failed', () => ({ media: { type: 'lottie', src: 'https://cdn.example.com/a.json' }, good: { ok: true, json: { w: 10, h: 10 }, canvases: 1 }, bad: { ok: false, error: 'network' }, type: 'glaze:lottie', why: 'load' })],
   ['a kept Lottie file, no answer', () => ({ media: { type: 'lottie', src: 'file:' + 'A'.repeat(43) }, good: { ok: true, json: { w: 10, h: 10 }, canvases: 1 }, bad: null, type: 'glaze:lottie', why: 'load' })],
+  ...['video', 'image', 'lottie'].flatMap((kind) => [null, { ok: false, error: 'failed' }, { ok: false, error: 'network' }].map((bad) => [
+    `a mod's ${kind}, ${bad?.error || 'no answer'}`,
+    () => ({ media: { type: kind, src: `mod:abcdefghijklmnop/loop.${kind === 'lottie' ? 'json' : kind === 'image' ? 'webp' : 'webm'}` },
+      good: { kind, ...(kind === 'lottie' ? { ok: true, json: { w: 10, h: 10 }, canvases: 1 } : wire(kind, kind === 'image' ? 'image/webp' : 'video/webm')) },
+      bad, type: 'glaze:modpage', why: kind === 'lottie' ? 'load' : 'file' }),
+  ])),
 ];
 // An ask that answers `first` for the first `n` times and `then` after.
 const flaky = (type, first, n, then) => { let k = 0; return async (m) => (m.type === type ? (k++ < n ? first : then) : { ok: false, error: 'bad' }); };
