@@ -250,7 +250,14 @@
     // That send was held: the site's editor didn't take the text, so nothing went.
     held: () => { if (!note) return; note.textContent = t('Not sent: Canvas didn’t take your text. Try again.'); note.hidden = false; },
     html: (m) => {
-      if (!ed || typeof m.html !== 'string') return;
+      if (!ed || refused || typeof m.html !== 'string') return;
+      // What Canvas put in its box (its autosave restored, an undo) gets init's check: what Writer can't keep goes back to
+      // Canvas's editor as it is.
+      if (site === 'canvas' && root.dataset.dialect) {
+        let lost;
+        try { lost = GZ_WRITER_SCHEMA.loses(GZ_WRITER_SCHEMA[root.dataset.dialect], m.html); } catch { lost = ['error']; }
+        if (lost.length) { refused = true; say({ type: 'native', reason: lost.join(' ') }); return; }
+      }
       quiet = true;
       try { ed.setHTML(m.html); } finally { quiet = false; }
       if (ed.text?.().trim()) document.querySelector('.gw-offer')?.remove();
