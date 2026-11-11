@@ -10,6 +10,7 @@
 var GZ_GLSL = globalThis.GZ_GLSL || (() => {
   const MAX = 8192; // characters, and ASCII only, so also bytes
   const MAX_LOOP = 256; // passes of one for loop
+  const MAX_ARRAY = 64; // elements of one array, all its dimensions together
   const COST_LIMIT = 4096; // operations per pixel, including built-ins and arithmetic; see estimate()
   // What the author may rely on: the uniforms every built-in scene reads and the helpers they share (looks/scene.js COMMON and
   // FLAT, the same text), plus px(). One string, so its line count is fixed.
@@ -48,7 +49,10 @@ var GZ_GLSL = globalThis.GZ_GLSL || (() => {
   // took seconds to step down; count built-ins and arithmetic inside a statement too. This is a bound, not a GPU sandbox.
   // A loop has to be countable: `for (int i = A; i < B; i++)` (or <=, >, >=, i--, i += n, i -= n) with A and B whole numbers,
   // a #define of one or a const int of one. Anything else is refused rather than guessed at: a bound the checker cannot read
-  // (`int(1e5)`, a const made of other consts) or a step that never reaches it is how a loop would run for minutes.
+  // (`int(1e5)`, a const made of other consts) or a step that never reaches it is how a loop would run for minutes. `while` and
+  // `do` can never be counted and are refused wherever they stand: ESSL 1.00 lets a compiler refuse them, not make it, and one
+  // that accepts them would run them unpriced, with every loop inside them. An array is sized the same way, holds at most
+  // MAX_ARRAY elements, and each declaration costs its elements, so a loop around one multiplies it.
   const tokens = (text) => {
     const T = [], L = [];
     let line = 1;
@@ -59,6 +63,8 @@ var GZ_GLSL = globalThis.GZ_GLSL || (() => {
   };
   const analyze = (src) => {
     const errors = [];
+    const e = (line, message, vars) => { errors.push({ line, message, ...(vars && { vars }) }); return 1; };
+    const uncountable = (line) => e(line, 'Can\'t tell how many times this loop runs. Write it as `for (int i = 0; i < 8; i++)`, with whole numbers (or a #define or const int that is one) for the start and the end.');
     const code = bare(src);
     // Object-like #defines are expanded where used (check() allows no others), so a macro can't hide a call or a bound.
     const macros = new Map();
@@ -82,6 +88,34 @@ var GZ_GLSL = globalThis.GZ_GLSL || (() => {
         const j = close(i + 1, '(', ')');
         if (T[j] === '{') { const k = close(j, '{', '}'); fns.set(T[i], [...(fns.get(T[i]) || []), [j + 1, k - 1]]); i = k - 1; }
       }
+    }
+
+    // `while` and `do` anywhere in the author's tokens, and every array declaration: its elements are read here, priced in run().
+    const looped = new Set(), sized = new Map(); // lines already refused; `[` token -> elements of the array it declares
+    const declares = (k, depth, start) => {
+      if (!isId(T[k - 1])) return false; // not `name[`: a constructor, a second dimension or an index into something else
+      if (isId(T[k - 2])) return T[k - 2] !== 'return' && T[k - 2] !== 'else'; // `float a[`, `highp vec2 a[`; not `return a[i]`
+      // `float b = 1., a[3];`: a later declarator, when its statement starts with a type and a name (and is not inside a call).
+      return T[k - 2] === ',' && !depth && isId(T[start]) && isId(T[start + 1]) && T[start] !== 'return' && T[start] !== 'else';
+    };
+    for (let k = P.length, depth = 0, start = k; k < T.length; k++) {
+      const t = T[k];
+      if ((t === 'while' || t === 'do') && !looped.has(L[k])) { looped.add(L[k]); uncountable(L[k]); }
+      else if (t === '[' && declares(k, depth, start)) {
+        let n = 1, readable = true;
+        for (let j = k; T[j] === '['; ) { // `a[4]`, and a second dimension `a[4][4]` where the compiler has one
+          const end = close(j, '[', ']'), inner = T.slice(j + 1, end - 1);
+          const v = inner.length === 1 ? num(inner[0]) : undefined;
+          if (v === undefined) readable = false; else n *= v;
+          j = end;
+        }
+        if (!readable) e(L[k], 'Can\'t tell how big this array is. Write its size as a whole number (or a #define or const int that is one).');
+        else if (n > MAX_ARRAY) e(L[k], 'An array of {n} elements is more than a background can afford (limit {limit}).', { n, limit: MAX_ARRAY });
+        else sized.set(k, n);
+      }
+      if (t === '(' || t === '[') depth++;
+      else if (t === ')' || t === ']') depth = Math.max(0, depth - 1);
+      else if (!depth && (t === ';' || t === '{' || t === '}')) start = k + 1;
     }
 
     const memo = new Map(), open = new Set();
@@ -108,7 +142,7 @@ var GZ_GLSL = globalThis.GZ_GLSL || (() => {
       const b = cond?.[0] === name && (lt || gt) ? val(cond.slice(or ? 3 : 2)) : undefined;
       const s = step?.join('');
       const by = s === `${name}++` || s === `++${name}` || s === `${name}--` || s === `--${name}` ? 1 : (s?.startsWith(`${name}+=`) || s?.startsWith(`${name}-=`) ? val(step.slice(3)) : undefined);
-      if (a === undefined || b === undefined || !(by > 0)) return bad('Can\'t tell how many times this loop runs. Write it as `for (int i = 0; i < 8; i++)`, with whole numbers (or a #define or const int that is one) for the start and the end.');
+      if (a === undefined || b === undefined || !(by > 0)) return uncountable(line);
       if (lt === (s.includes('-'))) return bad('This loop never reaches its end: count up with `<` and `i++` or `i += n`, down with `>` and `i--` or `i -= n`.');
       const n = Math.max(0, Math.ceil((lt ? b - a + or : a - b + or) / by));
       if (n > MAX_LOOP) bad('A loop of {n} passes is more than a background can afford (limit {limit}).', { n, limit: MAX_LOOP });
@@ -127,14 +161,16 @@ var GZ_GLSL = globalThis.GZ_GLSL || (() => {
         if (i >= to) return 0;
         if (k === 'for') { const at = i; i++; const h = parens(); return calls(h) + passes(h, L[at]) * stmt(); }
         if (k === '{') { i++; let sum = 0; while (i < to && T[i] !== '}') sum += stmt(); i++; return sum; }
-        if (k === 'if' || k === 'while') { i++; const h = parens(); let c = stmt(); if (T[i] === 'else') { i++; c = Math.max(c, stmt()); } return work(h) + c; }
+        if (k === 'if') { i++; const h = parens(); let c = stmt(); if (T[i] === 'else') { i++; c = Math.max(c, stmt()); } return work(h) + c; }
         // Anything else is one statement, up to its `;` (a struct's own braces and semicolons are inside it).
         const s = i;
         for (let p = 0; i < to; i++) {
           if (T[i] === '(' || T[i] === '{') p++; else if (T[i] === ')' || T[i] === '}') p--;
           else if (T[i] === ';' && p <= 0) { i++; break; }
         }
-        return work(T.slice(s, i));
+        let elements = 0;
+        for (let q = s; q < i; q++) elements += sized.get(q) || 0;
+        return work(T.slice(s, i)) + elements;
       };
       let sum = 0;
       while (i < to) sum += stmt();

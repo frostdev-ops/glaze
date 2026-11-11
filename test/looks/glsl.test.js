@@ -266,6 +266,7 @@ test('the checker stays fast on hostile 8 KiB inputs, and never throws', () => {
     comment_open: '/*'.repeat(4096), hashes: '# '.repeat(4096), for_open: 'for (int i = 0; i < 1; i++;'.repeat(300), parens: '('.repeat(8000),
     scene_sig: 'vec4 scene( vec2 ' + ' '.repeat(8000) + ')', defines: '#define A 1\n'.repeat(700), uniform_words: 'uniform '.repeat(1000),
     calls: 'float a(float x) { return a(x); }\n'.repeat(200) + MIN, protos: 'float f(float x); '.repeat(450) + MIN,
+    array_declarators: `float a = 1.${',b[1]'.repeat(1600)};\n${MIN}`, struct_declarators: `struct S { float a${',b[1]'.repeat(1600)}; };\n${MIN}`, deep_index: `float a[1${'['.repeat(2000)}${']'.repeat(2000)}];\n${MIN}`, whiles: `${'while(1){}'.repeat(800)}${MIN}`,
     typed_calls: 'a b(a b(a b(a b('.repeat(500) + MIN, deep_blocks: `vec4 scene(vec2 uv) ${'{'.repeat(3000)}${'}'.repeat(3000)}`,
   };
   for (const [name, src] of Object.entries(cases)) {
