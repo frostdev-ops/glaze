@@ -708,7 +708,8 @@ var GZ_SHEET_GRID = globalThis.GZ_SHEET_GRID || (() => {
       if (!redo) undoBytes -= x.bytes;
       if (x.sheet !== S().id) { const i = wb.sheets.findIndex((s) => s.id === x.sheet); if (i >= 0) { wb.active = i; sizes(); layout(); tabsDraw(); } }
       let res;
-      try { res = run(x.op); } catch (e) { refused(e); return; }
+      // Refused (the cell cap, a sheet name taken since): the step stays, to try again once the cause is gone.
+      try { res = run(x.op); } catch (e) { from.push(x); if (!redo) undoBytes += x.bytes; refused(e); return; }
       const back = { op: res.inverse, sheet: x.sheet, sel, bytes: weigh(res.inverse) };
       if (redo) pushUndo(back); else to.push(back);
       mark(res, x.op);
