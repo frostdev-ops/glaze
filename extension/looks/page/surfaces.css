@@ -11,6 +11,13 @@
   --gz-border-line: color-mix(in srgb, var(--gz-line) var(--gz-surface-border, 100%), transparent);
   --gz-border-strong: color-mix(in srgb, var(--gz-line-strong) var(--gz-surface-border, 100%), transparent);
 }
+/* Text on the accent tint (accent-soft): the accent on a dark palette, the bright accent on a light one, which the palette contract holds
+   to 4.5:1 on the tint (the accent itself read 4.24:1 on Paper and 4.47:1 on Rose). The palette sets the page's color-scheme, so
+   light-dark() tells which. Before Chrome 123 the accent stays. */
+:root, :host, [data-gz-course-look] { --gz-on-soft: var(--gz-accent); }
+@supports (color: light-dark(red, red)) {
+  :root, :host, [data-gz-course-look] { --gz-on-soft: light-dark(var(--gz-accent-hi), var(--gz-accent)); }
+}
 /* Per-course colors are inherited locally, including on course cards outside a course page. */
 [data-gz-course],
 [data-course-id],

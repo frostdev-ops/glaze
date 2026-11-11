@@ -67,7 +67,7 @@ button.primary:hover { color: var(--gz-accent-ink); background: var(--gz-accent-
 .seg { display: inline-flex; border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: 999px; padding: 2px; background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); }
 .seg label { padding: 0.25rem 0.7rem; border-radius: 999px; color: var(--gz-ink-muted); font-size: calc(12px * var(--gz-scale, 1)); transition: background 0.2s var(--gz-ease), color 0.2s var(--gz-ease); }
 .seg input { position: absolute; opacity: 0; width: 0; height: 0; }
-.seg label:has(input:checked) { background: var(--gz-accent-soft); color: var(--gz-accent); font-weight: 600; }
+.seg label:has(input:checked) { background: var(--gz-accent-soft); color: var(--gz-on-soft, var(--gz-accent)); font-weight: 600; }
 .seg label:has(input:focus-visible) { outline: 2px solid var(--gz-accent); outline-offset: 1px; }
 
 /* Preset swatches: surface disc with an accent dot; the active one gets a ring. */

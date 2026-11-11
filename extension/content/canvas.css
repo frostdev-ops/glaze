@@ -406,7 +406,7 @@ html[data-gz-nav-size="large"] { --gz-nav-wide: 100px; --gz-nav-narrow: 64px; --
 }
 #application #section-tabs li a:hover { background: var(--gz-row-hover); color: var(--gz-accent-hi); transform: var(--gz-nudge); }
 #application #section-tabs li a.active {
-  color: var(--gz-accent); font-weight: 600; background: color-mix(in srgb, var(--gz-accent-soft) 55%, transparent);
+  color: var(--gz-on-soft, var(--gz-accent)); font-weight: 600; background: color-mix(in srgb, var(--gz-accent-soft) 55%, transparent);
   box-shadow: inset 3px 0 0 var(--gz-accent);
 }
 html:not([data-gz-dark-theme]) #application #section-tabs li a.active { color: var(--gz-accent-hi); }
@@ -674,7 +674,7 @@ html[data-gz-motion="expressive"] :is(.ic-DashboardCard, .ig-row, .ic-item-row):
 :is(#application, .ui-dialog) :is(.btn:disabled, .btn.disabled, .Button--disabled, .btn-primary[disabled]) { opacity: 0.5; }
 /* Icon-only buttons and the ⋯ menus: a round tint behind the icon. */
 :is(#application, .ui-dialog) :is(.Button--icon-action, .al-trigger, .ic-DashboardCard__header-button, .btn-link.icon-only) { border-radius: 999px; transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease); }
-:is(#application, .ui-dialog) :is(.Button--icon-action, .al-trigger, .ic-DashboardCard__header-button):is(:hover, :focus-visible) { background: color-mix(in srgb, var(--gz-accent-soft) 80%, transparent); color: var(--gz-accent); }
+:is(#application, .ui-dialog) :is(.Button--icon-action, .al-trigger, .ic-DashboardCard__header-button):is(:hover, :focus-visible) { background: color-mix(in srgb, var(--gz-accent-soft) 80%, transparent); color: var(--gz-on-soft, var(--gz-accent)); }
 
 /* ---- forms: fields are surfaces with an edge, the accent ring while you type ---- */
 :is(#application, .ui-dialog, [role="dialog"]:not([id^="gz-"] *)) :is(input:not([type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="file"], [type="range"], [type="color"], [type="image"]), textarea, select),
@@ -990,11 +990,11 @@ body > :is(.ui-dialog, .ui-menu, .ui-datepicker, span:not([class])) :where(*) { 
 /* Menus and the date picker. Canvas fills the chosen row with the brand colour and writes the text white. */
 .ui-menu, .ui-datepicker, .ui-autocomplete { background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); color: var(--gz-ink); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius-sm); box-shadow: var(--gz-shadow); }
 .ui-menu .ui-menu-item a, .ui-menu .ui-menu-item .ui-menu-item-wrapper { color: var(--gz-ink); background: transparent; border: 0; }
-.ui-menu .ui-menu-item :is(.ui-state-focus, .ui-state-active, .ui-state-hover), .ui-menu .ui-menu-item a:is(:hover, :focus) { background: var(--gz-accent-soft) !important; color: var(--gz-accent) !important; border: 0; }
+.ui-menu .ui-menu-item :is(.ui-state-focus, .ui-state-active, .ui-state-hover), .ui-menu .ui-menu-item a:is(:hover, :focus) { background: var(--gz-accent-soft) !important; color: var(--gz-on-soft, var(--gz-accent)) !important; border: 0; }
 .ui-menu .ui-menu-item a:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
 .ui-menu .ui-menu-item :is(.ui-state-focus, .ui-state-active) * { color: inherit !important; }
 .ui-datepicker :is(.ui-datepicker-header, .ui-datepicker-title, th, td a, td span) { background: transparent; color: var(--gz-ink); border-color: transparent; }
-.ui-datepicker td a:hover { background: var(--gz-accent-soft); color: var(--gz-accent); }
+.ui-datepicker td a:hover { background: var(--gz-accent-soft); color: var(--gz-on-soft, var(--gz-accent)); }
 .ui-datepicker td a.ui-state-active, .ui-datepicker td.ui-datepicker-today a { background: var(--gz-accent); color: var(--gz-accent-ink); }
 /* Tooltips and the popovers built on them (a calendar event's card): the one tooltip language of theme.css,
    a surface with an edge and a shadow. Canvas fills them with a 2-class chain, opacity .8, and draws a caret
@@ -1091,13 +1091,13 @@ html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) 
 /* The text and highlight colour icons paint their letter with a fill attribute (their colour bar is the chosen colour, left alone). */
 .tox.tox-tinymce .tox-tbtn svg g[fill="#2B3B46"] { fill: currentColor; }
 .tox.tox-tinymce .tox-tbtn[data-gz-light] { background: transparent !important; }
-.tox.tox-tinymce :is(.tox-tbtn, .tox-mbtn):is(:hover, :focus, :focus-visible, [aria-expanded="true"]) { background: var(--gz-accent-soft) !important; color: var(--gz-accent); }
+.tox.tox-tinymce :is(.tox-tbtn, .tox-mbtn):is(:hover, :focus, :focus-visible, [aria-expanded="true"]) { background: var(--gz-accent-soft) !important; color: var(--gz-on-soft, var(--gz-accent)); }
 .tox.tox-tinymce :is(.tox-tbtn, .tox-mbtn):focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
 /* A split button (text colour, highlight, lists) lights #f2f2f2 whole, and white round its arrow: one wash, its halves clear. */
 .tox.tox-tinymce .tox-split-button { border-radius: var(--gz-radius-sm); transition: background var(--gz-t) var(--gz-ease); }
 .tox.tox-tinymce .tox-split-button:is(:hover, :focus, :focus-within) { background: var(--gz-accent-soft) !important; box-shadow: none; }
 .tox.tox-tinymce .tox-split-button:is(:hover, :focus, :focus-within) .tox-tbtn { background: transparent !important; color: var(--gz-accent); }
-.tox.tox-tinymce :is(.tox-tbtn--enabled, .tox-tbtn--enabled:hover, .tox-mbtn--active) { background: var(--gz-accent-soft) !important; color: var(--gz-accent); }
+.tox.tox-tinymce :is(.tox-tbtn--enabled, .tox-tbtn--enabled:hover, .tox-mbtn--active) { background: var(--gz-accent-soft) !important; color: var(--gz-on-soft, var(--gz-accent)); }
 .tox.tox-tinymce :is(.tox-tbtn--disabled, .tox-tbtn--disabled:hover, .tox-mbtn--disabled, .tox-mbtn--disabled:hover, .tox-tbtn:disabled) { background: transparent !important; color: var(--gz-ink-faint); opacity: 0.6; cursor: default; }
 .tox.tox-tinymce :is(.tox-tbtn, .tox-mbtn):focus-visible { box-shadow: inset 0 0 0 2px var(--gz-accent); }
 /* Canvas's status bar (path, word count, the editor's switches) is InstUI, not TinyMCE's. */
@@ -1114,7 +1114,7 @@ html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) 
 .tox.tox-tinymce-aux .tox-collection__group { border-color: var(--gz-border-line, var(--gz-line)) !important; background: transparent !important; }
 .tox.tox-tinymce-aux .tox-collection__item { color: var(--gz-ink); background: transparent !important; border-radius: calc(var(--gz-radius-sm) - calc(var(--gz-radius, 12px) * 1 / 6)); }
 .tox.tox-tinymce-aux .tox-collection__item :is(.tox-collection__item-label, .tox-collection__item-label *) { color: inherit !important; }
-.tox.tox-tinymce-aux .tox-collection__item:is(.tox-collection__item--active, :hover) { background: var(--gz-accent-soft) !important; color: var(--gz-accent); }
+.tox.tox-tinymce-aux .tox-collection__item:is(.tox-collection__item--active, :hover) { background: var(--gz-accent-soft) !important; color: var(--gz-on-soft, var(--gz-accent)); }
 .tox.tox-tinymce-aux .tox-collection__item:focus-visible { outline: 2px solid var(--gz-accent); outline-offset: -2px; }
 .tox.tox-tinymce-aux .tox-collection__item :is(svg, .tox-collection__item-icon, .tox-collection__item-checkmark, .tox-collection__item-caret) { fill: currentColor !important; color: inherit; }
 .tox.tox-tinymce-aux .tox-collection__item--state-disabled { opacity: 0.5; }
@@ -1201,7 +1201,7 @@ html[data-gz-dark-theme] .user_content img:not(.equation_image, [data-gz-rule]) 
   background: transparent; border-color: transparent; border-radius: 999px; color: var(--gz-ink-muted);
   transition: background var(--gz-t) var(--gz-ease), color var(--gz-t) var(--gz-ease);
 }
-#mobile-header button.Button--icon-action-rev:is(:hover, :focus-visible, [aria-expanded="true"]), #mobile-header #mobile-top-nav-tools-mount-point button:is(:hover, :focus-visible, [aria-expanded="true"]) { background: var(--gz-accent-soft); color: var(--gz-accent); }
+#mobile-header button.Button--icon-action-rev:is(:hover, :focus-visible, [aria-expanded="true"]), #mobile-header #mobile-top-nav-tools-mount-point button:is(:hover, :focus-visible, [aria-expanded="true"]) { background: var(--gz-accent-soft); color: var(--gz-on-soft, var(--gz-accent)); }
 #mobile-header button.Button--icon-action-rev:focus-visible { box-shadow: 0 0 0 2px var(--gz-accent); outline: 0; }
 #mobile-header .mobile-header-title { color: var(--gz-ink-muted); }
 #mobile-header .mobile-header-title div:last-child { color: var(--gz-ink); font-weight: 600; }
@@ -1420,7 +1420,7 @@ html[data-gz-enhance-reading] #application :is(#wiki_page_show .show-content, #a
 #gz-cmd li { display: flex; align-items: baseline; gap: 0.75rem; margin: 0; padding: 0.45rem 0.75rem; border-radius: calc(var(--gz-radius) * 2 / 3); cursor: pointer; }
 #gz-cmd li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #gz-cmd li small { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--gz-ink-faint); }
-#gz-cmd li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-accent); box-shadow: inset 3px 0 0 var(--gz-accent); }
+#gz-cmd li[aria-selected="true"] { background: var(--gz-accent-soft); color: var(--gz-on-soft, var(--gz-accent)); box-shadow: inset 3px 0 0 var(--gz-accent); }
 #gz-cmd li[aria-selected="true"] small { color: inherit; opacity: 0.8; }
 #gz-cmd .gz-cmd-empty { cursor: default; color: var(--gz-ink-faint); }
 #gz-cmd .gz-cmd-foot { margin: 0; padding: 0.45rem 1.1rem; font-size: 12px; color: var(--gz-ink-faint); border-top: 1px solid var(--gz-border-line, var(--gz-line)); }
@@ -1665,7 +1665,7 @@ html[data-gz-enhance-calc] #application #grade_entry { background: var(--gz-surf
   background: var(--gz-surface-grain, none), var(--gz-surface-fill, var(--gz-surface)); border: 1px solid var(--gz-border-strong, var(--gz-line-strong)); border-radius: var(--gz-radius); box-shadow: var(--gz-shadow); animation: var(--gz-tip-in);
 }
 #gz-mk a { padding: 0.4rem 0.7rem; border-radius: var(--gz-radius-sm); color: var(--gz-ink); text-decoration: none; }
-#gz-mk a:is(:hover, :focus-visible) { background: var(--gz-accent-soft); color: var(--gz-accent); outline: none; }
+#gz-mk a:is(:hover, :focus-visible) { background: var(--gz-accent-soft); color: var(--gz-on-soft, var(--gz-accent)); outline: none; }
 @media (max-width: 520px) { #gz-ce .gz-ce-field { grid-template-columns: minmax(0, 1fr) auto; } #gz-ce .gz-ce-field > span { grid-column: 1 / -1; } }
 
 /* Canvas has one breadcrumb row. A full-width strip wraps above or below that row. */
