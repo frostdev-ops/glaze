@@ -919,7 +919,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
       const recs = await S.get((await S.keys()).filter((k) => k.startsWith(REC))), out = {};
       for (const [k, r] of Object.entries(recs)) {
         if (!r?.id || !r.rsum || r.lsum !== r.rsum || !based(r.cat, r.key) || defOf(r.area, r.key)?.cat !== r.cat) continue;
-        const v = await valueOf(r.area, r.key).catch(() => undefined);
+        const v = await valueOf(r.area, r.key);
         if (v !== undefined && await sumOf(r.area, r.key, v) === r.rsum) out[BASE + k.slice(REC.length)] = { sum: r.rsum, value: v };
       }
       if (Object.keys(out).length) await S.set(out);
