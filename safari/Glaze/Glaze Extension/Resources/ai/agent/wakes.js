@@ -169,8 +169,13 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
   const alarm = (env, a) => (typeof a?.name === 'string' && a.name.startsWith(ALARM) ? tick(env) : Promise.resolve(0));
   // The student's school page asks: what fired, checked first, then marked shown (to that page) so no page shows it again.
   const record = ({ shown: _s, to: _t, ...f }) => f;
+  // A scope can contain the full page URL where the browser supplies no document id. Keep its exact identity in a
+  // bounded digest instead of losing the binding when that URL is long.
+  const scopeOf = async (to) => typeof to !== 'string' || to.length <= LIMIT.scope ? to
+    : `sha256:${[...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(to)))].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
   const take = async (env, to) => {
     if (!(await env.on())) return [];
+    to = await scopeOf(to);
     await tick(env);
     return turn(async () => {
       const s = await read(env), now = clock(env);
@@ -184,6 +189,7 @@ var GZ_AI_RIME_WAKES = globalThis.GZ_AI_RIME_WAKES || (() => {
   };
   // The student's Ask Rime or Dismiss on a shown one, from the page it was shown to: its record, now forgotten.
   const claim = (env, id, { to, now = clock(env) } = {}) => turn(async () => {
+    to = await scopeOf(to);
     const s = await read(env), f = s.fired.find((x) => x.id === id && x.shown);
     if (!f || (f.to !== undefined && f.to !== to)) return null;
     s.fired = s.fired.filter((x) => x !== f && (!x.shown || x.shown + LIMIT.hold > now));
