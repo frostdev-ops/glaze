@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 // A sheet's rules as [selector, body], comments removed, @media and @supports blocks flattened, in file order.
-const cssRules = (file) => {
+const cssRules = (file, active = () => true) => {
   const css = fs.readFileSync(path.join(__dirname, '../../extension', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const out = [];
   const walk = (text) => {
@@ -15,7 +15,7 @@ const cssRules = (file) => {
       let depth = 1, j = open + 1;
       for (; depth && j < text.length; j++) if (text[j] === '{') depth++; else if (text[j] === '}') depth--;
       const body = text.slice(open + 1, j - 1);
-      if (sel.startsWith('@media') || sel.startsWith('@supports')) walk(body); else if (!sel.startsWith('@')) out.push([sel, body]);
+      if (sel.startsWith('@media') || sel.startsWith('@supports')) { if (active(sel)) walk(body); } else if (!sel.startsWith('@')) out.push([sel, body]);
       i = j;
     }
   };
