@@ -840,7 +840,8 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
   const dockMove = (id, by, sel) => {
     const i = dockIds.indexOf(id), j = i + by;
     if (i < 0 || j < 0 || j >= dockIds.length) return;
-    side.op([{ op: 'move', id, by }]);
+    // Past the widget drawn beside it, never one the record keeps docked but the dock doesn't show (its switch off).
+    side.op([by < 0 ? { op: 'move', id, to: dockIds[j] } : { op: 'move', id: dockIds[j], to: id }]);
     say(t('{name} moved to {n} of {all}.', { name: t(nameOf(id)), n: j + 1, all: dockIds.length }));
     tiles.get(id)?.tools.querySelector(sel)?.focus();
   };
@@ -865,7 +866,9 @@ var GZ_WIDGETS_UI = globalThis.GZ_WIDGETS_UI || (() => {
         if (!ev) return;
         const to = list().indexOf(el);
         if (ev.type !== 'pointerup' || to === from || to < 0) { draw(); return; }
-        side.op(Array.from({ length: Math.abs(to - from) }, () => ({ op: 'move', id, by: to > from ? 1 : -1 })));
+        // The order it was dropped in, each drawn widget before the next: hidden ones docked between don't count.
+        const ids = list().map((c) => c.dataset.tile);
+        side.op(ids.slice(0, -1).map((x, k) => ({ op: 'move', id: x, to: ids[k + 1] })).reverse());
         say(t('{name} moved to {n} of {all}.', { name: t(nameOf(id)), n: to + 1, all: dockIds.length }));
       };
       gesture = { id, cancel: up };
