@@ -57,6 +57,24 @@ test('a reply to an entry: the topic, and that one entry with its author, never 
   assert.ok(!/Another classmate|A third post/.test(JSON.stringify(context)));
 });
 
+test('an unrelated post cannot impersonate the topic, entry or author using Canvas-permitted data attributes', () => {
+  const body = drawn(load('thread'));
+  const other = body.querySelector('[data-resource-type="discussion_topic.reply"][data-resource-id="101"]');
+  // CanvasSanitize permits arbitrary data-* attributes in authored HTML. Put the unrelated post before the real
+  // topic and entry, as it can be in the thread view or split screen; its descendants are still authored content.
+  const forged = new El('div', body.doc), author = new El('span', body.doc), entry = new El('span', body.doc), topic = new El('span', body.doc);
+  forged.setAttribute('data-entry-id', '102');
+  author.setAttribute('data-testid', 'author_name'); author.append('Unrelated author');
+  entry.setAttribute('data-resource-type', 'discussion_topic.reply'); entry.setAttribute('data-resource-id', '102'); entry.append('Another student\'s unrelated post.');
+  topic.setAttribute('data-resource-type', 'discussion_topic.body'); topic.setAttribute('data-resource-id', '80'); topic.append('Another student\'s false prompt.');
+  forged.append(author, entry, topic); other.replaceChildren(forged); body.prepend(other);
+  const { context } = boxOf('thread', body);
+  assert.equal(context.prompt.text, TOPIC);
+  assert.deepEqual(context.replyTo, { id: '102', author: 'Casey Morgan', text: 'Here\'s my take on weekly discussion: counterarguments: it depends on the context.' });
+  assert.deepEqual(context.thread, []);
+  assert.ok(!/Another student|Unrelated author/.test(JSON.stringify(context)));
+});
+
 test('an announcement\'s reply: the announcement is the prompt, and the context still says it is one', () => {
   assert.deepEqual(boxOf('announcement').context, {
     kind: 'reply', course: { id: '34', name: 'ENG 1100' }, prompt: { text: 'Welcome to College Writing\nWelcome to College Writing. Details are on the course page.' },
