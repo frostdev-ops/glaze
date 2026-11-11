@@ -457,13 +457,17 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     pointer = '';
   });
   addEventListener('pageshow', (e) => { live = true; if (e.persisted) { key = ''; sync(); } });
-  // Ultra changes pages in place: its stickers are the new path's. Without window.navigation, content-ultra.js syncQuiet says so.
-  const moved = () => { if (globalThis.GZ_LX) cursor(); if (key) stickers(); };
+  // Ultra changes pages in place: its stickers are the new path's. Where there is no window.navigation (Firefox before 147) and
+  // pushState fires no popstate, content.js's pass says so through route(), as a quiz or a tool's page comes or goes.
+  let was = null; // whether the page was a quiz or a tool's at the last sync or move
+  const moved = () => { was = quiz(); if (globalThis.GZ_LX) cursor(); if (key) stickers(); };
   globalThis.navigation?.addEventListener('navigatesuccess', moved);
   addEventListener('popstate', moved);
+  const route = () => { if (was !== null && quiz() !== was) moved(); };
 
   const sync = async () => {
     await lib();
+    was = quiz();
     cursor();
     arm();
     stickers();
@@ -494,6 +498,6 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
     ];
   };
 
-  return { sync, cmds, ready, edit };
+  return { sync, route, cmds, ready, edit };
 })();
 GZ_LOOKX;
