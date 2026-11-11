@@ -54,7 +54,12 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const providerName = (st, t) => (st?.provider === 'device' ? t('Chrome on-device AI') : st?.provider === 'apple' ? t('Apple Intelligence') : st?.provider === 'local' ? t('Rime') : st?.to || t('Endpoint'));
   // The models on this computer (ai/settings.js HERE): no model id, and a status that can change without the student.
   const HERE = ['device', 'apple', 'local'];
-  const api = { fits, sentence, tailText, nextWord, consume, pause, wait, learn, providerName };
+  // The text on each side of the caret at head that the gray text is asked with; the footnotes follow the draft.
+  const around = (doc, head) => {
+    const tx = (globalThis.GZ_WRITER_SCHEMA || require('../writer-schema.js')).text(doc, { notes: true }), off = tx.offsetAt(head);
+    return { before: tailText(tx.text.slice(0, off), 1e6), after: tx.text.slice(off, off + 4001) };
+  };
+  const api = { fits, sentence, tailText, nextWord, consume, pause, wait, learn, providerName, around };
   const D = typeof GZ_AI_FAILURE !== 'undefined' ? GZ_AI_FAILURE : typeof require === 'function' ? require('../../ai/failure.js') : null;
   const reasonText = (e) => D?.explain(e) || '';
 
@@ -353,8 +358,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (!v || !ok('completion') || v.composing || !v.hasFocus() || KEY.getState(v.state)) return;
     const st = v.state, { selection } = st;
     if (!selection.empty || !selection.$head.parent.isTextblock || selection.$head.parent.type.spec.code || quoted(selection.$head)) return;
-    const tx = S.text(st.doc), off = tx.offsetAt(selection.head);
-    const before = tailText(tx.text.slice(0, off), 1e6), after = tx.text.slice(off, off + 4001);
+    const { before, after } = around(st.doc, selection.head);
     if (!fits(before, after)) return;
     const r = run('completion', 'writer.complete', { before, after, mode: F.mode() === 'paper' ? 'paper' : 'compose', kind: F.kind(), context: F.context(), past: past.slice() });
     flight = r.id;
@@ -380,8 +384,8 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
     if (!selection.empty) return 'a selection';
     if (!selection.$head.parent.isTextblock || selection.$head.parent.type.spec.code) return 'not at this caret';
     if (quoted(selection.$head)) return 'in a quotation';
-    const tx = S.text(st.doc), off = tx.offsetAt(selection.head);
-    if (!fits(tailText(tx.text.slice(0, off), 1e6), tx.text.slice(off, off + 4000))) return 'not at this caret';
+    const { before, after } = around(st.doc, selection.head);
+    if (!fits(before, after)) return 'not at this caret';
     return KEY.getState(st) ? 'showing' : flight ? 'asking' : timer ? 'waiting for the pause' : 'ready: type a letter or a space';
   };
 
@@ -402,7 +406,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const review = async () => {
     const v = view();
     if (!v || !ok('writing') || reviewing) return;
-    const doc = v.state.doc, text = S.text(doc).text;
+    const doc = v.state.doc, text = S.text(doc, { notes: true }).text;
     if (!text.trim()) return;
     const tr = track(), gen = generation;
     reviewing = true;
@@ -523,7 +527,7 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   const feedback = async () => {
     const v = view();
     if (!v || !ok('writing') || fb.state === 'running' || !assignment()) return;
-    const doc = v.state.doc, text = S.text(doc).text;
+    const doc = v.state.doc, text = S.text(doc, { notes: true }).text;
     if (!text.trim()) return;
     fb.done?.();
     const tr = track(), gen = generation, turn = ++feedbackTurn;
