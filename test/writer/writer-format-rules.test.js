@@ -49,3 +49,42 @@ test('APA: a label or a run-on name with a number is not a citation missing its 
     assert.deepEqual(cards(withBody('apa7', text), 'apa7', 'cite-shape'), [], text);
   assert.deepEqual(cards(withBody('apa7', 'Rates rose (Smith 2020).'), 'apa7', 'cite-shape').map((i) => i.suggestions), [['(Smith, 2020)']]);
 });
+
+// Format cards' ranges are document positions: a footnote mark, picture or line break earlier in the paragraph takes one
+// position each, so a Fix replaces exactly the characters the card shows.
+const withHTML = (id, html) => {
+  const json = FX.papers[id](), at = F.read(S.paper.nodeFromJSON(json), ST.FORMATS[id]).end;
+  json.content.splice(at, 0, S.parse(S.paper, html).firstChild.toJSON());
+  return S.paper.nodeFromJSON(json);
+};
+const NOTE = '<sup class="gz-footnote" data-footnote="A note."></sup>';
+const shown = (doc, i) => doc.textBetween(i.from, i.to, '', '#');
+test('format cards cover the characters they name past footnote marks, pictures and line breaks', () => {
+  const img = '<img src="data:image/png;base64,iVBORw0KGgo=" alt="x">';
+  for (const lead of [NOTE, img, '<br>', `${NOTE}${img}<br>`]) {
+    const c = withHTML('chicago17', `<p>Time${lead} swings (Smith 42).</p>`), note = cards(c, 'chicago17', 'cite-note')[0];
+    assert.equal(shown(c, note), '(Smith 42)', lead);
+    assert.deepEqual([note.fix.from, note.fix.to], [note.from, note.to]);
+    const a = withHTML('apa7', `<p>More${lead} text (Smith 2020).</p>`), shape = cards(a, 'apa7', 'cite-shape')[0];
+    assert.equal(shown(a, shape), '(Smith 2020)', lead);
+    assert.ok(F.current(a, shape), 'the card still matches the paper');
+    const m = withHTML('mla9', `<p>She${lead} says (Morrison, 42).</p>`), mla = cards(m, 'mla9', 'cite-shape')[0];
+    assert.equal(shown(m, mla), '(Morrison, 42)', lead);
+  }
+  // A card whose text has changed since the check ran is not applied.
+  const a = withHTML('apa7', '<p>More text (Smith 2020).</p>'), shape = cards(a, 'apa7', 'cite-shape')[0];
+  assert.equal(F.current(withHTML('apa7', '<p>More text (Smyth 2020).</p>'), shape), false);
+});
+test('the block-quote Fix moves the quotation with its italics, links and footnotes (MLA 6.33, APA 8.27, CMOS 13.9)', () => {
+  const html = `<p>She wrote${NOTE} “It was <em>very</em> long, and <a href="https://example.com/">linked</a>${NOTE} too” here.</p>`;
+  const doc = withHTML('mla9', html), q = F.check(doc, ST.FORMATS.mla9, {}, { lines: () => 9 }).issues.find((i) => i.rule === 'block-quote');
+  assert.equal(shown(doc, q), '“It was very long, and linked# too”');
+  const r = F.quoteBlock(doc, q.fix.from, q.fix.to);
+  const quote = r.nodes.find((n) => n.type.name === 'blockquote');
+  assert.equal(quote.textContent, 'It was very long, and linked too');
+  const inner = [];
+  quote.descendants((n) => { if (n.isInline) inner.push(n.isText ? `${n.marks.map((k) => k.type.name).join('+')}:${n.text}` : n.type.name); });
+  assert.deepEqual(inner, [':It was ', 'italic:very', ': long, and ', 'link:linked', 'footnote_ref', ': too']);
+  assert.deepEqual(r.nodes.map((n) => n.textContent), ['She wrote ', 'It was very long, and linked too', ' here.']);
+  assert.deepEqual(r.nodes[0].content.content.map((c) => c.type.name), ['text', 'footnote_ref', 'text'], 'the note before the quotation stays in the paragraph');
+});
