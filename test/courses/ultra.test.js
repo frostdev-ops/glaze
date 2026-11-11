@@ -601,3 +601,26 @@ test("a course's content for links pages only the public list, asking each page 
     assert.equal(r.complete, false, 'and the list says it is incomplete');
   }
 });
+
+// Audit 2026-11-11 A1: a child whose folder sits on a page the read never reached is not proven released.
+test('content under a folder missing from an incomplete read is not listed or searched; a complete read is unchanged', async () => {
+  const open = { available: 'Yes', adaptiveRelease: {} };
+  const child = { id: '_5_1', parentId: '_9_1', title: 'Exam answers', availability: open };
+  const top = { id: '_6_1', title: 'Syllabus', availability: open };
+  const now = Date.now();
+  assert.equal(U.visibleIn([child, top], now)(child), Infinity, 'a complete read keeps the rule it had');
+  assert.equal(U.visibleIn([child, top], now, false)(child), null, 'an incomplete read cannot vouch for the missing folder');
+  assert.equal(U.visibleIn([child, top], now, false)(top), Infinity, 'a top-level item has no folder to miss');
+  const read = (nextPage) => U.read({ origin: o, maxPages: 1, f: async () => ({ ok: true, status: 200,
+    text: async () => JSON.stringify({ results: [child, top], paging: nextPage ? { nextPage } : {} }) }) });
+  const more = '/learn/api/public/v1/courses/_101_1/contents?offset=200&limit=200';
+  const course = { id: '_101_1', name: 'BIO' };
+  for (const [nextPage, titles, complete] of [[more, ['Syllabus'], false], ['', ['Exam answers', 'Syllabus'], true]]) {
+    const links = await read(nextPage).contents('_101_1');
+    assert.deepEqual(links.items.map((x) => x.title), titles, `links, complete ${complete}`);
+    assert.equal(links.complete, complete);
+    const found = await read(nextPage).search(course, U.SEARCH_KINDS[0], (h) => h);
+    assert.deepEqual(found.map((x) => x.title), titles, `search, complete ${complete}`);
+    assert.equal(found.complete, complete);
+  }
+});
