@@ -47,6 +47,10 @@
 .gz-fb-chip.met { color: var(--gz-ok); background: color-mix(in srgb, var(--gz-ok) 14%, transparent); }
 .gz-fb-chip.partly { color: var(--gz-warn); background: color-mix(in srgb, var(--gz-warn) 14%, transparent); }
 .gz-fb-chip.missing { color: var(--gz-err); background: color-mix(in srgb, var(--gz-err) 14%, transparent); }
+/* On a light palette the tone is a step toward the ink: its own tint under it took 3.7 to 4.2:1 on Paper and Rose. */
+:root:not([data-dark]) .gz-fb-chip.met { color: color-mix(in srgb, var(--gz-ok) 70%, var(--gz-ink)); }
+:root:not([data-dark]) .gz-fb-chip.partly { color: color-mix(in srgb, var(--gz-warn) 70%, var(--gz-ink)); }
+:root:not([data-dark]) .gz-fb-chip.missing { color: color-mix(in srgb, var(--gz-err) 70%, var(--gz-ink)); }
 .gz-fb-level { margin-left: auto; min-width: 0; font-size: 11px; color: var(--gz-ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gz-fb-crit { font-weight: 600; font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
 .gz-fb-comment { margin: 0; font-size: 13px; line-height: 1.5; color: var(--gz-ink-muted); }
