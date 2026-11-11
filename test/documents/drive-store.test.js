@@ -2109,3 +2109,14 @@ test('a task deletion keeps another device\'s edit to its steps or sessions', as
     }
   }
 });
+
+test('adjacent dashboard note edits merge independently without restoring old lines', async () => {
+  for (const [here, there, expected] of [['ONE\ntwo', 'one\nTWO', 'ONE\nTWO'], ['two', 'one\nTWO', 'TWO']]) {
+    const { clock, devs: [a, b] } = await linked({ [NOTE]: { text: 'one\ntwo', at: 100 } });
+    await change(a, clock, NOTE, () => ({ text: here, at: 200 }));
+    await change(b, clock, NOTE, () => ({ text: there, at: 300 }));
+    assert.ok((await a.run({ push: true })).ok);
+    await settled(b, a);
+    for (const d of [a, b]) assert.equal((await d.local.get(NOTE))[NOTE].text, expected);
+  }
+});
