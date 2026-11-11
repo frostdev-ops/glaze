@@ -156,6 +156,62 @@ test('rotation turns: a new schedule starts its clock without changing; then one
   assert.equal(L.turn(r.state, t0 + 99 * 36e5, { rotate: 'off', at: '08:00' }, list, true).wear, -1);
 });
 
+test('rotation across devices: the last turn any device made, shared through sync, is the clock and the place for all of them', () => {
+  const x = { rotate: '6h', at: '08:00' };
+  const list = ['Library', 'Terminal', 'Clear'];
+  const H = 36e5, t0 = 1e12;
+  // Two devices on one account, started a minute apart, each with its own stored state.
+  const a = L.turn(undefined, t0, x, list).state;
+  const b = L.turn(undefined, t0 + 6e4, x, list).state;
+  // A turns first. The record that goes to sync with the Look it wore:
+  const ra = L.turn(a, t0 + 6 * H, x, list, false, null);
+  assert.equal(ra.wear, 0);
+  const shared = { mode: '6h 08:00', at: t0 + 6 * H, i: 0 };
+  // B's own clock is due a minute later, but A has just turned: nothing to wear, and B takes A's clock and place.
+  const rb = L.turn(b, t0 + 6 * H + 6e4, x, list, false, shared);
+  assert.deepEqual(rb, { state: { mode: '6h 08:00', at: t0 + 6 * H, i: 0 }, wear: -1 });
+  assert.deepEqual(L.shared(ra.state), shared);
+  assert.equal(L.SHARED, 'rotateAt');
+  assert.equal(L.shared(rb.state), null, 'adopting is not turning: nothing new to share');
+  // Neither is due before six hours after A's turn; then the first to ask turns, from A's place.
+  assert.equal(L.turn(rb.state, t0 + 11 * H, x, list, false, shared).wear, -1);
+  assert.equal(L.turn(ra.state, t0 + 11 * H, x, list, false, shared).wear, -1);
+  const next = L.turn(rb.state, t0 + 12 * H + 1000, x, list, false, shared);
+  assert.deepEqual(next, { state: { mode: '6h 08:00', at: t0 + 12 * H + 1000, i: 1, turned: true }, wear: 1 });
+  // A, asking a second later with B's record: its own state is older, so it is not due either.
+  const again = L.turn(ra.state, t0 + 12 * H + 2000, x, list, false, L.shared(next.state));
+  assert.equal(again.wear, -1);
+  assert.deepEqual(again.state, { mode: '6h 08:00', at: t0 + 12 * H + 1000, i: 1 });
+  // A device that has never turned, newly signed in, takes the account's clock instead of starting its own.
+  assert.deepEqual(L.turn(undefined, t0 + 7 * H, x, list, false, shared), { state: { mode: '6h 08:00', at: t0 + 6 * H, i: 0 }, wear: -1 });
+  // "Next Look now" goes on from the shared place.
+  const newer = { ...shared, at: t0 + 6 * H + 1000 };
+  assert.equal(L.turn(rb.state, t0 + 7 * H, x, list, true, { ...newer, i: 1 }).wear, 2);
+  assert.equal(L.turn(rb.state, t0 + 7 * H, x, list, true, { ...newer, i: 2 }).wear, 0, 'and wraps');
+});
+
+test('rotation across devices: a record that is old, from another schedule, from the future or damaged changes nothing', () => {
+  const x = { rotate: '6h', at: '08:00' };
+  const list = ['Library', 'Terminal', 'Clear'];
+  const H = 36e5, t0 = 1e12;
+  const own = { mode: '6h 08:00', at: t0 + 3 * H, i: 1 };
+  const now = t0 + 10 * H;
+  const alone = L.turn(own, now, x, list);
+  assert.equal(alone.wear, 2);
+  const fine = { mode: '6h 08:00', at: t0, i: 0 };
+  assert.deepEqual(L.turn(own, now, x, list, false, fine), alone, 'older than this device\'s own turn');
+  assert.equal(L.turn(own, now, x, list, false, fine).state === own, false, 'the turn made a new state');
+  assert.equal(L.turn(own, t0 + 4 * H, x, list, false, fine).state, own, 'and not due leaves the stored state itself');
+  for (const [why, rec] of Object.entries({
+    'another schedule': { ...fine, at: t0 + 9 * H, mode: '12h 08:00' }, 'the future': { ...fine, at: now + 1 }, null: null, 'a string': 'x', 'a list': [fine], empty: {},
+    'at as text': { ...fine, at: String(t0 + 9 * H) }, 'at NaN': { ...fine, at: NaN }, 'i below 0': { ...fine, at: t0 + 9 * H, i: -1 }, 'i fractional': { ...fine, at: t0 + 9 * H, i: 0.5 }, 'no mode': { at: t0 + 9 * H, i: 0 },
+  })) assert.deepEqual(L.turn(own, now, x, list, false, rec), alone, why);
+  assert.equal(L.turn(own, now, { rotate: 'off', at: '08:00' }, list, true, { ...fine, mode: 'off 08:00', at: t0 + 9 * H }).state, own, 'off keeps the stored state');
+  assert.equal(L.shared(undefined), null);
+  assert.equal(L.shared({ mode: '6h 08:00', at: t0, i: 0 }), null, 'only a turn is shared');
+  assert.equal(L.shared({ mode: '6h 08:00', at: NaN, i: 0, turned: true }), null);
+});
+
 test('rotation\'s list: chosen Looks and favorite codes, none chosen being every built-in Look', () => {
   const looks = G.GZ_LOOKS.map((l) => l.name);
   assert.deepEqual(L.rotation(undefined, looks), looks);
