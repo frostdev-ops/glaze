@@ -251,7 +251,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     field.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); e.stopPropagation(); } });
     field.addEventListener('input', () => {
       const lines = field.value.replace(/\r\n?/g, '\n').split('\n'), wrap = document.createElement('div');
-      for (const l of lines) { const p = document.createElement('p'); if (l) p.textContent = l; else p.append(document.createElement('br')); wrap.append(p); }
+      // Canvas's rich editor collapses runs of spaces (TinyMCE's parser): those go in as no-break spaces, as the frame's do.
+      const kept = (l) => (X.site !== 'canvas' || box.mode === 'plain' ? l : l.replace(/^ | $| (?= )|(?<= ) /g, '\u00a0'));
+      for (const l of lines) { const p = document.createElement('p'); if (l) p.textContent = kept(l); else p.append(document.createElement('br')); wrap.append(p); }
       box.snapshot = { ...box.destination, html: wrap.innerHTML, text: field.value, at: Date.now() };
       sync(box, box.snapshot.html, [{ insert: `${lines.join('\n')}\n` }]); remember(box);
     });
