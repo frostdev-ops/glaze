@@ -402,14 +402,18 @@ var GZ_WRITER_AI = globalThis.GZ_WRITER_AI || (() => {
   let reviewing = false;
   // Offsets of a run's text (S.text of the doc it read) → positions now, or null when those words have changed since.
   // edit: a range a suggestion replaces, so never one holding a footnote mark or picture, nor one a mark or picture was put into
-  // since (the text the model read holds none, so each reads as U+FFFC, which the quote lacks; as writer-issues.js reads them).
+  // since. Check the leaves themselves: a character used to stand for one could also be literal text in the quote.
   const placer = (doc, m, edit = false) => {
-    const tx = S.text(doc), leaf = edit ? (n) => (n.type.name === 'hard_break' ? '' : '\ufffc') : undefined;
+    const tx = S.text(doc);
     return (start, end, quote) => {
       const at = edit ? tx.range(start, end) : { from: tx.posAt(start), to: tx.posAt(end, -1) };
       if (!at) return null;
       const from = m.map(at.from, 1), to = m.map(at.to, -1), v = view();
-      return v && to > from && v.state.doc.textBetween(from, to, '\n', leaf) === quote ? { from, to } : null;
+      if (!v || to <= from) return null;
+      let blocked = false;
+      const leaf = edit ? (n) => { if (n.type.name !== 'hard_break') blocked = true; return ''; } : undefined;
+      const words = v.state.doc.textBetween(from, to, '\n', leaf);
+      return !blocked && words === quote ? { from, to } : null;
     };
   };
   const review = async () => {
