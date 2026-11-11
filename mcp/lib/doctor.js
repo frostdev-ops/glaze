@@ -92,7 +92,10 @@ const run = async (o = {}) => {
     if (lLoose) out.push(lLoose);
     if (modes && !(lst.mode & 0o100)) out.push(`${launcher} is not executable. ${FIX}`);
     // Written by Claude Desktop's bundle when it found no Node.js; it reopens with one, or setup runs with this one.
-    if (l.node === null) return [...out, `${N.MISSING}, then reopen Claude or run: npx glaze-mcp setup`];
+    if (l.node === null) {
+      const why = I.refusal(ctx);
+      return [...out, `${N.MISSING}, then reopen Claude or run: npx glaze-mcp setup${why ? `. The Node.js running this, ${ctx.execPath}: ${why}` : ''}`];
+    }
     // The launcher runs the first of its nodes that is an executable file (launcher.js).
     const gone = (n) => {
       let st;

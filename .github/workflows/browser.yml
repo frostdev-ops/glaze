@@ -33,8 +33,15 @@ jobs:
           PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=1 "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps --no-shell chromium
           node tools/dev/ci-chromium.js
 
+      # glaze-mcp setup refuses a Node that other users can change (mcp/lib/nodes.js trust()), as setup-node's under
+      # /opt/hostedtoolcache is: the gate, and so the agent link check's setup, run the same Node from a root-owned copy.
+      - name: The pinned Node where only root can change it
+        run: |
+          sudo install -D -m 0755 "$(command -v node)" /usr/local/glaze-ci/bin/node
+          /usr/local/glaze-ci/bin/node -e "const why = require('./mcp/lib/nodes.js').trust(process.platform).path(process.execPath); if (why) { console.error(why); process.exit(1); }"
+
       - name: Settings, popup, sites, pointer and agent link checks
-        run: nice -n 10 node tools/dev/ci-browser-checks.js "$RUNNER_TEMP/browser-evidence"
+        run: nice -n 10 /usr/local/glaze-ci/bin/node tools/dev/ci-browser-checks.js "$RUNNER_TEMP/browser-evidence"
 
       - name: Keep the logs and screenshots
         if: failure()

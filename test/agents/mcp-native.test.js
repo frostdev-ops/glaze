@@ -95,3 +95,15 @@ test('the 5 MiB line goes out as frames the browser takes, and comes back whole'
   assert.equal(lines.length, 1);
   assert.equal(lines[0], text);
 });
+
+test('read on a Node without buffer.isUtf8 (18.0–18.13): a valid frame is read, a malformed one refused', () => {
+  const buffer = require('node:buffer'), had = buffer.isUtf8, file = require.resolve('../../mcp/lib/native.js');
+  delete require.cache[file];
+  buffer.isUtf8 = undefined;
+  let old;
+  try { old = require(file); } finally { buffer.isUtf8 = had; delete require.cache[file]; }
+  const got = [], push = old.reader((m) => got.push(m));
+  push(old.encode({ t: 'hello', s: 'é😀' }));
+  assert.deepEqual(got, [{ t: 'hello', s: 'é😀' }]);
+  refused(() => old.reader(() => assert.fail('no message'))(Buffer.from('0300000022ff22', 'hex')), 'bad-json');
+});

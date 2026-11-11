@@ -37,12 +37,16 @@ const usage = (message) => Object.assign(new Error(message), { code: 'USAGE' });
 const context = (o = {}) => {
   const platform = o.platform || process.platform;
   const env = o.env || { ...process.env, HOME: process.env.HOME || os.homedir() };
-  // By default this node, unless it is Claude's own runtime, which a browser can't start (nodes.js). also: the nodes a
-  // launcher tries after it; by default, when node is too, the others nodes.js finds (ensure looks).
-  const node = o.node !== undefined ? o.node : N.claude() ? null : stableNode(process.execPath, platform, env);
+  // By default this node, unless it is Claude's own runtime, which a browser can't start, or one others can change
+  // (nodes.js); then ensure searches. also: the nodes a launcher tries after it; by default, when node is too, the others
+  // nodes.js finds (ensure looks). execPath, versions and list (where to search) stand in for this process's own.
+  const execPath = o.execPath || process.execPath, versions = o.versions || process.versions;
+  const node = o.node !== undefined ? o.node : N.claude({ execPath, versions }) ? null : stableNode(execPath, platform, env);
   const also = Array.isArray(o.also) ? o.also : o.node !== undefined || node === null ? [] : undefined;
-  return { platform, env, node, also, src: o.src || PKG, run: o.run || runFile, tmp: o.tmp || os.tmpdir(), ...B.folder(platform, env) };
+  return { platform, env, node, also, execPath, versions, list: o.list, src: o.src || PKG, run: o.run || runFile, tmp: o.tmp || os.tmpdir(), ...B.folder(platform, env) };
 };
+// Why a browser can't be given the node running this, or null when it can.
+const refusal = (ctx) => (N.claude(ctx) ? 'it is Claude\'s own runtime, which a browser can\'t start' : N.trust(ctx.platform).path(ctx.execPath));
 const stableNode = N.stable;
 
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
@@ -295,16 +299,20 @@ const ensure = async (o = {}) => {
   if (o.keepNewer) {
     const ahead = [...before].filter((v) => newer(v, version) > 0).sort(newest)[0];
     if (ahead) return { ...out, newer: ahead };
-    // The bundle's PATH can omit the node an earlier setup found. Recheck it before replacing a working launcher.
-    if (ctx.node === null) {
-      const list = [...new Set(priorLaunchers.flatMap(({ l }) => [l.node, ...(l.also || [])]).filter((n) => n !== null))];
-      const search = { platform: ctx.platform, env: ctx.env, run: ctx.run, list };
-      ctx.node = await N.find(search);
-      ctx.also = ctx.node === null ? [] : await N.all({ ...search, skip: [ctx.node] });
-    }
+  }
+  // No node to name: this one is refused (setup then searches where installers put one), or the bundle's PATH omitted the
+  // one an earlier setup found. Either way the nodes existing launchers name are rechecked before a working launcher is
+  // replaced. A node the caller names is never replaced, the bundle's null aside.
+  if (ctx.node === null && (o.node === undefined || o.keepNewer)) {
+    const named = priorLaunchers.flatMap(({ l }) => [l.node, ...(l.also || [])]).filter((n) => n !== null);
+    const list = [...new Set([...(o.node === undefined ? ctx.list || N.places(ctx.platform, ctx.env) : []), ...named])];
+    const search = { platform: ctx.platform, env: ctx.env, run: ctx.run, list };
+    ctx.node = await N.find(search);
+    ctx.also = ctx.node === null ? [] : await N.all({ ...search, skip: [ctx.node] });
+    if (o.node === undefined) out.refused = { node: ctx.execPath, why: refusal(ctx) };
   }
   if (ctx.node === null) ctx.also = [];
-  else if (ctx.also === undefined) ctx.also = await N.all({ platform: ctx.platform, env: ctx.env, run: ctx.run, skip: [ctx.node] });
+  else if (ctx.also === undefined) ctx.also = await N.all({ platform: ctx.platform, env: ctx.env, run: ctx.run, list: ctx.list, skip: [ctx.node] });
   else ctx.also = ctx.also.filter((n) => n !== ctx.node);
   out.node = ctx.node;
   out.also = ctx.also;
@@ -379,4 +387,4 @@ const uninstall = async (o = {}) => {
   return { removed, kept };
 };
 
-module.exports = { DESCRIPTION, context, ensure, setup, uninstall, readKey, versionOf, manifestPath, inside, regExe, runFile, stableNode, safePath, granted };
+module.exports = { DESCRIPTION, context, refusal, ensure, setup, uninstall, readKey, versionOf, manifestPath, inside, regExe, runFile, stableNode, safePath, granted };

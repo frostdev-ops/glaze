@@ -14,7 +14,9 @@
 //     pages past 50 tools, stale cursors; the longest name a mod tool can have, called once granted.
 //   8 S3: calls waiting in the approval window with the SDK's defaults, with progress, and with resetTimeoutOnProgress; with
 //     FULL=1, one more that waits out the 600 s limit (about ten minutes).
-//   9 Off: the subscription ends gracefully, every agent is let go and the host goes.
+//   9 The host killed: each app's agent takes the worker's new host and replays the session; legacy apps hear one
+//     list_changed, the subscription its own, and every era lists the tools again without reconnecting.
+//  10 Off: the subscription ends gracefully, the host goes, and every agent stays, answering a call -31003 after its wait.
 // Evidence in the folder given: results.json (checks, s3, s4), log.txt, each client's wire-<label>.jsonl and stderr, setup,
 // and the approval windows.
 //   glaze-remote -o <evidence dir> -- node checks/agents/mcp-conformance-check.js /out        (with FULL=1: -e FULL=1 -t 2400)
@@ -547,20 +549,47 @@ async function timeouts() {
 }
 
 // 9: agent access off.
+async function rejoin() {
+  const ph = R.phases.rejoin = {};
+  const closed = {};
+  for (const k of ERAS) { const was = E[k].c.onclose; E[k].c.onclose = () => { was?.(); closed[k] = Date.now(); }; }
+  const listen = sent(E.auto, 'subscriptions/listen')[0]?.m;
+  const before = {};
+  for (const k of ERAS) before[k] = (await caught(() => E[k].c.listTools(undefined, { cacheMode: 'bypass' }))).value?.tools;
+  const pid = hosts()[0]?.rec.pid, at = Date.now();
+  if (pid) process.kill(pid, 'SIGKILL');
+  ph.host = await until(() => { const h = hosts()[0]; return h && h.rec.pid !== pid && h.rec.pid; }, 30000, 100, 'rejoin: a new host');
+  ok('9', 'the host killed: the worker starts a new one', !!pid && !!ph.host, { pid, next: ph.host });
+  const told = ph.told = {};
+  for (const k of ['legacy', 'old']) told[k] = await until(() => heardOn(E[k], 'notifications/tools/list_changed', at).length, 15000, 100, `rejoin: ${k} list_changed`);
+  told.auto = await until(() => heardOn(E.auto, 'notifications/tools/list_changed', at).some((e) => e.m.params?._meta?.[SUB] === listen?.id), 15000, 100, 'rejoin: the subscription\'s list_changed');
+  ok('9', 'each legacy app hears one notifications/tools/list_changed once its agent has replayed initialize, and the subscription its own',
+    ['legacy', 'old'].every((k) => heardOn(E[k], 'notifications/tools/list_changed', at).length === 1) && !!told.auto && heardOn(E.pin, 'notifications/tools/list_changed', at).length === 0, told);
+  ok('9', 'no app sees the replay: one initialize each on its own wire, answered once', ERAS.every((k) => sent(E[k], 'initialize').length <= 1
+    && E[k].wire.filter((e) => e.dir === 'in' && e.m.result?.protocolVersion !== undefined && e.m.result?.serverInfo).length <= 1));
+  const after = {};
+  for (const k of ERAS) after[k] = await caught(() => E[k].c.listTools(undefined, { cacheMode: 'bypass' }));
+  ph.lists = Object.fromEntries(ERAS.map((k) => [k, after[k].value?.tools?.length ?? after[k].error]));
+  ok('9', 'every era lists the same tools through the new host, and no app was let go', ERAS.every((k) => !!before[k] && same(after[k].value?.tools, before[k])) && !Object.keys(closed).length, { lists: ph.lists, closed });
+}
+
 async function off() {
   const ph = R.phases.off = {};
   const sub = E.auto.c.autoOpenedSubscription, listen = sent(E.auto, 'subscriptions/listen')[0]?.m;
-  const closes = ERAS.map((k) => new Promise((r) => { const was = E[k].c.onclose; E[k].c.onclose = () => { was?.(); r(Date.now()); }; }));
-  const pid = hosts()[0]?.rec.pid, at = Date.now();
+  const closed = {};
+  for (const k of ERAS) { const was = E[k].c.onclose; E[k].c.onclose = () => { was?.(); closed[k] = Date.now(); }; }
+  const pid = hosts()[0]?.rec.pid;
   ph.set = await config({ op: 'set', on: false });
   ph.subscription = await until(() => sub?.closed, 5000, 100, 'off: graceful subscription end');
   const end = listen && answerTo(E.auto, listen.id)?.m;
-  ok('9', 'off: the subscription is answered complete under its id; the SDK reads a graceful end', ph.subscription === 'graceful' && end?.result?.resultType === 'complete' && end.result._meta?.[SUB] === listen.id, { how: ph.subscription, end });
+  ok('10', 'off: the subscription is answered complete under its id; the SDK reads a graceful end', ph.subscription === 'graceful' && end?.result?.resultType === 'complete' && end.result._meta?.[SUB] === listen.id, { how: ph.subscription, end });
   const told = listen && await until(() => heardOn(E.auto, 'notifications/cancelled').find((e) => e.m.params?.requestId === listen.id)?.m, 2000, 100, 'off: subscription cancellation');
-  ok('9', 'then notifications/cancelled names it, as the spec requires of a server ending a subscription', !!told, told);
-  ph.closed = await until(() => Promise.all(closes), 8000, 100, 'off: all agents closed');
-  ok('9', 'every agent is let go', !!ph.closed, ph.closed && ph.closed.map((t) => t - at));
-  ok('9', 'and the host exits', !!await until(() => pid && !RV.alive(pid) && !hosts().length, 5000, 100, 'off: helper exit'), { pid });
+  ok('10', 'then notifications/cancelled names it, as the spec requires of a server ending a subscription', !!told, told);
+  ok('10', 'and the host exits', !!await until(() => pid && !RV.alive(pid) && !hosts().length, 5000, 100, 'off: helper exit'), { pid });
+  const at = Date.now(), away = ph.away = await caught(() => E.legacy.c.callTool({ name: 'todo_list', arguments: { account: ACCOUNT } }));
+  ph.awayMs = Date.now() - at;
+  ok('10', 'every agent stays, waiting for Glaze; a call meanwhile is answered -31003 after its 10 s wait', !Object.keys(closed).length && away.error?.code === -31003
+    && ph.awayMs >= 9000 && ph.awayMs < 15000, { closed, away, ms: ph.awayMs });
 }
 
 const guard = async (name, fn) => { if (halt.signal.aborted) return; await bounded(`phase ${name}`, fn, FULL && name === 'timeouts' ? A.TIMEOUT + 150000 : 180000).catch((e) => {
@@ -654,6 +683,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(signal, () =>
         await guard('cancel', cancel);
         await guard('changes', changes);
         await guard('timeouts', timeouts);
+        await guard('rejoin', rejoin);
         await guard('off', off);
         await guard('wire', auditWire);
       }

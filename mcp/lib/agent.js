@@ -1,19 +1,30 @@
 // glaze-mcp agent: what an agent app starts, speaking MCP lines on stdio. It waits for a host's run file (rendezvous.js),
 // holding up to 1 MiB of stdin meanwhile (refusing more), takes the host --browser, --instance or GLAZE_MCP_BROWSER names (else the
-// newest), proves the token (handshake.js) and then passes bytes both ways untouched: only the worker's lines reach
-// stdout, and everything it says goes to stderr. It exits 1 when the host's socket closes (the app starts it again)
-// and 0 when stdin ends. doctor() is glaze-mcp doctor's live check.
+// newest), proves the token (handshake.js) and then passes lines both ways as they came: only the worker's reach stdout,
+// and everything it says goes to stderr. When the connection closes (a worker or browser restart, agent access off) it
+// stays and tries again, only that first browser and instance, and session.js carries the app's MCP session over the
+// gap. It exits 0 when stdin ends, and 1 only for a host that can't prove the token or refuses ours, an unsafe run
+// folder, or a session Glaze won't take back. doctor() is glaze-mcp doctor's live check.
 'use strict';
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const R = require('./rendezvous.js');
 const HS = require('./handshake.js');
 const P = require('./peer.js');
+const L = require('./lines.js');
+const S = require('./session.js');
 
-const HOLD = 1024 * 1024, POLL = 250;
+const VERSION = require('../package.json').version;
+const POLL = 250, TICK = 250, GOING = 3000;
 const USAGE = 'Usage: glaze-mcp [agent] [--browser <id>] [--instance <id>]\n';
 const SETTINGS = 'In Glaze, turn on Settings → AI → Agents; if it says the helper is missing, run: npx glaze-mcp setup';
 // Chromium on macOS and Linux reads a user's host manifests from its user data folder, so one started with another
 // (--user-data-dir) finds none where setup writes them.
 const DATA_DIR = 'A browser started with --user-data-dir reads helpers from <that folder>/NativeMessagingHosts, not the folders above; copy the manifest there';
+// rendezvous.js never takes a lock back by its pid (that would race a new owner), so one left by a killed helper stays.
+const LOCK = '.rendezvous.lock';
+const LEFT = 'One that stays was left by a helper stopped while using it: with no browser or app using Glaze\'s helper, it is safe to delete';
 
 const usage = (message) => Object.assign(new Error(message), { code: 'USAGE' });
 const options = (args, env) => {
@@ -43,17 +54,26 @@ const main = async ({ args = [], io = {} } = {}) => {
   try { want = options(args, env); } catch (e) { stderr.write(`glaze-mcp: ${e.message}\n${USAGE}`); return 2; }
   const log = (s) => stderr.write(`glaze-mcp: ${s}\n`);
   try { dir = R.dir({ platform, env }); } catch (e) { log(e.message); return 1; }
+  // Who the app is, said once: a reconnect can't claim another app's grants.
+  const peer = P.self({ platform, env });
+  const session = S.create({ version: VERSION, nonce: crypto.randomBytes(12).toString('hex') });
+  const now = () => Date.now();
 
   return new Promise((resolve) => {
-    let held = [], size = 0, sock = null, pending = null, ended = false, finished = false, timer = null, waiting = false;
+    let sock = null, pending = null, ended = false, finished = false, timer = null, waiting = false, busy = false;
+    let appBlocked = false, hostBlocked = false;
+    // The browser and instance of the first connection: the only one tried after it.
+    let target = null;
+    let parts = [], partial = 0;
+    const going = new Map(); // a host's token → when its socket first closed on the handshake
     const finish = (code) => {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
+      clearInterval(ticker);
       if (pending) pending.destroy();
       if (sock) sock.destroy();
-      held = [];
-      size = 0;
+      parts = [];
       stdin.pause();
       let gone = false;
       const go = () => { if (!gone) { gone = true; resolve(code); exit(code); } };
@@ -61,17 +81,47 @@ const main = async ({ args = [], io = {} } = {}) => {
       stdout.once('drain', go);
       setTimeout(go, 500).unref();
     };
+    const flow = () => {
+      if (finished) return;
+      if (appBlocked || hostBlocked) stdin.pause();
+      else if (!ended) stdin.resume();
+      if (sock) { if (appBlocked) sock.pause(); else sock.resume(); }
+    };
+    const apply = (r) => {
+      if (finished) return;
+      for (const l of r.app) if (!stdout.write(`${l}\n`)) appBlocked = true;
+      if (sock) for (const l of r.glaze) if (!sock.write(`${l}\n`)) hostBlocked = true;
+      flow();
+      if (r.fatal) { log(r.fatal); finish(1); }
+    };
+    const ticker = setInterval(() => apply(session.tick(now())), TICK);
 
     stdin.on('data', (chunk) => {
       if (finished) return;
-      if (sock) { if (!sock.write(chunk)) stdin.pause(); return; }
-      // Keep reading so EOF remains observable. Refuse overflow rather than dropping part of an MCP request.
-      if (size + chunk.length > HOLD) {
-        log('more than 1 MiB of stdin before a host connected; refusing input');
-        return finish(1);
+      let at = 0;
+      for (let i; (i = chunk.indexOf(10, at)) >= 0; at = i + 1) {
+        if (partial + i - at > L.LINE) {
+          log(`a line over ${L.LINE} bytes; refusing input`);
+          return finish(1);
+        }
+        parts.push(chunk.subarray(at, i));
+        const text = Buffer.concat(parts).toString('utf8');
+        parts = [];
+        partial = 0;
+        apply(session.fromApp(text, now()));
+        if (finished) return;
       }
-      held.push(chunk);
-      size += chunk.length;
+      if (at === chunk.length) return;
+      parts.push(chunk.subarray(at));
+      partial += chunk.length - at;
+      // Keep reading so EOF remains observable. Refuse overflow rather than dropping part of an MCP request.
+      if (!sock && session.held() + partial > S.HOLD) {
+        log('more than 1 MiB of stdin before a host connected; refusing input');
+        finish(1);
+      } else if (partial > L.LINE) {
+        log(`a line over ${L.LINE} bytes; refusing input`);
+        finish(1);
+      }
     });
     const eof = () => {
       if (ended || finished) return;
@@ -85,44 +135,62 @@ const main = async ({ args = [], io = {} } = {}) => {
     stdin.on('close', eof);
     stdin.on('error', () => finish(0));
     stdout.on('error', () => finish(0));
+    stdout.on('drain', () => { appBlocked = false; flow(); });
 
+    const schedule = () => {
+      clearTimeout(timer);
+      timer = setTimeout(look, target ? session.delay(now()) : io.poll || POLL);
+    };
     const pipe = (s, rest, chosen, others) => {
       sock = s;
-      log(`connected to Glaze in ${named(chosen)}`);
-      if (others.length) log(`also open: ${others.map(named).join(', ')}; choose one with --browser or --instance`);
-      if (rest.length) stdout.write(rest);
-      for (const c of held) s.write(c);
-      held = [];
-      size = 0;
-      s.on('data', (c) => { if (!stdout.write(c)) s.pause(); });
-      stdout.on('drain', () => s.resume());
-      s.on('drain', () => { if (!ended) stdin.resume(); });
+      going.clear();
+      if (target) log(`connected to Glaze in ${named(chosen)} again`);
+      else {
+        target = { browser: chosen.rec.browser, instance: chosen.rec.instance };
+        log(`connected to Glaze in ${named(chosen)}`);
+        if (others.length) log(`also open: ${others.map(named).join(', ')}; choose one with --browser or --instance`);
+      }
+      const cut = L.cutter((text) => { if (sock === s) apply(session.fromGlaze(text, now())); });
+      const take = (c) => {
+        try { cut(c); } catch (e) { if (e.code !== 'too-long') throw e; log(`Glaze sent ${e.message}`); s.destroy(); }
+      };
+      apply(session.up(now(), chosen.rec.browser));
+      if (rest.length) take(rest);
+      s.on('data', take);
+      s.on('drain', () => { if (sock === s) { hostBlocked = false; flow(); } });
       s.on('error', () => {});
       s.on('close', () => {
-        if (!ended) log('Glaze closed the connection');
-        finish(ended ? 0 : 1);
+        if (sock !== s) return;
+        sock = null;
+        hostBlocked = false;
+        if (ended || finished) return finish(0);
+        log(`Glaze closed the connection; waiting for it in ${target.browser} (instance ${target.instance}) to come back`);
+        apply(session.down(now()));
+        schedule();
       });
-      s.resume();
-      stdin.resume();
+      flow();
     };
 
-    // One try at a host: connected, gone (a socket no one listens on; try another or wait), or refused (exit).
+    // One try at a host: connected, not now (a socket no one listens on, a host replaced or going; try again), or refused (exit).
     const attempt = async (e) => {
       let s;
       try {
         s = R.connect(e.rec.path);
         pending = s;
         s.on('error', () => {});
-        const { rest } = await HS.offer(s, e.rec.token, P.self({ platform, env }));
+        const { rest } = await HS.offer(s, e.rec.token, peer);
         return { s, rest };
       } catch (err) {
         if (finished) return {};
         if (err.code === 'refused') return { refused: `the socket for ${named(e)} didn't prove its token` };
-        // A host replaced, or going, since its run file was read.
-        const now = R.read(e.file, { platform });
-        if (err.code === 'closed' && now && now.token === e.rec.token) return { refused: `the host for ${named(e)} refused this agent; its run file doesn't match it` };
-        if (err.code === 'timeout') return { refused: `the host for ${named(e)} didn't answer` };
-        return {};
+        if (err.code !== 'closed') return {};
+        // A host replaced since its run file was read, or one shutting down, which closes before it removes its run file.
+        let still;
+        try { still = R.read(e.file, { platform }); } catch { return {}; }
+        if (!still || still.token !== e.rec.token) return {};
+        const first = going.get(e.rec.token) ?? now();
+        going.set(e.rec.token, first);
+        return now() - first < GOING ? {} : { refused: `the host for ${named(e)} refused this agent; its run file doesn't match it` };
       } finally {
         if (pending === s) pending = null;
       }
@@ -136,20 +204,28 @@ const main = async ({ args = [], io = {} } = {}) => {
           R.sweep(dir);
           live = R.list(dir, { platform }).filter((e) => e.alive);
         }
-      } catch (e) { log(e.message); return finish(1); }
-      const fit = live.filter((e) => (!want.browser || e.rec.browser === want.browser) && (!want.instance || e.rec.instance === want.instance));
+        busy = false;
+      } catch (e) {
+        if (e.code !== 'EBUSY') { log(e.message); return finish(1); }
+        // Another helper is changing the run folder: next time.
+        if (!busy) log(`the run folder is busy (${path.join(dir, LOCK)}); trying again. ${LEFT}`);
+        busy = true;
+        return schedule();
+      }
+      const pin = target || want;
+      const fit = live.filter((e) => (!pin.browser || e.rec.browser === pin.browser) && (!pin.instance || e.rec.instance === pin.instance));
       for (const e of fit) {
         const r = await attempt(e);
         if (finished) return r.s && r.s.destroy();
         if (r.s) return pipe(r.s, r.rest, e, live.filter((x) => x !== e));
         if (r.refused) { log(r.refused); return finish(1); }
       }
-      if (!waiting) {
+      if (!waiting && !target) {
         waiting = true;
         const which = want.browser || want.instance ? ` in ${[want.browser, want.instance && `instance ${want.instance}`].filter(Boolean).join(', ')}` : '';
         log(`waiting for Glaze${which}. ${SETTINGS}${live.length ? `. Open now: ${live.map(named).join(', ')}` : ''}`);
       }
-      timer = setTimeout(look, io.poll || POLL);
+      schedule();
     };
     look();
   });
@@ -167,6 +243,7 @@ const doctor = async (ctx = {}) => {
     dir = R.dir({ platform, env });
     if (!R.check(dir)) { add('warn', 'Live', `no browser has turned on agent access yet. ${SETTINGS}`); return hint(); }
   } catch (e) { add('fail', 'Live', e.message); return rows; }
+  if (fs.existsSync(path.join(dir, LOCK))) add('warn', 'Lock', `${path.join(dir, LOCK)} is the run folder's lock, which a helper holds only for a moment. ${LEFT}.`);
   const all = R.list(dir, { platform });
   if (!all.length) { add('warn', 'Live', `no browser has agent access on now. ${SETTINGS}`); return hint(); }
   for (const e of all) {
