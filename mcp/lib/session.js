@@ -53,7 +53,7 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
   // A line on its way to a live Glaze, noting the requests.
   const send = (r, h) => {
     if (h.id !== undefined && h.method) {
-      flight.set(key(h.id), { id: h.id, method: h.method, text: h.text, tools: h.tools, acked: h.acked });
+      flight.set(key(h.id), { id: h.id, method: h.method, text: h.text, tools: h.tools, acked: h.acked, params: h.params });
       if (h.again && h.method === 'subscriptions/listen') acks.set(key(h.id), h);
     }
     r.glaze.push(h.text);
@@ -100,7 +100,6 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
     if (method === 'subscriptions/listen') h.tools = isObj(p.notifications) && p.notifications.toolsListChanged === true;
     if (method === 'initialize' && h.id !== undefined) {
       h.params = m.params;
-      if (!init) init = { params: m.params, version: null };
     }
     if (method === 'notifications/cancelled' && isId(p.requestId)) {
       flight.delete(key(p.requestId));
@@ -134,7 +133,7 @@ const create = ({ version = '0.0.0', nonce = 'replay' } = {}) => {
       const k = key(m.id), f = flight.get(k);
       flight.delete(k);
       acks.delete(k);
-      if (f && f.method === 'initialize' && init && !init.version && isObj(m.result) && typeof m.result.protocolVersion === 'string') init.version = m.result.protocolVersion;
+      if (f && f.method === 'initialize' && !init && isObj(m.result) && typeof m.result.protocolVersion === 'string') init = { params: f.params, version: m.result.protocolVersion };
     }
     if (m && m.method === 'notifications/subscriptions/acknowledged' && isObj(m.params) && isObj(m.params._meta)) {
       const k = key(m.params._meta[SUB]);
