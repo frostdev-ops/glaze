@@ -157,7 +157,13 @@ var GZ_SHEET_FN_TEXT2 = globalThis.GZ_SHEET_FN_TEXT2 || (() => {
     SUBSTITUTE: { p: ['v', 'v', 'v', 'v'], min: 3, max: 4, fn: ([t, old, rep, instance], ctx) => {
       const s = text(t), o = text(old), r = text(rep);
       // Left out, every instance; given empty, 0 (#VALUE!), as Excel takes it.
-      if (instance === undefined) return o === '' ? s : capped(s.split(o).join(r));
+      if (instance === undefined) {
+        if (o === '') return s;
+        // The result's length from the match count, before the string is built.
+        const parts = s.split(o);
+        if (s.length + (parts.length - 1) * (r.length - o.length) > LIMIT) throw ERR.VALUE;
+        return parts.join(r);
+      }
       const n = whole(instance, ctx);
       if (n < 1) throw ERR.VALUE;
       if (o === '') return s;

@@ -3580,6 +3580,8 @@
   "Average: {n}": "Mittelwert: {n}",
   "Count: {n}": "Anzahl: {n}",
   "Circular reference: {ref}": "Zirkelbezug: {ref}",
+  "From the file: Glaze can’t calculate {name}": "Aus der Datei: Glaze kann {name} nicht berechnen",
+  "Glaze can’t calculate {name}": "Glaze kann {name} nicht berechnen",
   "There’s a problem with this formula.": "Diese Formel enthält einen Fehler.",
   "Reference isn’t valid.": "Dieser Bezug ist ungültig.",
   "That format can’t be used.": "Dieses Format kann nicht verwendet werden.",

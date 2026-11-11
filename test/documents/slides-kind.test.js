@@ -196,7 +196,7 @@ test('uncached card thumbnails do not retain blob URLs and read only listed medi
     document: { createElement: () => ({ replaceChildren() {} }) },
     GZ_PPTX: {
       read: async () => ({ size: { w: 1 }, slides: [slide], media: [{ path: 'ppt/media/a.png', mime: 'image/png' }] }),
-      media: async (_, p) => { reads.push(p); return new Uint8Array([1]); },
+      pictures: () => async (p) => { reads.push(p); return new Uint8Array([1]); },
     },
     GZ_SLIDES_RENDER: { px: (w) => w, stage: (_, __, o) => { painted(o.media); return {}; } },
   });
@@ -206,4 +206,26 @@ test('uncached card thumbnails do not retain blob URLs and read only listed medi
   assert.deepEqual(reads, ['ppt/media/a.png']);
   assert.equal(created, 0, 'discardable card thumbnails do not allocate page-lifetime blobs');
   assert.equal(media.get('ppt/media/a.png'), 'data:image/png;base64,AQ==');
+});
+
+// Opening a deck reads its pictures through one archive (documents/slides/pptx.js pictures), not an unzip per picture.
+test('a slide\'s pictures are read through one archive, opened once', async () => {
+  let painted, opened = 0, single = 0;
+  const done = new Promise((r) => { painted = r; }), reads = [];
+  const paths = ['ppt/media/a.png', 'ppt/media/b.png', 'ppt/media/c.png'];
+  const slide = { shapes: paths.map((path) => ({ media: { path } })) };
+  const { DK } = load({ slides: true }, {
+    Blob, URL: { createObjectURL: () => 'blob:card' },
+    document: { createElement: () => ({ replaceChildren() {} }) },
+    GZ_PPTX: {
+      read: async () => ({ size: { w: 1 }, slides: [slide], media: paths.map((path) => ({ path, mime: 'image/png' })) }),
+      pictures: () => { opened++; return async (p) => { reads.push(p); return new Uint8Array([1]); }; },
+      media: async () => { single++; return new Uint8Array([1]); },
+    },
+    GZ_SLIDES_RENDER: { px: (w) => w, stage: (_, __, o) => { painted(o.media); return {}; } },
+  });
+  await DK.settled();
+  DK.get('slides').thumb({ file: 'UEsDBA==' });
+  assert.equal((await done).size, 3);
+  assert.deepEqual([opened, single, reads], [1, 0, paths]);
 });

@@ -35,3 +35,32 @@ test('glance locates one-cell and absolute extents using actual row and column s
   sh.colW.set(0, 200 / 7); sh.rowH.set(0, 45); // A is 200px, row 1 is 60px.
   assert.deepEqual(CX.glance(wb, sh).map((x) => x.anchor), [[0, 0, 0, 0], [0, 0, 0, 0], [1, 1, 1, 1]]);
 });
+
+// A truncated or hand-edited drawing: an anchor whose from or to lacks its col or row drops only that chart, the reader
+// listing a part problem for it, and every other chart of the sheet still shows with its own id.
+test('a chart anchor missing its col or row drops only that chart, with a part problem', async () => {
+  const broken = '<xdr:from><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>' + marker('to', 4, 8);
+  const wb = await book([anchor('twoCellAnchor', marker('from', 1, 1) + marker('to', 5, 9)), anchor('twoCellAnchor', broken), anchor('oneCellAnchor', '<xdr:from><xdr:col>2</xdr:col></xdr:from>' + ext(100, 50)), anchor('twoCellAnchor', marker('from', 6, 1) + marker('to', 9, 9))].join(''));
+  const list = CX.charts(wb, wb.sheets[0]);
+  assert.deepEqual(list.map((c) => c.id), ['xl/drawings/drawing1.xml#0', 'xl/drawings/drawing1.xml#3'], 'the others keep their ids');
+  assert.deepEqual(list.map((c) => c.anchor.from.col), [1, 6]);
+  assert.deepEqual(wb.keep.problems.map((p) => p.code), ['part']);
+  assert.match(wb.keep.problems[0].message, /2 charts/);
+});
+
+test('a chart anchor missing a required marker is skipped without changing later ids or spans', async () => {
+  const body = [
+    anchor('twoCellAnchor', marker('to', 4, 8)),
+    anchor('twoCellAnchor', marker('from', 1, 1)),
+    anchor('oneCellAnchor', ext(100, 50)),
+    anchor('absoluteAnchor', '<xdr:pos x="0" y="0"/>' + ext(100, 50)),
+    anchor('twoCellAnchor', marker('from', 6, 1) + marker('to', 9, 9)),
+  ].join('');
+  const wb = await book(body), xml = drawing(body);
+  const list = CX.charts(wb, wb.sheets[0]);
+  assert.deepEqual(list.map((c) => c.id), ['xl/drawings/drawing1.xml#3', 'xl/drawings/drawing1.xml#4']);
+  assert.equal(CX.spans(xml).length, 5, 'broken anchors retain their positions in the source');
+  const moved = CX.setAnchor(xml, 4, { col: 10, row: 2, colOff: 0, rowOff: 0 }, { col: 13, row: 10, colOff: 0, rowOff: 0 });
+  assert.equal(CX.anchors(moved)[4].from.col, 10);
+  assert.match(wb.keep.problems.find((p) => p.code === 'part')?.message ?? '', /3 charts/);
+});

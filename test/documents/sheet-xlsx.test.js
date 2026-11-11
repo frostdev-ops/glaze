@@ -1022,3 +1022,78 @@ test('a workbook with a sheet part cut inside its root tag or its data still wri
     assert.deepEqual(again.keep.problems, [], `cut at ${cut}`);
   }
 });
+
+// ── A function Glaze lacks ────────────────────────────────────────────────────────────────────────────────────────────
+// A cell whose formula calls a function the engine has no definition for keeps the value the file came with while none of
+// its inputs change; its dependents calculate from that value, and every writer writes it. Once a student changes an
+// input, the cell is #NAME? (and its dependents with it), and that is what is written. Opening (sheet-grid.js begin) and
+// importing (sheet-kind.js workbookOf) calculate with { keep: true }; write() does too when it calculates.
+const lacking = (row) => pack({
+  '[Content_Types].xml': '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
+  '_rels/.rels': rels([['rId1', 'officeDocument', 'xl/workbook.xml']]),
+  'xl/workbook.xml': `<?xml version="1.0"?><workbook ${NS}><sheets><sheet name="S" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+  'xl/_rels/workbook.xml.rels': rels([['rId1', 'worksheet', 'worksheets/sheet1.xml']]),
+  'xl/worksheets/sheet1.xml': `<worksheet ${NS}><sheetData>${row}</sheetData></worksheet>`,
+});
+// The audit's case: A1 =BIN2DEC("101") cached 5, B1 =A1*2 cached 10, C1 =PRICE(…) cached 95.5.
+const X1 = '<row r="1"><c r="A1"><f>BIN2DEC("101")</f><v>5</v></c><c r="B1"><f>A1*2</f><v>10</v></c><c r="C1"><f>PRICE(DATE(2020,1,1),DATE(2025,1,1),0.05,0.06,100,2)</f><v>95.5</v></c></row>';
+// A2 the input; A1 =ERF(A2) cached 0.8427; B1, C1, D1 a chain three deep under it, B1's cached value stale on purpose.
+const CHAIN = '<row r="1"><c r="A1"><f>ERF(A2)</f><v>0.8427</v></c><c r="B1"><f>A1*2</f><v>0</v></c><c r="C1"><f>B1+1</f><v>0</v></c><c r="D1"><f>C1*10</f><v>0</v></c><c r="E1"><f>F2+1</f><v>0</v></c></row>'
+  + '<row r="2"><c r="A2"><v>1</v></c><c r="F2"><v>4</v></c></row>';
+const values = (wb, refs) => refs.map((a) => { const x = at(wb, 'S', a); return x && [x.t, x.v]; });
+const near = (got, want) => got.forEach(([t, v], i) => { assert.equal(t, want[i][0]); if (t === 'n') assert.ok(Math.abs(v - want[i][1]) < 1e-9, `${v} for ${want[i][1]}`); else assert.equal(v, want[i][1]); });
+
+test('the functions the next tests call are still ones the engine lacks', () => {
+  for (const name of ['BIN2DEC', 'PRICE', 'ERF']) assert.equal(C.fn(name), null, `${name} is built now: pick another unbuilt function for these tests`);
+});
+
+test('a function Glaze lacks: open, recalculate and write keep the file\'s cached values, A1 5, B1 10, C1 95.5', async () => {
+  const wb = await X.read(lacking(X1));
+  const e = C.engine(wb, { keep: true });
+  e.recalc();
+  assert.deepEqual(values(wb, ['A1', 'B1', 'C1']), [['n', 5], ['n', 10], ['n', 95.5]], 'after the open recalc');
+  const out = await X.write(wb, { date: DATE });
+  assert.doesNotMatch((await parts(out))['xl/worksheets/sheet1.xml'], /#NAME\?/);
+  assert.deepEqual(values(await X.read(out), ['A1', 'B1', 'C1']), [['n', 5], ['n', 10], ['n', 95.5]], 'after save and reopen');
+  // write() with no engine of its own calculates the workbook it is given the same way (Export, Drive, Submit).
+  const fresh = await X.read(lacking(X1));
+  assert.deepEqual(values(await X.read(await X.write(fresh, { date: DATE })), ['A1', 'B1', 'C1']), [['n', 5], ['n', 10], ['n', 95.5]]);
+  assert.equal(X.writeDelimited(await X.read(lacking(X1))), '﻿5,10,95.5\r\n', 'CSV too');
+});
+
+test('a function Glaze lacks: its dependents three deep calculate from the kept value', async () => {
+  const wb = await X.read(lacking(CHAIN));
+  C.engine(wb, { keep: true }).recalc();
+  near(values(wb, ['A1', 'B1', 'C1', 'D1', 'E1']), [['n', 0.8427], ['n', 1.6854], ['n', 2.6854], ['n', 26.854], ['n', 5]]);
+  near(values(await X.read(await X.write(wb, { date: DATE })), ['A1', 'B1', 'C1', 'D1']), [['n', 0.8427], ['n', 1.6854], ['n', 2.6854], ['n', 26.854]]);
+});
+
+test('a function Glaze lacks: an edit to an input makes the cell and its dependents #NAME?, and that is written', async () => {
+  const wb = await X.read(lacking(CHAIN)), id = wb.sheets[0].id;
+  const e = C.engine(wb, { keep: true });
+  e.recalc();
+  assert.deepEqual(e.missing(id, 0, 0), { names: ['ERF'], kept: true });
+  assert.equal(e.missing(id, 0, 1), null, 'B1 calls nothing missing');
+  // A format on the input, or an edit elsewhere, changes none of its inputs.
+  e.apply({ op: 'set', sheet: id, r: 1, c: 0, cell: { ...at(wb, 'S', 'A2'), s: M.internStyle(wb, { bold: true }) } });
+  e.edit(id, 1, 5, '9');
+  near(values(wb, ['A1', 'B1', 'E1']), [['n', 0.8427], ['n', 1.6854], ['n', 10]]);
+  e.edit(id, 1, 0, '2');
+  assert.deepEqual(values(wb, ['A1', 'B1', 'C1', 'D1']), [['e', '#NAME?'], ['e', '#NAME?'], ['e', '#NAME?'], ['e', '#NAME?']]);
+  assert.deepEqual(e.missing(id, 0, 0), { names: ['ERF'], kept: false });
+  const sheet = (await parts(await X.write(wb, { date: DATE })))['xl/worksheets/sheet1.xml'];
+  for (const a of ['A1', 'B1', 'C1', 'D1']) assert.match(sheet, new RegExp(`<c r="${a}"[^>]* t="e"[^>]*><f>[^<]*</f><v>#NAME\\?</v>`), a);
+  // Reopened, the cell stays the error it was saved as; a newly typed formula calling a lacking function is #NAME? at once.
+  const again = await X.read(await X.write(wb, { date: DATE }));
+  const e2 = C.engine(again, { keep: true });
+  e2.recalc();
+  assert.deepEqual(values(again, ['A1', 'D1']), [['e', '#NAME?'], ['e', '#NAME?']]);
+  e2.edit(again.sheets[0].id, 4, 0, '=BIN2DEC("11")');
+  assert.deepEqual(values(again, ['A5']), [['e', '#NAME?']]);
+});
+
+test('a function Glaze lacks: a formula the file left uncalculated has nothing to keep and is #NAME?', async () => {
+  const wb = await X.read(lacking('<row r="1"><c r="A1"><f>ERF(1)</f></c><c r="B1"><f>A1+1</f></c></row>'));
+  C.engine(wb, { keep: true }).recalc();
+  assert.deepEqual(values(wb, ['A1', 'B1']), [['e', '#NAME?'], ['e', '#NAME?']]);
+});

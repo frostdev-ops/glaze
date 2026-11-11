@@ -379,7 +379,8 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
 
   const invoke = (def, args, ctx) => {
     if (!def.errors) for (let i = 0; i < args.length; i++) if (isErr(args[i]) && kindAt(def, i) === 'v') return args[i];
-    try { return def.fn(args, ctx); } catch (e) { if (isErr(e)) return e; throw e; }
+    // A fault inside a function (a RangeError past JavaScript's string limit, a bug) is its cell's #VALUE!, never the workbook's.
+    try { return def.fn(args, ctx); } catch (e) { return isErr(e) ? e : ERR.VALUE; }
   };
   const call = (n, ctx) => {
     const def = REGISTRY.get(n.name);
@@ -458,12 +459,13 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
   const analyze = (ast) => {
     let info = analyses.get(ast);
     if (info) return info;
-    info = { refs: [], names: [], fns: new Set(), opaque: false };
+    info = { refs: [], names: [], fns: new Set(), opaque: false, broken: false };
     const walk = (n, locals = new Set()) => {
       if (n.k === 'ref') info.refs.push(n);
       else if (n.k === 'name') { if (n.sheet || !locals.has(n.name.toLowerCase())) info.names.push(n); }
       else if (n.k === 'table' || n.k === 'ext') info.opaque = true;
       else if (n.k === 'fn') info.fns.add(n.name);
+      else if (n.k === 'err' && n.v === '#REF!') info.broken = true;
       // Binding positions are declarations. Each value sees the earlier locals; the final calculation sees them all.
       // Defined names are analyzed separately by depend(), without these locals, as evalName() evaluates them.
       if (n.k === 'fn' && n.name === 'LET' && n.args.length >= 3 && n.args.length % 2 === 1) {
@@ -489,6 +491,16 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
   const hides = (op) => op.op === 'hide' || (op.op === 'prop' && op.key === 'filter') || (op.op === 'batch' && op.ops.some(hides))
     || (op.op === 'restore' && (op.hidden?.length > 0 || !!op.props?.some(([, k]) => k === 'filter')));
 
+  // What a formula cell from a file may hold that calculating it can't give back: a value, text, a boolean or an error
+  // other than the #NAME? calculating gives.
+  const HELD = new Set(['n', 's', 'b', 'e']);
+  const held = (cell) => HELD.has(cell.t) && !(cell.t === 'e' && cell.v === '#NAME?');
+  const near = (a, b) => typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) <= 1e-12 * Math.max(Math.abs(a), Math.abs(b));
+  const inside = ([id, r0, c0, r1, c1], i, r, c) => i === id && r >= r0 && r <= r1 && c >= c0 && c <= c1;
+
+  // opts.keep: a cell whose formula calls a function Glaze lacks keeps the value it holds (a file's cached value) and its
+  // dependents read that, until one of its inputs (a cell it reads, a name it uses) gets a new value; then it is #NAME?.
+  // Opening and importing a workbook calculate this way, so an .xlsx keeps Excel's numbers where Glaze can't compute them.
   class Engine {
     constructor(wb, opts = {}) {
       this.wb = wb;
@@ -504,6 +516,10 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
       this.changed = new Map();
       this.status = { circular: [] };
       this.time = Date.now();
+      this.held = new Set();
+      // This calculation's cells whose value or content changed (key → [sheetId, r, c]) and names whose definition did.
+      this.moved = new Map();
+      this.namesMoved = new Set();
       this.build();
     }
 
@@ -540,7 +556,7 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
 
     build() {
       this.checkArrays();
-      this.nodes.clear(); this.index.clear(); this.volatile.clear(); this.members.clear(); this.subtotals.clear(); this.dirty.clear(); this.circular.clear();
+      this.nodes.clear(); this.index.clear(); this.volatile.clear(); this.members.clear(); this.subtotals.clear(); this.dirty.clear(); this.circular.clear(); this.held.clear();
       this.byName = new Map(this.wb.sheets.map((s) => [s.name.toLowerCase(), s]));
       this.byId = new Map(this.wb.sheets.map((s) => [s.id, s]));
       this.extents = new Map();
@@ -647,7 +663,10 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
       for (const fname of info.fns) if (VOLATILE.has(fname) || REGISTRY.get(fname)?.volatile) node.volatile = true;
       if (info.fns.has('SUBTOTAL') || info.fns.has('AGGREGATE')) node.subtotal = true;
       if (info.opaque) node.opaque = true;
+      for (const fname of info.fns) if (!REGISTRY.has(fname)) (node.missing ||= new Set()).add(fname);
+      if (info.broken) node.broken = true;
       if (depth > 16) return;
+      for (const n of info.names) (node.names ||= new Set()).add(n.name.toLowerCase());
       for (const n of info.names) {
         const scope = n.sheet ? this.sheetNamed(n.sheet) : sheet;
         const def = scope || !n.sheet ? this.nameDef(n.name, scope) : null;
@@ -660,6 +679,8 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
       const node = { key: k, sheet, r, c, cell, ast: null, error: false, volatile: false, subtotal: false, opaque: false, entries: [], array: cell.a !== undefined, span: null, result: undefined };
       try { node.ast = F.compile(cell.f, r, c).ast; } catch { node.error = true; }
       if (node.ast) this.depend(node, node.ast, sheet, r, c);
+      // A reference an edit deleted (#REF!) is an input changed: nothing to keep.
+      if (node.missing && this.opts.keep && !node.broken && held(cell)) { node.kept = true; this.held.add(k); }
       if (node.volatile) this.volatile.add(k);
       if (node.subtotal) this.subtotals.add(k);
       this.nodes.set(k, node);
@@ -692,6 +713,7 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
       this.dirty.delete(k);
       this.circular.delete(k);
       this.members.delete(k);
+      this.held.delete(k);
       if (node.span) for (const [mk, master] of [...this.members]) if (master === k) this.remove(mk);
     }
 
@@ -732,22 +754,32 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
         row.set(node.c, (cell = { t: 'z' }));
       }
       const out = toCell(v);
-      if (cell.t !== out.t || !Object.is(cell.v, out.v)) { cell.t = out.t; cell.v = out.v; this.changed.set(node.key, [node.sheet.id, node.r, node.c]); }
+      if (cell.t !== out.t || !Object.is(cell.v, out.v)) {
+        if (!(cell.t === out.t && near(cell.v, out.v))) this.moved.set(node.key, [node.sheet.id, node.r, node.c]);
+        cell.t = out.t; cell.v = out.v; this.changed.set(node.key, [node.sheet.id, node.r, node.c]); }
     }
     // Evaluates a node and stores its value; → null when done, or the dirty cells it read and must wait for.
     compute(node) {
       if (node.master) {
         if (this.dirty.has(node.master.key)) return new Set([node.master.key]);
+        if (node.master.kept) return null;
         const res = node.master.result;
         this.store(node, Array.isArray(res) ? at(res, node.i, node.j) : res);
         return null;
+      }
+      if (node.kept) {
+        const wait = this.waitFor(node);
+        if (wait) return wait;
+        if (!this.moves(node)) return null;
+        node.kept = false;
+        this.held.delete(node.key);
       }
       if (node.opaque) return null;
       if (node.error) { this.store(node, ERR.NAME); return null; }
       const ctx = new Ctx(this, node.sheet, node.r, node.c, node.array);
       const needs = (this.needs = new Set());
       let v;
-      try { v = settle(evaluate(node.ast, ctx, true), ctx); } finally { this.needs = null; }
+      try { v = settle(evaluate(node.ast, ctx, true), ctx); } catch (e) { v = isErr(e) ? e : ERR.VALUE; } finally { this.needs = null; }
       if (needs.size) return needs;
       node.result = v;
       this.store(node, v);
@@ -805,6 +837,35 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
       this.status = { circular: [...this.circular.values()] };
     }
 
+    // The dirty cells a kept formula reads: it is decided after them, as an evaluated formula would be. → a Set or null.
+    waitFor(node) {
+      let out = null;
+      const add = (k) => { if (k !== node.key && this.dirty.has(k)) (out ||= new Set()).add(k); };
+      for (const e of node.entries) {
+        const [id, r0, c0, r1, c1] = e;
+        if ((r1 - r0 + 1) * (c1 - c0 + 1) <= this.dirty.size) { for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) add(key(id, r, c)); }
+        else for (const k of this.dirty) { const n = this.nodes.get(k); if (n && inside(e, n.sheet.id, n.r, n.c)) add(k); }
+      }
+      return out;
+    }
+    // Whether this calculation gave a kept formula's cell, or one of its inputs, a new value or meaning.
+    moves(node) {
+      if (this.moved.has(node.key)) return true;
+      if (node.names) for (const n of node.names) if (this.namesMoved.has(n)) return true;
+      for (const e of node.entries) {
+        const [id, r0, c0, r1, c1] = e;
+        if ((r1 - r0 + 1) * (c1 - c0 + 1) <= this.moved.size) { for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (this.moved.has(key(id, r, c))) return true; }
+        else for (const [i, r, c] of this.moved.values()) if (inside(e, i, r, c)) return true;
+      }
+      return false;
+    }
+    // The functions Glaze lacks that the formula computing (r, c) calls, and whether it shows the value it was given
+    // (kept) rather than #NAME?; null when it calls none.
+    missing(sheetId, r, c) {
+      const n = this.nodes.get(key(sheetId, r, c)), head = n?.master ?? n;
+      return head?.missing ? { names: [...head.missing], kept: !!head.kept } : null;
+    }
+
     finish() {
       const changed = [...this.changed.values()];
       this.changed = new Map();
@@ -812,6 +873,8 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
     }
     // Every formula, from scratch. → { changed, status }
     recalc() {
+      this.moved = new Map();
+      this.namesMoved = new Set();
       for (const k of this.nodes.keys()) this.dirty.add(k);
       this.run();
       return { changed: this.finish(), status: this.status };
@@ -861,7 +924,13 @@ var GZ_SHEET_CALC = globalThis.GZ_SHEET_CALC || (() => {
     // r, c]] cells whose value or content changed, status }
     apply(op) {
       this.guard(op);
+      const defs = (names) => new Map(names.map((x) => [`${x.sheet ?? ''}|${x.name.toLowerCase()}`, String(x.ref)]));
+      const was = defs(this.wb.names);
       const res = M.apply(this.wb, op, F.hooks);
+      this.moved = new Map(res.values.map(([id, r, c]) => [key(id, r, c), [id, r, c]]));
+      this.namesMoved = new Set();
+      const now = defs(this.wb.names);
+      for (const k of new Set([...was.keys(), ...now.keys()])) if (was.get(k) !== now.get(k)) this.namesMoved.add(k.slice(k.indexOf('|') + 1));
       const arraysChanged = res.rebuild || res.touched.some(([id, r, c]) => M.cell(this.byId.get(id), r, c)?.a !== undefined);
       if (arraysChanged) {
         let holes;

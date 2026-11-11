@@ -86,10 +86,10 @@
   // Pictures as blob: URLs, kept until the page goes.
   const made = new Set();
   const blobs = async (bytes, deck, paths, inline = false) => {
-    const out = new Map();
+    const out = new Map(), pic = GZ_PPTX.pictures(bytes);
     for (const m of deck.media) {
       if (!paths.has(m.path)) continue;
-      const b = await GZ_PPTX.media(bytes, m.path).catch(() => null);
+      const b = await pic(m.path).catch(() => null);
       if (!b) continue;
       const url = inline ? `data:${m.mime};base64,${b64(b)}` : URL.createObjectURL(new Blob([b], { type: m.mime }));
       if (!inline) made.add(url);
@@ -132,10 +132,10 @@
     const s = deck.slides[0], Rr = R();
     if (!s || typeof XMLSerializer !== 'function') return null;
     const w = Rr.px(deck.size.w), h = Rr.px(deck.size.h), W = 2 * THUMB, H = Math.round((h / w) * W);
-    const media = new Map();
+    const media = new Map(), pic = GZ_PPTX.pictures(bytes), shown = mediaOf(s);
     for (const m of deck.media) {
-      if (!mediaOf(s).has(m.path)) continue;
-      const b = await GZ_PPTX.media(bytes, m.path).catch(() => null);
+      if (!shown.has(m.path)) continue;
+      const b = await pic(m.path).catch(() => null);
       if (b) media.set(m.path, `data:${m.mime};base64,${b64(b)}`);
     }
     const el = Rr.slide(s, deck, { document, media, labels: LABELS() });

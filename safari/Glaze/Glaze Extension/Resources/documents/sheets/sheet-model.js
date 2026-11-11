@@ -105,8 +105,12 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
       if (!row.size) sh.rows.delete(r);
     }
     run.touched.push([sh.id, r, c]);
+    const at = `${sh.id}:${r}:${c}`;
+    if (!run.before.has(at)) run.before.set(at, [sh.id, r, c, prev]);
     return prev;
   };
+  // Whether two cells (null for none) hold the same value and formula, whatever their formats.
+  const sameContent = (a, b) => (a?.t ?? 'z') === (b?.t ?? 'z') && Object.is(a?.v ?? null, b?.v ?? null) && a?.f === b?.f && a?.a === b?.a;
 
   // A span [a, b] after inserting (n > 0) or deleting (n < 0) at `at`; null when the delete takes all of it.
   const shiftSpan = (a, b, at, n, max) => {
@@ -401,11 +405,17 @@ var GZ_SHEET_MODEL = globalThis.GZ_SHEET_MODEL || (() => {
       throw error;
     } finally { run.order = outer; }
   };
-  // → { inverse, touched: [[sheetId, r, c]] cells written, rebuild: whether formulas or names changed meaning }.
+  // → { inverse, touched: [[sheetId, r, c]] cells written, values: those of them whose value or formula the whole operation
+  // changed, rebuild: whether formulas or names changed meaning }.
   const apply = (wb, op, hooks = {}) => {
-    const run = { touched: [], rebuild: false, count: undefined };
+    const run = { touched: [], before: new Map(), rebuild: false, count: undefined };
     const inverse = step1(wb, op, hooks, run);
-    return { inverse, touched: run.touched, rebuild: run.rebuild };
+    const values = [];
+    for (const [id, r, c, prev] of run.before.values()) {
+      const sh = wb.sheets.find((x) => x.id === id);
+      if (!sh || !sameContent(prev, sh.rows.get(r)?.get(c) ?? null)) values.push([id, r, c]);
+    }
+    return { inverse, touched: run.touched, values, rebuild: run.rebuild };
   };
 
   // ── Serial dates ────────────────────────────────────────────────────────────────────────────────────────────────────

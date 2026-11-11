@@ -207,7 +207,7 @@
     await need(CHARTS).catch((e) => console.error(e));
     const wb = /\.(csv|tsv)$/i.test(file.name) ? X.readDelimited(bytes, { name: file.name }) : await X.read(bytes).catch(() => null);
     if (!wb?.sheets?.length) throw new RangeError(SAYS.read);
-    GZ_SHEET_CALC.engine(wb).recalc();
+    GZ_SHEET_CALC.engine(wb, { keep: true }).recalc();
     return wb;
   };
   const importFile = async (file, { progress = null } = {}) => {

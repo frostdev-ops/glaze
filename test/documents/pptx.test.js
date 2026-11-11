@@ -566,3 +566,69 @@ test('non-placeholder text boxes use presentation defaults while tables keep the
   assert.equal(named(d.slides[2], 'Default').text.paragraphs[0].runs[0].size, 26);
   assert.equal(named(d.slides[4], 'Table 3').rows[0].cells[0].text.paragraphs[0].runs[0].size, 14);
 });
+
+// ── Work bounded by the deck, not by slides × parts ───────────────────────────────────────────────────────────────────
+// A deck of n slides on the fixture's master and layout 2: slide(i) its shapes, rels(i) its extra relationships, files more
+// parts. Timings compare a small deck with a big one of the same shape (the Mac is busy: no absolute times).
+const NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+const REL = (items) => `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${items.map(([id, type, target]) => `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"/>`).join('')}</Relationships>`;
+const spTree = (inner) => `<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>${inner}</p:spTree></p:cSld>`;
+const made = ({ n, slide = () => '', rels = () => [], files = {}, layout }) => {
+  const ch = Object.fromEntries([...FILES.keys()].filter((k) => k.startsWith('ppt/slides/') || k.startsWith('ppt/notesSlides/')).map((k) => [k, null]));
+  const prel = [['rId1', 'slideMaster', 'slideMasters/slideMaster1.xml'], ['rId12', 'theme', 'theme/theme1.xml']], ids = [];
+  for (let i = 1; i <= n; i++) {
+    prel.push([`s${i}`, 'slide', `slides/slide${i}.xml`]);
+    ids.push(`<p:sldId id="${255 + i}" r:id="s${i}"/>`);
+    ch[`ppt/slides/slide${i}.xml`] = `<?xml version="1.0"?><p:sld ${NS}>${spTree(slide(i))}</p:sld>`;
+    ch[`ppt/slides/_rels/slide${i}.xml.rels`] = REL([['rId1', 'slideLayout', '../slideLayouts/slideLayout2.xml'], ...rels(i)]);
+  }
+  ch['ppt/_rels/presentation.xml.rels'] = REL(prel);
+  ch['ppt/presentation.xml'] = `<?xml version="1.0"?><p:presentation ${NS}><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${ids.join('')}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`;
+  if (layout) ch['ppt/slideLayouts/slideLayout2.xml'] = layout;
+  return pack({ ...ch, ...files });
+};
+const timed = async (fn) => { const t = process.hrtime.bigint(); const out = await fn(); return { out, ms: Number(process.hrtime.bigint() - t) / 1e6 }; };
+// The smaller of three runs, so one slow moment of a busy machine doesn't decide.
+const best = async (fn) => { let min = Infinity, out; for (let i = 0; i < 3; i++) { const r = await timed(fn); out = r.out; min = Math.min(min, r.ms); } return { out, ms: min }; };
+
+test('a notes part shared by many slides is parsed once: 40 slides take well under 20 times what 2 do, each with its own number', async () => {
+  const notes = `<?xml version="1.0"?><p:notes ${NS}>${spTree(`<p:sp><p:nvSpPr><p:cNvPr id="2" name="n"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:p><a:r><a:t>Slide </a:t></a:r><a:fld id="{1}" type="slidenum"><a:t>1</a:t></a:fld></a:p></p:txBody></p:sp>${'<p:sp/>'.repeat(120000)}`)}</p:notes>`;
+  const deckOf = (n) => made({ n, rels: () => [['rId2', 'notesSlide', '../notesSlides/notesSlide1.xml']], files: { 'ppt/notesSlides/notesSlide1.xml': notes } });
+  const small = deckOf(2), big = deckOf(40);
+  const a = await best(() => P.read(small)), b = await best(() => P.read(big));
+  assert.deepEqual(b.out.slides.slice(0, 3).map((s) => s.notes), ['Slide 1', 'Slide 2', 'Slide 3']);
+  assert.ok(b.ms < 6 * a.ms, `2 slides ${a.ms.toFixed(0)} ms, 40 slides ${b.ms.toFixed(0)} ms`);
+});
+
+test('placeholder inheritance looks placeholders up by type and idx: 4 times the placeholders take well under 16 times as long', async () => {
+  const ph = (i, type, idx) => `<p:sp><p:nvSpPr><p:cNvPr id="${i}" name="s"/><p:cNvSpPr/><p:nvPr><p:ph type="${type}" idx="${idx}"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp>`;
+  const deckOf = (k) => made({ n: 1,
+    layout: `<?xml version="1.0"?><p:sldLayout ${NS} type="obj">${spTree(Array.from({ length: k }, (_, i) => ph(i + 2, 'body', i + 1)).join(''))}</p:sldLayout>`,
+    // A type and idx the layout lacks: every lookup misses.
+    slide: () => Array.from({ length: k }, (_, i) => ph(i + 2, 'sldImg', 100000 + i)).join('') });
+  const small = deckOf(1500), big = deckOf(6000);
+  const a = await best(() => P.read(small)), b = await best(() => P.read(big));
+  assert.equal(b.out.slides[0].shapes.filter((s) => s.from === 'slide').length, 6000);
+  assert.ok(b.ms < 8 * a.ms, `1,500 placeholders ${a.ms.toFixed(0)} ms, 6,000 ${b.ms.toFixed(0)} ms`);
+});
+
+test('a deck\'s pictures are read through one archive: 8 times the pictures take well under 64 times as long', async () => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+  const deckOf = (m) => {
+    const files = {}, rel = [];
+    let inner = '';
+    for (let i = 0; i < m; i++) {
+      files[`ppt/media/i${i}.png`] = png;
+      rel.push([`m${i}`, 'image', `../media/i${i}.png`]);
+      inner += `<p:pic><p:nvPicPr><p:cNvPr id="${i + 2}" name="p"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="m${i}"/></p:blipFill><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="100000" cy="100000"/></a:xfrm></p:spPr></p:pic>`;
+    }
+    return made({ n: 1, slide: () => inner, rels: () => rel, files });
+  };
+  const all = async (bytes) => { const d = await P.read(bytes), pic = P.pictures(bytes); let n = 0; for (const m of d.media) if (await pic(m.path)) n++; return n; };
+  const small = deckOf(300), big = deckOf(2400);
+  const a = await best(() => all(small)), b = await best(() => all(big));
+  assert.equal(b.out, 2400);
+  assert.ok(b.ms < 20 * a.ms, `300 pictures ${a.ms.toFixed(0)} ms, 2,400 ${b.ms.toFixed(0)} ms`);
+  assert.deepEqual([...await P.pictures(small)('ppt/media/i0.png')], [...png], 'the picture\'s bytes');
+  assert.equal(await P.pictures(small)('ppt/slides/slide1.xml'), null, 'never a part that isn\'t a picture');
+});

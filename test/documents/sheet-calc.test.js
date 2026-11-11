@@ -783,3 +783,71 @@ test('criteria wildcards: Excel\'s matching, and many stars against a long text 
   assert.equal(w('*a'.repeat(12) + '*b', 'a'.repeat(80)), false);
   assert.ok(Date.now() - t0 < 200, `${Date.now() - t0} ms`);
 });
+
+const heldBook = (cells, options = {}) => {
+  const wb = M.workbook();
+  for (const [ref, cell] of Object.entries(cells)) {
+    const [r, c] = M.cellPosition(ref);
+    M.apply(wb, { op: 'set', sheet: 1, r, c, cell });
+  }
+  const e = C.engine(wb, { keep: true, ...options });
+  e.recalc();
+  return e;
+};
+
+test('held formulas follow changes in computed input values, including volatile recalculation', () => {
+  let input = 1;
+  C.define('CACHEINPUT', { volatile: true, fn: () => input });
+  const e = heldBook({
+    A1: { t: 'n', v: 1.1 }, B1: { t: 'n', v: 1, f: 'ROUND(A1,0)' },
+    C1: { t: 'n', v: 42, f: 'NOSUCHCACHE(B1)' }, D1: { t: 'n', v: 84, f: 'C1*2' },
+    A2: { t: 'n', v: 1, f: 'CACHEINPUT()' }, B2: { t: 'n', v: 17, f: 'NOSUCHCACHE(A2)' },
+  });
+  e.edit(1, 0, 0, '1.2');
+  assert.equal(val(e, 'C1'), 42, 'an upstream edit with the same computed input keeps the value');
+  input = 2;
+  e.recalc();
+  assert.equal(val(e, 'B2'), '#NAME?', 'a volatile input changed without a cell write');
+  e.edit(1, 0, 0, '1.9');
+  assert.equal(val(e, 'C1'), '#NAME?');
+  assert.equal(val(e, 'D1'), '#NAME?');
+});
+
+test('held formulas compare the final input of a batch and do not regain held status after rebuilds', () => {
+  const e = heldBook({ A1: { t: 'n', v: 1 }, B1: { t: 'n', v: 42, f: 'NOSUCHCACHE(A1)' } });
+  e.apply({ op: 'batch', ops: [
+    { op: 'set', sheet: 1, r: 0, c: 0, cell: { t: 'n', v: 2 } },
+    { op: 'set', sheet: 1, r: 0, c: 0, cell: { t: 'n', v: 1 } },
+  ] });
+  assert.equal(val(e, 'B1'), 42, 'the completed operation gave the input its original value');
+  const edit = e.edit(1, 0, 0, '2');
+  e.apply({ op: 'rename', sheet: 1, name: 'Data' });
+  assert.deepEqual(e.missing(1, 0, 1), { names: ['NOSUCHCACHE'], kept: false });
+  e.apply(edit.inverse);
+  assert.equal(val(e, 'B1'), '#NAME?', 'undoing the input cannot reconstruct a discarded result');
+  e.apply({ op: 'set', sheet: 1, r: 0, c: 1, cell: { ...M.cell(e.wb.sheets[0], 0, 1), s: 0 } });
+  assert.equal(e.missing(1, 0, 1).kept, false, 'formatting does not rearm a released formula');
+});
+
+test('held arrays survive moves and renames but release every result when a defined input changes', () => {
+  const e = heldBook({
+    A1: { t: 'n', v: 1 }, B1: { t: 'n', v: 10, f: 'NOSUCHCACHE(A1,Rate)', a: 'B1:C1' },
+    C1: { t: 'n', v: 20 }, D1: { t: 'n', v: 40, f: 'C1*2' },
+  });
+  e.apply({ op: 'name', name: 'Rate', ref: '1' });
+  assert.equal(val(e, 'B1'), '#NAME?', 'defining a previously absent input changes its value');
+  const wb = M.workbook();
+  wb.names.push({ name: 'Rate', ref: '1' });
+  for (const [r, row] of e.wb.sheets[0].rows) wb.sheets[0].rows.set(r, new Map([...row].map(([c, x]) => [c, { ...x }])));
+  M.cell(wb.sheets[0], 0, 1).t = 'n'; M.cell(wb.sheets[0], 0, 1).v = 10;
+  M.cell(wb.sheets[0], 0, 2).t = 'n'; M.cell(wb.sheets[0], 0, 2).v = 20;
+  const a = C.engine(wb, { keep: true }); a.recalc();
+  const move = a.apply({ op: 'insert', sheet: 1, axis: 'row', at: 0, n: 1 });
+  a.apply({ op: 'rename', sheet: 1, name: 'Data' });
+  assert.deepEqual(['B2', 'C2', 'D2'].map((ref) => val(a, ref)), [10, 20, 40]);
+  a.apply(move.inverse);
+  const change = a.apply({ op: 'name', name: 'Rate', ref: '2' });
+  assert.deepEqual(['B1', 'C1', 'D1'].map((ref) => val(a, ref)), ['#NAME?', '#NAME?', '#NAME?']);
+  a.apply(change.inverse);
+  assert.equal(a.missing(1, 0, 1).kept, false);
+});

@@ -950,3 +950,25 @@ test('legacy cards ignore chartsheets and other worksheets drawing parts', async
   wb.active = 1;
   assert.equal(badgeCount(k.thumb(rec())), 2, 'Other counts only its own drawing');
 });
+
+// An .xlsx whose formulas call a function Glaze lacks (documents/sheets/sheet-calc.js keep): imported, stored and exported, its
+// cells and their dependents keep the values the file came with instead of #NAME?.
+test('import and export keep the file\'s values for a formula calling a function Glaze lacks, and its dependents', async () => {
+  const X = require('../../extension/documents/sheets/sheet-xlsx.js'), C = require('../../extension/documents/sheets/sheet-calc.js');
+  require('../../extension/documents/sheets/sheet-fn-math.js');
+  assert.equal(C.fn('BIN2DEC'), null, 'BIN2DEC is built now: pick another unbuilt function');
+  const src = M.workbook();
+  put(src.sheets[0], 0, 0, { t: 'n', v: 5, f: 'BIN2DEC("101")' }); put(src.sheets[0], 0, 1, { t: 'n', v: 10, f: 'A1*2' });
+  const bytes = await X.write(src, { recalc: false });
+  const s = store(), P = PA.open(s, () => 1000, { versions: async () => 40 });
+  const { DK, ctx } = load({ sheets: true }, { local: s, GZ_WRITER_PAPERS: { ...PA, open: () => P }, GZ_SHEET_MODEL: M, GZ_SHEET_DATA: SD, GZ_SHEET_CALC: C,
+    GZ_SHEET_NUMFMT: require('../../extension/documents/sheets/sheet-numfmt.js'), CompressionStream, DecompressionStream, Response, Blob });
+  ctx.GZ_WRITER_PAPER = { need: async (files) => { if (files.includes('documents/sheets/sheet-xlsx.js')) ctx.GZ_SHEET_XLSX = X; } };
+  await DK.settled();
+  const k = DK.get('sheet');
+  const key = await k.importFile({ name: 'lab.xlsx', size: bytes.length, arrayBuffer: async () => bytes.slice().buffer });
+  const got = await SD.read((ks) => s.get(ks), key.key ?? key);
+  assert.deepEqual([...got.wb.sheets[0].rows.get(0).values()].map((x) => x.v), [5, 10], 'stored as the file had them');
+  const out = await k.file(key.key ?? key);
+  assert.deepEqual([...(await X.read(out.bytes)).sheets[0].rows.get(0).values()].map((x) => x.v), [5, 10], 'exported as the file had them');
+});
