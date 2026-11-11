@@ -279,6 +279,16 @@ test('inline struct instance arrays are sized and priced like named-type arrays'
   ok('a struct member index is not a declaration', body('struct S { float a[4]; }; S s; x = s.a[int(x)];'));
 });
 
+test('global arrays and array parameters contribute their elements to the first frame cost', () => {
+  const global = (n) => `float a${n ? `[${n}]` : ''};\n${MIN}`;
+  assert.equal(G.estimate(global(10)) - G.estimate(global(0)), 10);
+  const parameter = (n) => `float f(float a${n ? `[${n}]` : ''}) { return 1.; }\nvec4 scene(vec2 uv) { float a${n ? `[${n}]` : ''}; return vec4(f(a)); }`;
+  assert.equal(G.estimate(parameter(10)) - G.estimate(parameter(0)), 20, 'the local declaration and the called parameter each count');
+  const globals = Array.from({ length: 65 }, (_, i) => `float a${i}[64];`).join('\n');
+  bad('many global arrays', `${globals}\n${MIN}`, /Too heavy/);
+  ok('a small global array', global(4));
+});
+
 test('the checker stays fast on hostile 8 KiB inputs, and never throws', () => {
   const cases = {
     spaces: ' '.repeat(8192), semis: ';'.repeat(8192), braces: '{;'.repeat(4096), open_braces: '{'.repeat(8192), floats: 'float '.repeat(1365),
