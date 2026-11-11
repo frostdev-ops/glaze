@@ -72,7 +72,7 @@ const boot = async ({ pathname = '/ultra/stream', localGet, byId = false, store,
       sendMessage: (m) => { if (m?.type === 'glaze:load') { loads.push(m.files); return Promise.resolve({ ok: false, error: 'not loadable' }); } return Promise.resolve({ ok: false }); } },
       storage: { sync: { get: (k, cb) => { syncGets.push(k); cb({}); } }, local, onChanged: { addListener: (f) => changed.push(f) } } } });
   c.window = c; c.top = c; c.globalThis = c;
-  for (const f of ['core/color.js', 'core/i18n.js', 'core/page.js', 'planner/grades.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'navigation/nav.js', 'content/content-ultra.js']) vm.runInContext(read(f).replace('  const shown = new Map();', '  globalThis.__seen = () => ({ seen, seenItems }); globalThis.__loadSeen = () => loadSeen();\n  globalThis.__site = { keepSeen: (...a) => keepSeen(...a), record: () => record() };\n  const shown = new Map();').replace('  const myCourses = () => {', '  const myCourses = () => { if (globalThis.__courses) return Promise.resolve(globalThis.__courses);'), c, { filename: f });
+  for (const f of ['core/color.js', 'core/i18n.js', 'core/page.js', 'planner/grades.js', 'looks/fonts.js', 'looks/surfaces.js', 'content/defaults.js', 'navigation/nav.js', 'content/content-ultra.js']) vm.runInContext(read(f).replace('  const shown = new Map();', '  globalThis.__seen = () => ({ seen, seenItems }); globalThis.__loadSeen = () => loadSeen();\n  globalThis.__site = { keepSeen: (...a) => keepSeen(...a), record: () => record(), openNew: (e) => openNew(e), renderNew: () => renderNew(), books: () => books, contents: () => contents };\n  const shown = new Map();').replace('  const myCourses = () => {', '  const myCourses = () => { if (globalThis.__courses) return Promise.resolve(globalThis.__courses);'), c, { filename: f });
   vm.runInContext(read('content/content.js').replace('  const courseSlots = {};', '  const courseSlots = {}; globalThis.__slots = courseSlots;').replace('  let lookX;', '  let lookX; globalThis.__look = () => lookX;'), c, { filename: 'content/content.js' });
   await settle();
   const wait = async (ms) => {
@@ -366,4 +366,42 @@ test("an Ultra site's course list is written under the lock too, keeping other s
   await settle(30);
   assert.deepEqual(Object.keys(store.data.seenCourses).sort(), ['_1_1', '_6_1', 'canvas:https://c.example/1']);
   assert.ok(locks.asked.includes('glaze:seenCourses'));
+});
+
+// Audit 2026-11-11 A5: sessionStorage throws when storage is off, in a sandboxed or partitioned frame, or full.
+test("a sessionStorage that throws neither stops a new-count's click nor the rest of a pass", async () => {
+  const p = await boot({ pathname: '/ultra/courses/_1_1/grades' });
+  const calls = [];
+  const boom = (k) => () => { calls.push(k); throw new Error('The operation is insecure.'); };
+  p.c.sessionStorage = { getItem: boom('get'), setItem: boom('set'), removeItem: boom('remove') };
+  // The "N new" count on a card: the click still opens the page it names.
+  const assigned = [];
+  p.c.location.assign = (url) => assigned.push(url);
+  const pill = { dataset: { kind: 'grades', cid: '_1_1' }, closest: () => null };
+  const target = new p.El('span');
+  target.closest = () => pill;
+  let stopped = 0;
+  p.c.__site.openNew({ type: 'click', target, preventDefault: () => { stopped++; }, stopPropagation() {} });
+  assert.equal(stopped, 1);
+  assert.deepEqual(assigned, ['https://school.test/ultra/courses/_1_1/grades']);
+  // A grades page with a gradebook read, and an outline with rows: the badges are drawn, nothing throws.
+  p.c.__loadSeen();
+  await p.wait(100);
+  p.c.__site.books().set('_1_1', { key: '', at: Date.now(), pending: false, results: [] });
+  p.c.__site.renderNew();
+  assert.deepEqual(calls, ['set', 'get'], 'the click kept its jump, the grades page looked for one');
+  p.c.location.pathname = '/ultra/courses/_1_1/outline';
+  const row = new p.El('li');
+  row.dataset = { contentId: '_5_1' };
+  const everything = p.document.querySelectorAll;
+  p.document.querySelectorAll = (sel) => (sel === '.content-list-item[data-content-id]' ? [row] : []);
+  p.c.__site.contents().set('_1_1', { at: Date.now(), items: [{ id: '_5_1' }] });
+  p.c.__site.renderNew();
+  assert.deepEqual(calls, ['set', 'get', 'get'], 'and the outline looked for one');
+  p.document.querySelectorAll = everything;
+  // And a whole pass runs through.
+  const added = p.tree(1);
+  p.body.append(added);
+  p.mutate([{ type: 'childList', target: p.body, addedNodes: [added], removedNodes: [] }]);
+  await p.wait(500);
 });
