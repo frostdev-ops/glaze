@@ -171,6 +171,48 @@ test('size bounds as Ultra\'s page reads have them: 20,000 characters of instruc
   assert.equal(c.replyTo.author.length, 120);
 });
 
+test('Canvas bounds text-node reads before copying large instructions or a title', () => {
+  for (const [selector, limit] of [['#assignment_show .description.user_content', 20000], ['#assignment_show h1.title', 300]]) {
+    const body = drawn(load('assignment')), el = body.querySelector(selector), reads = [];
+    const node = { nodeType: 3, length: 1000000,
+      get textContent() { assert.fail('do not copy an unbounded text node'); },
+      substringData(from, count) { reads.push(count); assert.equal(from, 0); assert.ok(count <= limit * 2 + 1); return 'x'.repeat(Math.min(count, this.length)); } };
+    el.replaceChildren(); el.children.push(node);
+    const a = boxOf('assignment', body).context.assignment;
+    assert.ok(reads.length > 0);
+    assert.equal(selector.includes('h1') ? a.title.length : a.instructions.length, limit);
+    if (!selector.includes('h1')) assert.equal(a.incomplete, true);
+  }
+});
+
+test('a sparse authored tree has a node budget and reports the omitted instructions as incomplete', () => {
+  const body = drawn(load('assignment')), d = body.querySelector('#assignment_show .description.user_content');
+  let visited = 0;
+  const nodes = Array.from({ length: 5000 }, () => {
+    const el = new El('span', body.doc);
+    Object.defineProperty(el, 'childNodes', { get() { visited++; return []; } });
+    return el;
+  });
+  d.replaceChildren('Instructions before the sparse tree.', ...nodes, 'A requirement beyond the read budget.');
+  const a = boxOf('assignment', body).context.assignment;
+  assert.ok(visited < nodes.length, 'extraction stops instead of walking every empty node');
+  assert.equal(a.incomplete, true);
+  assert.equal(W.plain(a.instructions), 'Instructions before the sparse tree.');
+});
+
+test('instructions omitted at the nesting limit are marked incomplete for Feedback', () => {
+  const body = drawn(load('assignment')), d = body.querySelector('#assignment_show .description.user_content');
+  const outer = new El('span', body.doc);
+  let inner = outer;
+  for (let i = 0; i < 65; i++) { const next = new El('span', body.doc); inner.append(next); inner = next; }
+  inner.append('A deeply nested requirement.');
+  d.replaceChildren('Instructions before the deep tree.', outer);
+  const context = boxOf('assignment', body).context;
+  assert.equal(context.assignment.incomplete, true);
+  const feedback = require('../../extension/ai/tasks/writer-feedback.js').task.input({ text: 'My draft.', mode: 'compose', kind: 'assignment', context });
+  assert.equal(feedback.incomplete, true, 'omitted page material remains incomplete after the AI reader');
+});
+
 test('files the description links to are not read: the assignment says it is incomplete (attachments stay Ultra\'s)', () => {
   // The link's shape as Canvas's API and RCE write a course file (canvas-assignment-api.json; not seen live).
   const body = drawn(load('assignment'));
