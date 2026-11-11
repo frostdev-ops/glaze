@@ -62,8 +62,9 @@ var GZ_WRITER_PASTE = globalThis.GZ_WRITER_PASTE || (() => {
   const rules = (css) => {
     const out = new Map();
     const src = css.replace(/<!--|-->/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
+    let seen = 0, at = -1, open = -1; // the last "@" and "}" before the rule, found as the matches go by
     for (const m of src.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
-      const before = src.slice(0, m.index), at = before.lastIndexOf('@'), open = before.lastIndexOf('}');
+      for (; seen < m.index; seen++) { const c = src.charCodeAt(seen); if (c === 64) at = seen; else if (c === 125) open = seen; }
       if (at > open) continue; // inside an at-rule's head (@font-face, @list, @page)
       const decls = styleMap(m[2]);
       for (const sel of m[1].split(',').map((x) => x.trim().toLowerCase())) if (/^[a-z0-9]*(\.[\w-]+)?$/.test(sel) && sel) out.set(sel, { ...(out.get(sel) || {}), ...decls });
