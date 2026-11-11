@@ -43,7 +43,7 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   // test, catalog: how long Settings' Test and a run's catalog lookup may take; sender: a message's sender check.
   // rated: every tab's runs of tasks with their own rate; listed: how long a connection's catalog is kept for its runs;
   // keepalive: the longest silent gap between port messages while Chrome's local model is working.
-  const LIMIT = { message: 16 << 20, perMinute: 6, all: 30, rated: 240, test: 20000, catalog: 8000, sender: 5000, listed: 3600000, keepalive: 20000 };
+  const LIMIT = { message: 16 << 20, perMinute: 6, all: 30, rated: 240, test: 20000, catalog: 8000, sender: 5000, listed: 3600000, unlisted: 60000, keepalive: 20000 };
   const FEATURE = /^[a-z][a-z0-9-]{0,31}$/;
   const CALLS = 'aiCalls';
   const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
@@ -142,7 +142,8 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
   };
   const cache = (env) => ({ get: (k) => env.vault.get(k), set: (k, v) => env.vault.set(k, v) });
   // The connection's catalog, if one can be had quickly; null otherwise (the model is then unverified). Kept per vault (the
-  // worker's one) and connection generation for LIMIT.listed, so a run asks for it once an hour, not every time.
+  // worker's one) and connection generation for LIMIT.listed, so a run asks for it once an hour, not every time; one that
+  // failed or timed out only for LIMIT.unlisted, so one slow answer doesn't leave the model unverified for the hour.
   const listed = new WeakMap(); // env.vault → Map(`${id}|${generation}` → { at, list })
   const unlist = (env, id) => { for (const k of listed.get(env.vault)?.keys() || []) if (k.startsWith(`${id}|`)) listed.get(env.vault).delete(k); };
   // fresh: read it again whatever is kept (Glaze's own model for a task that may carry pictures, below).
@@ -150,13 +151,13 @@ var GZ_AI_BROKER = globalThis.GZ_AI_BROKER || (() => {
     if (!use.p.catalog) return null;
     if (!listed.has(env.vault)) listed.set(env.vault, new Map());
     const kept = listed.get(env.vault), k = `${use.id}|${use.generation || ''}`, was = kept.get(k);
-    if (!fresh && was && now - was.at < LIMIT.listed) return was.list;
+    if (!fresh && was && now - was.at < (was.failed ? LIMIT.unlisted : LIMIT.listed)) return was.list;
     const t = F().deadline(LIMIT.catalog), s = F().anySignal([signal, t.signal]);
-    let list;
-    try { list = await F().wait(() => use.p.catalog(use.cfg, { fetch: pinned(env, use), cache: cache(env), signal: s.signal }), s.signal); } catch { list = null; } finally { t.done(); s.done(); }
+    let list, failed = false;
+    try { list = await F().wait(() => use.p.catalog(use.cfg, { fetch: pinned(env, use), cache: cache(env), signal: s.signal }), s.signal); } catch { list = null; failed = true; } finally { t.done(); s.done(); }
     // No selected local text model yet: a download or a recovered store read must be discovered on the next run.
     if (!signal?.aborted && (use.p.id !== 'local' || list?.models.some((m) => typeof m.weights === 'string'))) {
-      kept.set(k, { at: now, list }); if (kept.size > 16) kept.delete(kept.keys().next().value);
+      kept.set(k, { at: now, list, ...(failed && { failed }) }); if (kept.size > 16) kept.delete(kept.keys().next().value);
     } else if (use.p.id === 'local') kept.delete(k);
     return list;
   };
