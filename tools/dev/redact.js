@@ -27,7 +27,7 @@ const secretTag = (tag, name, attribute) => {
 // Moodle's M.cfg and Canvas's ENV.current_user, as JSON in a script: the session key, and who the student is.
 const SESSKEY = /("sesskey"\s*:\s*)"[^"]+"/g;
 const IDENTITY = /("(?:email|login_id|sis_user_id)"\s*:\s*)(?:"(?:\\.|[^"\\])+"|\d+)/g;
-const BEARER = /(Authorization[\s"':=,]{1,6}Bearer\s+)[^\s"'<&]+/gi;
+const BEARER = /(Authorization[\s"':=,]+Bearer\s+)[^\s"'<&]+/gi;
 const JWT = /eyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]+/g;
 // Inlined pictures are bytes, not markup: dropped.
 const DATA_URI = /(data:[\w/+.-]+;base64,)[A-Za-z0-9+/=]{200,}/g;
