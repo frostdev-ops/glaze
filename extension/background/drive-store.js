@@ -915,6 +915,13 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         for (const R of memoryCopies) if ((await recOf(R.appProperties.key))?.id !== R.id) await each(ctx, R.appProperties.key, { R });
       } finally { ctx.listed = false; }
     };
+    // Every record listed again, once, a while after a full pass (documents/drive-sync.js recheck): another device's file Drive's
+    // search didn't show then (made just before that pass's page token, so no change brings it) is met now, the lowest id
+    // kept, and a second file this device made beside it gives way.
+    const recheck = async (ctx) => {
+      ctx.data = await sub(ctx, 'data', 'Data');
+      await all(ctx);
+    };
     // A page of Drive's changes: the record files among them.
     const changes = async (list, ctx) => {
       ctx.data = await sub(ctx, 'data', 'Data');
@@ -1053,7 +1060,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
     };
     // Whether a change to this key is one this layer listens for.
     const watches = (area, key) => !!catOf(area, key) || (area === 'local' && NOTES_KEY.test(key));
-    return { stamp, full, changes, sweep, snapshot, replay, failed, current, commit, forget, catOf, watches };
+    return { stamp, full, recheck, changes, sweep, snapshot, replay, failed, current, commit, forget, catOf, watches };
   };
 
   return { REC, FILE, STAMPS, CATS, SNAP, catOf, canon, clean, join, mergeNote, mergeFolders, notesArea, create };

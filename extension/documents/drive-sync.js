@@ -1131,10 +1131,11 @@ var GZ_DRIVE_SYNC = globalThis.GZ_DRIVE_SYNC || (() => {
     };
     // The copies listed again, once, WAIT.again after a full pass: one Drive's search didn't show then (made just before that
     // pass's page token, so its change never comes either) is met now, as that pass would have; one this device is linked to
-    // already is passed over.
+    // already is passed over. The records too (background/drive-store.js recheck).
     const recheck = async (folder) => {
       for (const [h, R] of await copies(folder)) { const d = await docOf(h); if (d ? d.json !== R.id : !R.trashed) await one(null, h, { R, folder }); }
       for (const F of await owns(folder)) await stray(F, folder);
+      if (more?.recheck) await more.recheck(hooks(folder));
       await setState({ again: 0 });
     };
     // Every document's own file in the folder, in Drive's trash too.
