@@ -165,9 +165,14 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   };
 
   // ==== APA 7 =======================================================================================================
+  const APA_FULL_DATE = ['article-magazine', 'article-newspaper', 'webpage', 'motion_picture'];
+  const apaDateKey = (s) => {
+    const [y, m, day] = dp(s.issued), full = APA_FULL_DATE.includes(s.type);
+    return [y || 0, full && m || 0, full && day || 0].map((v, i) => String(v).padStart(i ? 2 : 4, '0')).join('-');
+  };
   const apa = (s, letter) => {
     const lead = who(s) || (s.type === 'motion_picture' && s.publisher ? { names: [{ literal: s.publisher }], role: '' } : null);
-    const full = ['article-magazine', 'article-newspaper', 'webpage', 'motion_picture'].includes(s.type);
+    const full = APA_FULL_DATE.includes(s.type);
     const date = `(${D.apa(s.issued, full, letter)}).`;
     const t = rich(s.title);
     const italicTitle = !['chapter', 'article-journal', 'article-magazine', 'article-newspaper'].includes(s.type);
@@ -211,8 +216,8 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   const apaPage = (page) => (page ? (/^(p{1,2}|para|chap|ch)\./i.test(String(page)) ? esc(page) : apaPages(String(page).replace(/\s*[-–—]+\s*/g, '–'))) : '');
   const apaIn = (s, page, letter) => `(${join([apaName(s, '&'), D.apa(s.issued, false, letter), apaPage(page)])})`;
   const apaNarr = (s, page, letter) => `${apaName(s, 'and')} (${join([D.apa(s.issued, false, letter), apaPage(page)])})`;
-  // APA 8.19, 9.47: works with the same authors, in the same order, and the same year take a, b, … by title (A, An, The
-  // skipped). sources (deduped) → Map id → letter, for those that share.
+  // APA 8.19, 9.47: works with the same authors, in the same order, and the same year take a, b, … by date, then title
+  // (A, An, The skipped). sources (deduped) → Map id → letter, for those that share.
   const letters = (all) => {
     const groups = new Map(), out = new Map();
     for (const s of all) {
@@ -222,7 +227,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
       if (!groups.has(k)) groups.set(k, []);
       groups.get(k).push(s);
     }
-    for (const g of groups.values()) if (g.length > 1 && g.length <= 26) g.map((s) => [fold(article(s.title)), s]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).forEach(([, s], i) => out.set(s.id, String.fromCharCode(97 + i)));
+    for (const g of groups.values()) if (g.length > 1 && g.length <= 26) [...g].sort((a, b) => cmp([apaDateKey(a), fold(article(a.title))], [apaDateKey(b), fold(article(b.title))])).forEach((s, i) => out.set(s.id, String.fromCharCode(97 + i)));
     return out;
   };
 
@@ -311,7 +316,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   const sortKey = (s, k) => {
     const lead = k === 'mla9' && groupPublisher(s) ? null : who(s);
     const first = lead ? lead.names.map((n) => `${fold(fam(n))} ${fold(n.given || '')}`).join(' ') : k === 'chicago17' && s.type === 'webpage' && s.publisher ? fold(s.publisher) : fold(article(s.title));
-    return k === 'apa7' ? [first, String(yearOf(s) || 0).padStart(4, '0'), fold(article(s.title))] : [first, fold(article(s.title))];
+    return k === 'apa7' ? [first, apaDateKey(s), fold(article(s.title))] : [first, fold(article(s.title))];
   };
   const cmp = (a, b) => { for (let i = 0; i < a.length; i++) { if (a[i] < b[i]) return -1; if (a[i] > b[i]) return 1; } return 0; };
   const list = (sources, st) => {
@@ -367,7 +372,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
       for (const raw of parts) {
         const part = raw.replace(/^(see also|see|e\.g\.,?|cf\.|qtd\. in)\s+/i, '');
         let a;
-        if (k === 'chicago17' && part.split(',').length >= 3) { const name = noteName(part); if (looksNamed(name)) { out.push({ from, to, text: m[0], name, page: '', kind: 'note', ids: matchIds(name, sources) }); continue; } }
+        if (k === 'chicago17' && part.split(',').length >= 3) { const name = noteName(part, sources); if (looksNamed(name)) { out.push({ from, to, text: m[0], name, page: '', kind: 'note', ids: matchIds(name, sources) }); continue; } }
         if (k === 'apa7' && (a = PART.apa.exec(part)) && looksNamed(a[1])) { if (INSIDE.test(a[1]) && !matchIds(a[1], sources).length) continue; out.push({ from, to, text: m[0], name: a[1], year: a[2], page: a[3] || '', kind: 'paren', ids: matchIds(a[1], sources) }); continue; }
         if ((a = PART.year.exec(part))) { if (k !== 'apa7') continue; out.push({ from, to, text: m[0], name: '', year: a[1], page: a[2] || '', kind: 'narrative', ids: [] }); continue; }
         if ((a = PART.page.exec(part))) { out.push({ from, to, text: m[0], name: '', page: a[1], kind: 'narrative', ids: [] }); continue; }
@@ -407,12 +412,18 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
   // "For a contrasting view, see Smith, …" → Smith. '' for a note that names no one (an explanatory note, "Translation mine.").
   const SEE = String.raw`(?:see also|see|cf\.|compare)(?:,?\s+(?:e\.g\.|for example),?)?\s+`;
   const named = (head) => { const ws = head.split(/\s+/); return ws.length <= 6 && ws.every((w) => new RegExp(`^(?:${PARTICLE}|and|&)$`).test(w) || /^(?:(?:al|el)-)?\p{Lu}[\p{L}\p{M}'’.-]*$/u.test(w)); };
-  const noteName = (text) => {
+  const noteName = (text, sources = []) => {
     const lead = (t) => {
       t = t.trim().replace(/^\d+\.\s*/, '').replace(new RegExp(`^${SEE}`, 'i'), '');
       if (/^[“"]/.test(t)) return t.replace(/^[“"]([^”"]+)[”"].*$/, '$1').replace(/[,.]$/, '');
       const head = t.split(/,|\s\(/)[0].replace(/\s+et al\.?$/, '').trim();
       if (!named(head)) return '';
+      // A saved full name resolves a given name that also looks like a particle, and a generational suffix.
+      const first = head.split(/\s+(?:and|&)\s+/)[0];
+      for (const s of sources) {
+        const n = who(s)?.names[0];
+        if (n && S().fold(fwd(n)) === S().fold(first)) return fam(n);
+      }
       const ws = head.split(/\s+(?:and|&)\s+/)[0].split(/\s+/);
       // "Hans van der Berg" → "van der Berg": the last word and the particles before it.
       let i = ws.length - 1;
@@ -430,7 +441,7 @@ var GZ_WRITER_CITE = globalThis.GZ_WRITER_CITE || (() => {
     let prev = null;
     for (const n of T.notes) {
       if (/^\s*ibid\b/i.test(n.text)) { if (prev?.ids.length) found.push({ ...prev, at: [n.pos, n.pos + 1], text: n.text }); continue; }
-      const name = noteName(n.text);
+      const name = noteName(n.text, all);
       prev = name && looksNamed(name) ? { from: -1, to: -1, at: [n.pos, n.pos + 1], text: n.text, name, kind: 'note', page: '', ids: matchIds(name, all) } : null;
       if (prev) found.push(prev);
     }
