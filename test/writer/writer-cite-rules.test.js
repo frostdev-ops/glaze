@@ -94,3 +94,23 @@ test('suffixes and undotted initials parse as a person\'s parts (APA 9.8, MLA 5.
   }
   for (const n of ['UN Women', 'IBM Research', 'World Health Organization', 'BBC News', 'NASA']) assert.ok(!SRC.name(n).given, `${n} is not a person`);
 });
+
+// APA 7 §8.19 and §9.47: works by the same author(s) in the same year take a, b, … after the year, in the order of their
+// titles (A, An and The skipped), in both the reference entry and the in-text citation; n.d. works take n.d.-a, n.d.-b.
+test('APA: same author, same year: a and b by title order in the entry and the citation (APA 8.19, 9.47)', () => {
+  const smith = (id, title, year) => ({ id, type: 'book', author: [{ family: 'Smith', given: 'Ann' }], title, publisher: 'Press', ...(year && { issued: d(year) }) });
+  const all = [smith('s-beta', 'The beta work', 2020), smith('s-alpha', 'Alpha work', 2020), smith('s-gamma', 'Gamma work', 2021), { ...smith('s-other', 'Other', 2020), author: [{ family: 'Smith', given: 'Bea' }] }];
+  assert.deepEqual(C.list(all, 'apa7').entries.map((e) => e.html), [
+    'Smith, A. (2020a). <i>Alpha work</i>. Press.', 'Smith, A. (2020b). <i>The beta work</i>. Press.', 'Smith, A. (2021). <i>Gamma work</i>. Press.', 'Smith, B. (2020). <i>Other</i>. Press.']);
+  assert.equal(C.format(all[1], 'apa7', { sources: all }).inText(), '(Smith, 2020a)');
+  assert.equal(C.format(all[0], 'apa7', { sources: all }).narrative(4), 'Smith (2020b, p. 4)');
+  assert.equal(C.format(all[2], 'apa7', { sources: all }).inText(), '(Smith, 2021)');
+  assert.equal(C.format(all[0], 'apa7').inText(), '(Smith, 2020)', 'without the list, no letter');
+  assert.equal(C.format(all[0], 'mla9', { sources: all }).inText(), '(Smith)', 'MLA uses short titles, not letters');
+  const nd = [smith('s-x', 'Xylophones'), smith('s-y', 'Yodels')];
+  assert.deepEqual(C.list(nd, 'apa7').entries.map((e) => e.html.slice(0, 20)), ['Smith, A. (n.d.-a). ', 'Smith, A. (n.d.-b). ']);
+  // The check reads the letter: each citation names its own work, and both count as cited.
+  const issues = C.check('One (Smith, 2020a). Two (Smith, 2020b). Three (Smith, 2021). Four (Smith, 2020).', all.slice(0, 3).concat(all[3]), 'apa7');
+  assert.deepEqual(issues.map((i) => i.message), []);
+  assert.deepEqual(C.cites('One (Smith, 2020a).', all, 'apa7').map((c) => c.ids), [['s-alpha']]);
+});
