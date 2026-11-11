@@ -271,7 +271,7 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
     const l = look();
     worn = JSON.stringify(l);
     const native = A().read(ed);
-    if (!box.recovered) { box.latest = native.html; box.delta = null; }
+    if (!box.recovered || A().HOLD && !box.owns && !box.snapshot) { box.latest = native.html; box.delta = null; }
     box.nativeHTML = native.html;
     box.ready = box.owns = true;
     const selection = typing && box.mode === 'compose' && !box.recovered ? A().selection?.(box, main) : null;
