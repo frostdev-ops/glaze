@@ -4,7 +4,7 @@
 // Sources view, ⋯ Add references in compose mode (the list as plain paragraphs Quill keeps), and the cite issues
 // (GZ_WRITER_ISSUES, when the proofing part is there). Adds to GZ_WRITER_CITE:
 //   open({ anchor, prefill, form }) · add(prefill) · sourcesView(container) → { refresh, destroy } · count(doc?, sources?, style?)
-//   sources() · setSources(list) · use(style) · style() · on(fn) (sources or style changed) · references()
+//   sources() · setSources(list) · use(style) · style() · on(fn) (sources or style changed) · references() · lookup(value, say)
 // A lookup asks the browser for a page's host from the click itself (GZ_SITE.reach's way), then the worker fetches
 // ('glaze:writer-lookup', writer/writer-lookup.js); what comes back is parsed here as untrusted text. Open writers reload
 // sources on storage changes. Simultaneous saves across tabs still use the last write; storage.local has no transaction.
@@ -241,7 +241,9 @@
     const timeout = new Promise((res) => setTimeout(() => res(null), 30000));
     const status = await Promise.race([answer(1, { op: 'status', feature: 'writing' }), timeout]);
     if (!status?.allowed || !status.ready) return done(null);
-    const end = await Promise.race([answer(2, { op: 'run', feature: 'writing', task: 'writer.cite', input: { url, title: f.title, metas: f.metas.slice(0, 80), text: f.text } }), timeout]);
+    // writer.cite reads the page's text alone (its input takes text and url only); the metadata already went into src.
+    if (typeof f.text !== 'string' || !f.text.trim()) return done(null);
+    const end = await Promise.race([answer(2, { op: 'run', feature: 'writing', task: 'writer.cite', input: { text: f.text, url } }), timeout]);
     return done(end?.type === 'end' && end.output && typeof end.output === 'object' ? S.normalize(end.output.source || end.output) : null);
   };
 
@@ -576,7 +578,7 @@
   };
 
   Object.assign(C, {
-    open, sourcesView, references, use, on: (fn) => { if (typeof fn === 'function') subs.add(fn); return () => subs.delete(fn); },
+    open, lookup, sourcesView, references, use, on: (fn) => { if (typeof fn === 'function') subs.add(fn); return () => subs.delete(fn); },
     add: (prefill) => open({ prefill: prefill?.name ? { author: [S.name(prefill.name)].filter(Boolean) } : prefill || {}, form: true }),
     style: () => style, sources: () => sources.slice(), setSources,
     // The compose bar's sources pill: how many of the saved sources the text cites, of how many.
