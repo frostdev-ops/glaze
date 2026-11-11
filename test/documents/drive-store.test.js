@@ -2015,3 +2015,29 @@ test('records linked before agreed values were kept get them on the next run, so
   await settled(b, a);
   for (const d of [a, b]) assert.deepEqual(await titles(d), ['Four', 'One', 'Three']);
 });
+
+test('two devices pushing one record in the same window both keep their change: the later upload is fenced on Drive\'s head, then merges', async () => {
+  const drive = standin(), clock = { t: Date.parse('2026-10-30T12:00:00Z') };
+  const text = (b) => (typeof b === 'string' ? b : Buffer.from(b || []).toString('latin1'));
+  let gate = false, reached, release;
+  const at = new Promise((r) => { reached = r; }), held = new Promise((r) => { release = r; });
+  // A's record upload waits, its file read already, until B's upload of the same record has landed.
+  const gateA = { ...drive, fetch: async (u, i = {}) => {
+    if (gate && u.includes('/upload/') && ['PATCH', 'PUT'].includes(i.method) && text(i.body).includes('"glaze":"record"')) { gate = false; reached(); await held; }
+    return drive.fetch(u, i);
+  } };
+  const a = device(gateA, { clock }), b = device(drive, { clock });
+  await a.local.set({ writerWords: ['Alpha'] });
+  assert.ok((await a.on()).ok); assert.ok((await b.on()).ok);
+  clock.t += 1000; await a.local.set({ writerWords: ['Alpha', 'Beta'] });
+  clock.t += 1000; await b.local.set({ writerWords: ['Alpha', 'Gamma'] });
+  gate = true;
+  const first = a.run({ push: true });
+  await at;
+  assert.ok((await b.run({ push: true })).ok);
+  release();
+  await first;
+  await settled(a, b);
+  for (const d of [a, b]) assert.deepEqual((await d.local.get('writerWords')).writerWords.sort(), ['Alpha', 'Beta', 'Gamma']);
+  assert.deepEqual(body(recFile(drive, 'local', 'writerWords')).value.sort(), ['Alpha', 'Beta', 'Gamma']);
+});
