@@ -48,10 +48,10 @@ var GZ_MCP_ASSIGN = globalThis.GZ_MCP_ASSIGN || (() => {
   const ultra = async (ctx, who, course, item) => {
     const c = (await ctx.local.get('todoCache')).todoCache;
     const items = isObj(c) && c.key === `todo:${who.account}` && Array.isArray(c.items) ? c.items.filter((i) => isObj(i) && i.cid === course) : [];
-    if (items.some((i) => i.content === item)) return { assignment: item };
-    const i = items.find((x) => x.id === item || x.aid === item);
+    const i = items.find((x) => x.content === item) || items.find((x) => x.id === item || x.aid === item);
     if (!i) return { assignment: item };
-    return typeof i.content === 'string' && ID.ultra.test(i.content) ? { assignment: i.content } : { assignment: item, column: item };
+    const assignment = typeof i.content === 'string' && ID.ultra.test(i.content) ? i.content : item;
+    return { assignment, column: ID.ultra.test(i.id) ? i.id : item };
   };
 
   // ---- a read, fitted and kept ----

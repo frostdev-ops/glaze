@@ -164,17 +164,28 @@ var GZ_MCP_TAB = globalThis.GZ_MCP_TAB || (() => {
       // Writer's own read of an assignment (build), from the course's content item, gradebook row and rubric column; the
       // rubric as it shows before an attempt, so no evaluation is asked for.
       const reader = GZ_ULTRA.read({ origin: go.origin, signal: go.signal, live: go, maxPages: 3, maxRequests: 9 });
-      // A gradebook column (an item the planner knows by its column only): its content item.
-      let content = a.assignment;
-      if (a.column) {
+      // The planner's gradebook column: resolve its content item and retain the metadata even without a joined row.
+      let content = a.assignment, column = null;
+      const readColumn = async () => {
         let col;
-        try { col = await reader.get(`/learn/api/v1/courses/${a.course}/gradebook/columns/${a.column}`); } catch (e) { if (/^HTTP (403|404)$/.test(e.message)) return no('none'); throw e; }
-        if (col?.id !== a.column || !BB.test(col?.contentId || '')) return no('none');
-        content = col.contentId;
+        try { col = await reader.get(`/learn/api/v1/courses/${a.course}/gradebook/columns/${a.column}`); } catch (e) { if (/^HTTP (403|404)$/.test(e.message)) return null; throw e; }
+        return col?.id === a.column && BB.test(col?.contentId || '') && (col.courseId == null || col.courseId === a.course) ? col : null;
+      };
+      if (a.column && a.assignment === a.column) {
+        column = await readColumn();
+        if (!column) return no('none');
+        content = column.contentId;
       }
       let rows = null;
       const c = await W.build({ school: location.host, path: `/ultra/courses/${a.course}/assessment/${content}/attempt`, url: '', origin: location.origin,
-        uid: async () => uid, me: async () => null, courses: () => x.myCourses(), rows: async () => (rows = await reader.grades(a.course, uid)), get: (u) => reader.get(u), R, instructions: async () => '' });
+        uid: async () => uid, me: async () => null, courses: () => x.myCourses(), rows: async () => {
+          rows = await reader.grades(a.course, uid).catch((e) => { if (!a.column) throw e; return []; });
+          if (a.column && !rows.some((r) => r?.column?.contentId === content)) {
+            column ||= await readColumn();
+            if (column?.contentId === content) rows = [...rows, { courseId: a.course, columnId: column.id, column }];
+          }
+          return rows;
+        }, get: (u) => reader.get(u), R, instructions: async () => '' });
       const s = c?.assignment;
       if (!go()) return no('late');
       if (!s || (!s.title && !s.instructions && !s.description && !s.rubric)) return no('none');
