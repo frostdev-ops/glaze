@@ -268,6 +268,17 @@ test('array bounds cannot borrow a smaller constant from another scope or declar
   ok('constants in one declaration', `const int A = 4, N = A;\n${body('float a[N]; x = a[0];')}`);
 });
 
+test('inline struct instance arrays are sized and priced like named-type arrays', () => {
+  for (const declaration of ['struct S { float v; } a[65535];', 'struct { float v; } a[65535];', 'struct S { float v; } a, b[65535];']) {
+    bad(declaration, body(declaration), /array of 65,535 elements/);
+  }
+  bad('an unreadable inline struct array', body('struct S { float v; } a[int(1e5)];'), /Can't tell how big this array is/);
+  const array = body('for (int k = 0; k < 256; k++) { struct S { float v; } a[64]; x += a[0].v; }');
+  bad('inline struct arrays count on every pass', array, /Too heavy/);
+  ok('a small inline struct array', body('struct S { float v; } a[4]; a[0].v = 1.; x = a[0].v;'));
+  ok('a struct member index is not a declaration', body('struct S { float a[4]; }; S s; x = s.a[int(x)];'));
+});
+
 test('the checker stays fast on hostile 8 KiB inputs, and never throws', () => {
   const cases = {
     spaces: ' '.repeat(8192), semis: ';'.repeat(8192), braces: '{;'.repeat(4096), open_braces: '{'.repeat(8192), floats: 'float '.repeat(1365),
