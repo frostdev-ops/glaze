@@ -72,17 +72,24 @@ var GZ_AI_RIME_MEMORY = globalThis.GZ_AI_RIME_MEMORY || (() => {
   // prefers") and function words are free, negations never: course text can't plant a fact on evidence like "the".
   const FREE = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'these', 'those', 'from', 'about', 'into', 'also', 'what', 'when', 'which', 'who',
     'they', 'them', 'their', 'she', 'her', 'his', 'him', 'has', 'have', 'had', 'was', 'were', 'are', 'will', 'would', 'should',
+    'an', 'is', 'am', 'be', 'to', 'of', 'in', 'on', 'at', 'by', 'as', 'or', 'so', 'it', 'my', 'me', 'we', 'us', 'he', 'do', 'if', 'up',
+    'de', 'la', 'le', 'el', 'en', 'un', 'et', 'je', 'il', 'es', 'da', 'do', 'du', 'au', 'em', 'um', 'os', 'as', 'no', 'na', 'zu', 'im', 'ik', 'te', 'op',
+    'los', 'las', 'del', 'al', 'su', 'mi', 'que', 'con', 'por', 'com', 'uma', 'meu', 'les', 'une', 'aux', 'est', 'ses', 'mon', 'ma',
+    'der', 'die', 'das', 'ein', 'und', 'ich', 'ist', 'mit', 'von', 'den', 'dem', 'het', 'een', 'van', 'met',
     'student', 'students', 'user', 'prefer', 'prefers', 'preferred', 'estudiante', 'aluno', 'aluna', 'élève', 'étudiant', 'étudiante',
     'utilisateur', 'usuario', 'usuário', 'schüler', 'schülerin', 'nutzer', 'gebruiker', 'prefiere', 'prefere', 'préfère', 'bevorzugt', 'verkiest']);
-  const NEGATION = /^(?:no|not|never|nor|ne|pas|jamais|nunca|nada|não|nao|nem|nicht|nie|kein\p{L}*|niet|nooit|geen)$/u;
+  // Negations (with the "t" of "can't") always count and match exactly: "notes" never supports "not".
+  const NEGATION = /^(?:no|not|t|never|nor|ne|pas|jamais|nunca|nada|não|nao|nem|nicht|nie|kein\p{L}*|niet|nooit|geen)$/u;
   const words = (v) => v.normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}\p{M}]*/gu) || [];
-  const meant = (w) => NEGATION.test(w) || !FREE.has(w) && (w.length > 2 || /\p{N}/u.test(w));
-  const bases = (w) => [w, ...[['ies', 'y'], ['ing', ''], ['es', ''], ['ed', ''], ['s', ''], ['d', ''], ['e', '']]
-    .filter(([end, add]) => w.endsWith(end) && w.length - end.length + add.length >= 4).map(([end, add]) => w.slice(0, -end.length) + add)];
+  const meant = (w) => NEGATION.test(w) || !FREE.has(w) && !/^\p{L}\p{M}*$/u.test(w);
+  const bases = (w) => NEGATION.test(w) ? [w] : [w, ...[['ies', 'y', 3], ['ing', '', 3], ['es', '', 3], ['ed', '', 3], ['s', '', 3], ['d', '', 4], ['e', '', 4]]
+    .filter(([end, add, least]) => w.endsWith(end) && w.length - end.length + add.length >= least).map(([end, add]) => w.slice(0, -end.length) + add)];
   const pool = (v) => new Set(words(v).flatMap(bases));
+  const WORD = /[\p{L}\p{N}\p{M}]/u;
   const whole = (text, part) => {
     for (let at = text.indexOf(part); at >= 0; at = text.indexOf(part, at + 1)) {
-      if (!/[\p{L}\p{N}\p{M}]/u.test(text[at - 1] || '') && !/[\p{L}\p{N}\p{M}]/u.test(text[at + part.length] || '')) return true;
+      // By code point: a letter outside the BMP (two UTF-16 units) is still a letter.
+      if (!WORD.test([...text.slice(0, at)].pop() || '') && !WORD.test(String.fromCodePoint(text.codePointAt(at + part.length) ?? 32))) return true;
     }
     return false;
   };
