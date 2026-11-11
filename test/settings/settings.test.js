@@ -206,6 +206,26 @@ test('theme codes are untrusted: anything off refuses the whole code', async () 
   await assert.rejects(S.decode(await make({ c, l: { font: 'x'.repeat(50000) } })), /damaged/);
 });
 
+test('a theme code\'s pictures are at public hosts: an address on the student\'s own network refuses the whole code', async () => {
+  const S = require('../../extension/sharing/share.js');
+  const make = async (obj) => {
+    const z = await new Response(new Blob([JSON.stringify(obj)]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer();
+    return `glaze1:${Buffer.from(z).toString('base64url')}`;
+  };
+  const c = G.GZ_COLORS.map(([, , d]) => d.slice(1)).join('');
+  for (const host of ['192.168.1.1', '127.0.0.1', 'localhost', '10.0.0.5', '[::1]', 'printer.local']) {
+    const u = `https://${host}/x.png`;
+    await assert.rejects(S.decode(await make({ c, b: { kind: 'image', image: u } })), (e) => e.vars.setting === 'bg.image', `bg.image ${u}`);
+    await assert.rejects(S.decode(await make({ c, n: { k: 'image', u } })), (e) => e.vars.setting === 'nav.u', `nav.u ${u}`);
+  }
+  const ok = 'https://cdn.example.com/x.png';
+  const got = await S.decode(await make({ c, b: { kind: 'image', image: ok }, n: { k: 'image', u: ok } }));
+  assert.deepEqual([got.bg.image, got.nav.u], [ok, ok]);
+  // The student's own editor keeps whatever they type: a code made from it is theirs to make, and refused only where it is pasted.
+  const own = G.GZ_SANITIZE({ bg: { kind: 'image', image: 'https://192.168.1.1/x.png' } });
+  assert.equal(own.bg.image, 'https://192.168.1.1/x.png');
+});
+
 test('course tint is off and empty until configured; junk is dropped', () => {
   assert.deepEqual(G.GZ_DEFAULTS.courses, { harmonize: true, colors: {}, tint: false, tinted: [], strength: 60, looks: {}, names: {} });
   const c = G.GZ_SANITIZE({ courses: { tint: 'yes', tinted: ['2', '2', '11', 3, 'x', '10', '_53708_1', '_x_1', '_53708_1'], strength: 500 } }).courses;
