@@ -127,7 +127,8 @@ var GZ_SHEET_CHART_XML = globalThis.GZ_SHEET_CHART_XML || (() => {
   const autoColor = (i, theme) => transform(theme[4 + (i % 6)] ?? DEFAULT_THEME[4 + (i % 6)], VARY[Math.floor(i / 6) % VARY.length]);
 
   // ── Drawing anchors ─────────────────────────────────────────────────────────────────────────────────────────────────
-  const marker = (n) => n && { col: num(textOf(kid(n, 'col')), 0), colOff: num(textOf(kid(n, 'colOff') ?? { text: '0', kids: [] }), 0) / EMU, row: num(textOf(kid(n, 'row')), 0), rowOff: num(textOf(kid(n, 'rowOff') ?? { text: '0', kids: [] }), 0) / EMU };
+  // false for a marker without its col or row (a truncated or hand-edited drawing): that chart has no place.
+  const marker = (n) => n && (!kid(n, 'col') || !kid(n, 'row') ? false : { col: num(textOf(kid(n, 'col')), 0), colOff: num(textOf(kid(n, 'colOff') ?? { text: '0', kids: [] }), 0) / EMU, row: num(textOf(kid(n, 'row')), 0), rowOff: num(textOf(kid(n, 'rowOff') ?? { text: '0', kids: [] }), 0) / EMU });
   const extOf = (n) => n && { w: num(n.a.cx, 0) / EMU, h: num(n.a.cy, 0) / EMU };
   // The anchors that hold a chart (a graphic frame of c:chart or cx:chart, the first choice of an mc:AlternateContent).
   const anchors = (xml) => {
@@ -142,8 +143,11 @@ var GZ_SHEET_CHART_XML = globalThis.GZ_SHEET_CHART_XML || (() => {
       if (!ref) continue;
       const rid = attr(ref, 'id');
       const nv = all(frame, 'cNvPr')[0];
+      const from = marker(kid(a, 'from')), to = marker(kid(a, 'to'));
+      // Kept in the list, so the others keep their place (ids, spans); charts() leaves it out.
+      if (from === false || to === false) { out.push({ kind, rid, broken: true }); continue; }
       out.push({ kind, rid, ex: /chartex/i.test(data.a.uri || '') || /^cx:/.test(ref.name), name: nv?.a.name || '', descr: nv?.a.descr || '',
-        from: marker(kid(a, 'from')), to: marker(kid(a, 'to')), ext: extOf(kid(a, 'ext')), pos: kid(a, 'pos') && { x: num(kid(a, 'pos').a.x, 0) / EMU, y: num(kid(a, 'pos').a.y, 0) / EMU }, editAs: a.a.editAs || null });
+        from, to, ext: extOf(kid(a, 'ext')), pos: kid(a, 'pos') && { x: num(kid(a, 'pos').a.x, 0) / EMU, y: num(kid(a, 'pos').a.y, 0) / EMU }, editAs: a.a.editAs || null });
     }
     return out;
   };
@@ -336,6 +340,7 @@ var GZ_SHEET_CHART_XML = globalThis.GZ_SHEET_CHART_XML || (() => {
     const rels = parsed(partOf(parts, relsPath(d.path))?.data ?? '', () => relsOf(parts, d.path));
     const out = [];
     for (const [i, a] of parsed(part.data, anchors).entries()) {
+      if (a.broken) continue;
       const rel = rels.get(a.rid);
       const cp = rel && partOf(parts, rel.path);
       let c;

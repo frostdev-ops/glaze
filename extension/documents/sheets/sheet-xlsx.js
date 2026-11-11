@@ -32,6 +32,7 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     INDEXED = [...NF.PALETTE.slice(0, 8), ...NF.PALETTE];
   };
   const calc = () => (typeof GZ_SHEET_CALC !== 'undefined' ? GZ_SHEET_CALC : typeof module !== 'undefined' ? require('./sheet-calc.js') : null);
+  const chartXml = () => (typeof GZ_SHEET_CHART_XML !== 'undefined' ? GZ_SHEET_CHART_XML : typeof module !== 'undefined' ? require('./sheet-chart-xml.js') : null);
 
   // ── XML ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
   const local = (name) => name.slice(name.lastIndexOf(':') + 1);
@@ -778,6 +779,11 @@ var GZ_SHEET_XLSX = globalThis.GZ_SHEET_XLSX || (() => {
     for (const sh of wb.sheets) {
       const d = sh.keep.drawing, rp = d && relsPath(d.path);
       if (d) d.charts = relsOf(await text(rp, false), d.path, problem).filter((r) => r.kind === 'chart' && r.path).map((r) => real(r.path) ?? r.path);
+      // A chart anchor without its cell (a truncated drawing) is left out of the sheet's charts: said once here.
+      const CX = d && parts[d.path] && chartXml();
+      let lost = 0;
+      try { lost = CX ? CX.anchors(CX.partText(parts[d.path].data)).filter((a) => a.broken).length : 0; } catch { lost = 0; }
+      if (lost) problem(sh, 'part', `${sh.name}: ${lost} chart${lost === 1 ? '' : 's'} without a cell to sit on were left out`);
     }
     for (const p of Object.keys(parts)) {
       if (/^xl\/pivotTables\//i.test(p)) flags.pivots = true;
