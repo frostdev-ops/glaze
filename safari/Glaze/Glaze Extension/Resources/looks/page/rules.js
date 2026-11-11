@@ -107,8 +107,19 @@ var GZ_RULES = globalThis.GZ_RULES || (() => {
     const fg = vars['--gz-r-fg'], bg = vars['--gz-r-bg'];
     if (!fg && !bg) return false;
     if (fg === bg) return true;
-    const a = fg ? drawn(fg) : ink(el), b = bg ? drawn(bg) : behind(el);
-    return !!GZ_COLOR.parse(a) && !!GZ_COLOR.parse(b) && GZ_COLOR.contrast(a, b) < 3;
+    // A side left to the LMS must be measured without this element's previous Look paints. Otherwise a new rule can be
+    // rejected against the colour it replaces, then accepted on the next pass, over and over.
+    const st = el.getAttribute('data-gz-r-st');
+    const natural = st?.split(' ').filter((k) => k !== 'fg' && k !== 'bg').join(' ');
+    const reset = (!fg || !bg) && st !== null && natural !== st;
+    if (reset) { if (natural) el.setAttribute('data-gz-r-st', natural); else el.removeAttribute('data-gz-r-st'); }
+    try {
+      const inks = fg ? [drawn(fg)] : [ink(el), ...[...el.querySelectorAll(CONTROL)].map((node) => css(node)?.color || '')];
+      const b = bg ? drawn(bg) : behind(el);
+      return !!GZ_COLOR.parse(b) && inks.some((a) => !!GZ_COLOR.parse(a) && GZ_COLOR.contrast(a, b) < 3);
+    } finally {
+      if (reset) el.setAttribute('data-gz-r-st', st);
+    }
   };
   // Each part's elements on the page now, with what its end state asks of them; an element two parts name takes both.
   const want = (plan) => {
