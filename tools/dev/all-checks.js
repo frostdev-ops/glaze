@@ -145,7 +145,7 @@ function runCheck(check, where, opts) {
     const child = spawn(cmd.command, cmd.args, { cwd: cmd.cwd, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     child.stdout.on('data', take);
     child.stderr.on('data', take);
-    child.on('error', (e) => finish('fail', { detail: e.message }));
+    child.on('error', (e) => (where === 'runner' && e.code === 'ENOENT' ? finish('runner-failed', { detail: e.message }) : finish('fail', { detail: e.message })));
     child.on('close', (code, sig) => {
       if (interrupted) return finish('skipped', { code, detail: 'interrupted' });
       if (timedOut || (where === 'runner' && code === 124)) return finish('timed out', { code, detail: `limit ${check.limit}s` });
@@ -267,7 +267,8 @@ async function main(argv = process.argv.slice(2), deps = {}) {
   const { root = ROOT, log = console.log, spawn, timers, kill } = deps;
   const a = parseArgs(argv, deps.env);
   verify(root);
-  const { checks } = loadManifest(root);
+  const { checks, tags } = loadManifest(root);
+  for (const n of a.needs) if (!(n in tags)) throw new Error(`unknown --needs "${n}" (tags: ${Object.keys(tags).join(', ')})`);
   const chosen = plan(checks, a);
   const evidence = path.resolve(a.evidence || path.join(os.tmpdir(), `glaze-sweep-${new Date().toISOString().replace(/[:.]/g, '-')}`));
   const ctx = { evidence, root, lock: a.lock, nodePath: a.nodePath };
