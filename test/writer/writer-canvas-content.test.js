@@ -115,6 +115,30 @@ test('Canvas: a restored autosave arriving before the dialog observer runs is ha
   }
 });
 
+test('Canvas: a late restore preserves both Canvas\'s autosave and Writer\'s only unsynced copy', async () => {
+  const c = await page({ fixture: 'assignment', strict: true, helper: 'fail' });
+  c.emit({ type: 'change', html: '<p>Words only Writer has.</p>', text: 'Words only Writer has.' });
+  const native = c.doc.querySelector('#submission_body_ifr').contentDocument.body;
+  const restored = '<p>Restored by Canvas, with different work.</p>';
+  native.innerHTML = restored;
+  const dialog = c.doc.createElement('div');
+  dialog.setAttribute('data-testid', 'RCE_RestoreAutoSaveModal');
+  c.doc.body.append(dialog);
+  c.helper('ok'); // TinyMCE is available again, but overwriting its restored document is unsafe.
+  c.ctx.GZ_WRITER.pass();
+  assert.equal(native.innerHTML, restored, 'the restored version stays Canvas\'s');
+  const recovery = c.doc.querySelector('[data-gz-writer-recovery]');
+  assert.equal(recovery?.value, 'Words only Writer has.', 'the unsynced version stays available even with draft backup off');
+  assert.equal(recovery.readOnly, true, 'the saved copy cannot edit Canvas\'s different document');
+  assert.notEqual(c.doc.querySelector('#submission_body').closest('.rce-wrapper').style.display, 'none');
+  c.ctx.GZ_WRITER.pass();
+  assert.equal(c.doc.querySelectorAll('[data-gz-writer-recovery]').length, 1);
+  dialog.remove();
+  c.press(c.doc.querySelector('#submit_online_text_entry_form button[type="submit"]'));
+  assert.equal(c.clicks.length, 1, 'Canvas\'s visible editor owns Submit');
+  assert.equal(native.innerHTML, restored);
+});
+
 // The field a dead frame leaves (recover): TinyMCE's parser collapses runs of spaces, so a run goes in as no-break spaces.
 test('Canvas: the recovery field\'s lines with double spaces go into Canvas\'s editor as typed, and Submit isn\'t held', async () => {
   const c = await page({ fixture: 'assignment', strict: true });
