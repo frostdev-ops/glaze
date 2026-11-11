@@ -131,3 +131,12 @@ test('outline source blocks include the text of their footnotes', () => {
   const plain = F.outlineSource(withHTML('mla9', '<p>No notes here.</p>'), ST.FORMATS.mla9).blocks.find((b) => b.text.startsWith('No notes'));
   assert.equal(plain.text, 'No notes here.');
 });
+
+// A heading's own text is its outline label: a footnote on it goes with the section's first block instead, so the
+// label stays the student's heading and the note is still read.
+test('a footnote on a heading stays out of its outline label and travels with the section\'s text', () => {
+  const doc = S.parse(S.paper, '<h2>Garden experiments<sup class="gz-footnote" data-footnote="Smith, Plant Growth, 42."></sup></h2><p>We compared plant growth.</p>');
+  const blocks = F.outlineSource(doc, ST.FORMATS.mla9).blocks;
+  assert.equal(blocks[0].text, 'Garden experiments');
+  assert.equal(blocks[1].text, 'We compared plant growth.\n\nFootnotes:\n- Smith, Plant Growth, 42.');
+});
