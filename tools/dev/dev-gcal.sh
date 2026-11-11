@@ -13,7 +13,7 @@ cd "$(dirname "$0")/../.."
 key_file="${1:?usage: tools/dev/dev-gcal.sh <public-key file> [folder]}"
 out="${2:-dist/glaze-dev-gcal}"
 
-tools/build/package.sh >/dev/null
+tools/build/package.sh --allow-dirty >/dev/null
 version="$(node -p 'require("./extension/manifest.json").version')"
 rm -rf "$out"
 mkdir -p "$out"

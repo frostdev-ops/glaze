@@ -7,6 +7,9 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 cd "$root"
+# An upload is built from a commit: a working tree with edits or untracked files stops here (tools/release/clean-source.sh).
+. "$root/tools/release/clean-source.sh"
+glaze_require_clean "$root" appstore-ios
 team=${SAFARI_TEAM_ID:-22AAZFMTV8}
 version=$(node -p 'require("./extension/manifest.json").version')
 # Every upload needs a new build number; the time keeps them increasing.

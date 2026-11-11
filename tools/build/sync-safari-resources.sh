@@ -11,7 +11,8 @@ case "${1:-}" in
 esac
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
-DIST="$stage" bash "$root/tools/build/package.sh" >/dev/null
+# --check compares the checked-in copy with the working tree as it stands, so it packages that tree on purpose.
+DIST="$stage" bash "$root/tools/build/package.sh" --allow-dirty >/dev/null
 version=$(cd "$root" && node -p 'require("./extension/manifest.json").version')
 expected="$stage/Resources"
 unzip -q "$stage/glaze-v$version.zip" -d "$expected"

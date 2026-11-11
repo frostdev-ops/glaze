@@ -7,6 +7,9 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
 cd "$root"
+# An upload is built from a commit: a working tree with edits or untracked files stops here (tools/release/clean-source.sh).
+. "$root/tools/release/clean-source.sh"
+glaze_require_clean "$root" appstore-safari
 : "${ASC_KEY_PATH:?ASC_KEY_PATH is required}" "${ASC_KEY_ID:?ASC_KEY_ID is required}" "${ASC_ISSUER_ID:?ASC_ISSUER_ID is required}"
 team=${SAFARI_TEAM_ID:-22AAZFMTV8}
 version=$(node -p 'require("./extension/manifest.json").version')

@@ -1,8 +1,21 @@
 #!/usr/bin/env bash
 # Package the extension for the Chrome Web Store upload (and the Safari builds, which start from it).
+#   tools/build/package.sh [--allow-dirty]
+# A package is built from a commit: edits and untracked files stop it before anything is written
+# (tools/release/clean-source.sh), so a scratch file can't ride into an upload. --allow-dirty packages the working tree as
+# it stands, for the callers that mean to (development, never a release): sync-safari-resources.sh (its --check compares
+# the checked-in Safari copy with this working tree), package-safari.sh, build-safari.sh's local builds, package-firefox.sh
+# --development, tools/dev/dev-*.sh and the tests that read a package. The release scripts never pass it.
 # DIST: the folder the zip goes in (default dist); a relative DIST is from the repo root, where dist/ is.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
+case "${1:-}" in
+  '')
+    . "$root/tools/release/clean-source.sh"
+    glaze_require_clean "$root" package.sh 'pass --allow-dirty to package the working tree as it stands (development only).' ;;
+  --allow-dirty) ;;
+  *) echo 'usage: tools/build/package.sh [--allow-dirty]' >&2; exit 2 ;;
+esac
 cd "$root/extension"
 
 version="$(node -p 'require("./manifest.json").version')"
