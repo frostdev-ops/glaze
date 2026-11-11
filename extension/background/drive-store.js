@@ -597,15 +597,18 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         if (value.deleted && was?.id) await keepForgotten(ctx, h, key, value, at, sum);
       }
       const expect = aim !== undefined ? aim?.appProperties?.sum : was?.rsum;
+      // Fenced out (another device's write landed first): each meets Drive's file again.
       const r = await send(ctx, `R:${h}`, sum, was?.id ?? null, async () => {
         const meta = { appProperties: { glaze: 'rec', cat, key: h, sum, at: String(at) } };
         const bytes = new TextEncoder().encode(JSON.stringify({ glaze: 'record', v: 1, cat, area, key, at, ...(value === undefined ? { deleted: true } : { value }) }));
         if (bytes.length > MAX) throw new Fail('large');
         return { bytes, id: was?.id ?? null, rev: was?.id && aim?.id === was.id ? aim.headRevisionId ?? null : null,
-          match: cat === 'memories' && was?.id ? aim?.headRevisionId || '' : null,
+          // Over Drive's file only while it holds the revision this run met (drive.js put: a write another device made since
+          // is 'stale', met again); a saved memory never goes unfenced.
+          match: was?.id ? (cat === 'memories' ? aim?.headRevisionId || '' : aim?.headRevisionId || null) : null,
           sum: was?.id && SUM.test(expect || '') ? expect : null, meta, create: { ...meta, name: `${cat}-${h.slice(0, 12)}.json`, mimeType: JSON_TYPE, parents: [ctx.data],
             ...(cat === 'memories' && value.deleted && { appProperties: { ...meta.appProperties, forgotten: 'true' } }) }, mime: JSON_TYPE };
-      }, { rec: h, area, key }, { rec: h, link });
+      }, { rec: h, area, key }, { rec: h, link }).catch((e) => { if (e?.why === 'stale') e.fenced = true; throw e; });
       await put(h, { ...link, id: r.file.id }, was, value);
     };
 
@@ -813,8 +816,7 @@ var GZ_DRIVE_STORE = globalThis.GZ_DRIVE_STORE || (() => {
         for (let retry = 0; ; retry++) {
           try { await one(retry ? { ...ctx, listed: false } : ctx, h, x); break; }
           catch (e) {
-            const rec = await recOf(h);
-            if (e?.why !== 'stale' || retry >= 2 || (catOf(x.area, x.key) || rec?.cat) !== 'memories') throw e;
+            if (e?.why !== 'stale' || retry >= 2 || (!e.fenced && (catOf(x.area, x.key) || (await recOf(h))?.cat) !== 'memories')) throw e;
             // Another device won the conditional write. Merge its actual current record before trying again, rather
             // than reusing a stale change-list or full-listing snapshot, even before this device has a record link.
             // Further contention stays dirty for the next ordinary run.
