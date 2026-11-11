@@ -117,7 +117,7 @@ var GZ_MOODLE_PAGE = globalThis.GZ_MOODLE_PAGE || (() => {
   const cards = () => {
     const s = session();
     if (!s) return;
-    if (failed && Date.now() - failed >= 60000) totals = null;
+    if (failed && Date.now() - failed >= 60000) { totals = null; failed = 0; }
     totals ||= fetch(`${s.root}/grade/report/overview/index.php`, { credentials: 'same-origin' })
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status))))).then(M.overview).then((byId) => { failed = 0; return byId; }, () => { failed = Date.now(); return {}; });
     totals.then((byId) => {
