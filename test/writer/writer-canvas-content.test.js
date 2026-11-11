@@ -86,6 +86,23 @@ test('Canvas: its restore dialog appearing after Writer opened hands the box bac
   assert.equal(native.textContent, 'Restored by Canvas.');
 });
 
+test('Canvas: a restored autosave arriving before the dialog observer runs is handed back without a stale write', async () => {
+  for (const observed of [false, true]) {
+  const c = await page({ fixture: 'assignment', strict: true });
+  c.emit({ type: 'change', html: '<p>Typed in Writer.</p>', text: 'Typed in Writer.' });
+  const native = c.doc.querySelector('#submission_body_ifr').contentDocument.body;
+  const restored = '<p>Restored by Canvas, with more of my work.</p>';
+  const dialog = c.doc.createElement('div');
+  dialog.setAttribute('data-testid', 'RCE_RestoreAutoSaveModal');
+  c.doc.body.append(dialog);
+  native.innerHTML = restored;
+  if (observed) for (const o of c.observers) if (o.target === native) o.fn();
+  c.ctx.GZ_WRITER.pass();
+  assert.equal(native.innerHTML, restored, 'giving the editor back cannot overwrite the autosave Canvas restored');
+  assert.ok(!c.doc.querySelector('iframe.gz-writer'));
+  }
+});
+
 // The field a dead frame leaves (recover): TinyMCE's parser collapses runs of spaces, so a run goes in as no-break spaces.
 test('Canvas: the recovery field\'s lines with double spaces go into Canvas\'s editor as typed, and Submit isn\'t held', async () => {
   const c = await page({ fixture: 'assignment', strict: true });
