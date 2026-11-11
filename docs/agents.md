@@ -71,7 +71,8 @@ release](https://github.com/frostdev-ops/glaze/releases/latest). Its **Browser**
 One Glaze window holds every request waiting for you and shows the oldest, with or without a school page open. It names
 the app as the app reports itself. On Chrome, Edge and Firefox, its program identity is also self-reported and
 unverified: macOS may report a bundle id, and Windows normally supplies no program path. Other programs under your user
-account can reach the helper; these identities are not proof of who an app is. **Don't allow** has the focus first.
+account can reach the helper; these identities are not proof of who an app is, so any program running as you can claim
+an app's name and use what you allowed it. **Don't allow** has the focus first.
 
 - An app's first request asks to pair it; **Allow** also gives it the group that request needs.
 - A request for another group asks for that group.
@@ -126,8 +127,12 @@ Settings → AI → Agents shows the helper's state, with **Copy** for a command
 `npx glaze-mcp doctor` checks the helper's folders, each browser's setup, the Node.js each one starts, and whether a
 browser has agent access on now. An app with no browser to reach says "waiting for Glaze" in its log.
 In Safari, Glaze's background sleeps a few minutes after you last use Glaze there, and an app's request then times
-out: open Glaze's popup or a Blackboard or Canvas tab in Safari, then ask again. If the app then shows Glaze as
-disconnected, reconnect it there (in Claude Code, `/mcp`).
+out: open Glaze's popup or a Blackboard or Canvas tab in Safari, then ask again.
+
+When the browser restarts or agent access goes off and on, a connected app reconnects by itself, to the same browser
+profile, with its approvals. A request that was running then answers that the connection was interrupted: a change you
+had allowed may have been made, so check before asking again. A request made while Glaze is away waits up to 10
+seconds.
 
 ## Browsers
 
@@ -138,7 +143,8 @@ disconnected, reconnect it there (in Claude Code, `/mcp`).
 | Firefox | Yes | Yes | Yes |
 | Safari | The downloaded Mac app | — | — |
 
-Phones and tablets have no agent access. Mods' code tools need Chrome.
+Phones and tablets have no agent access. Mods' code tools need Chrome. On Linux, browsers installed as a snap or
+Flatpak aren't supported: setup doesn't set them up.
 
 ## Mods
 
