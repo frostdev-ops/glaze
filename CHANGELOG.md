@@ -8,7 +8,7 @@ All notable changes to Glaze are documented here. The format follows
 
 ### Added
 
-- Two Looks for Thanksgiving, Harvest Moon and Turkey Trot: each has its own animated scene (a harvest moon over the wheat; turkeys on parade at sundown), pointer set and effects. Both scenes are also under Settings → Background → Scene.
+- Three Looks for Thanksgiving, Harvest Moon, Turkey Trot and Hearthside: each has its own animated scene (a harvest moon over the wheat; turkeys on parade at sundown; a fire in a brick hearth, with a cat asleep on the rug), pointer set and effects. The three scenes are also under Settings → Background → Scene.
 
 ### Changed
 

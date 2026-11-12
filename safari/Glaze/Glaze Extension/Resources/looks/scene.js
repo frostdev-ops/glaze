@@ -560,6 +560,125 @@ void main() {
   c = lights(c, p, uC3, .06, .26);
   gl_FragColor = vec4(dither(c), 1.);
 }`;
+// A fireside evening: a brick fireplace with a living fire, embers going up, a mantel with candles, little pumpkins and a
+// garland, a wreath over it, dusk and falling leaves in the window, an armchair, and a cat asleep on the rug.
+const HEARTH = `${AUTUMN}
+float gourd(vec2 p) { return min(length(p * vec2(1., 1.25)) - .42, length(vec2(abs(p.x) - .25, p.y) * vec2(1.1, 1.25)) - .36); }
+// A flame one unit tall standing on y = 0: a teardrop that leans more the higher it goes.
+float lick(vec2 a, float t, float f) {
+  a.x += (.16 * sin(t * 2.6 + f * 2. + a.y * 3.) + .07 * sin(t * 6.1 + f + a.y * 8.)) * a.y;
+  return max(abs(a.x) - .46 * (1. - a.y) * (.5 + .9 * a.y), -a.y);
+}
+void main() {
+  vec2 p = vec2(vUv.x * uAspect, vUv.y);
+  // The fireplace stands right of the middle, in the middle on a narrow page; the rest keeps its distance from it.
+  float t = uTime, fl = .15, fx = uAspect * mix(.5, .66, smoothstep(.8, 1.4, uAspect));
+  float pulse = .78 + .22 * noise(vec2(t * 2.3, 1.));
+  vec3 wood = mix(uGround, uC1, .32);
+  // The wall, lit from the fire.
+  vec3 c = mix(uGround, uC2, amt(.15 + .06 * p.y));
+  c = mix(c, uC1, amt(exp(-length((p - vec2(fx, fl + .1)) * vec2(1., 1.3)) * 2.4) * .4 * pulse));
+  // The window: dusk, a moon, a few stars, leaves coming down past it.
+  vec2 w = p - vec2(fx - .83, .62);
+  vec3 sky = mix(mix(uGround, uC2, .6), uC1, .4 * smoothstep(.12, -.15, w.y));
+  sky = mix(sky, uC3, stars(p) * .8);
+  sky = mix(sky, uC3, cover(length(w - vec2(.045, .075)) - .026) * .9);
+  for (int i = 0; i < 4; i++) {
+    float fi = float(i), h = hash(vec2(fi, 6.));
+    vec2 o = vec2((h - .5) * .17 + .02 * sin(t * .8 + fi * 2.), .17 - mod(t * (.03 + .02 * h) + h, .36));
+    vec2 q = rot(t * (.6 + h) + fi) * (w - o) / .014;
+    sky = mix(sky, mix(uC1, uC3, h), cover(min(length(q * vec2(1., 2.3)) - .55, length((rot(.9) * q) * vec2(1., 2.6)) - .45)) * .9);
+  }
+  c = mix(c, sky, amt(cover(box(w, vec2(.105, .15)))));
+  float frame = max(box(w, vec2(.122, .167)), -box(w, vec2(.105, .15)));
+  frame = min(frame, min(min(box(w, vec2(.005, .15)), box(w, vec2(.105, .005))), box(w - vec2(0., -.18), vec2(.14, .012))));
+  c = mix(c, wood, amt(cover(frame)));
+  // The chimney breast and its wreath.
+  vec2 q = (p - vec2(fx, fl)) / .4;
+  c = mix(c, mix(uGround, uC2, .32), amt(cover(box(q - vec2(0., 1.7), vec2(.66, .7))) * .7));
+  vec2 wr = q - vec2(0., 1.7);
+  for (int i = 0; i < 12; i++) {
+    float f = float(i), m = mod(f, 3.);
+    vec3 wc = mix(uGround, m < .5 ? uC1 : m < 1.5 ? uC2 : uC3, .62 + .14 * hash(vec2(f, 7.)));
+    c = mix(c, wc, amt(cover(length(wr - (.23 + .02 * sin(f * 2.4)) * vec2(cos(f * .5236), sin(f * .5236))) - .085)));
+  }
+  float bow = min(length(vec2(abs(wr.x) - .075, wr.y + .25) * vec2(1., 1.7)) - .06, min(seg(wr, vec2(0., -.25), vec2(-.07, -.42)), seg(wr, vec2(0., -.25), vec2(.07, -.42))) - .022);
+  c = mix(c, mix(uC2, uC3, .35), amt(cover(bow)));
+  // The floor, its firelight and the rug.
+  vec3 floorC = mix(uGround, uC1, .1 + .05 * step(.5, fract(p.y * 34.)));
+  floorC = mix(floorC, uC1, exp(-length((p - vec2(fx, fl)) * vec2(1.1, 5.)) * 3.) * .34 * pulse);
+  c = mix(c, floorC, amt(cover(p.y - fl)));
+  c = mix(c, wood, amt(cover(abs(p.y - fl - .006) - .006) * .7));
+  float rug = length((p - vec2(fx - .22, .064)) * vec2(1., 7.)) - .43;
+  c = mix(c, mix(uGround, uC2, .42), amt(cover(rug)));
+  c = mix(c, mix(uGround, uC3, .4), amt(cover(abs(rug + .07) - .009) * .7));
+  // The fireplace: bricks round an arched firebox, warmer the nearer the fire.
+  float opening = min(box(q - vec2(0., .27), vec2(.42, .27)), length((q - vec2(0., .54)) * vec2(1., 1.5)) - .42);
+  vec2 bb = vec2(q.x / .26 + .5 * mod(floor(q.y / .1), 2.), q.y / .1), bf = abs(fract(bb) - .5);
+  vec3 brick = mix(uGround, uC2, .42 + .18 * hash(floor(bb)));
+  brick = mix(brick, mix(uGround, uC2, .14), 1. - smoothstep(.008, .017, min((.5 - bf.x) * .26, (.5 - bf.y) * .1)));
+  brick = mix(brick, uC1, .3 * pulse * exp(-max(opening, 0.) * 5.));
+  c = mix(c, brick, amt(cover(box(q - vec2(0., .5), vec2(.8, .5)))));
+  c = mix(c, mix(uGround, uC1, .4), amt(cover(max(abs(opening - .035) - .028, -q.y))));
+  float inside = cover(opening);
+  c = mix(c, mix(uGround, uC1, .1 + .1 * pulse), amt(inside));
+  // The fire: four flames with a bright heart each, over two logs that glow, and embers going up.
+  float outer = 1., heart = 1.;
+  for (int i = 0; i < 4; i++) {
+    float f = float(i), tall = (.36 + .2 * hash(vec2(f, 3.))) * (.72 + .28 * noise(vec2(t * 3.4 + f * 9., f)));
+    vec2 a = (q - vec2(-.21 + .14 * f, .1)) / tall;
+    outer = min(outer, lick(a, t, f) * tall);
+    heart = min(heart, lick(a / .56, t, f + 5.) * tall * .56);
+  }
+  c = mix(c, uC1, amt(exp(-max(outer, 0.) * 12.) * .45 * pulse) * inside);
+  c = mix(c, mix(uC1, uC2, .55 * smoothstep(.22, .6, q.y)), amt(cover(outer)) * inside);
+  c = mix(c, uC3, amt(cover(heart) * .95) * inside);
+  float logs = min(seg(q, vec2(-.28, .06), vec2(.2, .11)) - .058, seg(q, vec2(-.15, .14), vec2(.3, .05)) - .052);
+  c = mix(c, mix(mix(uGround, uC2, .4), uC1, .25 + .4 * noise(vec2(q.x * 9. + t * .4, t * 1.3))), amt(cover(logs)));
+  for (int i = 0; i < 6; i++) {
+    float f = float(i), h = hash(vec2(f, 17.)), u = fract(t * (.12 + .1 * h) + h * 5.);
+    vec2 o = q - vec2((h - .5) * .5 + .09 * sin(t * 1.7 + f * 3.) * u, .16 + u * .66);
+    c = mix(c, uC3, amt(exp(-dot(o, o) * 2400.) * (1. - u)) * inside);
+  }
+  // The mantel: a garland in two swags under it, candles and little pumpkins on it.
+  c = mix(c, mix(wood, uC3, .2 * smoothstep(1.06, 1.1, q.y)), amt(cover(box(q - vec2(0., 1.045), vec2(.93, .04)) - .012)));
+  float gi = floor(q.x * 12.), gh = hash(vec2(gi, 23.));
+  vec2 gq = vec2((fract(q.x * 12.) - .5) / 12., q.y - .975 + .075 * abs(sin(q.x / .9 * 3.1416)) - .014 * sin(gi * 2.4));
+  c = mix(c, mix(uGround, gh < .34 ? uC1 : gh < .67 ? uC2 : uC3, .74), amt(cover(max(length(gq) - .052, abs(q.x) - .9))));
+  for (int i = 0; i < 3; i++) {
+    float f = float(i), tall = .1 + .045 * mod(f, 2.), x = -.78 + .13 * f;
+    c = mix(c, mix(uGround, uC3, .62), amt(cover(box(q - vec2(x, 1.095 + tall), vec2(.026, tall)))));
+    vec2 k = q - vec2(x + .008 * sin(t * 8. + f * 4.), 1.14 + 2. * tall);
+    float glim = .8 + .2 * noise(vec2(t * 5., f * 7.));
+    c = mix(c, uC3, amt(exp(-length(k) * 13.) * .3 * glim));
+    c = mix(c, uC3, amt(cover(length(k * vec2(1., .55)) - .026 * glim)));
+  }
+  vec3 vine = mix(uGround, vec3(.3, .55, .25), .55);
+  for (int i = 0; i < 3; i++) {
+    float f = float(i), s = .16 - .035 * f;
+    vec2 k = (q - vec2(.36 + .2 * f, 1.095 + s * .42)) / s;
+    float d = gourd(k);
+    vec3 skin = mix(mix(uC1, uGround, .4 * smoothstep(.1, -.45, k.y)), uC3, .25 * smoothstep(.1, .45, k.y - k.x * .4));
+    skin = mix(skin, mix(uC1, uGround, .45), cover(abs(abs(k.x) - .2) - .018) * cover(d + .05));
+    c = mix(c, skin, amt(cover(d)));
+    c = mix(c, vine, amt(cover(box(rot(.25) * (k - vec2(.03, .46)), vec2(.05, .09)) - .02)));
+  }
+  // The armchair, lit on the side the fire is.
+  vec2 a = (p - vec2(fx - .56, fl - .035)) / .27;
+  float seat = min(min(box(a - vec2(0., .62), vec2(.34, .34)) - .13, box(vec2(abs(a.x) - .52, a.y - .36), vec2(.06, .24)) - .09), box(a - vec2(0., .16), vec2(.52, .1)) - .03);
+  seat = min(seat, box(vec2(abs(a.x) - .47, a.y - .02), vec2(.04, .05)));
+  c = mix(c, mix(mix(uGround, uC2, .5), uC1, .28 * smoothstep(-.5, .75, a.x) * pulse), amt(cover(seat)));
+  c = mix(c, mix(mix(uGround, uC2, .68), uC1, .2 * pulse), amt(cover(box(a - vec2(0., .32), vec2(.36, .06)) - .05)));
+  c = mix(c, mix(uGround, uC1, .62), amt(cover(box(rot(.25) * (a - vec2(-.1, .56)), vec2(.13, .1)) - .06)));
+  // The cat, breathing in its sleep.
+  vec2 k = (p - vec2(fx - .3, .088)) / .115;
+  float breath = 1. + .05 * sin(t * 1.4);
+  float cat = min(length(vec2(k.x, k.y / breath) * vec2(1., 1.85)) - .5, length(k - vec2(-.47, .02)) - .21);
+  cat = min(cat, min(tri(rot(.25) * (k - vec2(-.6, .17)), .08, .16), tri(rot(-.2) * (k - vec2(-.39, .2)), .08, .16)));
+  cat = min(cat, seg(k, vec2(.44, -.12), vec2(-.05, -.22)) - .055);
+  c = mix(c, mix(mix(uGround, uC3, .42), uC1, .4 * smoothstep(-.2, .7, k.x + k.y) * pulse), amt(cover(cat)));
+  gl_FragColor = vec4(dither(c), 1.);
+}`;
 
 // Point scenes: soft round dots in 3D, moved in the vertex shader.
 const DOT = `
@@ -947,6 +1066,7 @@ const SCENES = {
   pumpkins: flat(0.6, PUMPKINS),
   harvest: flat(0.6, HARVEST),
   turkeys: flat(0.6, TURKEYS),
+  hearth: flat(0.6, HEARTH),
   // Follows the pointer a little (at most PARALLAX css px), while it animates.
   topography: { ...flat(0.5, TOPOGRAPHY), parallax: true },
   waves: { scale: 0.5, make: (m) => [new Points(grid(), m(WAVES, DOT, true)), perspective(1.1, 0, -1.5)] },

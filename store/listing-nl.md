@@ -10,10 +10,10 @@ Geef Canvas, Blackboard Ultra en Moodle je eigen thema en donkere modus. Op Canv
 
 JOUW UITERLIJK
 
-• Pas een van elf stijlen toe of haal gratis stijlen op frostdev.io/glaze/looks; stijlen die je opslaat of uit de galerie gebruikt, staan overal waar je een stijl kiest, ook voor één cursus.
+• Pas een van twaalf stijlen toe of haal gratis stijlen op frostdev.io/glaze/looks; stijlen die je opslaat of uit de galerie gebruikt, staan overal waar je een stijl kiest, ook voor één cursus.
 • Donkere modus: koppel een licht en een donker palet aan de modus van je systeem of aan een schema.
 • Eigen kleuren en lettertypen: pas alle veertien kleuren aan, geef elke cursus een eigen kleur en kies Lexend, OpenDyslexic of elk Google Font.
-• Achtergronden: een verloop, je eigen afbeelding of een van dertien geanimeerde scènes.
+• Achtergronden: een verloop, je eigen afbeelding of een van veertien geanimeerde scènes.
 • Aanwijzers in Uiterlijk › Aanwijzer, en type-effecten die nooit lezen wat je typt en nooit verschijnen in wachtwoordvelden of toetsen.
 • Glaze-navigatie, en Ctrl+K (⌘K op een Mac) om naar elke cursus, pagina of instelling te springen.
 

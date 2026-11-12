@@ -6,7 +6,7 @@
 const GZ_NEWS = (() => {
   const NOTES = {
     '4.0.8': [
-      "Two Looks for Thanksgiving, Harvest Moon and Turkey Trot, each with its own scene and pointer.",
+      "Three Looks for Thanksgiving: Harvest Moon, Turkey Trot and Hearthside, each with its own scene.",
       "Graveyard and Pumpkin Patch moved to the Looks gallery; they stay on wherever you wear them.",
     ],
     '4.0.7': [

@@ -77,7 +77,7 @@ All six files are transparent 32 × 32 PNG. Prompts request one recognizable chu
 | `cursors/pearl/default.png` | 3, 2 |
 | `cursors/pearl/pointer.png` | 14, 2 |
 
-The thirteen sets below belong to the built-in Looks (a Look's `x.pointer`). Each was drawn by hand as SVG on a 32 × 32 viewBox from that Look's concept sheet: solid fills, a dark outline and a pale outer keyline so it reads on light and dark pages, one facet in the Look's second colour, and a cuff on the hand. `default.svg` and `pointer.svg` come with PNG copies rendered from them at 32 × 32 (`default.png`) and 64 × 64 (`default@2x.png`), for a browser that won't draw an SVG cursor. Terminal's set is pixel art on a 2-unit grid (`shape-rendering: crispEdges`). Hotspots are in viewBox units, the same at 1x; at 2x the browser scales them.
+The fourteen sets below belong to the built-in Looks (a Look's `x.pointer`). Each was drawn by hand as SVG on a 32 × 32 viewBox from that Look's concept sheet: solid fills, a dark outline and a pale outer keyline so it reads on light and dark pages, one facet in the Look's second colour, and a cuff on the hand. `default.svg` and `pointer.svg` come with PNG copies rendered from them at 32 × 32 (`default.png`) and 64 × 64 (`default@2x.png`), for a browser that won't draw an SVG cursor. Terminal's set is pixel art on a 2-unit grid (`shape-rendering: crispEdges`). Hotspots are in viewBox units, the same at 1x; at 2x the browser scales them.
 
 | Set (Look) | Arrow, hand | Hotspot default | Hotspot pointer |
 | --- | --- | --- | --- |
@@ -93,6 +93,7 @@ The thirteen sets below belong to the built-in Looks (a Look's `x.pointer`). Eac
 | `cursors/pumpkin/` (Pumpkin Patch) | pumpkin orange, candle-yellow facet, lime cuff | 4, 3 | 12, 3 |
 | `cursors/harvest/` (Harvest Moon) | harvest amber, cream facet, cranberry cuff | 4, 3 | 12, 3 |
 | `cursors/feather/` (Turkey Trot) | roast orange, gold facet with a cranberry band, sage cuff | 4, 3 | 12, 3 |
+| `cursors/hearth/` (Hearthside) | ember orange, candle-cream facet with a bright heart, brick cuff | 4, 3 | 12, 3 |
 | `cursors/frostdev/` (Frostdev) | facets from the FD monogram: frost-white leading face, cyan inner face, deep blue notch; ice-white hand, cyan palm facet, angular cyan cuff; navy outline | 3, 2 | 11, 2 |
 
 No text cursor is supplied; preserve the native text selection cursor. CSS integration should retain a native fallback (`auto` or `pointer`) after the bitmap URL and hotspot.
