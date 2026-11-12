@@ -1157,6 +1157,9 @@ html:not([data-gz-sidebar="expanded"], [data-gz-sidebar="collapsed"]) #site-wrap
   border: 1px solid var(--gz-border-line, var(--gz-line)) !important; border-radius: var(--gz-radius) !important;
   background: var(--gz-surface-grain, none), color-mix(in srgb, var(--gz-surface-paint, var(--gz-surface)) var(--gz-glass-mix, 100%), transparent) !important; backdrop-filter: blur(var(--gz-glass)) saturate(1.2); box-shadow: var(--gz-rest-shadow) !important;
 }
+/* A question with its dropdown open has no glass while the list shows: a backdrop filter makes the card a layer of its own and
+   the box a fixed list is placed in, so Ultra's list went under the next question or the footer, or opened away from its button. */
+#site-wrap .assessment-attempt-panel .assessment-question:has([aria-expanded="true"]) { backdrop-filter: none; }
 /* Over a solid background the glass on the nav, the headers and these panels blurs a flat colour: nothing to see, and
    a GPU layer each. Same fill. */
 html[data-gz-bg="solid"] :where(.MuiDrawer-paper):is(.MuiDrawer-paper, #site-wrap .discussion-container .panel-header.panel-header-directive.has-controls),

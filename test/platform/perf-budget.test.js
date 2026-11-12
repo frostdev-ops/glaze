@@ -663,7 +663,9 @@ test('Ultra\'s :has() rules keep a small change from restyling the whole page', 
 const SPLIT_LEFT = { 'navigation/page/sidebar.css': 15 };
 // What remains tried on every element once split (`*`, `[class*=…]`, :not(), pseudo-elements …), and the rules with a
 // [class*=…] or a :has() in those sheets: the counts may fall, never rise.
-const UNKEYED_MAX = 190, CLASS_STAR_MAX = 162, HAS_MAX = 140;
+// HAS_MAX 141 (2026-11-11): a test question with an open dropdown drops its glass (theme.css), the one way its list isn't caught
+// under the next question; keyed on .assessment-question, so only a test's few cards are tried.
+const UNKEYED_MAX = 190, CLASS_STAR_MAX = 162, HAS_MAX = 141;
 // A CSS escape can include six hex digits and a terminating whitespace character, all part of one identifier.
 const escapeEnd = (text, at) => {
   let j = at + 1;
