@@ -104,6 +104,9 @@ var GZ_MOTIONX = globalThis.GZ_MOTIONX || (() => {
         }
       }
     },
+    // A cap over a nut with a point, and a tail feather: a long vane on a quill.
+    acorn: (g, h) => { g.moveTo(-h * 0.62, -h * 0.2); g.bezierCurveTo(-h * 0.62, h * 0.55, -h * 0.2, h * 0.8, 0, h); g.bezierCurveTo(h * 0.2, h * 0.8, h * 0.62, h * 0.55, h * 0.62, -h * 0.2); g.closePath(); g.moveTo(-h * 0.75, -h * 0.25); g.arc(0, -h * 0.25, h * 0.75, Math.PI, 0); g.closePath(); g.rect(-h * 0.08, -h * 1.1, h * 0.16, h * 0.2); },
+    feather: (g, h) => { g.moveTo(0, h); g.lineTo(-h * 0.08, h * 0.45); g.bezierCurveTo(-h * 0.6, h * 0.2, -h * 0.55, -h * 0.7, 0, -h); g.bezierCurveTo(h * 0.55, -h * 0.7, h * 0.6, h * 0.2, h * 0.08, h * 0.45); g.closePath(); },
     shard: (g, h) => { g.moveTo(0, -h); g.lineTo(h * 0.38, -h * 0.15); g.lineTo(0, h); g.lineTo(-h * 0.3, h * 0.1); g.closePath(); },
   };
   const STROKED = new Set(['snow', 'bubble', 'flake']);

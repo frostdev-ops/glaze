@@ -6,6 +6,14 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Two Looks for Thanksgiving, Harvest Moon and Turkey Trot: each has its own animated scene (a harvest moon over the wheat; turkeys on parade at sundown), pointer set and effects. Both scenes are also under Settings → Background → Scene.
+
+### Changed
+
+- Halloween's Graveyard and Pumpkin Patch moved to the [Looks gallery](https://frostdev.io/glaze/looks). They stay on wherever you already wear them, and their scenes and pointers stay in Settings.
+
 ## [4.0.7] — 2026-11-11
 
 ### Added

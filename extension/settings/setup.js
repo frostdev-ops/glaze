@@ -35,7 +35,7 @@ var GZ_SETUP = globalThis.GZ_SETUP || (() => {
   // Glaze's own theme: the default palette, look and background, worn as a Look is (a student's tooltips, hints and picture
   // kept), with light and dark left as they are.
   const OWN = C.OWN;
-  const LOOKS = [OWN, ...D.GZ_LOOKS];
+  const LOOKS = [OWN, ...D.GZ_LOOKS.filter((L) => !L.old)];
   const theme = C.theme;
   const worn = (s) => LOOKS.find((L) => D.GZ_LOOK_ON(s, L)) || null;
   // The motion the page shows: the student's level, off where the system asks for less and they follow it.

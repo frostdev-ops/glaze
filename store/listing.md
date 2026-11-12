@@ -21,7 +21,7 @@ YOUR LOOK
 • Apply one of eleven Looks, or get free ones at frostdev.io/glaze/looks; Looks you save or use from the gallery appear wherever you pick one, even for a single course.
 • Dark mode: pair a light and a dark palette with your system's appearance or a schedule.
 • Custom colors and fonts: edit all fourteen colors, give each course its own color, and pick Lexend, OpenDyslexic or any Google Font.
-• Backgrounds: a gradient, your own picture or one of eleven animated scenes.
+• Backgrounds: a gradient, your own picture or one of thirteen animated scenes.
 • Pointers in Look › Pointer, and typing effects that never read what you type and stay out of password fields and quizzes.
 • Glaze navigation, and Ctrl+K (⌘K on a Mac) to jump to any course, page or setting.
 

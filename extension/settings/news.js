@@ -5,6 +5,10 @@
 // 2.1.x, never before; `node --test` lists a todo while the newest notes are ahead of the manifest.
 const GZ_NEWS = (() => {
   const NOTES = {
+    '4.0.8': [
+      "Two Looks for Thanksgiving, Harvest Moon and Turkey Trot, each with its own scene and pointer.",
+      "Graveyard and Pumpkin Patch moved to the Looks gallery; they stay on wherever you wear them.",
+    ],
     '4.0.7': [
       "Writer on Canvas: assignment boxes, discussion replies, the Inbox and quiz essays open in Writer.",
       "A switch under Writer in Settings turns it off.",

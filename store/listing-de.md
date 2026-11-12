@@ -13,7 +13,7 @@ DEIN AUSSEHEN
 • Wende eines von elf Designs an oder hol dir kostenlose unter frostdev.io/glaze/looks; gespeicherte und aus der Galerie genutzte Designs stehen überall zur Wahl, wo du ein Design auswählst, auch für einen einzelnen Kurs.
 • Dunkelmodus: Verknüpfe eine helle und eine dunkle Palette mit dem Erscheinungsbild deines Systems oder einem Zeitplan.
 • Eigene Farben und Schriften: Bearbeite alle vierzehn Farben, gib jedem Kurs seine Farbe und wähle Lexend, OpenDyslexic oder jede Google-Schrift.
-• Hintergründe: ein Verlauf, dein eigenes Bild oder eine von elf animierten Szenen.
+• Hintergründe: ein Verlauf, dein eigenes Bild oder eine von dreizehn animierten Szenen.
 • Mauszeiger unter Aussehen › Mauszeiger und Tippeffekte, die nie lesen, was du tippst, und nie in Passwortfeldern oder Tests erscheinen.
 • Glaze-Navigation und Strg+K (⌘K auf dem Mac), um zu jedem Kurs, jeder Seite und jeder Einstellung zu springen.
 

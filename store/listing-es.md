@@ -13,7 +13,7 @@ TU ASPECTO
 • Aplica uno de once estilos o consigue más gratis en frostdev.io/glaze/looks; los que guardes o uses desde la galería aparecen dondequiera que elijas un estilo, también para un solo curso.
 • Modo oscuro: combina una paleta clara y otra oscura con el modo de tu sistema o con un horario.
 • Colores y fuentes: edita los catorce colores, da a cada curso su color y elige Lexend, OpenDyslexic o cualquier fuente de Google.
-• Fondos: un degradado, tu propia imagen o una de once escenas animadas.
+• Fondos: un degradado, tu propia imagen o una de trece escenas animadas.
 • Punteros en Aspecto › Puntero, y efectos al escribir que nunca leen lo que escribes ni aparecen en campos de contraseña o cuestionarios.
 • Navegación de Glaze, y Ctrl+K (⌘K en Mac) para ir a cualquier curso, página o ajuste.
 

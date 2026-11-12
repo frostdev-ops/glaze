@@ -13,7 +13,7 @@ SUA APARÊNCIA
 • Aplique um dos onze estilos ou pegue outros, gratuitos, em frostdev.io/glaze/looks; os que você salvar ou usar da galeria aparecem onde quer que você escolha um estilo, inclusive para um só curso.
 • Modo escuro: combine uma paleta clara e uma escura com a aparência do sistema ou com um horário.
 • Cores e fontes personalizadas: edite as catorze cores, dê a cada curso sua cor e escolha Lexend, OpenDyslexic ou qualquer Google Font.
-• Fundos: um gradiente, uma imagem sua ou uma das onze cenas animadas.
+• Fundos: um gradiente, uma imagem sua ou uma das treze cenas animadas.
 • Ponteiros em Aparência › Ponteiro, e efeitos ao digitar que nunca leem o que você digita nem aparecem em campos de senha ou questionários.
 • Navegação do Glaze, e Ctrl+K (⌘K no Mac) para ir a qualquer curso, página ou configuração.
 

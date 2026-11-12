@@ -111,7 +111,7 @@ var GZ_MX = globalThis.GZ_MX || (() => {
   const SHAPES = ['dot', 'star', 'snow', 'heart', 'leaf', 'spark'];
   // Marks: shapes only the canvas draws (event effects, the pointer's and typing's), never a background layer's particles,
   // which looks/scene.js draws on the GPU from SHAPES alone.
-  const MARKS = ['bat', 'petal', 'pixel', 'drop', 'bubble', 'ghost', 'pumpkin', 'flake', 'shard'];
+  const MARKS = ['bat', 'petal', 'pixel', 'drop', 'bubble', 'ghost', 'pumpkin', 'flake', 'shard', 'acorn', 'feather'];
   const DRAWN = [...SHAPES, ...MARKS];
   // The pointer's animation, drawn around the system pointer (never in its place): a trail, sparkles, ripples, a glow that
   // follows, a glow that flickers like a candle, marks that orbit it, scanlines that shimmer over it, marks that drift down,
@@ -119,7 +119,7 @@ var GZ_MX = globalThis.GZ_MX || (() => {
   const CURSORS = ['trail', 'sparkle', 'ripple', 'glow', 'flicker', 'orbit', 'scan', 'drift', 'contour'];
   // The pointer sets (x.pointer): assets/art/cursors/<set>/, their hotspots in looks/lookx.js. 'own' is the student's own
   // picture, which stays on their device: a theme code never carries it (sharing/share.js).
-  const POINTERS = ['aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'frostdev', 'own'];
+  const POINTERS = ['aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'harvest', 'feather', 'frostdev', 'own'];
   // Typing effects (x.type): what rises from the caret as the student types.
   const TYPES = ['embers', 'ink', 'sparks', 'pixels', 'petals', 'snow', 'bubbles', 'wisps', 'contour'];
   // A palette token (--gz-<name> on <html>) or #rrggbb; looks/page/motionx.js turns a name into the colour the page wears.

@@ -13,7 +13,7 @@ VOTRE APPARENCE
 • Appliquez l’un des onze styles ou trouvez-en d’autres, gratuits, sur frostdev.io/glaze/looks ; ceux que vous enregistrez ou utilisez depuis la galerie apparaissent partout où vous choisissez un style, même pour un seul cours.
 • Mode sombre : associez une palette claire et une palette sombre au mode de votre système ou à un horaire.
 • Couleurs et polices : modifiez les quatorze couleurs, donnez sa couleur à chaque cours et choisissez Lexend, OpenDyslexic ou toute police Google.
-• Arrière-plans : un dégradé, votre image ou l’une des onze scènes animées.
+• Arrière-plans : un dégradé, votre image ou l’une des treize scènes animées.
 • Pointeurs dans Apparence › Pointeur, et effets de frappe qui ne lisent jamais ce que vous tapez et n’apparaissent ni dans les champs de mot de passe ni pendant les quiz.
 • Navigation Glaze, et Ctrl+K (⌘K sur Mac) pour accéder aux cours, aux pages et aux réglages.
 

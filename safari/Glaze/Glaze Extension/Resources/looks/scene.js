@@ -398,6 +398,168 @@ void main() {
   c = lights(c, p, uC3, .08, .3);
   gl_FragColor = vec4(dither(c), 1.);
 }`;
+// Thanksgiving: two autumn evenings in the same shapes. tri is a triangle standing on y = 0, w wide each side and h tall.
+const AUTUMN = `${SPOOKY}
+float tri(vec2 p, float w, float h) { p.x = abs(p.x); return max(-p.y, (p.x * h + p.y * w - w * h) / length(vec2(h, w))); }
+// Leaves with three lobes, tumbling down.
+vec3 leaves(vec3 c, vec2 p, float t) {
+  for (int i = 0; i < 8; i++) {
+    float fi = float(i), h = hash(vec2(fi, 6.));
+    vec2 o = vec2(fract(h * 3.7) * uAspect + .06 * sin(t * .8 + fi * 2.), 1.1 - mod(t * (.02 + .015 * h) + h, 1.3));
+    vec2 q = rot(t * (.6 + h) + fi) * (p - o) / .017;
+    vec3 leaf = mix(uC1, i == 2 || i == 5 ? uC2 : uC3, h * .7);
+    float d = min(length(q * vec2(1., 2.3)) - .55, min(length((rot(.9) * q) * vec2(1., 2.6)) - .45, length((rot(-.9) * q) * vec2(1., 2.6)) - .45));
+    c = mix(c, leaf, amt(cover(d) * .85));
+  }
+  return c;
+}
+`;
+// A harvest moon rising over the fields: geese crossing it in a V, a barn with a lit window, corn shocks, a scarecrow
+// who sways, and wheat that leans with the wind.
+const HARVEST = `${AUTUMN}
+float goose(vec2 p, float f) { p.x = abs(p.x); return min(seg(p, vec2(0.), vec2(.5, .28 * f)) - .05, length(p * vec2(.6, 1.)) - .09); }
+// A row of wheat: one stalk to a cell, base to about s above it, each leaning on its own beat.
+float wheat(vec2 p, float cell, float base, float s, float t) {
+  float d = 1.;
+  for (int k = -1; k <= 1; k++) {
+    float id = floor(p.x / cell) + float(k), h = hash(vec2(id, cell * 91.));
+    float x = (id + .2 + .6 * h) * cell, top = base + s * (.7 + .3 * hash(vec2(id, 5.)));
+    float lean = (.012 + .01 * h) * sin(t * .9 + id * .7 + h * 6.);
+    vec2 b = vec2(x + lean, top);
+    d = min(d, seg(p, vec2(x, base - .05), b) - .0012);
+    d = min(d, length((rot(-lean * 14.) * (p - b)) * vec2(1., .32)) - .0038);
+  }
+  return d;
+}
+float rise(float x) { return .33 + .04 * sin(x * 1.1 + .6) + .02 * sin(x * 2.9 + 2.); }
+float slope(float x) { return .24 + .03 * sin(x * 1.7 + 2.) + .012 * sin(x * 4.6); }
+void main() {
+  vec2 p = vec2(vUv.x * uAspect, vUv.y);
+  float t = uTime;
+  vec3 c = mix(uGround, uC2, amt(smoothstep(1., .25, p.y) * .34));
+  c = mix(c, uC1, amt(smoothstep(.5, .24, p.y) * .2));
+  c = mix(c, uC3, amt(stars(p) * .7));
+  vec2 m = p - vec2(uAspect * .7, .5);
+  float md = length(m);
+  c = mix(c, uC1, amt(exp(-md * 4.5) * .35));
+  vec3 moon = mix(uC1, uC3, .35 + .3 * smoothstep(-.12, .12, m.y - m.x * .3));
+  moon = mix(moon, uC1 * .8, .35 * smoothstep(.45, .7, fbm(m * 14. + 3.)));
+  c = mix(c, moon, amt(cover(md - .135) * .92));
+  vec2 lead = vec2(mod(t * .022 + .9, uAspect + .8) - .4, .66 + .015 * sin(t * .5));
+  for (int i = 0; i < 7; i++) {
+    float fi = float(i), side = mod(fi, 2.) * 2. - 1., rank = floor((fi + 1.) / 2.);
+    vec2 q = (p - lead - vec2(-rank * .034, side * rank * .02)) / .022;
+    c = mix(c, mix(uGround, uC3, .5), amt(cover(goose(q, sin(t * 5. + fi * 1.3))) * .95));
+  }
+  c = mix(c, mix(uGround, uC2, .3), amt(cover(p.y - rise(p.x))));
+  vec2 b = (p - vec2(.42, rise(.42) + .03)) / .06;
+  float barn = min(min(box(b, vec2(.7, .5)), tri(b - vec2(0., .5), .8, .45)), min(box(b - vec2(1.05, .15), vec2(.22, .65)), length(b - vec2(1.05, .8)) - .22));
+  c = mix(c, mix(uGround, uC2, .52), amt(cover(barn)));
+  c = mix(c, uC3, amt(exp(-length(b - vec2(0., .02)) * 3.) * .18));
+  c = mix(c, uC3, amt(cover(box(b - vec2(0., .02), vec2(.13, .19))) * (.8 + .2 * noise(vec2(t * 3., 1.)))));
+  c = mix(c, mix(uGround, uC2, .16), amt(cover(p.y - slope(p.x))));
+  for (int i = 0; i < 5; i++) {
+    float fi = float(i), x = (fi + .35 + .3 * hash(vec2(fi, 11.))) / 5. * uAspect, s = .05 + .02 * hash(vec2(fi, 12.));
+    vec2 q = (p - vec2(x, slope(x) - .012)) / s;
+    float shock = cover(min(tri(q, .42, 1.), tri(vec2(q.x, 1.12 - q.y), .2, .3)));
+    c = mix(c, mix(mix(uGround, uC1, .32), uC3, .12 * smoothstep(0., 1., q.y)), amt(shock));
+    c = mix(c, mix(uGround, uC1, .16), amt(cover(abs(abs(q.x) - .14 * (1. - q.y)) - .012) * shock * .6));
+    c = mix(c, uGround, amt(cover(abs(q.y - .78) - .03) * shock * .5));
+  }
+  float sx = uAspect * .22;
+  vec2 q = rot(.04 * sin(t * .7)) * (p - vec2(sx, slope(sx) - .01)) / .11;
+  c = mix(c, mix(uGround, uC1, .3), amt(cover(min(min(box(q - vec2(0., .5), vec2(.03, .5)), box(q - vec2(0., .72), vec2(.42, .028))), length(vec2(abs(q.x) - .46, q.y - .72)) - .06))));
+  c = mix(c, mix(uGround, uC2, .62), amt(cover(min(box(q - vec2(0., .56), vec2(.17, .2)), box(q - vec2(0., .72), vec2(.36, .065))))));
+  c = mix(c, mix(uGround, uC3, .55), amt(cover(length(q - vec2(0., .95)) - .13)));
+  c = mix(c, uGround, amt(cover(min(length(vec2(abs(q.x) - .05, q.y - .97)) - .02, max(abs(length(q - vec2(0., .95)) - .07) - .012, q.y - .93))) * .85));
+  c = mix(c, mix(uGround, uC1, .42), amt(cover(min(box(q - vec2(0., 1.06), vec2(.25, .022)), box(q - vec2(0., 1.12), vec2(.12, .06)) - .02))));
+  float g = .1 + .015 * sin(p.x * 2.3 + 1.);
+  c = mix(c, mix(uGround, uC1, .28), amt(cover(wheat(p, .021, g + .01, .13, t))));
+  c = mix(c, mix(uGround, uC2, .08), amt(cover(p.y - g)));
+  c = mix(c, mix(uGround, uC1, .45), amt(cover(wheat(p, .027, 0., .12, t + 2.))));
+  c = leaves(c, p, t);
+  c = lights(c, p, uC3, .08, .3);
+  gl_FragColor = vec4(dither(c), 1.);
+}`;
+// Turkeys on parade at sundown: a row of them strutting across the field, one or two in a pilgrim's hat, under trees in
+// their autumn colours, with pumpkins by the path and leaves coming down.
+const TURKEYS = `${AUTUMN}
+float gourd(vec2 p) { return min(length(p * vec2(1., 1.25)) - .42, length(vec2(abs(p.x) - .25, p.y) * vec2(1.1, 1.25)) - .36); }
+float ridge(float x) { return .36 + .03 * sin(x * 1.3 + 2.) + .015 * sin(x * 3.3); }
+float path(float x) { return .2 + .015 * sin(x * 2.1 + 1.) + .008 * sin(x * 5.3); }
+// A turkey about one unit tall, walking right; w is where it is in its step.
+vec3 turkey(vec3 c, vec2 q, float w, float hat) {
+  vec2 f = q - vec2(-.12, .05);
+  float ang = atan(f.y, -f.x), r = length(f);
+  // The fan is a wedge between two lines through its root, so its edge has no jump where the angle wraps.
+  vec2 u = vec2(-f.x, f.y);
+  float fan = cover(max(r - .52 - .03 * cos(ang * 14.), max(-(u.y * .8776 + u.x * .4794), u.y * -.5885 - u.x * .8085)));
+  vec3 fc = mix(mix(uC2, uC1, smoothstep(.2, .34, r)), uC3, smoothstep(.4, .47, r));
+  fc = mix(fc, uGround, .4 * (1. - smoothstep(0., .12, abs(fract(ang * 2.23 + .5) - .5))));
+  c = mix(c, mix(uGround, fc, .82), amt(fan));
+  for (int i = 0; i < 2; i++) {
+    float s = i == 0 ? 1. : -1.;
+    vec2 hip = vec2(.02 + .06 * s, -.2), foot = hip + vec2(.12 * s * sin(w), -.26 + .05 * max(0., s * cos(w)));
+    c = mix(c, mix(uGround, uC3, .6), amt(cover(min(seg(q, hip, foot), seg(q, foot, foot + vec2(.08, 0.))) - .018)));
+  }
+  vec2 bob = vec2(.03 * sin(w * 2.), 0.);
+  vec3 skin = mix(uGround, uC1, .5);
+  c = mix(c, mix(skin, uGround, .25 * smoothstep(.05, -.25, q.y)), amt(cover(length(q * vec2(1., 1.2)) - .3)));
+  c = mix(c, mix(uGround, uC2, .55), amt(cover(length((rot(.3) * (q - vec2(-.04, -.02))) * vec2(1., 1.5)) - .17)));
+  vec2 hd = vec2(.33, .4) + bob;
+  c = mix(c, skin, amt(cover(min(seg(q, vec2(.2, .08), hd) - .055, length(q - hd) - .09))));
+  c = mix(c, uC3, amt(cover(seg(q, hd + vec2(.08, 0.), hd + vec2(.16, -.03)) - .02)));
+  c = mix(c, uC2, amt(cover(length((q - hd - vec2(.07, -.08)) * vec2(1., .65)) - .034)));
+  c = mix(c, uGround, amt(cover(length(q - hd - vec2(.025, .02)) - .02) * .9));
+  vec2 k = q - hd - vec2(-.01, .08);
+  c = mix(c, mix(uGround, uC2, .3), amt(cover(min(box(k, vec2(.12, .014)), box(k - vec2(0., .07), vec2(.065, .06)))) * hat));
+  c = mix(c, uC3, amt(cover(max(box(k - vec2(0., .03), vec2(.065, .014)), -box(k - vec2(0., .03), vec2(.016, .006)))) * hat));
+  return c;
+}
+void main() {
+  vec2 p = vec2(vUv.x * uAspect, vUv.y);
+  float t = uTime;
+  vec3 c = mix(uGround, uC2, amt(smoothstep(1., .3, p.y) * .3));
+  c = mix(c, uC1, amt(smoothstep(.62, .3, p.y) * .42));
+  c = mix(c, uC3, amt(stars(p) * .5));
+  vec2 s = p - vec2(uAspect * .3, .37);
+  c = mix(c, uC3, amt(exp(-length(s) * 5.) * .4));
+  c = mix(c, mix(uC1, uC3, .6), amt(cover(length(s) - .1) * .9));
+  float cloud = smoothstep(.55, .75, fbm(vec2(p.x * 1.6 - t * .012, p.y * 7.))) * smoothstep(.45, .6, p.y) * smoothstep(1., .8, p.y);
+  c = mix(c, uC2, amt(cloud * .25));
+  c = mix(c, mix(uGround, uC2, .28), amt(cover(p.y - ridge(p.x))));
+  for (int i = 0; i < 9; i++) {
+    float fi = float(i), h = hash(vec2(fi, 21.));
+    float x = (fi + .2 + .6 * h) / 9. * uAspect, sz = .045 + .03 * hash(vec2(fi, 22.));
+    vec2 q = (p - vec2(x, ridge(x) - .01)) / sz;
+    float crown = min(length(q - vec2(0., 1.)) - .5, min(length(q - vec2(-.35, .8)) - .36, length(q - vec2(.36, .78)) - .34)) + .03 * sin(q.x * 9. + t * .8 + fi);
+    vec3 k = h < .34 ? uC1 : h < .67 ? uC2 : uC3;
+    c = mix(c, mix(uGround, uC2, .15), amt(cover(box(q - vec2(0., .35), vec2(.07, .4)))));
+    c = mix(c, mix(uGround, k, .6 + .14 * smoothstep(-.2, .5, q.y - 1. - q.x * .5)), amt(cover(crown)));
+  }
+  c = mix(c, mix(uGround, uC1, .13), amt(cover(p.y - path(p.x))));
+  for (int i = 0; i < 5; i++) {
+    float fi = float(i), h = hash(vec2(fi, 31.));
+    float x = mod(t * .028 + fi * (uAspect + .6) / 5. + .08 * h, uAspect + .6) - .3, sz = .085 + .05 * h, w = t * 5. + fi * 2.1;
+    c = turkey(c, (p - vec2(x, path(x) - .03 + sz * (.47 + .02 * abs(sin(w))))) / sz, w, step(.6, hash(vec2(fi, 32.))));
+  }
+  float g = .09 + .012 * sin(p.x * 3.1 + 2.);
+  c = mix(c, mix(uGround, uC2, .1), amt(cover(p.y - g)));
+  vec3 vine = mix(uGround, vec3(.3, .55, .25), .55);
+  for (int i = 0; i < 6; i++) {
+    float fi = float(i), h = hash(vec2(fi, 41.)), sz = .03 + .025 * hash(vec2(fi, 42.));
+    float x = (fi + .5) / 6. * uAspect + (h - .5) * .12;
+    vec2 q = (p - vec2(x, .09 + .012 * sin(x * 3.1 + 2.) - .035 + sz * .42)) / sz;
+    float d = gourd(q);
+    vec3 skin = mix(mix(uC1, uGround, .4 * smoothstep(.1, -.45, q.y)), uC3, .25 * smoothstep(.1, .45, q.y - q.x * .4));
+    skin = mix(skin, mix(uC1, uGround, .45), cover(abs(abs(q.x) - .2) - .018) * cover(d + .05));
+    c = mix(c, skin, amt(cover(d)));
+    c = mix(c, vine, amt(cover(box(rot(.25) * (q - vec2(.03, .46)), vec2(.05, .09)) - .02)));
+  }
+  c = leaves(c, p, t);
+  c = lights(c, p, uC3, .06, .26);
+  gl_FragColor = vec4(dither(c), 1.);
+}`;
 
 // Point scenes: soft round dots in 3D, moved in the vertex shader.
 const DOT = `
@@ -783,6 +945,8 @@ const SCENES = {
   horizon: flat(0.5, HORIZON),
   graveyard: flat(0.6, GRAVEYARD),
   pumpkins: flat(0.6, PUMPKINS),
+  harvest: flat(0.6, HARVEST),
+  turkeys: flat(0.6, TURKEYS),
   // Follows the pointer a little (at most PARALLAX css px), while it animates.
   topography: { ...flat(0.5, TOPOGRAPHY), parallax: true },
   waves: { scale: 0.5, make: (m) => [new Points(grid(), m(WAVES, DOT, true)), perspective(1.1, 0, -1.5)] },

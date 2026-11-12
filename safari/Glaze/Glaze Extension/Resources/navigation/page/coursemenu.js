@@ -268,7 +268,7 @@ var GZ_COURSE_MENU = globalThis.GZ_COURSE_MENU || (() => {
     const { cid, btn } = menu; // sync may have replaced the original opener
     if (closeMenu(false)) cardUI((m) => m.open(cid, btn));
   };
-  const lookButtons = (cid) => [['', null], ...GZ_LOOKS.map((L) => [L.name, L]), ...kept.map((E) => [E.id, E])].map(([look, L]) => {
+  const lookButtons = (cid) => [['', null], ...GZ_LOOKS.filter((L) => !L.old).map((L) => [L.name, L]), ...kept.map((E) => [E.id, E])].map(([look, L]) => {
     const b = make('button', { type: 'button', className: 'gz-cm-look', textContent: L ? L.name : t('Your theme') });
     b.dataset.look = look;
     if (L) {

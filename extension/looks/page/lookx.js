@@ -477,7 +477,7 @@ var GZ_LOOKX = globalThis.GZ_LOOKX || (() => {
   // on, the student's pointer by name, as the editor's Look › Pointer lists them (settings extras.pointer, defaults.js), with
   // their own picture only once there is one (ready(), asked as the palette opens), and its animation's switch.
   const POINTERS = { look: "The Look's pointer", aqua: 'Aqua', lilac: 'Lilac', pearl: 'Pearl', aurora: 'Aurora', quill: 'Quill', terminal: 'Terminal',
-    lava: 'Lava', neon: 'Neon', clear: 'Clear', lagoon: 'Lagoon', rose: 'Rose', ghost: 'Ghost', pumpkin: 'Pumpkin', frostdev: 'Frostdev', own: 'Your own picture' };
+    lava: 'Lava', neon: 'Neon', clear: 'Clear', lagoon: 'Lagoon', rose: 'Rose', ghost: 'Ghost', pumpkin: 'Pumpkin', harvest: 'Harvest', feather: 'Feather', frostdev: 'Frostdev', own: 'Your own picture' };
   let ownPic = false;
   const ready = async () => { ownPic = !!(await get('cursorImg')).cursorImg; };
   const cmds = () => {

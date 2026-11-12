@@ -66,8 +66,8 @@ var GZ_CATALOG = globalThis.GZ_CATALOG || (() => {
   // ---- reading it --------------------------------------------------------------------------------------------------
   // The kept Looks of a stored catalogue (storage.local is Glaze's own, but an old or hand-edited one mustn't break a page).
   const looks = (cat) => (Array.isArray(cat?.looks) ? cat.looks.filter((E) => E && ID.test(E.id) && typeof E.name === 'string' && E.colors && E.look && E.bg) : []);
-  // Every Look: { id, name, kind, colors, look, bg } and, for a built-in, L (for GZ_LOOK_APPLY and its parts).
-  const list = (cat) => [...G.GZ_LOOKS.map((L) => ({ id: L.name, name: L.name, kind: 'builtin', colors: L.colors, look: L.look, bg: L.bg, L })), ...looks(cat)];
+  // Every Look on offer (a built-in gone to the gallery, `old`, is worn where it was chosen and offered nowhere): { id, name, kind, colors, look, bg } and, for a built-in, L (for GZ_LOOK_APPLY and its parts).
+  const list = (cat) => [...G.GZ_LOOKS.filter((L) => !L.old).map((L) => ({ id: L.name, name: L.name, kind: 'builtin', colors: L.colors, look: L.look, bg: L.bg, L })), ...looks(cat)];
   const find = (all, id) => all.find((E) => E.id === id) || null;
   // [[group, entries]] of the groups with any, in order: 'builtin', 'saved', 'gallery' (with the backgrounds).
   const groups = (all) => ['builtin', 'saved', 'gallery'].map((g) => [g, all.filter((E) => (E.kind === 'background' ? 'gallery' : E.kind) === g)]).filter(([, l]) => l.length);
