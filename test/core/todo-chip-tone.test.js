@@ -12,7 +12,7 @@ const P = require('../helpers/palettes.cjs');
 const css = fs.readFileSync(path.join(__dirname, '../../extension/core/page/apps.css'), 'utf8');
 const TONES = ['ok', 'warn', 'err'];
 const rule = (prefix, tone) => {
-  const sel = `${prefix}:is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="${tone}"] {`;
+  const sel = `${prefix}:is(#gz-todo, .gz-ct, .gz-stream-status) .gz-todo-chip[data-tone="${tone}"] {`; // To Do, the card tasks and Activity cards share them
   const at = css.indexOf(`\n${sel}`);
   assert.ok(at !== -1, `a rule for ${sel}`);
   const body = css.slice(at + sel.length + 1, css.indexOf('}', at));
