@@ -126,3 +126,13 @@ test('an explicit missing or conflicting Activity destination cannot fall back t
   assert.equal(S.find(ITEMS, { links: ['/ultra/courses/_102_1/outline'], title, course }), null, 'the course id overrides a stale course label');
   assert.equal(S.find(ITEMS, { links: ['/ultra/courses/_101_1/outline/assessment/_501_1', '/ultra/courses/_102_1/outline/assessment/_502_1'] }), null, 'conflicting item links do not pick the first');
 });
+
+test('an ordinary colon in an unavailable Activity title does not borrow another assignment\'s status', () => {
+  const links = ['/ultra/courses/_101_1/outline'];
+  for (const prefix of ['Reading', 'Part One', 'Discussion']) {
+    assert.equal(S.find(ITEMS, { links, title: `${prefix}: Practice essay` }), null, 'the full title is absent from the planner');
+  }
+  for (const prefix of ['Past due', 'Overdue', 'Vencido', 'Atrasado', 'En retard', 'Überfällig', 'Te laat']) {
+    assert.equal(S.find(ITEMS, { links, title: `${prefix}: Practice essay` }), ITEMS[0], 'recognized deadline labels still work');
+  }
+});
