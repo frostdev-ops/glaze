@@ -305,6 +305,37 @@ test('review (B2 1): a module that lands after Glaze or its switch went off stay
   assert.deepEqual(r.due, []);
 });
 
+test('Activity status rechecks its switch, route and page when the card module arrives', async () => {
+  const src = read('content/content-ultra.js');
+  const decls = ['load', 'top', 'streamHere', 'syncCardTasks'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))[0]).join('');
+  for (const change of [
+    (c) => { c.I.settings.stream.status = false; },
+    (c) => { c.I.links = []; },
+    (c) => { c.location.pathname = '/ultra/grades'; },
+    (c) => { c.cards = false; },
+    (c) => { c.solo = false; },
+  ]) {
+    let arrive;
+    const wanted = [];
+    const c = {
+      I: { links: [1], settings: { stream: { status: true }, enhance: { cardTasks: false } } },
+      solo: true, cards: true, CARD: 'article', location: { pathname: '/ultra/stream' },
+      document: { querySelector: () => c.cards ? {} : null },
+      need: () => new Promise((res) => { arrive = res; }),
+    };
+    c.globalThis = c;
+    vm.createContext(c);
+    vm.runInContext(`${decls}\nglobalThis.syncCardTasks = syncCardTasks;`, c);
+    c.syncCardTasks();
+    change(c);
+    c.syncCardTasks(); // off before the module exists
+    c.GZ_CARD_TASKS = { sync() {}, stream: (on) => wanted.push(on) };
+    arrive();
+    await settle();
+    assert.deepEqual(wanted, [false], 'the late module stays off');
+  }
+});
+
 test("review (B2 2): on Ultra the cards and the reminders count this device's ticks, whatever \"Tick off in Canvas too\" says", async () => {
   const now = Date.now();
   const stored = { [KEY]: { tasks: [], items: { 'assignment:_603_1': { done: true } } } };
