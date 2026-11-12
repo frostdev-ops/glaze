@@ -184,11 +184,11 @@ const animates = async (frame, at, bound = 20000) => {
     await page.fill('#find', '');
 
     // ---- another Look: the choice stays -------------------------------------------------------------------------------------
-    await wearLook('Graveyard');
-    check('wearing Graveyard: the student\'s picture stays the pointer; the Look\'s card shows the ghost', await until(() => page.evaluate(() => /cursors\/ghost\/default/.test(document.querySelector('[data-pointer="look"] img')?.src || '')))
+    await wearLook('Harvest Moon');
+    check('wearing Harvest Moon: the student\'s picture stays the pointer; the Look\'s card shows its own', await until(() => page.evaluate(() => /cursors\/harvest\/default/.test(document.querySelector('[data-pointer="look"] img')?.src || '')))
       && (await sync()).pointer === 'own' && !!await wears('own'), await worn());
     await page.click('#pointer-remove');
-    check('Remove picture: gone from this computer, and the Look\'s pointer is back', await until(async () => !(await localImg()) && (await sync()).pointer === 'look') && !!await wears('ghost'), await worn());
+    check('Remove picture: gone from this computer, and the Look\'s pointer is back', await until(async () => !(await localImg()) && (await sync()).pointer === 'look') && !!await wears('harvest'), await worn());
     check('  focus goes to the card that asks for another', await page.evaluate(() => document.activeElement?.tagName === 'BUTTON' && document.activeElement.dataset.pointer === 'own'));
 
     await page.focus('#pointer-tiles input[value="look"]');

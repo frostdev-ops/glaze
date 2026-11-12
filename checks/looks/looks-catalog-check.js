@@ -90,13 +90,13 @@ const wear = (name) => G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ
     const a = await open();
     check(await a.evaluate(async () => {
       const raw = await chrome.storage.local.get('lookCatalog');
-      return raw.lookCatalog === undefined && document.querySelectorAll('#looks .look').length === GZ_LOOKS.length;
+      return raw.lookCatalog === undefined && document.querySelectorAll('#looks .look').length === GZ_LOOKS.filter((L) => !L.old).length;
     }), 'Settings shows the built-in Looks with no catalogue cache');
     const freshPopup = await ctx.newPage();
     freshPopup.on('pageerror', (e) => errors.push(`fresh popup: ${e}`));
     await freshPopup.goto(`${base}/popup.html`);
     await freshPopup.locator('#look').click();
-    check(await freshPopup.locator('#looks').evaluate((box) => box.querySelectorAll('.look').length === GZ_LOOKS.length && !box.querySelector('.looks-head')), 'the popup shows the built-in Looks with no catalogue cache');
+    check(await freshPopup.locator('#looks').evaluate((box) => box.querySelectorAll('.look').length === GZ_LOOKS.filter((L) => !L.old).length && !box.querySelector('.looks-head')), 'the popup shows the built-in Looks with no catalogue cache');
     await freshPopup.close();
     await a.evaluate(async ({ kept }) => {
       await chrome.storage.local.set({ lookFavorites: kept, seenCourses: { _101_1: { name: 'Biology 101', slot: '2', org: false } } });
