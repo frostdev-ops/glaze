@@ -52,7 +52,8 @@ var GZ_STREAM = globalThis.GZ_STREAM || (() => {
       return same.length === 1 ? same[0] : null;
     }
     const c = norm(course), mine = items.filter((i) => cids.size ? cids.has(i.cid) : !!c && norm(i.course) === c);
-    for (const t of [norm(title), norm(title).replace(/^\p{L}+(?: \p{L}+){0,2}:\s+/u, '')]) {
+    // Strip recognized deadline labels only: "Reading: Essay" can be a different item outside the planner range.
+    for (const t of [norm(title), norm(title).replace(/^(?:past due|overdue|vencido|atrasado|en retard|überfällig|te laat):\s+/u, '')]) {
       const same = t ? mine.filter((i) => norm(i.title) === t) : [];
       if (same.length) return same.length === 1 ? same[0] : null;
     }
