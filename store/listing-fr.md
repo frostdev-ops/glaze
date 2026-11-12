@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.7 (French)
+# Chrome Web Store listing — Glaze 4.0.8 (French)
 
 ## Short summary (132 character maximum)
 
@@ -72,6 +72,12 @@ Open source (MIT) : https://github.com/frostdev-ops/glaze
 Canvas est une marque d’Instructure, Inc. Blackboard est une marque d’Anthology Inc. Moodle est une marque déposée de Moodle Pty Ltd. Glaze est un projet indépendant ; il n’est affilié à aucune de ces sociétés ni à aucun établissement, et n’est approuvé par aucun d’eux.
 
 ## Release notes
+
+NOUVEAUTÉS DE LA VERSION 4.0.8
+
+• Trois styles pour Thanksgiving : Harvest Moon, Turkey Trot et Hearthside, chacun avec sa scène animée, son pointeur et ses effets.
+• Les styles d’Halloween Graveyard et Pumpkin Patch ont rejoint la galerie sur frostdev.io/glaze/looks ; ils restent là où vous les portez.
+• Blackboard : le statut de remise sur les cartes d’activité et les tâches sur les cartes de cours s’affichent quand vous passez d’une page Blackboard à une autre.
 
 NOUVEAUTÉS DE LA VERSION 4.0.7
 
