@@ -17,6 +17,8 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   let L = null; // planner/todo.js
   let tz, uid = '', key = '', o = null, data = null, cache = null;
   let on = false, cards = false, streamOn = false, starting = null, asking = null, failed = 0, listed = false;
+  let generation = 0, retired = false;
+  const current = (g) => !retired && g === generation;
   let gs = null; // Gradescope's items for this site (planner/todo.js gradescope)
   let asked = null; // Gradescope's one-time question, while it's on the page
 
@@ -57,24 +59,26 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   // teach is null, and the list keeps these planner items and asks for the grading alone (planner/page/todo.js load).
   // It's kept through the worker, only if no newer one is stored (planner/todo.js publishIn): an answer asked for before the
   // one already kept (the list's, another tab's) is dropped, and the newer one shown.
-  const load = async () => {
+  const load = async (g) => {
+    const account = key;
     const now = Date.now();
     const { start, end } = L.fetchRange(o, now, tz);
     let c, due;
     if (ultra) {
       // Ultra: no teachers' grading, and no popup list from here (content.js keeps Ultra's own). Read only while still on.
       await ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA);
-      if (!on) throw new Error('off');
+      if (!on || !current(g)) throw new Error('off');
       const r = await GZ_ULTRA.page.due(Date.parse(start), Date.parse(end));
-      c = { key, at: r.at ?? now, epoch: r.epoch, start, end, teach: o.teacher, progress: o.progress, items: r.items, complete: r.complete, grading: [], sums: {} };
+      c = { key: account, at: r.at ?? now, epoch: r.epoch, start, end, teach: o.teacher, progress: o.progress, items: r.items, complete: r.complete, grading: [], sums: {} };
     } else {
       const [raw, list] = await Promise.all([pages(`/api/v1/planner/items?start_date=${start}&end_date=${end}&per_page=100`), ctx.canvasCourses()]);
       const teaches = list.some((c) => (c.enrollments || []).some((e) => /^(teacher|ta)/i.test(e.type || '')));
-      c = { key, at: now, start, end, teach: o.teacher && teaches ? null : o.teacher, progress: o.progress, items: raw.map(L.slim), grading: [], sums: {} };
+      c = { key: account, at: now, start, end, teach: o.teacher && teaches ? null : o.teacher, progress: o.progress, items: raw.map(L.slim), grading: [], sums: {} };
       due = GZ_CANVAS_DUE_WEEK(raw, now);
     }
-    const best = (await new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:todo', key, cache: c, due }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } }))?.cache || c;
-    if (!on) return;
+    if (!on || !current(g)) return;
+    const best = (await new Promise((res) => { try { chrome.runtime.sendMessage({ type: 'glaze:todo', key: account, cache: c, due }, (r) => res(chrome.runtime.lastError ? null : r)); } catch { res(null); } }))?.cache || c;
+    if (!on || !current(g)) return;
     if (!(cache?.key === key && cache.at > best.at)) cache = best;
     paint();
   };
@@ -83,7 +87,9 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   // within a minute of a failed ask.
   const refresh = (force = false) => {
     if (!on || !L || !mine || asking || Date.now() - failed < 60000 || (!force && fresh(cache, Date.now())) || document.getElementById('gz-todo')) return;
-    asking = load().catch(() => { failed = Date.now(); }).finally(() => { asking = null; });
+    const g = generation;
+    const pending = load(g).catch(() => { if (current(g)) failed = Date.now(); }).finally(() => { if (asking === pending) asking = null; });
+    asking = pending;
   };
 
   // ---- the cards ----
@@ -186,20 +192,36 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   };
   document.addEventListener('glaze:ultra-refresh', (e) => {
     if (!ultra) return;
+    if (e.detail?.identity || e.detail?.retire) {
+      // A new identity must confirm itself again; no continuation from the old account may draw or publish.
+      generation++;
+      retired ||= !!e.detail.retire;
+      mine = false;
+      cache = data = starting = asking = null;
+      uid = key = '';
+      failed = 0;
+      for (const el of document.querySelectorAll('.gz-ct')) el.remove();
+      unstream(); asked?.remove(); asked = null;
+      if (retired) cards = streamOn = false;
+      run();
+      return;
+    }
     cache = null;
-    if (e.detail?.retire) { sync(false); mine = false; }
-    else if (on) refresh(true);
+    if (on) refresh(true);
   });
   const onShow = () => { if (document.visibilityState === 'visible') refresh(); };
   // Who's signed in (their id names their data and the cache; their Canvas time zone counts the days), what's kept. On
   // Ultra the student last confirmed on this site answers first (courses/ultra.js page.known), so what's kept is read while
   // /users/me confirms who it is; sure says whether it's them, and the tasks show only once it is (mine).
   let heard = false, sure = null, mine = false;
-  const start = async () => {
+  const start = async (g) => {
     await ctx.need('planner/todo.js', () => globalThis.GZ_TODO);
+    if (!current(g)) throw new Error('stale');
     L = globalThis.GZ_TODO;
     const known = ultra ? await ctx.need('courses/ultra.js', () => globalThis.GZ_ULTRA).then(() => globalThis.GZ_ULTRA?.page?.known?.() || null, () => null) : null;
+    if (!current(g)) throw new Error('stale');
     const [p] = known ? [known, await readPrefs()] : await Promise.all([ctx.profile(), readPrefs()]);
+    if (!current(g)) throw new Error('stale');
     if (!L.ID.test(String(p?.id))) throw new Error('no profile');
     tz = L.zone(p.time_zone);
     uid = String(p.id);
@@ -207,6 +229,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     mine = !known;
     sure = known ? () => ctx.profile().then((x) => String(x?.id) === String(p.id)) : () => true;
     const r = await get([key, CACHE]);
+    if (!current(g)) throw new Error('stale');
     data = L.clean(r[key]);
     cache = r[CACHE]?.key === key ? r[CACHE] : null;
     if (heard) return;
@@ -219,16 +242,18 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   // another student than the one signed in: those tasks go, and it starts again.
   const sync = (want) => { cards = !!want; run(); };
   const stream = (want) => {
-    streamOn = ultra && !!want;
+    streamOn = ultra && !retired && !!want;
     if (streamOn && !globalThis.GZ_STREAM) ctx.need('courses/stream.js', () => globalThis.GZ_STREAM).then(paint, () => {});
     run();
   };
   const run = () => {
-    on = cards || streamOn;
+    on = !retired && (cards || streamOn);
     if (!on) { for (const e of document.querySelectorAll('.gz-ct')) e.remove(); unstream(); asked?.remove(); asked = null; return; }
     const list = !!document.getElementById('gz-todo');
     // Started: whether the list is here now counts as seen, so its going later is noticed whenever it goes.
-    if (!starting) starting = start().then(() => { listed = !!document.getElementById('gz-todo'); paint(); return sure(); }).then((ok) => {
+    const g = generation;
+    if (!starting) starting = start(g).then(() => { if (!current(g)) return; listed = !!document.getElementById('gz-todo'); paint(); return sure(); }).then((ok) => {
+      if (!current(g)) return;
       mine = ok;
       if (ok) { paint(); if (ultra && fresh(cache, Date.now())) setTimeout(() => { if (on) refresh(true); }, 0); else return refresh(); }
       for (const e of document.querySelectorAll('.gz-ct')) e.remove();
@@ -236,7 +261,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       cache = data = null;
       starting = null;
       run();
-    }, () => { setTimeout(() => { starting = null; }, 60000); });
+    }, () => { if (current(g)) setTimeout(() => { if (current(g)) starting = null; }, 60000); });
     else {
       paint();
       if (!cache || (listed && !list)) refresh();
