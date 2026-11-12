@@ -93,7 +93,10 @@ test('a redirect, an error status and a network failure are refused, never follo
     const x = await got('video', URL1, reply);
     assert.deepEqual([x.ok, x.error], [false, 'network'], why);
     assert.equal(x.calls.length, 1, `${why}: asked once and not again`);
+    // What the address answered stays its answer (final); a fetch that did not get through may pass a moment later.
+    assert.equal(x.final, why === 'offline' ? undefined : true, `${why}: final`);
   }
+  assert.equal((await got('video', URL1, response(new Uint8Array(), { ok: false, status: 503 }))).final, undefined, 'the server\'s own trouble may pass');
 });
 
 test('a body over the byte cap is refused by its length or as it arrives, and the rest is not read', async () => {

@@ -409,6 +409,11 @@ test('lottie: a kept file answers with its cleaned JSON; an address only when al
   assert.equal((await run(url, response('', { status: 301, headers: { location: 'https://evil.example/' } }))).error, 'network');
   assert.equal((await run(url, response('x', { ok: false, status: 404 }))).error, 'network');
   assert.equal((await run(url, new Error('offline'))).error, 'network');
+  // An address that answered with a redirect or a refusal answers the same a moment later: final, so no page asks again.
+  assert.equal((await run(url, response('', { status: 302, type: 'opaqueredirect' }))).final, true);
+  assert.equal((await run(url, response('x', { ok: false, status: 404 }))).final, true);
+  assert.equal((await run(url, new Error('offline'))).final, undefined, 'a fetch that did not get through may pass later');
+  assert.equal((await run(url, response('x', { ok: false, status: 503 }))).final, undefined, 'and so may the server\'s own trouble');
   assert.equal((await run(url, response('x', { headers: { 'content-length': String(M.LIMIT.bg.lottie + 1) } }))).error, 'big');
   assert.equal((await run(url, response(' '.repeat(M.LIMIT.bg.lottie + 10)))).error, 'big', 'a body past the limit with no length given');
   assert.equal((await run(url, response('{"not":"lottie"}'))).error, 'type');

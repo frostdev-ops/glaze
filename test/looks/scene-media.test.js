@@ -365,6 +365,9 @@ test('what a retry cannot fix fails at once: not here, refused, past a limit, no
     ['address, not that kind', 'glaze:remoteMedia', { ok: false, error: 'type' }, { type: 'video', src: URL1 }, 'limits'],
     ['Lottie, missing', 'glaze:lottie', { ok: false, error: 'missing' }, { type: 'lottie', src: 'file:' + 'A'.repeat(43) }, 'file'],
     ['Lottie, refused', 'glaze:lottie', { ok: false, error: 'type' }, { type: 'lottie', src: 'https://cdn.example.com/a.json' }, 'load'],
+    // The address answered, with a refusal or a redirect (final): a second ask gets the same answer.
+    ['address, answered 404', 'glaze:remoteMedia', { ok: false, error: 'network', final: true }, { type: 'video', src: URL1 }, 'load'],
+    ['Lottie address, answered 404', 'glaze:lottie', { ok: false, error: 'network', final: true }, { type: 'lottie', src: 'https://cdn.example.com/a.json' }, 'load'],
   ]) {
     const r = rig({ ask: flaky(type, bad, Infinity, null) });
     r.scene.update(o(media));
