@@ -58,7 +58,7 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 
 // One headless browser at a time across agents: wait (up to 25 minutes) while anyone else's is running.
 const othersRunning = () => execSync('ps -axo pid=,command=', { encoding: 'utf8' }).split('\n')
-  .filter((l) => /chrome-headless-shell|--headless|Chromium|Google Chrome for Testing/.test(l) && !/scene-check|pgrep|ps -ax|^\s*\d+\s+(\/bin\/)?(zsh|bash|sh)\s/.test(l)).length;
+  .filter((l) => /chrome-headless-shell|Chromium|Google Chrome for Testing|(chrome|firefox)\S*\s.*--headless/i.test(l) && !/scene-check|pgrep|ps -ax|^\s*\d+\s+(\/bin\/)?(zsh|bash|sh)\s/.test(l)).length;
 for (let i = 0; i < 300 && othersRunning(); i++) {
   if (i % 6 === 0) console.error(`[scene-check] another headless browser is running; waiting (${i * 5}s)`);
   await new Promise((r) => setTimeout(r, 5000));

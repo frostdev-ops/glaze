@@ -127,7 +127,7 @@ const stub = () => {
 
     // A provider's key: kept by the worker, shown back masked, its model chosen as Settings suggests.
     await page.click('.ai-choice[data-choice="key"]');
-    check(await until(async () => (await stored(page))?.model?.use === null && (await stored(page))?.on === true), 'a key picked leaves Rime, AI still on');
+    check(await until(async () => (await stored(page))?.model?.use === null && (await stored(page))?.on === false), 'a key picked leaves Rime, AI off until a key works');
     check(await page.isVisible('.ai-provs') && await page.isHidden('.ai-bar'), 'the providers show; the field waits for one');
     await shot(page, 'wide-dark-4-key');
     await page.click('.ai-prov[data-p="openai"]');

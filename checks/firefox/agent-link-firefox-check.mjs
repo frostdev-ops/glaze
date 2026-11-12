@@ -349,11 +349,13 @@ const checkRun = async () => {
   process.kill(host.pid, 'SIGKILL');
   const exited = await until(async () => (await links(b, c)).find((l) => l?.state === 'exited'), 'the link to show exited', 10000);
   const back = await until(async () => { const l = await link(b, c); return l?.state === 'connected' && l.at > exited.at && l; }, 'the link to reconnect', 15000);
-  const gone = await Promise.all([a.exited, b2.exited]);
-  R.exited = { error: exited.error ?? null, then: back, launches: started().map((s) => s.pid), agents: gone.map((g, i) => ({ ...g, stderr: [a, b2][i].err() })) };
+  const stayed = await Promise.all([a, b2].map((x) => x.ask(LIST(3)).catch((e) => ({ error: String(e.message || e) }))));
+  R.exited = { error: exited.error ?? null, then: back, launches: started().map((s) => s.pid),
+    agents: [a, b2].map((x, i) => ({ alive: alive(x.p.pid), tools: stayed[i].result?.tools?.length ?? null, error: stayed[i].error ?? null, stderr: x.err() })) };
   ok(exited.state === 'exited' && exited.error == null, `the helper killed reads as exited with no port error (error ${JSON.stringify(exited.error ?? null)})`);
   ok(back.state === 'connected' && started().length === 2 && started()[1].pid !== host.pid, `and the link reconnects to a new helper ${started()[1]?.pid}`);
-  ok(gone.every((g) => g.code === 1), `both agents exit 1 as the helper's socket closes (${JSON.stringify(gone)})`);
+  ok(R.exited.agents.every((g) => g.alive && g.tools === names.length),
+    `both agents stay and answer through the new helper (${JSON.stringify(R.exited.agents.map(({ alive, tools, error }) => ({ alive, tools, error })))})`);
 
   // Control: with the port closed, the idle timeout stops the event page.
   const before = (await b.inChrome(PAGE)).log.length;

@@ -208,15 +208,16 @@ const rss = (profile) => {
     check(new Set(all.map((s) => s.worker)).size === 1, `one Harper worker for ${frames.length} boxes in ${pages.length} tabs on ${SITES.length} schools (worker ${all[0].worker.slice(0, 8)}…)`);
     check(all[0].ports >= frames.length && all.every((s) => s.loads === 1), `its linter loaded once (${all[0].ports} frames connected, ${all[0].lints} lints)`);
     // The AI stream's decide hook rules on a fix that isn't sure ("Their going": Grammar), here with an object verdict.
+    // Grammar has no Typing switch, so an apply comes back as the card's first suggestion and the paper keeps its words.
     const other = frames[1];
     await other.fr.evaluate(() => { window.__asked = []; GZ_WRITER_PROOF.decide = async (a) => { __asked.push(a); return { verdict: 'apply', choice: 0 }; }; });
     await pages[1].bringToFront();
     await other.fr.click('.ProseMirror');
     await pages[1].keyboard.press('End');
     await pages[1].keyboard.type(' Their going to the river tomorrow.', { delay: 12 });
-    await until(async () => (await text(other.fr)).includes("They're going to the river"), 'decide applied');
+    await until(() => other.fr.evaluate(() => __asked.some((x) => x.suggestions[0] === "They're") && GZ_WRITER_ISSUES.list().some((i) => i.text === 'Their' && i.suggestions[0] === "They're")), 'decide ruled');
     check(await other.fr.evaluate(() => { const a = __asked.find((x) => x.suggestions[0] === "They're"); return a && a.text.slice(a.from, a.to) === 'Their' && typeof a.context === 'object' && __asked.every((x) => x.to < x.text.length && !/\p{L}/u.test(x.text.charAt(x.to))); }), 'decide gets the paragraph, the offsets, the suggestions and the context; { verdict: \'apply\', choice } puts the choice in as autocorrect; never asked about a word still being typed');
-    check(await other.fr.evaluate(() => [...document.querySelectorAll('.ProseMirror .gz-ac')].some((s) => s.textContent === "They're")), 'marked like any autocorrect');
+    check((await text(other.fr)).includes('Their going to the river') && await other.fr.evaluate(() => ![...document.querySelectorAll('.ProseMirror .gz-ac')].some((s) => s.textContent === "They're")), 'a grammar apply is only suggested: the paper keeps its words');
     await pause(1500);
     memory.sixTabs = rss(profile);
 
