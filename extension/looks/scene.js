@@ -560,138 +560,506 @@ void main() {
   c = lights(c, p, uC3, .06, .26);
   gl_FragColor = vec4(dither(c), 1.);
 }`;
-// A fireside evening: a brick fireplace with a living fire, embers going up, a mantel with candles, little pumpkins and a
-// garland, a wreath over it, dusk and falling leaves in the window, an armchair, and a cat asleep on the rug.
+// A fireside evening: a brick fireplace with a living fire over a bed of coals, a mantel with candles, pumpkins and a leaf
+// garland, a wreath above it, a dusk window with leaves falling past, an armchair with a throw, and a ginger cat asleep on
+// the rug. The firelight warms what faces the fire and leans soft shadows away from it. Room units r: 0 at the fireplace's
+// middle, the floor meeting the wall at fl. Small things are drawn only near where they are, so their edges use cv() and the
+// pixel's size, px, where fwidth() would be undefined.
 const HEARTH = `${AUTUMN}
-float gourd(vec2 p) { return min(length(p * vec2(1., 1.25)) - .42, length(vec2(abs(p.x) - .25, p.y) * vec2(1.1, 1.25)) - .36); }
-// A flame one unit tall standing on y = 0: a teardrop that leans more the higher it goes.
-float lick(vec2 a, float t, float f) {
-  a.x += (.2 * sin(t * 3.4 + f * 2. + a.y * 3.) + .09 * sin(t * 8.3 + f + a.y * 8.)) * a.y;
-  return max(abs(a.x) - .46 * (1. - a.y) * (.5 + .9 * a.y), -a.y);
+float cv(float d, float w) { return 1. - smoothstep(-w, w, d); }
+// A pointed leaf along y: half length h, half width w.
+float lens(vec2 q, float h, float w) { float r = (h * h / w + w) * .5; return length(vec2(abs(q.x) + r - w, q.y)) - r; }
+// An ellipse with radii e, near enough a distance for an edge.
+float oval(vec2 q, vec2 e) { return (length(q / e) - 1.) * min(e.x, e.y); }
+// The fire's heat at f (y up from the coals): above 0 is flame, near 1 its pale core. Five tongues rise and fall on their own
+// beats; noise carried upward makes them lick and their tips break away.
+float heat(vec2 f, float t, float boost) {
+  float y = max(f.y, 0.);
+  float n1 = noise(vec2(f.x * 6., y * 3.6 - t * 2.9)), n2 = noise(vec2(f.x * 13. + 3., y * 7.5 - t * 5.3));
+  // The higher up, the more a tongue bends and licks.
+  f.x += ((n1 - .5) * .32 + .06 * sin(t * 1.7 + y * 6.)) * y * 1.1;
+  float h = 1. - y / (.08 * boost) - f.x * f.x / .1156;
+  for (int i = 0; i < 5; i++) {
+    float fi = float(i), side = fi - 2.;
+    float hi = (.5 - .055 * side * side + .07 * sin(t * (2.1 + .37 * fi) + fi * 1.9) + .04 * sin(t * (4.7 + .5 * fi) + fi * 4.)) * boost;
+    float s = y / hi, wx = (f.x - side * .12 - .02 * sin(t * .8 + fi * 2.3)) / ((.085 + .025 * (1. - abs(side) * .5)) * (1.45 - min(s, 1.)));
+    h = max(h, 1. - s - wx * wx);
+  }
+  return h - (n1 * .55 + n2 * .45 - .42) * (.2 + 1.1 * y);
+}
+// A log from a to b, w thick: round bark lit from the flames above and glowing in its cracks below, its cut end at b
+// showing rings and a burning rim.
+vec3 logC(vec3 c, vec2 q, vec2 a, vec2 b, float w, float seed, float t, float glow, float qp) {
+  vec2 ax = normalize(b - a);
+  float l = length(b - a), u = dot(q - a, ax), v = dot(q - a, vec2(-ax.y, ax.x)) / w;
+  float d = min(max((abs(v) - 1.) * w, max(-u, u - l)), oval(vec2(u, v * w), vec2(w * .4, w)));
+  float e = oval(vec2(u - l, v * w), vec2(w * .42, w)), cyl = sqrt(max(1. - v * v, 0.));
+  float n = noise(vec2(u * 4. + seed * 7., v * 2.));
+  vec3 bark = mix(uGround, mix(uC2, uC1, .3), .3 + .1 * n) * (.82 + .25 * smoothstep(-.3, .6, sin(v * 9. + n * 5.)));
+  bark *= .42 + .38 * cyl + .35 * max(v, 0.);
+  float cr = (1. - smoothstep(.0, .07, abs(n - .5))) * smoothstep(.0, .5, abs(sin(v * 4.5 + n * 3.)));
+  bark = mix(bark, mix(uC1, uC3, .15), cr * (.55 + .45 * sin(t * 1.3 + u * 9. + seed * 5.)) * (.08 + .92 * smoothstep(.1, -.9, v)) * glow);
+  bark = mix(bark, mix(uC1, uC3, .2), smoothstep(.6, 1., v) * .45 * glow);
+  bark = mix(bark, uC1, smoothstep(-.55, -1., v) * .35 * glow);
+  float ring = length(vec2((u - l) / (w * .42), v));
+  vec3 grain = mix(uGround, mix(uC3, uC1, .5), .5) * (.84 + .16 * sin(ring * 26.)) * (.8 + .25 * v);
+  grain = mix(grain, bark * .8, smoothstep(.8, .88, ring));
+  grain = mix(grain, mix(uC1, uC3, .35), smoothstep(.7, .86, ring) * (.4 + .6 * smoothstep(-.4, .8, v)) * .7 * glow);
+  return mix(mix(c, bark, cv(d, qp)), grain, cv(e, qp));
+}
+// A pumpkin of radii e with its stem, ribbed, lit from the left: colour and cover.
+vec4 pumpkin(vec2 k, vec2 e, vec3 skin, float qp) {
+  float d = oval(k, e) + .012 * smoothstep(.6, 1., k.y / e.y) * smoothstep(.3, 0., abs(k.x / e.x));
+  float u = clamp(k.x / (e.x * sqrt(max(1. - k.y * k.y / (e.y * e.y), .03))), -1., 1.), th = asin(u);
+  float lobe = cos(th * 5.);
+  vec3 col = skin * (.55 + .4 * (.5 + .5 * lobe)) * (.78 + .32 * smoothstep(.8, -.8, u - k.y / e.y * .5));
+  col *= 1. - .35 * smoothstep(.75, 1., -lobe) * (1. - abs(u) * .5);
+  col = mix(col, mix(uC3, skin, .4), .3 * exp(-dot((k - e * vec2(-.4, .38)) / e, (k - e * vec2(-.4, .38)) / e) * 9.));
+  col *= 1. - .3 * smoothstep(-.4, -1., k.y / e.y);
+  float stem = box(rot(.25) * (k - vec2(.02, e.y * .95)), vec2(e.x * .07, e.y * .2)) - .004;
+  col = mix(col, mix(uGround, mix(vec3(.3, .55, .25), skin, .35), .45) * (.8 + .3 * smoothstep(-.01, .01, k.x - .02)), cv(stem, qp));
+  return vec4(col, max(cv(d, qp), cv(stem, qp)));
 }
 void main() {
   vec2 p = vec2(vUv.x * uAspect, vUv.y);
-  // The fireplace stands right of the middle, in the middle on a narrow page; the rest keeps its distance from it.
-  float t = uTime, fl = .15, fx = uAspect * mix(.5, .66, smoothstep(.8, 1.4, uAspect));
-  // The fire's light: a slow breath, a quick flutter, and now and then the crack of a log.
-  float crack = pow(noise(vec2(t * 6.5, 3.)), 5.) * 1.7;
-  float pulse = .72 + .2 * noise(vec2(t * 2.6, 1.)) + .04 * sin(t * 11. + 4. * noise(vec2(t * 1.7, 5.))) + .14 * crack;
-  vec3 wood = mix(uGround, uC1, .32);
-  // The wall, lit from the fire.
-  vec3 c = mix(uGround, uC2, amt(.15 + .06 * p.y));
-  vec2 lit = p - vec2(fx, fl + .1);
-  c = mix(c, uC1, amt(exp(-length(lit * vec2(1., 1.3)) * 2.2) * .42 * pulse * (.88 + .12 * noise(vec2(atan(lit.y, lit.x) * 3., t * 3.)))));
-  // The window: dusk, a moon, a few stars, leaves coming down past it.
-  vec2 w = p - vec2(fx - .83, .62);
-  vec3 sky = mix(mix(uGround, uC2, .6), uC1, .4 * smoothstep(.12, -.15, w.y));
-  sky = mix(sky, uC3, stars(p) * .8);
-  sky = mix(sky, uC3, cover(length(w - vec2(.045, .075)) - .026) * .9);
-  for (int i = 0; i < 4; i++) {
-    float fi = float(i), h = hash(vec2(fi, 6.));
-    vec2 o = vec2((h - .5) * .17 + .02 * sin(t * .8 + fi * 2.), .17 - mod(t * (.03 + .02 * h) + h, .36));
-    vec2 q = rot(t * (.6 + h) + fi) * (w - o) / .014;
-    sky = mix(sky, mix(uC1, uC3, h), cover(min(length(q * vec2(1., 2.3)) - .55, length((rot(.9) * q) * vec2(1., 2.6)) - .45)) * .9);
+  float t = uTime;
+  // The fireplace stands right of the middle; on a narrow page in the middle, where the whole room draws smaller to fit.
+  float fx = uAspect * mix(.5, .66, smoothstep(.8, 1.4, uAspect)), k = clamp(uAspect / 1.2, .6, 1.);
+  vec2 r = vec2(p.x - fx, p.y - .25 * (1. - k)) / k;
+  float px = .001 / (uPx * k), fl = .155;
+  // The fire breathes: a slow swell, a quick flutter, and every few seconds a log cracks, flaring it and throwing sparks.
+  float ev = floor(t * .16), et = fract(t * .16) / .16 - 1. - 3. * hash(vec2(ev, 2.));
+  float pop = step(.3, hash(vec2(ev, 5.))) * step(0., et) * exp(-et * 4.);
+  float flick = .84 + .1 * noise(vec2(t * 2.1, 1.)) + .06 * noise(vec2(t * 7.3, 4.)) + .2 * pop;
+  vec2 L = (r - vec2(0., fl + .09)) * vec2(1., 1.25);
+  float fall = flick / (1. + dot(L, L) * 10.), sway = (flick - .87) * .25;
+  vec3 warm = mix(uC1, uC3, .3), wood = mix(uGround, mix(uC1, uC2, .45), .32);
+  // How much each pixel turns to the fire, for the light laid over everything at the end.
+  float face = .55;
+
+  // The wall: dark paper with a faint stripe and a small dot; panelling below a rail.
+  vec3 c = mix(uGround, uC2, amt(.11 + .04 * r.y));
+  float sx = fract(r.x * 9. + .5) - .5;
+  c = mix(c, mix(uGround, uC2, .17 + .04 * r.y), amt(cover(abs(sx) - .17) * .5));
+  c = mix(c, mix(uGround, uC3, .15), amt(cover(length(vec2(sx, fract(r.y * 9.) - .5)) / 9. - .0045) * .5));
+  float rail = fl + .2;
+  vec2 pc = vec2((fract(r.x / .19 + .5) - .5) * .19, r.y - fl - .108), pn = pc / vec2(.07, .066);
+  float pnl = box(pc, vec2(.064, .06)) - .006;
+  float tone = abs(pn.y) > abs(pn.x) ? sign(pn.y) : -sign(pn.x * r.x) * .6;
+  vec3 wain = mix(uGround, mix(uC2, uC1, .3), .2 + .04 * cover(pnl));
+  wain *= 1. + cover(abs(pnl + .008) - .008) * tone * .28;
+  wain = mix(wain, uGround, cover(abs(pnl) - .0015) * .3);
+  c = mix(c, wain, amt(cover(r.y - rail)));
+  c = mix(c, mix(wood, uC3, .12 * smoothstep(rail, rail + .008, r.y)), amt(cover(abs(r.y - rail - .002) - .007)));
+  c = mix(c, mix(wood, uGround, .3), amt(cover(r.y - fl - .026)));
+  c = mix(c, mix(wood, uC3, .1), amt(cover(abs(r.y - fl - .026) - .002)));
+
+  // The window: dusk over a line of hills, the moon, leaves coming down past it.
+  vec2 w = r - vec2(-.83, .62);
+  vec3 sky = uGround;
+  if (abs(w.x) < .11 && abs(w.y) < .155) {
+    sky = mix(mix(uGround, uC2, .45), mix(uC2, uC1, .7), smoothstep(.13, -.1, w.y));
+    vec2 mw = w - vec2(.045, .08);
+    float md = length(mw);
+    sky = mix(sky, mix(uC1, uC3, .6), exp(-md * 28.) * .45);
+    sky = mix(sky, uC3, stars(vec2(w.x * 1.6 + .3, w.y * 1.6 + .74)) * .8);
+    sky = mix(sky, mix(uC3, uC1, .15 + .2 * noise(mw * 90.)), cv(md - .024, px));
+    float hills = w.y + .1 - .01 * sin(w.x * 21. + 1.) - .004 * sin(w.x * 53.) - .006 * cos(w.x * 140.) * step(w.x, -.02);
+    sky = mix(sky, mix(uGround, uC2, .22), cv(hills, px));
+    for (int i = 0; i < 5; i++) {
+      float fi = float(i), h = hash(vec2(fi, 61.));
+      float drop = t * (.022 + .015 * h) + h * 2.;
+      vec2 o = vec2((hash(vec2(fi, floor(drop / .4))) - .5) * .2 + .02 * sin(t * .7 + fi * 2.), .19 - mod(drop, .4));
+      sky = mix(sky, mix(uC1, i == 2 ? uC2 : uC3, h * .7), cv(lens(rot(t * (.7 + h) + fi) * (w - o), .009, .004), px) * .9);
+    }
+    sky = mix(sky, uC3, .05 * smoothstep(.015, 0., abs(w.x + w.y * .7 - .03) - .012));
   }
-  c = mix(c, sky, amt(cover(box(w, vec2(.105, .15)))));
-  float frame = max(box(w, vec2(.122, .167)), -box(w, vec2(.105, .15)));
-  frame = min(frame, min(min(box(w, vec2(.005, .15)), box(w, vec2(.105, .005))), box(w - vec2(0., -.18), vec2(.14, .012))));
-  c = mix(c, wood, amt(cover(frame)));
-  // The chimney breast and its wreath.
-  vec2 q = (p - vec2(fx, fl)) / .4;
-  c = mix(c, mix(uGround, uC2, .32), amt(cover(box(q - vec2(0., 1.7), vec2(.66, .7))) * .7));
-  vec2 wr = q - vec2(0., 1.7);
-  for (int i = 0; i < 12; i++) {
-    float f = float(i), m = mod(f, 3.);
-    vec3 wc = mix(uGround, m < .5 ? uC1 : m < 1.5 ? uC2 : uC3, .62 + .14 * hash(vec2(f, 7.)));
-    c = mix(c, wc, amt(cover(length(wr - (.23 + .02 * sin(f * 2.4)) * vec2(cos(f * .5236), sin(f * .5236))) - .085)));
+  float glass = box(w, vec2(.1, .145));
+  c = mix(c, sky, amt(cover(glass)));
+  c = mix(c, uGround, amt(.35 * smoothstep(-.012, 0., glass) * cover(glass)));
+  float frame = min(max(box(w, vec2(.116, .161)), -glass), min(box(w, vec2(.1, .004)), box(w, vec2(.004, .145))));
+  c = mix(c, mix(wood, uC3, .06), amt(cover(frame)));
+  c = mix(c, uGround, amt(.3 * smoothstep(-.2, -.178, w.y) * step(w.y, -.177) * smoothstep(.14, .12, abs(w.x))));
+  c = mix(c, mix(wood, uC3, .08 + .1 * smoothstep(-.17, -.16, w.y)), amt(cover(box(w - vec2(0., -.168), vec2(.135, .009)) - .002)));
+  // Curtains tied back either side, folds catching the light, their hems stirring in a draft.
+  float cw = .045 + .03 * smoothstep(0., .22, r.y - .56) + .055 * smoothstep(0., .35, .56 - r.y);
+  float ax = abs(w.x) + .0025 * sin(t * .5 + r.y * 6.) * smoothstep(.56, .2, r.y);
+  float cu = (ax - .165 + cw) / cw, curtain = max(abs(ax - .165 + cw * .5) - cw * .5, max(r.y - .805, fl + .005 - r.y));
+  vec3 cloth = mix(uGround, uC2, .34) * (.72 + .36 * (.5 + .5 * cos(cu * 15.7))) * (.85 + .2 * smoothstep(.1, .9, cu));
+  c = mix(c, cloth, amt(cover(curtain)));
+  c = mix(c, mix(uGround, mix(uC1, uC3, .4), .55), amt(cover(max(abs(r.y - .56) - .007, curtain))));
+  c = mix(c, mix(wood, uC3, .15), amt(cover(min(max(abs(r.y - .81) - .0035, abs(w.x) - .19), length(vec2(abs(w.x) - .195, r.y - .81)) - .008))));
+
+  // The fireplace, in its own units: q is 0 at the middle of its foot and 1 under the mantel.
+  vec2 q = vec2(r.x, r.y - fl) / .4;
+  float qp = px / .4;
+  // The chimney breast above, and the wreath on it.
+  float breast = box(q - vec2(0., 2.), vec2(.7, 1.));
+  c = mix(c, mix(uGround, uC2, .16), amt(cover(breast)));
+  c = mix(c, uGround, amt(.25 * cover(breast) * smoothstep(-.08, 0., breast)));
+  vec2 wq = q - vec2(0., 1.72);
+  vec4 wr = vec4(uGround, 0.);
+  if (abs(wq.x) < .38 && wq.y < .36 && wq.y > -.48) {
+    float wa = atan(wq.y, wq.x + 1e-5), wd = length(wq);
+    vec3 col = mix(uGround, mix(uC2, uC1, .3), .3) * (.75 + .5 * noise(wq * 45.));
+    float al = cv(abs(wd - .21) - .045, qp);
+    for (int j = 0; j < 3; j++) {
+      float fj = float(j), off = fj / 3.;
+      for (int m = 0; m < 2; m++) {
+        float s = floor(wa / 6.2832 * 11. + off) + float(m), an = (s - off + .5) * 6.2832 / 11.;
+        float h = hash(vec2(mod(s, 11.), fj + 3.));
+        vec2 lq = rot(-an + (h - .5) * 1.1 + .5 * (fj - 1.)) * (wq - (.205 + .04 * (fj - 1.) + .015 * h) * vec2(cos(an), sin(an)));
+        float lc = cv(lens(lq, .085 - .015 * fj, .033 - .004 * fj), qp);
+        vec3 leaf = mix(uGround, h < .33 ? uC1 : h < .66 ? uC2 : uC3, .55 + .12 * fj);
+        leaf *= .78 + .3 * smoothstep(-.02, .02, lq.x);
+        leaf = mix(leaf, leaf * .6, cv(abs(lq.x) - .0035, qp) * step(abs(lq.y), .07));
+        col = mix(col, leaf, lc);
+        al = max(al, lc);
+      }
+    }
+    // A bow at the foot, its tails barely stirring.
+    vec2 bw = wq - vec2(0., -.215);
+    float tail = min(seg(bw, vec2(0.), vec2(-.05 + .006 * sin(t * 1.1), -.14)), seg(bw, vec2(0.), vec2(.055 + .006 * sin(t * 1.3 + 1.), -.13))) - .02;
+    float loops = min(oval(rot(-.35) * (bw - vec2(-.075, .02)), vec2(.075, .042)), oval(rot(.35) * (bw - vec2(.075, .02)), vec2(.075, .042)));
+    vec3 rib = mix(uGround, mix(uC2, uC1, .3), .75);
+    col = mix(col, rib * (.8 + .25 * smoothstep(-.2, -.05, bw.y)), cv(tail, qp));
+    col = mix(col, rib * (.75 + .35 * smoothstep(-.03, .05, bw.y)), cv(loops, qp));
+    col = mix(col, rib * .55, cv(min(oval(rot(-.35) * (bw - vec2(-.07, .018)), vec2(.035, .013)), oval(rot(.35) * (bw - vec2(.07, .018)), vec2(.035, .013))), qp));
+    col = mix(col, rib * 1.1, cv(box(bw, vec2(.022, .026)) - .008, qp));
+    wr = vec4(col, max(al, max(cv(min(tail, loops), qp), cv(box(bw, vec2(.022, .026)) - .008, qp))));
   }
-  float bow = min(length(vec2(abs(wr.x) - .075, wr.y + .25) * vec2(1., 1.7)) - .06, min(seg(wr, vec2(0., -.25), vec2(-.07, -.42)), seg(wr, vec2(0., -.25), vec2(.07, -.42))) - .022);
-  c = mix(c, mix(uC2, uC3, .35), amt(cover(bow)));
-  // The floor, its firelight and the rug.
-  vec3 floorC = mix(uGround, uC1, .1 + .05 * step(.5, fract(p.y * 34.)));
-  floorC = mix(floorC, uC1, exp(-length((p - vec2(fx, fl)) * vec2(1., 4.6)) * 2.8) * .38 * pulse);
-  c = mix(c, floorC, amt(cover(p.y - fl)));
-  c = mix(c, wood, amt(cover(abs(p.y - fl - .006) - .006) * .7));
-  float rug = length((p - vec2(fx - .22, .064)) * vec2(1., 7.)) - .43;
-  c = mix(c, mix(uGround, uC2, .42), amt(cover(rug)));
-  c = mix(c, mix(uGround, uC3, .4), amt(cover(abs(rug + .07) - .009) * .7));
-  // The armchair's and the cat's shadows, thrown away from the fire and moving with it.
-  float sway = .02 * (noise(vec2(t * 3.1, 9.)) - .5);
-  float shade = exp(-pow(length((p - vec2(fx - .78 + sway, fl - .03)) * vec2(1., 4.5)) / .2, 2.)) + .7 * exp(-pow(length((p - vec2(fx - .4 + sway, .07)) * vec2(1., 5.)) / .07, 2.));
-  c = mix(c, uGround, amt(shade * .32 * pulse) * (1. - cover(p.y - fl)));
-  // The fireplace: bricks round an arched firebox, warmer the nearer the fire.
-  float opening = min(box(q - vec2(0., .27), vec2(.42, .27)), length((q - vec2(0., .54)) * vec2(1., 1.5)) - .42);
-  vec2 bb = vec2(q.x / .26 + .5 * mod(floor(q.y / .1), 2.), q.y / .1), bf = abs(fract(bb) - .5);
-  vec3 brick = mix(uGround, uC2, .42 + .18 * hash(floor(bb)));
-  brick = mix(brick, mix(uGround, uC2, .14), 1. - smoothstep(.008, .017, min((.5 - bf.x) * .26, (.5 - bf.y) * .1)));
-  brick = mix(brick, uC1, .3 * pulse * exp(-max(opening, 0.) * 5.));
-  c = mix(c, brick, amt(cover(box(q - vec2(0., .5), vec2(.8, .5)))));
-  c = mix(c, mix(uGround, uC1, .4), amt(cover(max(abs(opening - .035) - .028, -q.y))));
+  c = mix(c, wr.rgb, amt(wr.a));
+  // A clock beside the breast, its pendulum swinging.
+  vec2 ck = r - vec2(.47, .64);
+  float ccase = min(length(ck) - .044, box(ck - vec2(0., -.085), vec2(.027, .062)) - .004);
+  vec3 clock = wood * 1.1;
+  if (abs(ck.x) < .05 && ck.y < .05 && ck.y > -.16) {
+    vec3 col = clock;
+    float fd = length(ck);
+    col = mix(col, mix(uGround, uC3, .5), cv(fd - .035, px));
+    float ta = atan(ck.y, ck.x + 1e-5) / 6.2832 * 12.;
+    col = mix(col, wood * .6, cv(max(abs(fract(ta + .5) - .5) / 12. * 6.2832 * fd - .0012, abs(fd - .03) - .003 - .002 * step(mod(floor(ta + .5) + 300., 3.), .5)), px));
+    float hr = 1.3 - t * .00145, mn = 2. - t * .0174;
+    col = mix(col, wood * .5, cv(min(seg(ck, vec2(0.), .018 * vec2(cos(hr), sin(hr))), seg(ck, vec2(0.), .027 * vec2(cos(mn), sin(mn)))) - .0018, px));
+    vec2 pw = ck - vec2(0., -.09);
+    float win = box(pw, vec2(.017, .046));
+    col = mix(col, mix(uGround, uC2, .2), cv(win, px));
+    float sw = .28 * sin(t * 3.1416);
+    vec2 bob = vec2(0., .04) + .07 * vec2(sin(sw), -cos(sw));
+    float pend = min(seg(pw, vec2(0., .04), bob) - .0015, length(pw - bob) - .009);
+    clock = mix(col, mix(uGround, uC3, .45) * (.8 + .3 * smoothstep(-.01, .01, pw.x - bob.x)), cv(pend, px) * cv(win, px));
+  }
+  c = mix(c, clock, amt(cover(ccase)));
+
+  // The floor: boards running into the room, meeting far behind the fire; a sheen where the fire shines on them.
+  float dz = max(.52 - r.y, .05), bx = r.x / dz * 6., bid = floor(bx), bz = 1. / dz * 2. + hash(vec2(bid, 8.));
+  vec3 boards = mix(uGround, mix(uC1, uC2, .5), .15 + .05 * hash(vec2(bid, 3.)) + .025 * sin((bx - bid) * 31. + sin(bz * 3. + bid) * 2.));
+  boards = mix(boards, uGround, .55 * max(lineAt(bx), lineAt(bz) * .8));
+  boards = mix(boards, warm * .55, .22 * exp(-r.x * r.x * 100.) * smoothstep(-.1, fl, r.y) * flick);
+  boards *= .7 + .3 * smoothstep(fl, fl - .03, r.y);
+  c = mix(c, boards, amt(cover(r.y - fl)));
+  face = mix(face, 1., cover(r.y - fl));
+  // Shadows of the armchair and the cat, thrown away from the fire and trembling with it.
+  float shw = smoothstep(.1, -.08, box(r - vec2(-.68 - sway * .3, fl + .17), vec2(.17, .17)) - .05) * cover(fl - r.y);
+  float shf = smoothstep(.05, -.03, oval(r - vec2(-.76 - sway * .2, fl - .055), vec2(.27, .03))) + smoothstep(.02, -.015, oval(r - vec2(-.33 - sway * .1, .066), vec2(.08, .016)));
+  c = mix(c, uGround, amt(.3 * shw + .4 * min(shf, 1.) * cover(r.y - fl)) * (.8 + .4 * (flick - .84)));
+
+  // The hearth: a stone slab, its top and its front edge, warm where the fire shines on it.
+  float slab = max(abs(q.x) - .96 + .3 * q.y, abs(q.y + .068) - .068);
+  vec3 stone = mix(uGround, mix(uC3, uC2, .5), .18 + .04 * hash(vec2(floor(q.x * 3.2 + .5), 1.)));
+  stone *= .9 + .12 * noise(q * vec2(14., 30.));
+  float front = cover(q.y + .1);
+  stone = mix(stone, uGround, .5 * lineAt(q.x * 3.2 + .5) * (1. - front));
+  stone = mix(stone, stone * .62, front);
+  stone = mix(stone, warm * .7, .4 * exp(-q.x * q.x * 6.) * smoothstep(-.14, 0., q.y) * flick);
+  c = mix(c, stone, amt(cover(slab)));
+  face = mix(face, 1.1, cover(slab));
+
+  // The surround: bricks in a running bond round an arched opening, each a shade different, the edge toward the fire
+  // catching its light, soot above the arch, and the mantel's shadow under it.
+  float body = box(q - vec2(0., .5), vec2(.8, .5));
+  float opening = min(box(q - vec2(0., .27), vec2(.42, .27)), oval(q - vec2(0., .54), vec2(.42, .28)));
+  vec2 bb = vec2(q.x / .26 + .5 * mod(floor(q.y / .1), 2.), q.y / .1), bi = floor(bb), bf = fract(bb) - .5;
+  vec2 bc = vec2((bi.x + .5 - .5 * mod(bi.y, 2.)) * .26, (bi.y + .5) * .1), toF = normalize(vec2(0., .32) - bc);
+  float ex = (.5 - abs(bf.x)) * .26, ey = (.5 - abs(bf.y)) * .1;
+  vec3 brick = mix(uGround, uC2, .34 + .14 * hash(bi) + .1 * noise(q * 26.));
+  brick = mix(brick, mix(uGround, uC1, .42), .3 * step(.87, hash(bi + 3.)));
+  float edge = (1. - smoothstep(.006, .03, ex)) * max(0., sign(bf.x) * toF.x) + (1. - smoothstep(.006, .022, ey)) * max(0., sign(bf.y) * toF.y);
+  brick *= 1. - .25 * (1. - smoothstep(.006, .02, ey)) * step(bf.y, 0.);
+  brick = mix(brick, warm, edge * .3 * flick * exp(-max(opening, 0.) * 3.));
+  brick = mix(brick, mix(uGround, uC3, .1), cover(min(ex, ey) - .007));
+  brick = mix(brick, brick * (1. + warm * .6), exp(-max(opening, 0.) * 7.) * flick);
+  brick = mix(brick, uGround, .55 * smoothstep(.99, .8, q.y) * smoothstep(.62, .82, q.y) * exp(-q.x * q.x * 6.) * (.5 + .6 * noise(q * vec2(8., 3.))));
+  brick = mix(brick, uGround, .45 * smoothstep(.85, 1., q.y));
+  // The arch: wedge bricks round the top, a keystone in the middle.
+  vec2 ae = (q - vec2(0., .54)) / vec2(.42, .28);
+  float arch = max(oval(q - vec2(0., .54), vec2(.53, .38)), max(-opening, .54 - q.y));
+  float ang = atan(ae.y, ae.x + 1e-5) / 3.1416 * 11.;
+  vec3 vous = mix(uGround, uC2, .44 + .1 * hash(vec2(floor(ang + .5), 4.))) * (1. + .3 * flick * smoothstep(1.25, 1., length(ae)));
+  vous = mix(vous, mix(uGround, uC3, .1), lineAt(ang + .5) * step(abs(ang - 5.5), 4.9));
+  float key = max(box(q - vec2(0., .87), vec2(.06, .075)) - .006, -opening);
+  c = mix(c, brick, amt(cover(body)));
+  c = mix(c, vous, amt(cover(arch)));
+  c = mix(c, mix(mix(uGround, uC2, .5), uC3, .12) * (1. + .2 * smoothstep(.83, .78, q.y) * flick), amt(cover(key)));
+  face = mix(face, .5, cover(body));
+  // The firebox: back and side walls of firebrick, coals, logs on a grate, the fire, and embers going up.
+  vec3 fb = uGround;
+  if (abs(q.x) < .47 && q.y < .86 && q.y > -.03) {
+    float s = clamp((abs(q.x) - .29) / .13, 0., 1.);
+    float course = (q.y - .09 * (1. - s)) / mix(.075, .094, s);
+    vec3 wall = mix(uGround, uC2, .16 + .1 * s);
+    wall *= 1. - .35 * cv(abs(fract(course + .5) - .5) - .05, .02);
+    wall *= 1. - .3 * cv(abs(fract(q.x / .15 * (1. - s) + .5 * mod(floor(course), 2.) + .5) - .5) - .03, .04) * (1. - s);
+    wall = mix(wall, uGround, .45 * smoothstep(.35, .8, q.y) * (1. - s * .5));
+    float glow = flick * exp(-q.x * q.x * 9. - (q.y - .22) * (q.y - .22) * 9.77);
+    wall = mix(wall, warm, glow * (.4 + .25 * s));
+    wall = mix(wall, mix(uGround, uC2, .3), cv(q.y - .09 * (1. - s), qp) * .8);
+    fb = wall;
+    // The coal bed under the grate, each coal glowing on its own slow beat.
+    float top = .075 + .012 * cos(q.x * 11.) - .2 * q.x * q.x;
+    float lump = noise(vec2(q.x * 34., q.y * 46.)), pulse = noise(vec2(q.x * 9. - t * .3, t * .45));
+    float bed = cv(q.y - top - .012 * (lump - .5) - .006 * sin(q.x * 61.), qp) * cv(abs(q.x) - .4, qp);
+    vec3 coal = mix(mix(uC2, uC1, .5), mix(uC1, uC3, .4), smoothstep(.45, .9, pulse) * (.6 + .4 * flick));
+    coal = mix(coal, mix(uGround, uC2, .22), smoothstep(.5, .62, lump) * (.75 + .25 * smoothstep(.2, .5, q.y - top + .06)));
+    fb = mix(fb, coal, bed);
+    // A log behind, the flames, two logs in front, the grate.
+    fb = logC(fb, q, vec2(.37, .235), vec2(-.34, .2), .048, 2., t, flick, qp);
+    float hh = heat(q - vec2(0., .1), t, 1. + .35 * pop);
+    vec3 flame = mix(mix(uC2, uC1, .35), uC1, smoothstep(.04, .18, hh));
+    flame = mix(flame, mix(uC1, uC3, .5), smoothstep(.38, .5, hh));
+    flame = mix(flame, uC3, smoothstep(.7, .86, hh));
+    flame = mix(flame, mix(uC2, uC1, .3), smoothstep(.15, .45, q.y - .1) * (1. - smoothstep(.08, .3, hh)) * .6);
+    fb = mix(fb, warm, .25 * smoothstep(-.4, 0., hh) * smoothstep(.75, .25, q.y) * flick);
+    fb = mix(fb, flame, smoothstep(0., .05, hh) * (.8 + .2 * smoothstep(0., .25, hh)) * smoothstep(top - .01, top + .04, q.y));
+    fb = logC(fb, q, vec2(-.35, .11), vec2(.29, .128), .062, 5., t, flick, qp);
+    float grate = min(box(vec2(abs(q.x) - .3, q.y - .03), vec2(.011, .03)), box(q - vec2(0., .052), vec2(.34, .006)) - .003);
+    fb = mix(fb, mix(uGround, uC2, .12) * (1. + .8 * warm * smoothstep(.05, .06, q.y) * flick), cv(grate, qp));
+    float emb = 0.;
+    for (int i = 0; i < 9; i++) {
+      float fi = float(i), h = hash(vec2(fi, 17.)), life = 1.8 + 1.4 * h;
+      float u = fract(t / life + h), n = floor(t / life + h);
+      vec2 o = q - vec2((hash(vec2(n, fi)) - .5) * .5 + (.05 * sin(t * 2.6 + fi * 3.) + .12 * (hash(vec2(n, fi + 9.)) - .5)) * u, .14 + u * .72);
+      emb += exp(-dot(o, o) * 9000.) * (1. - u) * (.6 + .4 * sin(t * 13. + fi * 5.));
+    }
+    fb = mix(fb, mix(uC3, uC1, .3), clamp(emb, 0., 1.));
+  }
   float inside = cover(opening);
-  c = mix(c, mix(uGround, uC1, .1 + .11 * pulse), amt(inside));
-  // The fire: five flames with a bright heart each, over two logs that glow, and embers going up.
-  float outer = 1., heart = 1.;
-  for (int i = 0; i < 5; i++) {
-    float f = float(i), tall = (.34 + .22 * hash(vec2(f, 3.))) * (.58 + .42 * noise(vec2(t * 5. + f * 9., f))) * (1. + .22 * crack);
-    vec2 a = (q - vec2(-.24 + .12 * f, .1)) / tall;
-    outer = min(outer, lick(a, t, f) * tall);
-    heart = min(heart, lick(a / .56, t, f + 5.) * tall * .56);
+  c = mix(c, fb, amt(inside));
+  face = mix(face, 0., inside);
+  // When a log cracks, sparks jump out over the hearth, land, and fade.
+  if (et > 0. && et < 2.2 && abs(q.x) < 1.3 && q.y > -.3 && q.y < .9) {
+    float sp = 0.;
+    for (int i = 0; i < 6; i++) {
+      float fi = float(i), h = hash(vec2(ev, fi + 40.)), h2 = hash(vec2(fi, ev + 7.));
+      float tt = et - h2 * .25, land = -.02 - .1 * hash(vec2(fi, ev + 3.));
+      vec2 v0 = vec2((h - .5) * 1.7, .5 + .55 * h2), p0 = vec2((h - .5) * .2, .14);
+      float tl = (v0.y + sqrt(v0.y * v0.y + 5.2 * (p0.y - land))) / 2.6, ta = min(tt, tl), tz = min(max(tt - .04, 0.), tl);
+      vec2 o = p0 + v0 * ta - vec2(0., 1.3 * ta * ta), o2 = p0 + v0 * tz - vec2(0., 1.3 * tz * tz);
+      float d = seg(q, o, o2);
+      sp += exp(-d * d * 14000.) * step(0., tt) * (1. - smoothstep(.5, 1.9, tt));
+    }
+    c = mix(c, mix(uC3, uC1, .25), amt(clamp(sp, 0., 1.)));
   }
-  c = mix(c, uC1, amt(exp(-max(outer, 0.) * 12.) * .45 * pulse) * inside);
-  c = mix(c, mix(uC1, uC2, .55 * smoothstep(.22, .6, q.y)), amt(cover(outer)) * inside);
-  c = mix(c, uC3, amt(cover(heart) * .95) * inside);
-  float logs = min(seg(q, vec2(-.28, .06), vec2(.2, .11)) - .058, seg(q, vec2(-.15, .14), vec2(.3, .05)) - .052);
-  c = mix(c, mix(mix(uGround, uC2, .4), uC1, .25 + .4 * noise(vec2(q.x * 9. + t * .4, t * 1.3))), amt(cover(logs)));
-  for (int i = 0; i < 7; i++) {
-    float f = float(i), h = hash(vec2(f, 17.)), u = fract(t * (.14 + .12 * h) + h * 5.);
-    vec2 o = q - vec2((h - .5) * .5 + .09 * sin(t * 1.7 + f * 3.) * u, .16 + u * .66);
-    c = mix(c, uC3, amt(exp(-dot(o, o) * 2200.) * (1. - u)) * inside);
+
+  // The mantel: a shelf with a moulded edge on two brackets, its lip warm from the fire below.
+  float shelf = box(q - vec2(0., 1.045), vec2(.95, .042)) - .006;
+  float corbel = max(box(vec2(abs(q.x) - .82, q.y - .93), vec2(.045, .075)), -oval(vec2(abs(q.x) - .74, q.y - .855), vec2(.06, .075)));
+  vec3 mwood = mix(uGround, mix(uC1, uC2, .45), .36) * (.92 + .08 * sin(q.x * 37. + sin(q.x * 6. + q.y * 30.) * 2.));
+  mwood = mix(mwood, mwood * 1.25, smoothstep(1.076, 1.084, q.y));
+  mwood = mix(mwood, mwood * .7, cover(abs(q.y - 1.028) - .004));
+  mwood = mix(mwood, warm * .8, .3 * smoothstep(1.02, 1., q.y) * exp(-q.x * q.x * 3.) * flick);
+  c = mix(c, mwood * .9, amt(cover(corbel)));
+  c = mix(c, mwood, amt(cover(shelf)));
+  // A garland of leaves swagged along its edge, the leaves barely moving.
+  if (abs(q.x) < 1. && q.y > .86 && q.y < 1.08) {
+    vec3 col = c;
+    for (int j = 0; j < 2; j++) {
+      float fj = float(j), gi = floor(q.x / .095 + fj * .5), gx = (gi + .5 - fj * .5) * .095;
+      float gy = 1.005 - .07 * abs(sin(gx / .95 * 3.1416)) - .012 * fj, h = hash(vec2(gi, 23. + fj));
+      vec2 lq = rot((mod(gi, 2.) * 2. - 1.) * (.9 + .3 * h) + .06 * sin(t * 1.2 + gi)) * (q - vec2(gx, gy));
+      float lc = cv(lens(lq, .05, .021), qp) * step(abs(gx), .93);
+      vec3 leaf = mix(uGround, h < .33 ? uC1 : h < .66 ? uC2 : uC3, .6) * (.8 + .3 * smoothstep(-.015, .015, lq.x));
+      leaf = mix(leaf, leaf * .6, cv(abs(lq.x) - .003, qp));
+      col = mix(col, leaf, lc);
+    }
+    c = mix(c, col, amt(1.));
   }
-  // A log cracks: sparks jump out over the hearth and fall.
+  // On it: three candles to the left, pumpkins and a gourd to the right.
+  float halo = 0.;
   for (int i = 0; i < 3; i++) {
-    float f = float(i), n = floor(t * .35 + f * .27), u = fract(t * .35 + f * .27), h = hash(vec2(n, f + 31.));
-    vec2 o = q - vec2((h - .5) * .2, .2) - vec2((h - .5) * 2.2, 1.1 + .6 * hash(vec2(n, f))) * u * .9 + vec2(0., 1.9 * u * u);
-    c = mix(c, uC3, amt(exp(-dot(o, o) * 3200.) * (1. - u) * step(u, .7) * .8) * step(0., o.y + q.y));
+    float fi = float(i), tall = .22 + .1 * step(.5, fi) - .15 * step(1.5, fi);
+    vec2 fq = q - vec2(-.82 + .13 * fi, 1.09 + tall + .045);
+    halo += exp(-length(fq * vec2(1., .8)) * 16.) * (.88 + .12 * sin(t * 7.3 + fi * 2.) * sin(t * 3.1 + fi * 5.));
   }
-  // The mantel: a garland in two swags under it, candles and little pumpkins on it.
-  c = mix(c, mix(wood, uC3, .2 * smoothstep(1.06, 1.1, q.y)), amt(cover(box(q - vec2(0., 1.045), vec2(.93, .04)) - .012)));
-  float gi = floor(q.x * 12.), gh = hash(vec2(gi, 23.));
-  vec2 gq = vec2((fract(q.x * 12.) - .5) / 12., q.y - .975 + .075 * abs(sin(q.x / .9 * 3.1416)) - .014 * sin(gi * 2.4) - .006 * sin(t * 1.3 + gi * .9));
-  c = mix(c, mix(uGround, gh < .34 ? uC1 : gh < .67 ? uC2 : uC3, .74), amt(cover(max(length(gq) - .052, abs(q.x) - .9))));
-  for (int i = 0; i < 3; i++) {
-    float f = float(i), tall = .1 + .045 * mod(f, 2.), x = -.78 + .13 * f;
-    c = mix(c, mix(uGround, uC3, .62), amt(cover(box(q - vec2(x, 1.095 + tall), vec2(.026, tall)))));
-    vec2 k = q - vec2(x + .008 * sin(t * 8. + f * 4.), 1.14 + 2. * tall);
-    float glim = .8 + .2 * noise(vec2(t * 5., f * 7.));
-    c = mix(c, uC3, amt(exp(-length(k) * 13.) * .3 * glim));
-    c = mix(c, uC3, amt(cover(length(k * vec2(1., .55)) - .026 * glim)));
+  c = mix(c, warm, amt(halo * .22));
+  if (q.x > -.98 && q.x < -.5 && q.y > 1.07 && q.y < 1.58) {
+    vec3 col = c;
+    for (int i = 0; i < 3; i++) {
+      float fi = float(i), tall = .22 + .1 * step(.5, fi) - .15 * step(1.5, fi), hw = .036 - .004 * fi;
+      vec2 cq = q - vec2(-.82 + .13 * fi, 1.09);
+      float body = min(box(cq - vec2(0., tall * .5), vec2(hw, tall * .5)) - .004, box(cq - vec2(hw * .45, tall - .025), vec2(.006, .025)) - .006);
+      float cx = cq.x / hw;
+      vec3 wax = mix(uGround, uC3, .55) * (.62 + .28 * (1. - cx * cx) + .18 * smoothstep(-1., 1., cx));
+      wax = mix(wax, mix(uC3, uC1, .3), .45 * smoothstep(tall - .08, tall, cq.y));
+      col = mix(col, wax, cv(body, qp));
+      col = mix(col, mix(uC3, uC1, .2) * .85, cv(oval(cq - vec2(0., tall - .002), vec2(hw * .85, .008)), qp));
+      col = mix(col, uGround, cv(seg(cq, vec2(0., tall), vec2(.003, tall + .022)) - .003, qp));
+      float gl = .88 + .12 * sin(t * 7.3 + fi * 2.) * sin(t * 3.1 + fi * 5.);
+      vec2 fq = cq - vec2(0., tall + .016);
+      fq.x -= (.012 * sin(t * 2.3 + fi * 2.) + .006 * sin(t * 7.1 + fi)) * fq.y / .06;
+      vec2 fe = vec2(fq.x / (1. - .75 * smoothstep(.0, .08, fq.y)), fq.y - .03);
+      float fd = oval(fe, vec2(.016, .04 * gl));
+      vec3 fc = mix(uC1, uC3, smoothstep(.04, -.02, fd + fq.y * .4));
+      col = mix(col, fc, cv(fd, qp));
+    }
+    c = mix(c, col, amt(1.));
   }
-  vec3 vine = mix(uGround, vec3(.3, .55, .25), .55);
-  for (int i = 0; i < 3; i++) {
-    float f = float(i), s = .16 - .035 * f;
-    vec2 k = (q - vec2(.36 + .2 * f, 1.095 + s * .42)) / s;
-    float d = gourd(k);
-    vec3 skin = mix(mix(uC1, uGround, .4 * smoothstep(.1, -.45, k.y)), uC3, .25 * smoothstep(.1, .45, k.y - k.x * .4));
-    skin = mix(skin, mix(uC1, uGround, .45), cover(abs(abs(k.x) - .2) - .018) * cover(d + .05));
-    c = mix(c, skin, amt(cover(d)));
-    c = mix(c, vine, amt(cover(box(rot(.25) * (k - vec2(.03, .46)), vec2(.05, .09)) - .02)));
+  if (q.x > .2 && q.x < .98 && q.y > 1.07 && q.y < 1.48) {
+    vec4 pk = pumpkin(q - vec2(.44, 1.205), vec2(.17, .118), mix(uGround, uC1, .78), qp);
+    vec4 pw = pumpkin(q - vec2(.66, 1.165), vec2(.105, .078), mix(uGround, uC3, .62), qp);
+    vec2 gq = q - vec2(.82, 1.09);
+    float gd = min(oval(gq - vec2(0., .07), vec2(.065, .07)), oval(gq - vec2(-.012, .17), vec2(.036, .06)));
+    vec3 gc = mix(mix(uGround, uC3, .6), mix(uGround, uC1, .7), smoothstep(.1, .06, gq.y)) * (.75 + .35 * smoothstep(.06, -.06, gq.x));
+    vec3 col = mix(c, gc, cv(gd, qp));
+    col = mix(col, mix(uGround, mix(vec3(.3, .55, .25), uC1, .35), .45), cv(box(rot(-.3) * (gq - vec2(-.02, .235)), vec2(.007, .02)), qp));
+    col = mix(col, pw.rgb, pw.a);
+    col = mix(col, pk.rgb, pk.a);
+    vec2 sl = rot(1.2) * (q - vec2(.29, 1.1));
+    col = mix(col, mix(uGround, uC2, .6), cv(lens(sl, .045, .018), qp));
+    c = mix(c, col, amt(1.));
   }
-  // The armchair, lit on the side the fire is.
-  vec2 a = (p - vec2(fx - .56, fl - .035)) / .27;
-  float seat = min(min(box(a - vec2(0., .62), vec2(.34, .34)) - .13, box(vec2(abs(a.x) - .52, a.y - .36), vec2(.06, .24)) - .09), box(a - vec2(0., .16), vec2(.52, .1)) - .03);
-  seat = min(seat, box(vec2(abs(a.x) - .47, a.y - .02), vec2(.04, .05)));
-  c = mix(c, mix(mix(uGround, uC2, .5), uC1, .3 * smoothstep(-.5, .75, a.x) * pulse), amt(cover(seat)));
-  c = mix(c, mix(mix(uGround, uC2, .68), uC1, .2 * pulse), amt(cover(box(a - vec2(0., .32), vec2(.36, .06)) - .05)));
-  c = mix(c, mix(uGround, uC1, .62), amt(cover(box(rot(.25) * (a - vec2(-.1, .56)), vec2(.13, .1)) - .06)));
-  // The cat, breathing in its sleep.
-  vec2 k = (p - vec2(fx - .3, .088)) / .115;
-  float breath = 1. + .05 * sin(t * 1.4);
-  float cat = min(length(vec2(k.x, k.y / breath) * vec2(1., 1.85)) - .5, length(k - vec2(-.47, .02)) - .21);
-  cat = min(cat, min(tri(rot(.25) * (k - vec2(-.6, .17)), .08, .16), tri(rot(-.2) * (k - vec2(-.39, .2)), .08, .16)));
-  cat = min(cat, seg(k, vec2(.44, -.12), vec2(-.05 + .07 * sin(t * 1.1), -.22 + .035 * sin(t * .9 + 1.))) - .055);
-  c = mix(c, mix(mix(uGround, uC3, .42), uC1, .42 * smoothstep(-.2, .7, k.x + k.y) * pulse), amt(cover(cat)));
-  // The firelight on everything in the room: a little, nearest the hearth, rising and falling with the fire.
-  c *= 1. + .3 * exp(-length(lit * vec2(1., 1.2)) * 1.8) * (pulse - .55) * amt(1.);
+
+  // A basket of logs by the hearth.
+  vec2 bk = r - vec2(.46, fl - .045);
+  float basket = max(abs(bk.x) - .06 - .12 * bk.y, abs(bk.y - .03) - .03) - .004;
+  vec3 weave = mix(uGround, mix(uC1, uC3, .3), .3) * (.84 + .16 * sin(bk.x * 280.) * sin(bk.y * 470.)) * (.75 + .4 * smoothstep(.06, -.06, bk.x));
+  weave = mix(weave, weave * 1.2, cover(abs(bk.y - .058) - .004));
+  c = mix(c, uGround, amt(.4 * smoothstep(.02, -.02, oval(bk - vec2(-.01, -.002), vec2(.085, .01)))));
+  for (int i = 0; i < 4; i++) {
+    float fi = float(i);
+    vec2 o = bk - vec2(-.035 + .023 * fi + .006 * sin(fi * 3.), .068 + .014 * mod(fi, 2.));
+    float d = length(o) - .016;
+    vec3 end = mix(uGround, mix(uC3, uC1, .45), .42) * (.85 + .15 * sin(length(o) * 600.)) * (.8 + .3 * smoothstep(.02, -.02, o.x));
+    c = mix(c, mix(end, wood * .8, smoothstep(-.004, -.001, d)), amt(cover(d)));
+  }
+  c = mix(c, weave, amt(cover(basket)));
+  face = mix(face, .8, cover(basket));
+
+  // A side table under the window: two books, a mug of cider and its steam.
+  vec2 tb = r - vec2(-.83, fl);
+  float table = min(min(box(tb - vec2(0., .13), vec2(.065, .006)) - .003, box(tb - vec2(0., .06), vec2(.007, .07))), oval(tb - vec2(0., -.012), vec2(.04, .007)));
+  c = mix(c, uGround, amt(.35 * smoothstep(.02, -.02, oval(tb - vec2(.01, -.014), vec2(.07, .01)))));
+  c = mix(c, wood * (.8 + .3 * smoothstep(.03, -.03, tb.x)), amt(cover(table)));
+  float book1 = box(tb - vec2(-.005, .147), vec2(.05, .008)) - .002, book2 = box(tb - vec2(.004, .164), vec2(.043, .007)) - .002;
+  c = mix(c, mix(uGround, uC2, .6), amt(cover(book1)));
+  c = mix(c, mix(uGround, uC3, .45), amt(cover(box(tb - vec2(.04, .147), vec2(.008, .006)))));
+  c = mix(c, mix(uGround, uC1, .55), amt(cover(book2)));
+  c = mix(c, mix(uGround, uC3, .45), amt(cover(box(tb - vec2(.04, .164), vec2(.005, .005)))));
+  vec2 mg = tb - vec2(0., .19);
+  float mug = min(box(mg, vec2(.013, .015)) - .002, abs(length(mg - vec2(.016, .002)) - .007) - .0022);
+  c = mix(c, mix(uGround, uC3, .55) * (.75 + .3 * smoothstep(.015, -.015, mg.x)), amt(cover(mug)));
+  if (abs(mg.x) < .03 && mg.y > .01 && mg.y < .14) {
+    float st = 0.;
+    for (int i = 0; i < 2; i++) {
+      float fi = float(i), y = mg.y - .018;
+      float x = mg.x + .004 - fi * .008 - .008 * sin(y * 55. - t * 1.7 + fi * 2.) * smoothstep(0., .06, y);
+      st += exp(-x * x * 80000.) * smoothstep(0., .02, y) * smoothstep(.11, .03, y);
+    }
+    c = mix(c, mix(uC3, c, .4), amt(st * .25));
+  }
+
+  // The armchair: a wingback with a tufted cushion, rolled arms, a seat cushion and a skirted base on short legs, a throw
+  // over the far arm and a cushion in the corner; the side toward the fire warm, the far side in shadow.
+  vec2 a = (r - vec2(-.57, fl - .045)) / .26, am = vec2(abs(a.x) - .53, a.y), th = a - vec2(-.53, 0.);
+  float legs = box(vec2(abs(a.x) - .52, a.y - .035), vec2(.028, .04)) - .006;
+  float back = max(max(abs(a.x) - .5 - .1 * smoothstep(.5, .85, a.y) + .07 * smoothstep(.92, 1.12, a.y), .12 - a.y), a.y - 1.13 + .12 * a.x * a.x + .1 * smoothstep(.3, .62, abs(a.x)));
+  float pillow = max(box(a - vec2(0., .7), vec2(.29, .26)) - .07, a.y - .94 - .06 * cos(a.x * 2.4));
+  float seat = box(a - vec2(0., .41), vec2(.38, .05)) - .035, skirt = box(a - vec2(0., .18), vec2(.62, .1)) - .025;
+  float roll = length(am - vec2(0., .6)), arms = min(box(am - vec2(0., .36), vec2(.15, .24)), roll - .15);
+  float chair = min(min(back, arms), skirt);
+  vec3 fab = mix(uGround, uC2, .5);
+  float lit = smoothstep(-.8, .8, a.x), nx = clamp(am.x / .15, -1., 1.) * sign(a.x);
+  c = mix(c, mix(uGround, wood, .8), amt(cover(legs)));
+  vec3 ch = fab * (.5 + .3 * lit) * (1. + .3 * smoothstep(-.07, 0., back) * smoothstep(.8, 1., a.y)) * (1. - .25 * smoothstep(.42, .55, abs(a.x)) * (1. - lit * step(0., a.x)));
+  ch = mix(ch, fab * (.66 + .32 * lit) * (1. - .3 * smoothstep(-.14, 0., pillow)) * (.9 + .15 * smoothstep(.45, .95, a.y)), cover(pillow));
+  ch = mix(ch, ch * .7, cover(abs(pillow) - .008));
+  float tuft = min(length(vec2(abs(abs(a.x) - .15), a.y - .62)), length(vec2(min(abs(a.x), abs(abs(a.x) - .3)), a.y - .82)));
+  ch *= 1. - (.2 * smoothstep(.08, 0., tuft) + .3 * cover(tuft - .016)) * cover(pillow + .03);
+  ch = mix(ch, fab * (.7 + .35 * lit) * (1. + .22 * smoothstep(.43, .48, a.y) - .12 * abs(a.x)), cover(seat));
+  ch = mix(ch, fab * .56 * (.75 + .35 * lit), cover(skirt));
+  ch = mix(ch, ch * .62, cover(abs(a.y - .29) - .009) * cover(skirt));
+  // Each arm throws a soft shadow on the seat and back on its side away from the fire.
+  ch *= 1. - .3 * smoothstep(.12, 0., abs(a.x - .29)) * smoothstep(.36, .42, a.y) * smoothstep(.8, .7, a.y);
+  vec3 arm = fab * (.6 + .3 * lit) * (.82 + .18 * nx + .14 * (1. - nx * nx));
+  arm *= 1. + .25 * smoothstep(.05, .15, am.y - .6 + .05 * nx) * step(.55, a.y);
+  arm = mix(arm, arm * .7, cover(abs(roll - .085) - .007) * smoothstep(-.02, .02, (am.x * sign(a.x) + .03) * 1.5 - a.y + .6) + cover(roll - .02) * .6);
+  ch = mix(ch, arm, cover(arms));
+  ch = mix(ch, ch * .6, cover(abs(arms) - .006) * smoothstep(.64, .58, a.y) * smoothstep(.08, .12, a.y));
+  // The throw: plaid, over the far arm and down its front, its fringe hanging.
+  float hem = .4 + .03 * sin(th.x * 26. + 1.);
+  float throwD = max(min(box(th - vec2(0., .52), vec2(.17, .12)) - .02, length(th - vec2(0., .61)) - .175), hem - th.y);
+  vec3 plaid = mix(uGround, uC3, .36) * (.72 + .3 * smoothstep(-.17, .17, th.x)) * (.88 + .12 * cos(th.x * 40.));
+  plaid = mix(plaid, mix(uGround, uC2, .5), .55 * max(cover(abs(fract(th.x * 7.) - .5) - .12), cover(abs(fract(th.y * 7.) - .5) - .12)));
+  plaid = mix(plaid, mix(uGround, uC1, .55), .5 * cover(abs(fract(th.x * 7. + .5) - .5) - .035));
+  plaid *= 1. - .25 * smoothstep(.62, .78, th.y + abs(th.x) * .3);
+  float fringe = max((abs(fract(th.x * 45.) - .5) - .2) / 45., max(abs(th.x) - .17, abs(th.y - hem + .03) - .035));
+  ch = mix(ch, plaid * .85, cover(fringe));
+  ch = mix(ch, plaid, cover(throwD));
+  // A cushion in the corner nearest the fire.
+  vec2 cq = rot(-.25) * (a - vec2(.22, .6));
+  float cush = box(cq, vec2(.11, .1)) - .05;
+  vec3 cc = mix(uGround, mix(uC1, uC2, .3), .5) * (.72 + .38 * smoothstep(-.2, .2, cq.x + cq.y)) * (1. - .25 * smoothstep(-.08, .02, cush));
+  cc = mix(cc, cc * .6, cover(length(cq) - .02) + cover(abs(cush) - .006));
+  ch = mix(ch, cc, cover(cush));
+  c = mix(c, ch, amt(cover(min(min(chair, fringe), min(cush, throwD)))));
+  face = mix(face, .25 + .75 * lit, cover(chair));
+
+  // The braided rug, ring on ring.
+  vec2 re = (r - vec2(-.3, .058)) / vec2(.29, .046);
+  float er = length(re), band = floor(er * 6.);
+  float br = .5 + .5 * sin(re.x * 70. + (mod(band, 2.) * 2. - 1.) * fract(er * 6.) * 6.2832);
+  vec3 rug = mix(uGround, mod(band, 3.) < .5 ? uC2 : mod(band, 3.) < 1.5 ? mix(uC1, uC2, .5) : mix(uC3, uC2, .55), .26 + .06 * br);
+  rug = mix(rug, uGround, .3 * lineAt(er * 6.));
+  rug *= .8 + .3 * smoothstep(-.6, .6, re.x);
+  c = mix(c, rug, amt(cover((er - 1.) * .046)));
+  face = mix(face, 1., cover((er - 1.) * .046));
+  // The cat, curled up asleep and breathing slowly, head down by the fire; now and then an ear twitches or the tail moves.
+  vec2 kq = (r - vec2(-.27, .08)) / .058;
+  float breath = 1. + .06 * sin(t * 1.25);
+  float tw = fract(t * .13 + .3), twitch = sin(tw * 90.) * step(tw, .035) * .35;
+  float ft = fract(t * .09), tip = sin(ft * 40.) * step(ft, .08) * .15;
+  vec2 kb = (kq - vec2(-.1, .02)) / vec2(1., .62 * breath), hq = kq - vec2(.78, -.14);
+  float kbody = max(min(oval(kq - vec2(-.1, .02 + .62 * (breath - 1.)), vec2(1., .62 * breath)), oval(kq - vec2(-.55, .15 + .48 * (breath - 1.)), vec2(.5, .48 * breath))), -kq.y - .5);
+  float head = oval(hq, vec2(.37, .32));
+  vec2 e1 = rot(.45) * (hq - vec2(-.2, .19)), e2 = rot(-.25 + twitch) * (hq - vec2(.15, .22));
+  float ears = min(tri(e1, .13, .25), tri(e2, .13, .25)), inner = min(tri(e1 - vec2(0., .03), .065, .15), tri(e2 - vec2(0., .03), .065, .15));
+  float ktail = min(min(seg(kq, vec2(-.98, -.12), vec2(-.62, -.46)), seg(kq, vec2(-.62, -.46), vec2(.15, -.55))) - .105, seg(kq, vec2(.15, -.55), vec2(.5, -.38 + tip)) - .085);
+  float paws = min(oval(kq - vec2(.62, -.47), vec2(.14, .075)), oval(kq - vec2(.92, -.46), vec2(.13, .07)));
+  float kat = min(min(kbody, head), min(ears, min(ktail, paws)));
+  c = mix(c, uGround, amt(.4 * smoothstep(.15, -.1, oval(kq - vec2(-.1, -.5), vec2(1.3, .22)))));
+  float kang = atan(kb.y + .55, kb.x + .10001);
+  float stripe = smoothstep(.2, .8, sin(kang * 9. + 1.2 * sin(kang * 2.5 + 1.))) * smoothstep(.45, .85, length(kb));
+  vec3 fur = mix(uGround, uC1, .55), pale = mix(uGround, uC3, .58);
+  vec3 cat = fur * (.66 + .42 * smoothstep(-.7, .8, kq.x * .45 + kq.y)) * (1. - .32 * stripe);
+  cat = mix(cat, fur * .45, cover(ktail - .03));
+  cat = mix(cat, fur * (.58 + .2 * smoothstep(-.64, -.42, kq.y)) * (1. - .3 * smoothstep(.4, .9, sin((kq.x + kq.y * .6) * 9.)) - .25 * smoothstep(.3, .5, kq.x)), cover(ktail));
+  cat = mix(cat, fur * .5, cover(head - .03));
+  cat = mix(cat, fur * (.8 + .32 * smoothstep(-.3, .35, hq.x * .6 + hq.y)) * (1. - .22 * smoothstep(.4, .9, sin(hq.x * 24.)) * smoothstep(.06, .24, hq.y)), cover(head));
+  cat = mix(cat, fur * (.85 + .25 * smoothstep(-.1, .2, hq.x)), cover(ears));
+  cat = mix(cat, mix(uGround, mix(uC2, uC3, .5), .62), cover(inner));
+  cat = mix(cat, pale, cover(oval(hq - vec2(.05, -.13), vec2(.17, .1))));
+  cat = mix(cat, pale * .95, cover(paws));
+  float eyes = max(abs(length(vec2(abs(hq.x - .04) - .13, hq.y + .01)) - .055) - .014, hq.y + .01);
+  cat = mix(cat, fur * .28, cover(min(eyes, oval(hq - vec2(.05, -.085), vec2(.032, .02)))));
+  c = mix(c, cat, amt(cover(kat)));
+  face = mix(face, .4 + .6 * smoothstep(-.8, .8, kq.x), cover(kat));
+
+  // The firelight on the room: a little, nearest the fire and on what faces it, rising and falling with it; dusk at the edges.
+  c = mix(c, mix(uC1, uC2, .35), amt(.17 * exp(-length(L) * 2.6) * flick * face));
+  c *= 1. + warm * amt(.7) * fall * face;
+  c = mix(c, warm * .8, amt(.1 * fall * fall * face));
+  vec2 vg = (vUv - vec2(.55, .45)) * vec2(1.5, 1.1);
+  c = mix(c, uGround, .35 * smoothstep(.45, 1.1, length(vg)));
   gl_FragColor = vec4(dither(c), 1.);
 }`;
 
