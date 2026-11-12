@@ -222,7 +222,7 @@ void main() {
 const SPOOKY = `${FLAT}
 float cover(float d) { float w = fwidth(d) + 1e-4; return 1. - smoothstep(-w, w, d); }
 float box(vec2 p, vec2 b) { vec2 d = abs(p) - b; return length(max(d, 0.)) + min(max(d.x, d.y), 0.); }
-float seg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.)); }
+float seg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / max(dot(ba, ba), 1e-8), 0., 1.)); }
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
 // Twinkling stars, only up in the sky.
 float stars(vec2 p) {
