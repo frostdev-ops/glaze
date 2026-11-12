@@ -89,6 +89,9 @@ test('an Activity card finds its assignment by the ids in its link, else by its 
   const colon = [{ ...ITEMS[0], title: 'Module 1: Discussion -- ¡Nos conocemos!' }];
   assert.equal(S.find(colon, { links: ['/ultra/courses/_101_1/outline'], title: 'Past due: Module 1: Discussion -- ¡Nos conocemos!' })?.id, '_605_1', 'a title with its own colon');
   assert.equal(S.find(colon, { links: ['/ultra/courses/_101_1/outline'], title: 'Module 1: Discussion -- ¡Nos conocemos!' })?.id, '_605_1', 'and without the status');
+  // The owner's cards name the course by its course ID (202640-SPAN1110-802): the page knows which course that is.
+  assert.equal(S.find(ITEMS, { cid: '_101_1', title: 'Past due: Practice essay', course: '202640-BIO1100-01' })?.id, '_605_1', 'the course the page names');
+  assert.equal(S.find(ITEMS, { cid: '_102_1', title: 'Practice essay' }), null, 'and only that course');
   assert.equal(S.find([{ ...ITEMS[0], title: 'Discussion -- ¡Nos conocemos!' }], { links: ['/ultra/courses/_101_1/outline'], title: 'Module 1: Discussion -- ¡Nos conocemos!' }), null, 'a title is never cut to fit another');
 });
 test("an Activity card's title alone, or in another course, names nothing", () => {
