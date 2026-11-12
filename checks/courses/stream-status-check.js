@@ -11,9 +11,10 @@ const ext = require('../../tools/dev/check-env.js').staged(path.join(__dirname, 
 const site = 'https://bb.school.test', out = process.argv[2], lock = require('../../tools/dev/check-env.js').lockPath();
 const fixture = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8'));
 const DAY = 864e5, now = Date.now();
-const card = (id, course, name) => `<li id="${id}" class="stream-item-container"><div class="stream-item"><div class="stream-item-contents"><div class="element-card stream-panel-activity-card"><div class="element-image stream-panel-activity-icon"></div><div class="element-details${course ? ' course-color-3' : ''}"><div class="timestamp"><div><div class="js-split-datetime"><span class="date">Nov 10</span></div></div></div><div class="context">${course ? `<a href="${site}/ultra/courses/${course}/outline"><span>BIO 1100: Biology I</span></a>` : 'School notice'}</div><div class="name"><ng-switch><span>${name}</span></ng-switch></div></div></div></div></div></li>`;
+// code: the course line as the owner's cards have it (2026-11-11), the course ID with no link, and the name "Past due: <title>".
+const card = (id, course, name, code = false) => `<li id="${id}" class="stream-item-container"><div class="stream-item"><div class="stream-item-contents"><div class="element-card stream-panel-activity-card"><div class="element-image stream-panel-activity-icon"></div><div class="element-details${course ? ' course-color-3' : ''}"><div class="timestamp"><div><div class="js-split-datetime"><span class="date">Nov 10</span></div></div></div><div class="context">${code ? 'FA26-BIO1100-01' : course ? `<a href="${site}/ultra/courses/${course}/outline"><span>BIO 1100: Biology I</span></a>` : 'School notice'}</div><div class="name"><ng-switch><span>${name}</span></ng-switch></div></div></div></div></div></li>`;
 const page = `<!doctype html><html lang="en-US"><head><meta charset="utf-8"><base href="https://cdn.school.test/ultra/"><style>body{font:16px system-ui;padding:24px}.element-card{display:flex;padding:20px;border:1px solid}.stream-item-container{margin-bottom:28px;list-style:none}</style></head><body><div id="site-wrap"><section class="js-base-stream-container route-view-container"><h1>Activity Stream</h1><div id="activity-stream" class="activity-stream"><div class="activity-group"><h2 class="activity-group-title">Upcoming</h2><ul class="activity-feed">${
-  card('graded', '_101_1', 'Essay 1')}${card('late', '_101_1', 'Essay 2')}${card('missing', '_101_1', 'Essay 3')}${card('open', '_101_1', 'Essay 4')}${card('notice', '_101_1', 'Welcome to Biology')}${card('nocourse', '', 'Essay 1')}</ul></div></div></section></div></body></html>`;
+  card('graded', '_101_1', 'Essay 1')}${card('late', '_101_1', 'Essay 2')}${card('missing', '_101_1', 'Past due: Essay 3', true)}${card('open', '_101_1', 'Essay 4')}${card('notice', '_101_1', 'Welcome to Biology')}${card('nocourse', '', 'Essay 1')}</ul></div></div></section></div></body></html>`;
 // Blackboard's answers: the essays due around now, each joined to its gradebook row by its column. The rows are the
 // fixture's (Essay 2 handed in after its due date, Essay 3 unopened past it), and Essay 4 is Essay 3's row due next week.
 const shape = fixture('ultra-calendar-items.json').results.find((i) => /\.GradableItem$/.test(i.itemSourceType) && !/forumlink/.test(i.dynamicCalendarItemProps?.handle || ''));
@@ -52,7 +53,9 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     const id = new URL(worker.url()).host;
     const settings = G.GZ_SANITIZE({ navbar: { on: false }, footer: false });
-    await worker.evaluate(async ({ settings, site }) => { await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site] }); }, { settings, site });
+    // The course list as content-ultra.js keeps it from Blackboard's memberships (its course ID as code).
+    const seenCourses = { _101_1: { name: 'BIO 1100: Biology I', code: 'FA26-BIO1100-01', site, slot: '3' } };
+    await worker.evaluate(async ({ settings, site, seenCourses }) => { await chrome.storage.sync.set(settings); await chrome.storage.local.set({ ultra: [site], seenCourses, [`seenCoursesAt ${site}`]: Date.now() }); }, { settings, site, seenCourses });
     const tab = await context.newPage(); tab.on('pageerror', (e) => errors.push(e.message));
     await tab.goto(`chrome-extension://${id}/popup.html`);
     await require('../../tools/dev/check-env.js').ultraReady(tab);
