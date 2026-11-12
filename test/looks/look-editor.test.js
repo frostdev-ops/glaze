@@ -38,6 +38,23 @@ const loadUi = (extra = {}) => {
 };
 const UI = loadUi();
 
+test('a retired worn Look keeps its name and an offered card remains reachable by keyboard', () => {
+  const node = () => ({ children: [], dataset: {}, style: { setProperty() {} }, contains: () => false,
+    append(...kids) { this.children.push(...kids); }, replaceChildren(...kids) { this.children = kids; },
+    setAttribute() {}, addEventListener() {},
+  });
+  const ui = loadUi({ GZ_CATALOG: LC, document: { createElement: node }, GZ_CHOICES: { themeArt: (make) => make('span') } });
+  const all = LC.list();
+  for (const L of D.GZ_LOOKS.filter((L) => L.old)) {
+    const s = D.GZ_SANITIZE({ ...D.GZ_DEFAULTS, ...D.GZ_LOOK_APPLY(D.GZ_DEFAULTS, L) });
+    const box = node();
+    assert.equal(ui.themeName(s, all), L.name);
+    ui.looks(box, s, () => {}, all, true);
+    assert.deepEqual(box.children.filter((b) => b.tabIndex === 0).map((b) => b.dataset.look), [all[0].id]);
+    assert.ok(!box.children.some((b) => b.dataset.look === L.name));
+  }
+});
+
 test('course-tab navigation warning follows placement changes without repainting navigation', () => {
   require('../../extension/navigation/coursetabs.js');
   const s = D.GZ_SANITIZE({ navbar: { on: false, tabs: false } }), controls = new Map();

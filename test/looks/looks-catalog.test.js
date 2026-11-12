@@ -84,6 +84,24 @@ test('which Look is worn: a kept Look as its code wears it, parts and all; a bui
   assert.equal(C.find(all, 'c:00000000000000'), null);
 });
 
+test('retired built-ins resolve and keep their worn names without being offered', async (t) => {
+  const all = C.list();
+  for (const L of G.GZ_LOOKS.filter((L) => L.old)) {
+    assert.ok(!all.some((E) => E.id === L.name), 'retired Looks stay out of every picker');
+    await t.test(`${L.name} resolves by its stored name`, () => {
+      assert.equal(C.find(all, L.name)?.L, L);
+    });
+    await t.test(`${L.name} is recognized while worn`, () => {
+      const s = wear(L.name);
+      assert.equal(C.worn(s, all)?.name, L.name);
+      assert.equal(C.worn({ ...s, look: { ...s.look, radius: 1 } }, all), null, 'an edited theme is no longer that Look');
+    });
+  }
+  const s = wear('Graveyard');
+  const cat = await C.build([C.make(await code(s), 'My night', '', 'saved')], S.decode);
+  assert.equal(C.worn(s, C.list(cat))?.name, 'My night', 'a saved Look still wins over a retired built-in');
+});
+
 test('a course wears a kept Look by id; an old built-in name still reads; a missing Look falls back to the student\'s theme', async () => {
   const { favorites, settings } = await fixtures();
   const cat = await C.build(favorites, S.decode), saved = C.looks(cat);
