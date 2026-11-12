@@ -270,6 +270,19 @@ test('rotation turns to a kept Look ticked by id, and one ticked by its code bef
   }
 });
 
+test('rotation only turns to offered built-ins, including with stale retired ticks', async (t) => {
+  const offered = G.GZ_LOOKS.filter((L) => !L.old);
+  for (const [name, ticks, i, expected] of [
+    ['the default list wraps after the last offered Look', undefined, offered.length - 1, offered[0]],
+    ['retired ticks are skipped beside a current choice', ['Graveyard', 'Pumpkin Patch', 'Harvest Moon'], -1, look('Harvest Moon')],
+    ['only retired ticks fall back to the offered list', ['Graveyard', 'Pumpkin Patch'], -1, offered[0]],
+  ]) await t.test(name, async () => {
+    const w = worker({ rotateLooks: ticks, rotateState: { mode: '6h 08:00', at: 1, i } }, G.GZ_SANITIZE({ extras: { rotate: '6h' } }));
+    assert.deepEqual(await w.send({ type: 'glaze:rotate' }, w.popup), { ok: true });
+    assert.ok(G.GZ_LOOK_ON(G.GZ_SANITIZE(w.sync), expected), `rotation must wear ${expected.name}`);
+  });
+});
+
 test('looks/looks.js loads on demand as the worker injects it: it ends on a value, and a second injection keeps the first', () => {
   const context = vm.createContext({ GZ_LOOKS: G.GZ_LOOKS, GZ_LOOK_ON: G.GZ_LOOK_ON });
   const first = vm.runInContext(read('looks/looks.js'), context);
