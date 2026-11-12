@@ -55,6 +55,30 @@ test('a retired worn Look keeps its name and an offered card remains reachable b
   }
 });
 
+test('course selectors display a retired Look already worn without offering it again', () => {
+  const optionsFor = between(options, '  const lookOptions = ', '  // A row per course');
+  const select = between(options, "      const look = Object.assign(document.createElement('select')", "      look.addEventListener('change'");
+  class Option {
+    constructor(text, value) { Object.assign(this, { text, value, hidden: false, disabled: false }); }
+  }
+  const element = () => ({ children: [], dataset: {}, setAttribute() {}, append(...kids) { this.children.push(...kids); },
+    get options() { return this.children.flatMap((e) => e.children || [e]); },
+    set value(v) { this.selected = this.options.find((e) => e.value === v); }, get value() { return this.selected?.value || ''; },
+  });
+  for (const name of ['Graveyard', 'Pumpkin Patch', 'Harvest Moon', '']) {
+    const s = D.GZ_SANITIZE({ courses: { looks: { _1_1: name } } });
+    const context = vm.createContext({ ...D, GZ_CATALOG: LC, catalog: LC.list(), Option, document: { createElement: element },
+      s, id: '_1_1', c: { name: 'Course' }, t: say,
+    });
+    vm.runInContext(`${optionsFor}\n${select}\nglobalThis.picker = look;`, context);
+    const picker = context.picker;
+    assert.equal(picker.value, name, `${name || 'Your theme'} must remain selected`);
+    const retired = picker.options.filter((o) => ['Graveyard', 'Pumpkin Patch'].includes(o.value));
+    assert.deepEqual(retired.map((o) => [o.value, o.hidden, o.disabled]), name === 'Graveyard' || name === 'Pumpkin Patch' ? [[name, true, true]] : []);
+    assert.equal(s.courses.looks._1_1 || '', name, 'drawing the selector does not change the saved Look');
+  }
+});
+
 test('course-tab navigation warning follows placement changes without repainting navigation', () => {
   require('../../extension/navigation/coursetabs.js');
   const s = D.GZ_SANITIZE({ navbar: { on: false, tabs: false } }), controls = new Map();
