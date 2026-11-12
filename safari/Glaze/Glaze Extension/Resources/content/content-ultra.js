@@ -76,7 +76,7 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
   const syncTodo = () => load(() => top()?.todo && /^\/ultra\/(course\/?$|institution-page\/?$|courses\/_\d+_\d+\/outline)/.test(location.pathname) && !(sidebarOn() && !globalThis.GZ_SIDEBAR_UI?.failed()), ['courses/ultra.js', 'planner/todo.js', 'planner/page/todo.js'], 'GZ_TODO_UI');
   // Submission status on Activity cards (stream.status) comes from the same module as the card tasks.
   const streamHere = () => top() && I.settings.stream?.status && /^\/ultra\/stream(?:\/|$)/.test(location.pathname) && document.querySelector('.stream-panel-activity-card');
-  const syncCardTasks = () => (streamHere() ? need('courses/page/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.stream(true), () => {}) : globalThis.GZ_CARD_TASKS?.stream?.(false), load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'courses/page/cardtasks.js', 'GZ_CARD_TASKS'));
+  const syncCardTasks = () => (streamHere() ? need('courses/page/cardtasks.js', () => globalThis.GZ_CARD_TASKS).then(() => GZ_CARD_TASKS.stream(!!streamHere()), () => {}) : globalThis.GZ_CARD_TASKS?.stream?.(false), load(() => top()?.cardTasks && /^\/ultra\/course\/?$/.test(location.pathname) && document.querySelector(CARD), 'courses/page/cardtasks.js', 'GZ_CARD_TASKS'));
   // Reminders and floating widgets are the page's, once: never again in a course tab's frame over it.
   const syncRemind = () => load(() => !tabFrame && ['remind', 'remindExam', 'remindPlan', 'remindClass', 'streak'].some((k) => top()?.[k]), 'planner/page/reminders.js', 'GZ_REMIND_UI');
   const syncAhead = () => load(() => !tabFrame && top()?.prefetch, 'courses/page/ahead.js', 'GZ_AHEAD');
