@@ -951,7 +951,9 @@ GZ_UI.load().then((s) => {
       look.dataset.settingControl = 'courses.looks';
       look.setAttribute('aria-label', look.title);
       look.append(new Option(t('Your theme'), ''), ...lookOptions());
-      look.value = GZ_COURSE_LOOK_ID(s, id, catalog);
+      const current = GZ_COURSE_LOOK_ID(s, id, catalog), worn = GZ_CATALOG.find(catalog, current);
+      if (worn?.L?.old) look.append(Object.assign(new Option(worn.name, current), { hidden: true, disabled: true, translate: false }));
+      look.value = current;
       look.addEventListener('change', () => {
         GZ_COURSE_EDIT.look(cc, id, look.value, s.courseLooks);
         refresh();
