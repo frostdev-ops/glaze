@@ -27,24 +27,31 @@ var GZ_STREAM = globalThis.GZ_STREAM || (() => {
     return { label, full };
   };
   // The assignment an Activity card names, among the planner's Ultra items (courses/ultra.js due(): id the gradebook column,
-  // content its content item, cid its course): by the ids in its links, else by its title in the course a link or its
-  // course name gives. A title that two items share, or with no course to tell it by, names nothing. Ultra names a deadline's
-  // card "Past due: <title>" (its status in up to three words, translated): without its own match the name is tried without it.
+  // content its content item, cid its course). Content and column ids have separate namespaces. An explicit destination
+  // must agree with every item link; only a card with no item destination can fall back to its title in its course.
   const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
-  // cid: the course the page says the card is in (its course line read against Glaze's course list), when it knows.
   const find = (items, { links = [], title = '', course = '', cid: known = '' } = {}) => {
-    const cids = new Set(known ? [known] : []);
+    const cids = new Set(known ? [known] : []), targets = [];
     for (const href of links) {
       let u;
       try { u = new URL(href, 'https://x.invalid/'); } catch { continue; }
-      const m = /^\/ultra\/courses\/(_\d+_\d+)\/(?:.*\/)?(_\d+_\d+)(?:\/|$)/.exec(u.pathname) || /^\/ultra\/courses\/(_\d+_\d+)/.exec(u.pathname);
-      const cid = m?.[1] || u.searchParams.get('courseId'), ids = [m?.[2], ...u.pathname.match(/_\d+_\d+/g) || [], u.searchParams.get('contentId')].filter((x) => x && x !== cid);
-      if (!cid) continue;
+      const m = /^\/ultra\/courses\/(_\d+_\d+)(?=\/|$)/.exec(u.pathname);
+      const cid = m?.[1] || (u.pathname.startsWith('/ultra/') && u.searchParams.get('courseId'));
+      if (!/^_\d+_\d+$/.test(cid)) continue;
       cids.add(cid);
-      const hit = items.find((i) => i.cid === cid && ids.some((x) => x === i.content || x === i.id));
-      if (hit) return hit;
+      const path = m ? u.pathname.slice(m[0].length) : '';
+      const column = /^\/grades\/assessment\/(_\d+_\d+)(?:\/|$)/.exec(path);
+      // The first item id belongs to the destination; later ids may name attempts or other nested records.
+      const content = path.match(/(?:^|\/)(_\d+_\d+)(?:\/|$)/)?.[1] || (u.pathname === '/ultra/redirect' && u.searchParams.get('contentId'));
+      if (column || content) targets.push({ cid, field: column ? 'id' : 'content', id: column?.[1] || content });
+      else if ([...u.searchParams].some(([k, v]) => k !== 'courseId' && /Id$/.test(k) && /^_\d+_\d+$/.test(v))) return null;
     }
-    const c = norm(course), mine = items.filter((i) => cids.has(i.cid) || (!!c && norm(i.course) === c));
+    if (cids.size > 1) return null;
+    if (targets.length) {
+      const same = items.filter((i) => targets.every((x) => i.cid === x.cid && i[x.field] === x.id));
+      return same.length === 1 ? same[0] : null;
+    }
+    const c = norm(course), mine = items.filter((i) => cids.size ? cids.has(i.cid) : !!c && norm(i.course) === c);
     for (const t of [norm(title), norm(title).replace(/^\p{L}+(?: \p{L}+){0,2}:\s+/u, '')]) {
       const same = t ? mine.filter((i) => norm(i.title) === t) : [];
       if (same.length) return same.length === 1 ? same[0] : null;
