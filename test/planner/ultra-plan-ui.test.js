@@ -52,7 +52,10 @@ class E {
     }
     return null;
   }
-  querySelectorAll() { return []; }
+  querySelectorAll(sel) {
+    if (sel !== 'a[href]') return [];
+    return this.children.flatMap((c) => c && typeof c === 'object' ? [...(c.tagName === 'A' && c.getAttribute('href') !== null ? [c] : []), ...c.querySelectorAll(sel)] : []);
+  }
   get text() { return [this.textContent || '', ...this.children.map((c) => (c && typeof c === 'object' ? c.text : c ? String(c) : ''))].filter(Boolean).join(' '); }
 }
 
@@ -421,14 +424,35 @@ const activity = (p, title = 'Lab report') => {
   context.className = 'context'; context.textContent = 'Biology';
   link.setAttribute('href', '/ultra/courses/_101_1/outline');
   context.append(link); details.append(context, name); row.append(details);
-  row.querySelectorAll = (sel) => sel === 'a[href]' ? [link] : [];
   const all = p.c.document.querySelectorAll;
   p.c.document.querySelectorAll = (sel) => sel === '#activity-stream .stream-item-container' ? [row]
     : sel === '.gz-stream-status' ? details.children.filter((x) => x.className === 'gz-stream-status')
     : sel === '.gz-ct' ? p.card.children.filter((x) => x.className === 'gz-ct') : all(sel);
   p.c.GZ_STREAM = require('../../extension/courses/stream.js');
-  return () => details.querySelector(':scope > .gz-stream-status');
+  return Object.assign(() => details.querySelector(':scope > .gz-stream-status'), { row, details, titleElement: name, context });
 };
+
+test('Activity status uses the title and course links, not assignment links in the message body', async () => {
+  const lab = { ...ITEMS[0], content: '_701_1', sub: { submitted: true } };
+  const essay = { ...ITEMS[0], id: '_605_1', content: '_705_1', title: 'Essay', sub: { missing: true } };
+  const p = page({ path: '/ultra/stream', items: [lab, essay] });
+  const chip = activity(p), body = new E(), other = new E('a');
+  body.className = 'content';
+  other.setAttribute('href', '/ultra/courses/_101_1/outline/assessment/_705_1');
+  body.append(other); chip.details.append(body);
+  vm.runInContext(read('courses/page/cardtasks.js'), p.c);
+  const ui = p.c.GZ_CARD_TASKS;
+  ui.stream(true); await settle();
+  assert.equal(chip()?.text, 'Submitted', 'a body link cannot replace the named assignment with the missing essay');
+  chip.titleElement.textContent = 'Welcome to Biology';
+  ui.stream(true);
+  assert.equal(chip(), null, 'a notice linking to an assignment has no status of its own');
+  const titleLink = new E('a');
+  titleLink.setAttribute('href', '/ultra/redirect?courseId=_101_1&contentId=_701_1');
+  chip.titleElement.append(titleLink);
+  ui.stream(true);
+  assert.equal(chip()?.text, 'Submitted', 'the title destination still identifies its assignment');
+});
 
 test('Activity chips clear on an identity refresh and wait for the new account before reading or publishing', async () => {
   const submitted = { ...ITEMS[0], sub: { submitted: true } };
