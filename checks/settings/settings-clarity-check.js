@@ -66,8 +66,8 @@ const check = async (name, run) => { try { await run(); results.push({ name, ok:
     await check('themes work with arrows, Home/End and a single keyboard stop', async () => {
       await open('look/palette'); await page.locator('#looks .look[aria-pressed="true"]').focus();
       await page.keyboard.press('End');
-      await until(() => page.locator('#looks .look[data-look="Pumpkin Patch"]').getAttribute('aria-pressed').then((s) => s === 'true'));
-      assert.equal(await page.evaluate(() => document.activeElement.dataset.look), 'Pumpkin Patch');
+      await until(() => page.locator('#looks .look[data-look="Turkey Trot"]').getAttribute('aria-pressed').then((s) => s === 'true'));
+      assert.equal(await page.evaluate(() => document.activeElement.dataset.look), 'Turkey Trot');
       await page.keyboard.press('Home');
       await until(() => page.locator('#looks .look[data-look="Frost"]').getAttribute('aria-pressed').then((s) => s === 'true'));
       assert.equal(await page.locator('#looks .look[tabindex="0"]').count(), 1);

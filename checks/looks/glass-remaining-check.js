@@ -10,7 +10,7 @@ const out = path.resolve(process.argv[2]);
 const args = process.argv.slice(3);
 const lookArg = args.find((a) => a.startsWith('--looks='));
 const only = args.filter((a) => !a.startsWith('--'));
-const LOOKS = lookArg ? lookArg.slice(8).split(',') : ['Pumpkin Patch', 'Clear', 'Terminal', 'Aurora Night', 'Library'];
+const LOOKS = lookArg ? lookArg.slice(8).split(',') : ['Turkey Trot', 'Clear', 'Terminal', 'Aurora Night', 'Library'];
 const W = Number(process.env.W || 1528), H = Number(process.env.H || 1046);
 const fx = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
 // The real course bar nesting (course-bar-outline.txt): div.bb-course-navigation > course-page-header > header.makeStylesheader,

@@ -46,9 +46,10 @@ test('the catalogue: built-in, saved and gallery Looks and gallery backgrounds, 
   assert.deepEqual(C.tone(cat.looks[0]), ['#112233', '#445566', '#778899'], 'the swatch strip is its background\'s colors');
   assert.notEqual(cat.looks[3].px, '', 'parts are told apart by their hash');
   const all = C.list(cat);
-  assert.equal(all.length, G.GZ_LOOKS.length + 4);
-  assert.deepEqual(all.slice(0, G.GZ_LOOKS.length).map((E) => [E.id, E.kind]), G.GZ_LOOKS.map((L) => [L.name, 'builtin']), 'a built-in Look\'s id is its name');
-  assert.deepEqual(C.groups(all).map(([g, l]) => [g, l.length]), [['builtin', G.GZ_LOOKS.length], ['saved', 2], ['gallery', 2]]);
+  const offered = G.GZ_LOOKS.filter((L) => !L.old);
+  assert.equal(all.length, offered.length + 4);
+  assert.deepEqual(all.slice(0, offered.length).map((E) => [E.id, E.kind]), offered.map((L) => [L.name, 'builtin']), 'a built-in Look\'s id is its name; one gone to the gallery is not offered');
+  assert.deepEqual(C.groups(all).map(([g, l]) => [g, l.length]), [['builtin', offered.length], ['saved', 2], ['gallery', 2]]);
   assert.deepEqual(C.groups(C.list(null)).map(([g]) => g), ['builtin'], 'no kept Looks: one group');
   // Rebuilt after a rename: the same ids, nothing decoded again.
   const was = decoded;
@@ -274,7 +275,7 @@ test('looks/looks.js loads on demand as the worker injects it: it ends on a valu
   const first = vm.runInContext(read('looks/looks.js'), context);
   assert.ok(first, 'no last value: the worker would answer "did not finish"');
   assert.equal(vm.runInContext(read('looks/looks.js'), context), first);
-  assert.equal(vm.runInContext('GZ_CATALOG', context).list().length, G.GZ_LOOKS.length);
+  assert.equal(vm.runInContext('GZ_CATALOG', context).list().length, G.GZ_LOOKS.filter((L) => !L.old).length);
 });
 
 test('a course page asks the worker for its Look\'s parts by id: a kept Look\'s from its code, a built-in\'s own', async () => {

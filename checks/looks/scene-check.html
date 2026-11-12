@@ -55,13 +55,14 @@ const fetchText = async (url) => (await fetch(url)).text();
 
 const mod = await import('/looks/scene.js');
 const base = params.get('base') === '1' ? await import('/base/looks/scene.js') : null;
+const baseText = base ? await (await fetch('/base/looks/scene.js')).text() : '';
 const dbg = contexts[0] || document.createElement('canvas').getContext('webgl2');
 const info = dbg.getExtension('WEBGL_debug_renderer_info');
 out.data.renderer = info ? dbg.getParameter(info.UNMASKED_RENDERER_WEBGL) : 'unknown';
 const EXAMPLES = {};
 for (const f of ['aurora', 'starfield', 'liquid']) EXAMPLES[f] = await fetchText(`/assets/shaders/${f}.glsl`);
 const MIN = 'vec4 scene(vec2 uv) { return vec4(uv, 0., 1.); }';
-const NAMES = ['mist', 'orbs', 'borealis', 'lava', 'contours', 'horizon', 'graveyard', 'pumpkins', 'waves', 'dust'];
+const NAMES = ['mist', 'orbs', 'borealis', 'lava', 'contours', 'horizon', 'graveyard', 'pumpkins', 'harvest', 'turkeys', 'waves', 'dust'];
 
 // ---- builtins: the same shaders and the same pixels as before, alone and as a single layer -------------------------------
 if (run.includes('builtins')) {
@@ -81,7 +82,8 @@ if (run.includes('builtins')) {
     row.repeat = differing(draw(mod, { ...OPTS, name }).px, now.px); // the GPU drawing the same thing twice, the yardstick for the rest
     row.size = now.size; row.std = stats(now.px).std;
     check(`${name}: draws something, with no guard step and no failure at motion off`, stats(now.px).std > 2 && !now.steps && !now.fails, JSON.stringify({ std: row.std, steps: now.steps, fails: now.fails }));
-    if (base) {
+    // A scene the base has not got has nothing to be the same as.
+    if (base && new RegExp(`\\b${name}:`).test(baseText)) {
       const was = draw(base, { ...OPTS, name });
       row.sameSource = JSON.stringify(was.src) === JSON.stringify(now.src);
       row.differingBytes = differing(was.px, now.px);
@@ -93,7 +95,7 @@ if (run.includes('builtins')) {
     check(`${name}: as the only layer, at full amount, it is the same picture as the scene, or as close as it is to itself`, row.layerDifferingBytes <= row.repeat, `${row.layerDifferingBytes} bytes differ; drawing it twice differs by ${row.repeat}`);
   }
   // Animated, with the guard watching, for a few seconds each: the dearest built-ins on this GPU must not be stepped down.
-  for (const name of ['mist', 'graveyard', 'pumpkins', 'waves']) {
+  for (const name of ['mist', 'graveyard', 'pumpkins', 'harvest', 'turkeys', 'waves']) {
     const c = mkCanvas(), w = watch(mod, c);
     w.scene.update({ ...OPTS, name, speed: 1 });
     const r = await rate(2500);

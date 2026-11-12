@@ -58,7 +58,7 @@ test('an update from 4.0.6 to 4.0.7 shows the 4.0.7 note once', () => {
 });
 
 test('a student coming from before 4.0 is told about each 4.x release that changed what they see, newest first', () => {
-  assert.deepEqual(Object.keys(N.NOTES).filter((v) => N.cmp(v, '4') >= 0).sort((a, b) => N.cmp(b, a)), ['4.0.7', '4.0.6', '4.0.5', '4.0.3', '4.0.1', '4.0.0']);
+  assert.deepEqual(Object.keys(N.NOTES).filter((v) => N.cmp(v, '4') >= 0).sort((a, b) => N.cmp(b, a)), ['4.0.8', '4.0.7', '4.0.6', '4.0.5', '4.0.3', '4.0.1', '4.0.0']);
   assert.deepEqual(N.unseen('4.0.7', '3.0.1', true).map(([v]) => v), ['4.0.7', '4.0.6', '4.0.5', '4.0.3', '4.0.1', '4.0.0', '3.0.2']);
   assert.deepEqual(N.unseen('4.0.6', '4.0.5', true).map(([v]) => v), ['4.0.6']);
   assert.deepEqual(N.unseen('4.0.2', '4.0.1', true), [], 'a release with no note shows none');

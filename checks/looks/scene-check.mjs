@@ -42,6 +42,8 @@ for (const f of ['scene.js', 'three.js', 'three.min.js']) {
   // A scene.js from looks/ imports ../vendor/three.js; an older one imports ./three.js beside it.
   fs.writeFileSync(path.join(baseDir, 'lib', f), src);
   if (f !== 'scene.js') { fs.mkdirSync(path.join(baseDir, 'vendor'), { recursive: true }); fs.writeFileSync(path.join(baseDir, 'vendor', f), src); }
+  // The page asks for /base/looks/scene.js since the layout moved.
+  else { fs.mkdirSync(path.join(baseDir, 'looks'), { recursive: true }); fs.writeFileSync(path.join(baseDir, 'looks', f), src); }
 }
 
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.css': 'text/css', '.glsl': 'text/plain' };

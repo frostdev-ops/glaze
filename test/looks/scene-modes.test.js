@@ -463,7 +463,7 @@ test('at most four layers, of the four kinds; anything else is dropped', () => {
 });
 
 test('every built-in scene works as a layer, points scenes included', () => {
-  for (const name of ['mist', 'orbs', 'borealis', 'lava', 'contours', 'horizon', 'graveyard', 'pumpkins', 'topography', 'waves', 'dust', 'no such scene']) {
+  for (const name of ['mist', 'orbs', 'borealis', 'lava', 'contours', 'horizon', 'graveyard', 'pumpkins', 'harvest', 'turkeys', 'topography', 'waves', 'dust', 'no such scene']) {
     const e = engine(), scene = e.start({});
     scene.update(layersOf([{ k: 'scene', name }], { speed: 0 }));
     assert.equal(e.made.materials.length, 1, name);

@@ -69,7 +69,7 @@ test('a Look is put on as Settings puts it on, and Glaze\'s own theme leaves lig
   assert.equal(S.worn(G.GZ_SANITIZE({})), S.OWN, 'a fresh install wears Glaze\'s own theme');
   assert.equal(S.worn({ ...G.GZ_SANITIZE({}), ...G.GZ_LOOK_APPLY(G.GZ_SANITIZE({}), L) }), L);
   assert.equal(S.worn(G.GZ_SANITIZE({ colors: { '--gz-accent': '#123456' } })), null, 'a palette of their own is no Look');
-  assert.equal(S.LOOKS.length, G.GZ_LOOKS.length + 1);
+  assert.equal(S.LOOKS.length, G.GZ_LOOKS.filter((l) => !l.old).length + 1);
 });
 
 test('the page shows the motion chosen, off where the system asks and the student follows it', () => {
