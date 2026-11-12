@@ -14,6 +14,10 @@ All notable changes to Glaze are documented here. The format follows
 
 - Halloween's Graveyard and Pumpkin Patch moved to the [Looks gallery](https://frostdev.io/glaze/looks). They stay on wherever you already wear them, and their scenes and pointers stay in Settings.
 
+### Fixed
+
+- Blackboard: submission status on Activity cards, and the tasks on course cards, show when you open the page within two minutes of another Blackboard page. In 4.0.7 they were drawn and taken away again, over and over.
+
 ## [4.0.7] — 2026-11-11
 
 ### Added
