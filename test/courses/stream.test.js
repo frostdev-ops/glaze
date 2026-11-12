@@ -106,3 +106,23 @@ test('submission status on Activity cards is a stream setting, on unless turned 
   assert.equal(D.GZ_SANITIZE({}).stream.status, true);
   assert.equal(D.GZ_SANITIZE({ stream: { status: false } }).stream.status, false);
 });
+
+test('an Activity link matches its target id namespace, never another column, content item or attempt', () => {
+  const items = [
+    { ...ITEMS[0], id: '_501_1', content: '_900_1', title: 'Other assignment' },
+    ITEMS[0],
+  ];
+  assert.equal(S.find(items, { links: ['/ultra/courses/_101_1/outline/assessment/_501_1'] }), ITEMS[0], 'assessment routes name content');
+  assert.equal(S.find(items.toReversed(), { links: ['/ultra/courses/_101_1/grades/assessment/_501_1/overview'] }), items[0], 'grade routes name columns');
+  assert.equal(S.find(items, { links: ['/ultra/redirect?courseId=_101_1&contentId=_501_1'] }), ITEMS[0], 'redirects name content');
+  assert.equal(S.find(ITEMS, { links: ['/ultra/courses/_101_1/outline/assessment/_999_1/attempt/_501_1'] }), null, 'an attempt is not the assessment');
+});
+
+test('an explicit missing or conflicting Activity destination cannot fall back to a same-named assignment', () => {
+  const title = ITEMS[0].title, course = ITEMS[0].course;
+  for (const link of ['/ultra/courses/_101_1/outline/assessment/_999_1', '/ultra/redirect?courseId=_101_1&contentId=_999_1']) {
+    assert.equal(S.find(ITEMS, { links: [link], title, course }), null, 'the linked item is outside the planner range');
+  }
+  assert.equal(S.find(ITEMS, { links: ['/ultra/courses/_102_1/outline'], title, course }), null, 'the course id overrides a stale course label');
+  assert.equal(S.find(ITEMS, { links: ['/ultra/courses/_101_1/outline/assessment/_501_1', '/ultra/courses/_102_1/outline/assessment/_502_1'] }), null, 'conflicting item links do not pick the first');
+});
