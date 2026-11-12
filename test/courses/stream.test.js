@@ -83,6 +83,13 @@ test('an Activity card finds its assignment by the ids in its link, else by its 
   assert.equal(S.find(ITEMS, { links: ['/ultra/redirect?redirectType=nautilus&courseId=_102_1&contentId=_502_1'] })?.id, '_606_1', "Ultra's redirect");
   assert.equal(S.find(ITEMS, { links: ['#'], title: '  Practice   essay ', course: 'BIO 1100: Biology I' })?.id, '_605_1', 'title and course name');
   assert.equal(S.find(ITEMS, { links: ['/ultra/courses/_102_1/outline'], title: 'Quiz 1' })?.id, '_606_1', 'title in the course its link names');
+  // The owner's Activity, 2026-11-11: Ultra names a deadline's card "Past due: <title>" (translated in other languages).
+  assert.equal(S.find(ITEMS, { links: ['/ultra/courses/_101_1/outline'], title: 'Past due: Practice essay' })?.id, '_605_1', 'a status before the title');
+  assert.equal(S.find(ITEMS, { links: ['/ultra/courses/_101_1/outline'], title: 'Vencido: Practice essay' })?.id, '_605_1', 'in another language');
+  const colon = [{ ...ITEMS[0], title: 'Module 1: Discussion -- ¡Nos conocemos!' }];
+  assert.equal(S.find(colon, { links: ['/ultra/courses/_101_1/outline'], title: 'Past due: Module 1: Discussion -- ¡Nos conocemos!' })?.id, '_605_1', 'a title with its own colon');
+  assert.equal(S.find(colon, { links: ['/ultra/courses/_101_1/outline'], title: 'Module 1: Discussion -- ¡Nos conocemos!' })?.id, '_605_1', 'and without the status');
+  assert.equal(S.find([{ ...ITEMS[0], title: 'Discussion -- ¡Nos conocemos!' }], { links: ['/ultra/courses/_101_1/outline'], title: 'Module 1: Discussion -- ¡Nos conocemos!' }), null, 'a title is never cut to fit another');
 });
 test("an Activity card's title alone, or in another course, names nothing", () => {
   assert.equal(S.find(ITEMS, { title: 'Quiz 1' }), null, 'two courses have a Quiz 1');
