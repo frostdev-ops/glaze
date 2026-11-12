@@ -504,7 +504,7 @@ const BROKER = {
       const { rotateState, rotateLooks, lookFavorites } = await local.get(['rotateState', 'rotateLooks', 'lookFavorites']);
       // Ticked by id (looks/looks.js); a tick from before ids, by its code, is its kept Look's.
       const kept = GZ_CATALOG.keptAll(lookFavorites);
-      const list = GZ_LX.rotation(GZ_CATALOG.ids(rotateLooks, lookFavorites), GZ_LOOKS.map((L) => L.name), kept.map((f) => f.id));
+      const list = GZ_LX.rotation(GZ_CATALOG.ids(rotateLooks, lookFavorites), GZ_LOOKS.filter((L) => !L.old).map((L) => L.name), kept.map((f) => f.id));
       // The account's last turn (storage.sync, written with the Look it wore): a turn another device made is this device's own.
       const last = (await sync.get(GZ_LX.SHARED))[GZ_LX.SHARED];
       const r = GZ_LX.turn(rotateState, Date.now(), s.extras, list, m.now === true, last);
