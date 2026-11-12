@@ -471,6 +471,31 @@ test('every built-in scene works as a layer, points scenes included', () => {
   }
 });
 
+test('Hearthside spark trails stay finite after both endpoints land together', () => {
+  const e = engine(), scene = e.start({});
+  scene.update({ ...base, name: 'hearth', speed: 0 });
+  const src = e.made.materials[0].fragmentShader;
+  // Evaluate the emitted shader's scalar projection and trail times on the CPU. This exercises the actual denominator,
+  // including a stationary trail after landing; it does not substitute for a graphics compiler or GPU check.
+  const projection = src.match(/float seg\([^\n]*clamp\((.+), 0\., 1\.\)/)?.[1];
+  assert.ok(projection, 'the segment helper has a clamped projection');
+  const project = new Function('pa', 'ba', 'dot', 'max', `return ${projection};`);
+  const times = src.match(/ta = (.+), tz = (.+);/);
+  assert.ok(times, 'spark endpoints stop at the landing time');
+  const trailTimes = new Function('tt', 'tl', 'min', 'max', `return [${times[1]}, ${times[2]}];`);
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1];
+  const position = (t) => [.2 * t, .14 + .8 * t - 1.3 * t * t];
+  const p = [.1, .05], landing = .8;
+  for (const time of [.4, landing + .01, landing + .1, 1.9, 0]) {
+    const [ta, tz] = trailTimes(time, landing, Math.min, Math.max), a = position(ta), b = position(tz);
+    const pa = p.map((v, i) => v - a[i]), ba = b.map((v, i) => v - a[i]);
+    const u = Math.min(1, Math.max(0, project(pa, ba, dot, Math.max)));
+    const d = Math.hypot(...pa.map((v, i) => v - ba[i] * u));
+    assert.ok(Number.isFinite(d), `spark distance at ${time}s must not poison the firelight with NaN`);
+    if (time > landing + .04) assert.equal(d, Math.hypot(...pa), 'a landed trail is a point');
+  }
+});
+
 test('the drawing is as sharp as the sharpest layer needs', () => {
   const e = engine(), scene = e.start({});
   scene.update(layersOf([{ k: 'scene', name: 'mist' }, { k: 'gradient' }], { speed: 0 }));
