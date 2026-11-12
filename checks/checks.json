@@ -61,6 +61,7 @@
     "courses/ultra-live-frames-check.js": {"needs":["runner"],"limit":300,"args":["{out}"]},
     "courses/ultra-perf-check.js": {"needs":["runner"],"limit":900,"args":["{out}/ultra-perf.json"],"note":"argv[2] is a JSON file, not a folder; a measurement, PERF_* env tunes it"},
     "courses/ultra-preview-check.js": {"needs":["runner"],"limit":600,"args":["{out}"]},
+    "courses/stream-status-check.js": {"needs":["runner"],"limit":120,"args":["{out}"]},
     "courses/ultra-test-attempt-check.js": {"needs":["runner"],"limit":300,"args":["{out}"]},
     "courses/ultra-test-dropdown-check.js": {"needs":["runner"],"limit":180,"args":["{out}"]},
     "documents/documents-ai-check.js": {"needs":["runner"],"limit":300,"args":["{out}"]},
