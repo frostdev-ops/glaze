@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.6 (French)
+# Chrome Web Store listing — Glaze 4.0.7 (French)
 
 ## Short summary (132 character maximum)
 
@@ -72,6 +72,18 @@ Open source (MIT) : https://github.com/frostdev-ops/glaze
 Canvas est une marque d’Instructure, Inc. Blackboard est une marque d’Anthology Inc. Moodle est une marque déposée de Moodle Pty Ltd. Glaze est un projet indépendant ; il n’est affilié à aucune de ces sociétés ni à aucun établissement, et n’est approuvé par aucun d’eux.
 
 ## Release notes
+
+NOUVEAUTÉS DE LA VERSION 4.0.7
+
+• Chrome : la synchronisation avec Google Drive fusionne élément par élément les tâches, les emplois du temps, le dictionnaire, les favoris et les sources enregistrées lorsque deux appareils les ont modifiés.
+• Chrome : Agents se reconnecte de lui-même après le redémarrage du navigateur.
+• Writer sur Canvas est nouveau : les zones de texte des devoirs, les réponses aux discussions et aux annonces, la boîte de réception et les questions de rédaction des quiz s’ouvrent dans Glaze Writer, avec votre Look. Un interrupteur sous Writer, dans les Réglages, le désactive.
+• Sur Canvas, l’IA de Writer lit dans la page les consignes du devoir, ou le sujet et le message auquel vous répondez.
+• Les pages de Canvas flottent sur les panneaux de votre Look, comme celles de Blackboard.
+• Firefox : la synchronisation avec Google Drive fusionne élément par élément les tâches, les emplois du temps, le dictionnaire, les favoris et les sources enregistrées lorsque deux appareils les ont modifiés.
+• Firefox : Agents se reconnecte de lui-même après le redémarrage du navigateur.
+• Ask Rime n’enregistre un souvenir qu’à partir de vos propres mots, et ses réponses ne renvoient qu’au site de votre établissement ou aux adresses que Glaze a lues pour cette réponse.
+• Corrections dans les citations, les exports et la correction automatique de Writer, les feuilles de calcul, les notes et le GPA, les tâches et les rappels, et une meilleure lisibilité dans les Looks clairs.
 
 NOUVEAUTÉS DE LA VERSION 4.0.6
 

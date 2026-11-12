@@ -6,70 +6,38 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [4.0.7] — 2026-11-11
+
 ### Added
 
-- Glaze Writer on Canvas: a classic assignment's text entry box opens in Writer, in your Look. Submit waits until Canvas's editor holds exactly what you wrote and says so in Writer's bar if it doesn't; ⋯ → Canvas editor gives the box back, and ⋯ → Insert from Canvas adds an image, media, a document, an equation or a course link with Canvas's own tools. Settings → Writer → Glaze Writer turns it off on both sites.
-- Writer on Canvas in discussion and announcement replies, a topic's or a thread's: the box opens with the caret in Writer, Reply and Ctrl/Cmd+Enter send exactly what you wrote, and Canvas's Attach and Cancel stay where they are.
-- Writer in the Canvas Inbox, as plain text: a new message opens in Writer, Canvas's signature shows as it arrives, Send and Ctrl/Cmd+Enter send exactly your lines, and the Inbox's draft backup goes on keeping your message.
-- Writer on Canvas assignments' newer submission page (Assignments 2): your text goes into Canvas's saved draft as you type, and Submit waits until that draft holds exactly what you wrote.
-- Writer on a Canvas quiz's essay questions, with AI off and proofing on: each answer goes into Canvas as you type, so its autosave and its timer have it, and Submit Quiz, Next and Previous wait for every essay's last words.
-- Writer on Canvas keeps what you write on this device beside Canvas's own autosave. Canvas's restore question still comes first; a box that opens empty offers Glaze's copy back in Writer (Restore or Dismiss), unless Canvas already has that text as your submission or post.
-- Writer's AI on Canvas knows what you are answering: completion, Check with AI and Feedback read the assignment's instructions, or the discussion topic and the post you are replying to, off the page, and the word ring shows a reply's targets. Nothing is read on a quiz or in the Inbox.
-- What's new has notes for 4.0.0 through 4.0.7.
+- Glaze Writer on Canvas: assignment text boxes (classic and Assignments 2), discussion and announcement replies, the Inbox and classic quiz essays open in Writer, in your Look. Submit, Reply and Send wait until Canvas holds exactly what you wrote. Settings → Writer → Glaze Writer turns it off. New Quizzes is not covered.
+- Writer on Canvas keeps what you write on this device and offers it back when a box opens empty.
+- Writer's AI on Canvas reads the assignment's instructions, or the topic and the post you are replying to, off the page. Nothing is read on a quiz or in the Inbox.
 
 ### Changed
 
-- Canvas pages float on your Look's panels, as Blackboard's do: assignments, discussions, grades, pages, the syllabus, files, people, the inbox and settings. Header bars are rounded, and Canvas's editor and submission form wear your Look.
-- Sync to Google Drive merges To Do lists, class schedules, GPA terms, dashboard notes, Looks history and favorites, the dictionary and saved sources item by item when two devices changed them, where it used to keep only the later device's copy. Two devices saving the same thing at once both keep their change, a device that joins just after another's upload gets its records, and a document Drive refuses for an unknown reason is tried again.
-- Agents: a connected app reconnects by itself after the browser restarts or agent access goes off and on, and an app started before the browser gets its first answer instead of timing out. `glaze-mcp setup` picks a safe Node.js when the one running it can't be used and says which; with none it says it isn't set up. The helper works on Node 18.0 to 18.13 and no longer names fnm's per-shell Node, which vanished at logout.
-- Ask Rime saves a memory only from your own words, so text in a course can't plant one, and its answers link only to your school's site or to addresses Glaze read for that answer.
-- A spreadsheet cell that uses a function Glaze can't calculate keeps the file's own value through open, import, export, Drive and Submit until one of its inputs changes, and the status line says so.
-- A shared Look is refused when its shader uses `while` or `do` loops or oversized arrays, or when its picture points at an address on your own network. A Look can't fade the school's main navigation below half or paint its text in its own background colour.
-- Look rotation changes the Look once each period across your signed-in devices.
-- A dark Look prints as dark ink on white, and Moodle prints without the bar's gutter. Instructors' text colours show in Blackboard. Settings, the popup and the hub are readable in Windows High Contrast.
-- AI no longer changes grammar or word choice while you type in Writer; it suggests instead.
-- Documents holds at most 2,000 documents and refuses a new one past that, where it used to lose track of the oldest.
-- Writer's autocorrect sends a cloud model only the sentence and its candidate fixes, nothing of the assignment.
+- Canvas pages float on your Look's panels, as Blackboard's do.
+- Sync to Google Drive merges To Do, class schedules, GPA terms, dashboard notes, Looks history, favorites, the dictionary and saved sources item by item when two devices changed them.
+- Agents: a connected app reconnects by itself after the browser restarts or agent access goes off and on. `glaze-mcp setup` picks a safe Node.js and says which, or says it isn't set up.
+- Ask Rime saves a memory only from your own words, and its answers link only to your school's site or to addresses Glaze read for that answer.
+- AI suggests grammar and word-choice changes in Writer instead of making them as you type. Autocorrect sends a cloud model only the sentence and its candidate fixes.
+- A spreadsheet cell using a function Glaze can't calculate keeps the file's own value. Documents holds at most 2,000 documents.
+- A shared Look with `while` or `do` shader loops, or a picture on your own network, is refused.
+- A dark Look prints as dark ink on white. Settings, the popup and the hub are readable in Windows High Contrast.
 
 ### Fixed
 
-- Hovering rows, tabs and the editor's buttons on Canvas no longer flashes white, and the last module item you pointed at no longer stays white.
-- On Canvas's newer submission page (Assignments 2), the lines above the text entry box and the Submit bar, a submitted file's preview edge and the Canvas Files picker's heading line are your Look's border colour, not white, in a dark Look.
-- The "or" divider in Canvas's file upload box (Assignments 2) shows in a dark Look again.
-
-- Typing `/` with a switch or choice focused opens Settings search again.
-- Google Drive's daily backup keeps Notes and the Pet habitat on for a new install, so restoring it no longer turns them off.
-- Reset everything says so when it couldn't reset your school sites.
-- A sheet formula with many `*` wildcards, or a damaged .xlsx with thousands of column ranges, no longer freezes the tab.
-- Writer: Find and Replace works with hyphenated words. An AI suggestion or a citation fix next to a footnote or picture no longer deletes it, and Check with AI, Feedback, the outline and the gray text read your footnotes. Editing a footnote keeps its formatting.
-- Writer: autocorrect leaves other languages, quotations, block quotes and a variable named i alone, and uses straight apostrophes when Smart quotes is off. Long unbroken runs of letters no longer freeze the editor, and pasting a very large Word-style email no longer does either.
-- Writer's format and citation checks: Fix edits the right characters when a footnote, picture or line break comes earlier, and the block-quote Fix keeps italics, links and notes. Correctly ordered reference lists are no longer flagged and Sort uses the same order. (Figure 3) and (Table 2) are no longer turned into footnotes. Possessives, O'Malley-style names and van der Berg-style particles match their entries. The MLA date suggestion is right in US time zones.
-- Writer's sources: an edition typed in words ("Second edition") prints as 2nd ed.; Jr., III and "JK Rowling" read as people; APA adds 2020a and 2020b; distinct works no longer merge, and a Chicago journal entry no longer swallows the next one. Cite's AI reading of thin web pages runs.
-- Writer's exports: a form feed no longer glues the words either side of it in a .docx; a continued list keeps its own numbering style; .txt and .md place merged table cells correctly and number lists as the paper does. Pasted text keeps CJK and typographic spaces.
-- Sheets: the fill handle counts INV-0001 on to INV-0002 and CS-101 to CS-102. A workbook whose formula hits a text-length limit opens, showing #VALUE! there; a damaged chart anchor drops only that chart; a sheet that is cut short says so and still exports; a refused undo or redo keeps its step.
-- Slides: decks with a shared notes part, many placeholders or many pictures open far faster.
-- Grades and GPA: "You'd need about N%" no longer overstates a whole target by a tenth, and a GPA exactly on a half cent rounds up (3.825 shows 3.83). A Blackboard overall grade that is a letter or hidden reads as an estimate.
-- To Do and reminders: a Canvas tick stays ticked when a slower refresh lands, and one account's tick never carries to another. A reminder checks the site first when its information is over two minutes old, so work handed in since gets none. A Gradescope status Glaze can't read is no longer marked Missing.
-- Notes: a title typed just before another tab saves is kept, and a picture or paste dropped into a note in Firefox lands at the pointer. A dashboard note from a computer with a fast clock shows on your other computers.
-- Syllabus import: "Week 1 starts" uses your school's time zone.
-- On a shared browser profile, Canvas's Dashboard shows only the signed-in student's course cards, and Blackboard's remembered navigation is kept per student. Tabs of different schools no longer lose each other's course list and new-grade marks.
-- Search and the notes links skip content in folders a cut-short read never reached. The "N new" count opens its page where session storage is blocked. Turning bookmark icons off or on no longer resets other card settings when storage can't be read.
-- Moving a widget in the sidebar dock steps past widgets whose switch is off, and the position read out is where it went. Ctrl-click or middle-click on Blackboard items in Glaze's bar, and on its logo, opens Blackboard's page.
-- Moodle: courses you've left leave the course list, and card totals retry after a failed read.
-- Look animations and stickers go off on a quiz opened inside Blackboard in Firefox before 147. Animated backgrounds retry after a brief load failure, a gallery Look's background file is kept while you preview it, and the gallery's "Use this Look" falls back to copying the code after Glaze updates under an open tab.
-- Study help lists every Blackboard to-do item and reads it, even when its course's gradebook wasn't read, and no longer stalls on long pages of equations. A reminder card's Ask Rime still works after the browser unloads Glaze's background, and Dismiss clears it.
-- AI setup: a provider whose site access was refused no longer shows Connected, and Settings offers Allow; picking Your key turns AI on only once a key works; a slow model list no longer limits long documents for an hour. After a graphics reset or running out of graphics memory, the on-device model reloads on the next run and says what happened. The Sharing relay's Test asks for access correctly in Firefox.
-- Selected rows, chips, field edges, Writer's feedback chips, the course dots and the To Do count are easier to read in the light Looks; menus show where the keyboard is; the popup announces its status; Writer's citation edit button shows on touch screens.
-- Agents on Blackboard get a fresh planner again instead of an old saved copy.
-- Settings → Writer → Clear all papers and documents also removes spreadsheets, PDFs and slide decks, and their files.
-- Settings can no longer connect or disconnect Google Drive, or switch Sync, while shown inside a school's page.
-- Settings search no longer fails on "constructor" or on names with İ, and no longer freezes on "h:". Documents search finds İstanbul by "istanbul" in a Turkish or Azeri browser.
-- Writer's AI no longer stalls on assignment text full of unclosed `<`, on long dialogue-heavy drafts, or on very long replies with no spaces.
-- To Do chips on light Looks show their status colour again, and the spreadsheet's formula bar and Find fields have a visible edge there.
-- Settings shown inside a school's page opens its own tab for Google Drive's Connect, Disconnect and Sync.
-- A full Documents list says so instead of "Not saved".
-- Course card search finds İstanbul by "istanbul" in a Turkish or Azeri browser.
-- An AI suggestion is dropped where a footnote or picture was added to its text after the check, and decks sharing one huge master or layout open faster.
+- Canvas: hovering no longer flashes white, and Assignments 2's lines and the upload box's "or" divider take your Look's colours.
+- Writer: Find and Replace with hyphenated words, fixes beside a footnote or picture, autocorrect in other languages, reference formatting and exports.
+- Sheets and slides: damaged workbooks open, and large decks open faster.
+- Grades and GPA rounding, To Do ticks and reminders, Notes titles and drops, and syllabus week starts in your school's time zone.
+- On a shared browser profile, Canvas's course cards and Blackboard's navigation are kept per student.
+- Search skips folders a cut-short read never reached. Moodle drops courses you've left.
+- Look animations go off on a quiz opened inside Blackboard in Firefox before 147.
+- AI setup shows Connected only once site access is granted, and Your key turns AI on only once a key works. Study help lists every Blackboard to-do item.
+- Agents on Blackboard get a fresh planner.
+- Settings: `/` opens search again with a switch focused, and Clear all papers and documents also removes spreadsheets, PDFs and slide decks.
+- Selected rows, chips, field edges and the To Do count are easier to read in the light Looks.
 
 ## [4.0.6] — 2026-11-09
 

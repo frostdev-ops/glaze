@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.6 (Portuguese (Brazil))
+# Chrome Web Store listing — Glaze 4.0.7 (Portuguese (Brazil))
 
 ## Short summary (132 character maximum)
 
@@ -72,6 +72,18 @@ Código aberto (MIT): https://github.com/frostdev-ops/glaze
 Canvas é uma marca da Instructure, Inc. Blackboard é uma marca da Anthology Inc. Moodle é uma marca registrada da Moodle Pty Ltd. O Glaze é um projeto independente e não tem afiliação com nenhuma dessas empresas nem com nenhuma escola, e não é endossado por elas.
 
 ## Release notes
+
+NOVO NA 4.0.7
+
+• Chrome: a sincronização com o Google Drive mescla item por item as tarefas, os horários de aula, o dicionário, os favoritos e as fontes salvas quando dois dispositivos os alteraram.
+• Chrome: Agentes se reconecta sozinho depois que o navegador reinicia.
+• O Writer no Canvas é novidade: as caixas de texto das tarefas, as respostas em discussões e avisos, a Caixa de entrada e as questões dissertativas dos testes abrem no Glaze Writer, com o seu Look. Uma chave em Writer, nas Configurações, desliga.
+• No Canvas, a IA do Writer lê na página as instruções da tarefa, ou o tópico e a postagem que você está respondendo.
+• As páginas do Canvas flutuam sobre os painéis do seu Look, como as do Blackboard.
+• Firefox: a sincronização com o Google Drive mescla item por item as tarefas, os horários de aula, o dicionário, os favoritos e as fontes salvas quando dois dispositivos os alteraram.
+• Firefox: Agentes se reconecta sozinho depois que o navegador reinicia.
+• O Ask Rime salva uma memória apenas a partir das suas próprias palavras, e suas respostas só levam ao site da sua escola ou a endereços que o Glaze leu para aquela resposta.
+• Correções nas citações, nas exportações e na autocorreção do Writer, nas planilhas, nas notas e no GPA, nas tarefas e nos lembretes, e leitura mais fácil nos Looks claros.
 
 NOVO NA 4.0.6
 

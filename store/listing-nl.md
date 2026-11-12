@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.6 (Dutch)
+# Chrome Web Store listing — Glaze 4.0.7 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -72,6 +72,18 @@ Open source (MIT): https://github.com/frostdev-ops/glaze
 Canvas is een handelsmerk van Instructure, Inc. Blackboard is een handelsmerk van Anthology Inc. Moodle is een geregistreerd handelsmerk van Moodle Pty Ltd. Glaze is een onafhankelijk project en is niet verbonden aan, noch goedgekeurd door, een van deze bedrijven of een school.
 
 ## Release notes
+
+NIEUW IN 4.0.7
+
+• Chrome: synchronisatie met Google Drive voegt taken, lesroosters, het woordenboek, favorieten en bewaarde bronnen item voor item samen wanneer twee apparaten ze hebben gewijzigd.
+• Chrome: Agents maakt na een herstart van de browser vanzelf weer verbinding.
+• Writer op Canvas is nieuw: tekstvakken van opdrachten, antwoorden in discussies en aankondigingen, het Postvak IN en essayvragen in toetsen openen in Glaze Writer, in je Look. Een schakelaar onder Writer in Instellingen zet het uit.
+• De AI van Writer leest op Canvas de instructies van de opdracht, of het onderwerp en het bericht waarop je antwoordt, van de pagina.
+• Canvas-pagina’s zweven op de panelen van je Look, net als die van Blackboard.
+• Firefox: synchronisatie met Google Drive voegt taken, lesroosters, het woordenboek, favorieten en bewaarde bronnen item voor item samen wanneer twee apparaten ze hebben gewijzigd.
+• Firefox: Agents maakt na een herstart van de browser vanzelf weer verbinding.
+• Ask Rime bewaart een herinnering alleen uit je eigen woorden, en zijn antwoorden linken alleen naar de site van je school of naar adressen die Glaze voor dat antwoord heeft gelezen.
+• Verbeteringen in de citaten, exports en autocorrectie van Writer, in spreadsheets, cijfers en GPA, taken en herinneringen, en betere leesbaarheid in de lichte Looks.
 
 NIEUW IN 4.0.6
 
