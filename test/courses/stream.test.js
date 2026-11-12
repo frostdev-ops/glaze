@@ -69,3 +69,30 @@ test('an Activity card reads item first, in bold, then its course and the rest i
   assert.equal(winner(theme, kid('div.context'), 'font-weight')?.[0], '400');
   assert.equal(weight('context'), '400');
 });
+
+// An Activity card's assignment, among the planner's Ultra items (courses/ultra.js due(): id the gradebook column, content
+// its content item, cid the course), for the submission status beside it (courses/page/cardtasks.js, stream.status).
+const ITEMS = [
+  { type: 'assignment', id: '_605_1', content: '_501_1', cid: '_101_1', course: 'BIO 1100: Biology I', title: 'Practice essay', sub: { submitted: true } },
+  { type: 'assignment', id: '_606_1', content: '_502_1', cid: '_102_1', course: 'ENG 1100: College Writing', title: 'Quiz 1', sub: { submitted: false } },
+  { type: 'quiz', id: '_607_1', content: '_503_1', cid: '_103_1', course: 'MATH 1350: Calculus I', title: 'Quiz 1', sub: null },
+];
+test('an Activity card finds its assignment by the ids in its link, else by its title in its course', () => {
+  assert.equal(S.find(ITEMS, { links: ['/ultra/courses/_101_1/outline/assessment/_501_1'] })?.id, '_605_1', 'the content item');
+  assert.equal(S.find(ITEMS, { links: ['/ultra/courses/_101_1/grades/assessment/_605_1/overview'] })?.id, '_605_1', 'the gradebook column');
+  assert.equal(S.find(ITEMS, { links: ['/ultra/redirect?redirectType=nautilus&courseId=_102_1&contentId=_502_1'] })?.id, '_606_1', "Ultra's redirect");
+  assert.equal(S.find(ITEMS, { links: ['#'], title: '  Practice   essay ', course: 'BIO 1100: Biology I' })?.id, '_605_1', 'title and course name');
+  assert.equal(S.find(ITEMS, { links: ['/ultra/courses/_102_1/outline'], title: 'Quiz 1' })?.id, '_606_1', 'title in the course its link names');
+});
+test("an Activity card's title alone, or in another course, names nothing", () => {
+  assert.equal(S.find(ITEMS, { title: 'Quiz 1' }), null, 'two courses have a Quiz 1');
+  assert.equal(S.find(ITEMS, { title: 'Practice essay' }), null, 'no course to tell it by');
+  assert.equal(S.find(ITEMS, { title: 'Practice essay', course: 'ENG 1100: College Writing' }), null, 'another course');
+  assert.equal(S.find(ITEMS, { links: ['/ultra/courses/_101_1/outline/assessment/_999_1'], title: 'Lab report' }), null, 'an item the planner lacks');
+  assert.equal(S.find([], { links: ['/ultra/courses/_101_1/outline/assessment/_501_1'] }), null);
+  assert.equal(S.find(ITEMS, {}), null);
+});
+test('submission status on Activity cards is a stream setting, on unless turned off', () => {
+  assert.equal(D.GZ_SANITIZE({}).stream.status, true);
+  assert.equal(D.GZ_SANITIZE({ stream: { status: false } }).stream.status, false);
+});
