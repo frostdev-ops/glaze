@@ -454,6 +454,28 @@ test('Activity status uses the title and course links, not assignment links in t
   assert.equal(chip()?.text, 'Submitted', 'the title destination still identifies its assignment');
 });
 
+test('an ambiguous Activity course label cannot choose the first course, even with only one cached assignment', async () => {
+  const lab = { ...ITEMS[0], sub: { submitted: true } };
+  const p = page({ path: '/ultra/stream', items: [lab] });
+  const chip = activity(p), courseLink = chip.context.children[0];
+  courseLink.setAttribute('href', '#');
+  p.c.GZ_CTX.courseList = () => ({
+    _101_1: { site: O, name: 'Biology', code: 'BIO-101' },
+    _102_1: { site: O, name: 'Biology', code: 'BIO-102' },
+  });
+  vm.runInContext(read('courses/page/cardtasks.js'), p.c);
+  const ui = p.c.GZ_CARD_TASKS;
+  ui.stream(true); await settle();
+  assert.equal(chip(), null, 'a shared course name does not identify which course the card belongs to');
+  courseLink.setAttribute('href', '/ultra/courses/_101_1/outline');
+  ui.stream(true);
+  assert.equal(chip()?.text, 'Submitted', 'an explicit course link disambiguates the label');
+  courseLink.setAttribute('href', '#');
+  chip.context.textContent = 'BIO-101';
+  ui.stream(true);
+  assert.equal(chip()?.text, 'Submitted', 'a unique course code still works without a link');
+});
+
 test('Activity chips clear on an identity refresh and wait for the new account before reading or publishing', async () => {
   const submitted = { ...ITEMS[0], sub: { submitted: true } };
   const p = page({ path: '/ultra/stream', items: [submitted] });
