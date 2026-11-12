@@ -30,6 +30,7 @@ class E {
   replaceWith(x) { const p = this.parent; p.children[p.children.indexOf(this)] = x; x.parent = p; this.parent = null; }
   remove() { const p = this.parent; if (p) p.children.splice(p.children.indexOf(this), 1); this.parent = null; }
   get nextElementSibling() { const l = this.parent?.children || []; return l[l.indexOf(this) + 1] || null; }
+  get previousElementSibling() { const l = this.parent?.children || []; return l[l.indexOf(this) - 1] || null; }
   get isConnected() { return !!this.parent; }
   setAttribute(k, v) { this.attrs[k] = String(v); }
   getAttribute(k) { return this.attrs[k] ?? null; }
@@ -412,6 +413,84 @@ const known = (p, id = '_900_1') => {
   return (who) => answer(who);
 };
 const keptFor = (uid, items, at = NOW) => ({ todoCache: { key: T.storeKey(O, uid), at, ...T.fetchRange(D.GZ_SANITIZE({}).todo, NOW, 'America/New_York'), teach: true, progress: true, items, complete: true, grading: [], sums: {} } });
+
+// The Activity surface uses the production matcher and the same card module as the Courses surface.
+const activity = (p, title = 'Lab report') => {
+  const row = new E(), details = new E(), name = new E(), context = new E(), link = new E('a');
+  details.className = 'element-details'; name.className = 'name'; name.textContent = title;
+  context.className = 'context'; context.textContent = 'Biology';
+  link.setAttribute('href', '/ultra/courses/_101_1/outline');
+  context.append(link); details.append(context, name); row.append(details);
+  row.querySelectorAll = (sel) => sel === 'a[href]' ? [link] : [];
+  const all = p.c.document.querySelectorAll;
+  p.c.document.querySelectorAll = (sel) => sel === '#activity-stream .stream-item-container' ? [row]
+    : sel === '.gz-stream-status' ? details.children.filter((x) => x.className === 'gz-stream-status')
+    : sel === '.gz-ct' ? p.card.children.filter((x) => x.className === 'gz-ct') : all(sel);
+  p.c.GZ_STREAM = require('../../extension/courses/stream.js');
+  return () => details.querySelector(':scope > .gz-stream-status');
+};
+
+test('Activity chips clear on an identity refresh and wait for the new account before reading or publishing', async () => {
+  const submitted = { ...ITEMS[0], sub: { submitted: true } };
+  const p = page({ path: '/ultra/stream', items: [submitted] });
+  const chip = activity(p);
+  vm.runInContext(read('courses/page/cardtasks.js'), p.c);
+  const ui = p.c.GZ_CARD_TASKS;
+  ui.stream(true); await settle();
+  assert.equal(chip()?.text, 'Submitted');
+  const confirm = known(p, '_800_1');
+  p.fire('glaze:ultra-refresh', { identity: true });
+  assert.equal(chip(), null, 'the previous account loses its chip immediately');
+  ui.stream(true); ui.sync(false); await settle();
+  assert.equal(p.due.length, 1, 'no read before the new account is confirmed');
+  p.change({ todoCache: { newValue: p.store.todoCache } }, 'local');
+  assert.equal(chip(), null, 'an old-account storage event cannot restore it');
+  confirm('_800_1'); await settle();
+  const nextKey = T.storeKey(O, '_800_1');
+  assert.equal(p.due.length, 2);
+  assert.equal(p.sent.filter((m) => m.cache).at(-1).key, nextKey, 'the fresh answer belongs to the new account');
+  assert.equal(chip()?.text, 'Submitted');
+  const unchanged = chip();
+  ui.sync(false); ui.stream(true); await settle();
+  assert.equal(chip(), unchanged, 'passes over unchanged cards retain their chip');
+  ui.stream(false);
+  assert.equal(chip(), null, 'status off removes the chip');
+});
+
+test('an Activity read from the previous identity cannot publish or paint after an account refresh', async () => {
+  const p = page({ path: '/ultra/stream' });
+  const chip = activity(p);
+  let finish;
+  p.c.GZ_ULTRA.page.due = () => new Promise((res) => { finish = res; });
+  vm.runInContext(read('courses/page/cardtasks.js'), p.c);
+  p.c.GZ_CARD_TASKS.stream(true); await settle();
+  assert.equal(typeof finish, 'function');
+  known(p, '_800_1');
+  p.fire('glaze:ultra-refresh', { identity: true });
+  finish({ items: [{ ...ITEMS[0], sub: { submitted: true } }], complete: true });
+  await settle();
+  assert.equal(p.sent.filter((m) => m.cache).length, 0, 'the old response is discarded');
+  assert.equal(chip(), null);
+});
+
+test('retiring Ultra during an Activity storage read cannot revive the previous account\'s chips', async () => {
+  const p = page({ path: '/ultra/stream', stored: keptFor('_900_1', [{ ...ITEMS[0], sub: { submitted: true } }]) });
+  const chip = activity(p);
+  const get = p.c.chrome.storage.local.get;
+  let finish;
+  p.c.chrome.storage.local.get = (keys, cb) => { finish = () => get(keys, cb); };
+  vm.runInContext(read('courses/page/cardtasks.js'), p.c);
+  const ui = p.c.GZ_CARD_TASKS;
+  ui.stream(true); await settle();
+  assert.equal(typeof finish, 'function');
+  p.fire('glaze:ultra-refresh', { identity: true, retire: true });
+  finish(); await settle();
+  assert.equal(chip(), null, 'retirement remains final when storage returns');
+  ui.stream(true); ui.sync(true); await settle();
+  assert.equal(chip(), null, 'later content passes cannot revive a retired page');
+  assert.equal(p.due.length, 0);
+  assert.equal(p.sent.length, 0);
+});
 
 test('D: Better To Do on Ultra draws its frame at once and the kept list the moment the student is confirmed, then asks Ultra', async () => {
   // Kept three minutes ago: drawn once confirmed, and asked again.
