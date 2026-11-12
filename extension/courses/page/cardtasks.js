@@ -143,10 +143,11 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
       const context = details?.querySelector(':scope > .context');
       const course = context?.textContent.replace(/\s+/g, ' ').trim().toLowerCase() || '';
       // The course line is the course's name or its course ID (Glaze's course list keeps both, as code).
-      const cid = course && Object.entries(ctx.courseList?.() || {}).find(([k, c]) => /^_\d+_\d+$/.test(k) && (!c?.site || c.site === location.origin) && [c?.code, c?.name].some((x) => x && x.replace(/\s+/g, ' ').trim().toLowerCase() === course))?.[0];
+      const courses = course ? Object.entries(ctx.courseList?.() || {}).filter(([k, c]) => /^_\d+_\d+$/.test(k) && (!c?.site || c.site === location.origin) && [c?.code, c?.name].some((x) => x && x.replace(/\s+/g, ' ').trim().toLowerCase() === course)) : [];
+      const cid = courses.length === 1 ? courses[0][0] : '';
       // Only the card's identifying links count; excerpts can link to unrelated work.
       const links = [name, context].flatMap((e) => e ? [...e.querySelectorAll('a[href]')].map((a) => a.getAttribute('href')) : []);
-      const i = name && cache && S.find(cache.items || [], { links, title: name.textContent, course, cid });
+      const i = name && cache && S.find(cache.items || [], { links, title: name.textContent, course: courses.length > 1 ? '' : course, cid });
       const word = i ? L.status(i, L.isDone(i, o.done, data.items[`${i.type}:${i.id}`]?.done)) || (i.sub ? 'Not submitted' : '') : '';
       if (!word) { box?.remove(); continue; }
       if (box?.dataset.word === word && box.previousElementSibling === name) continue;
