@@ -72,6 +72,7 @@
   "Due and posted dates": "Inlever- en plaatsingsdatums",
   "Relative due dates": "Relatieve inleverdatums",
   "Compact cards": "Compacte kaarten",
+  "Submission status": "Inleverstatus",
   "Show encouragement": "Aanmoedigingen tonen",
   "Posted {when}": "Geplaatst {when}",
   "Could not save. Try again.": "Opslaan mislukt. Probeer het opnieuw.",

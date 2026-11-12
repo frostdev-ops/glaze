@@ -79,6 +79,7 @@ NIEUW IN 4.0.7
 • Chrome: Agents maakt na een herstart van de browser vanzelf weer verbinding.
 • Writer op Canvas is nieuw: tekstvakken van opdrachten, antwoorden in discussies en aankondigingen, het Postvak IN en essayvragen in toetsen openen in Glaze Writer, in je Look. Een schakelaar onder Writer in Instellingen zet het uit.
 • De AI van Writer leest op Canvas de instructies van de opdracht, of het onderwerp en het bericht waarop je antwoordt, van de pagina.
+• De activiteitskaarten in Blackboard tonen of elke opdracht is ingeleverd, te laat, beoordeeld of ontbrekend is. Een schakelaar onder Activity Stream in Instellingen zet het uit.
 • Canvas-pagina’s zweven op de panelen van je Look, net als die van Blackboard.
 • Firefox: synchronisatie met Google Drive voegt taken, lesroosters, het woordenboek, favorieten en bewaarde bronnen item voor item samen wanneer twee apparaten ze hebben gewijzigd.
 • Firefox: Agents maakt na een herstart van de browser vanzelf weer verbinding.

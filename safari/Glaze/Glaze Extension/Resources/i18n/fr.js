@@ -72,6 +72,7 @@
   "Due and posted dates": "Échéances et publications",
   "Relative due dates": "Échéances relatives",
   "Compact cards": "Cartes compactes",
+  "Submission status": "Statut de remise",
   "Show encouragement": "Afficher les encouragements",
   "Posted {when}": "Publié {when}",
   "Could not save. Try again.": "Impossible d’enregistrer. Réessayez.",

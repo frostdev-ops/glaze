@@ -87,6 +87,7 @@ NEW IN 4.0.7
 • Chrome: Agents reconnect by themselves after the browser restarts.
 • Writer on Canvas is new: assignment text boxes, discussion and announcement replies, the Inbox and quiz essays open in Glaze Writer, in your Look. A switch under Writer in Settings turns it off.
 • Writer's AI on Canvas reads the assignment's instructions, or the topic and the post you are replying to, from the page.
+• Blackboard's Activity cards say whether each assignment is submitted, late, graded or missing. A switch under Activity Stream in Settings turns it off.
 • Canvas pages float on your Look's panels, as Blackboard's do.
 • Firefox: Google Drive sync merges To Do, class schedules, the dictionary, favorites and saved sources item by item when two devices changed them.
 • Firefox: Agents reconnect by themselves after the browser restarts.

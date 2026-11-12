@@ -219,14 +219,14 @@ test('reminders on Ultra: quiet on a test, assignment or tool page; links made w
 
 test('content-ultra.js loads each where it goes: Better To Do on the Courses page and outlines, cards with cards, reminders anywhere; top frame only', async () => {
   const src = read('content/content-ultra.js');
-  const decls = ['load', 'top', 'sidebarHere', 'sidebarOn', 'syncTodo', 'syncCardTasks', 'syncRemind'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))[0]).join('');
+  const decls = ['load', 'top', 'sidebarHere', 'sidebarOn', 'syncTodo', 'streamHere', 'syncCardTasks', 'syncRemind'].map((n) => src.match(new RegExp(` {2}const ${n} = .*\\n`))[0]).join('');
   const asked = [];
   const ctx = {
-    I: { links: [1], settings: { enhance: { todo: true, cardTasks: true, remind: false, remindExam: false, remindPlan: false, remindClass: false, streak: true } } },
+    I: { links: [1], settings: { stream: { status: true }, enhance: { todo: true, cardTasks: true, remind: false, remindExam: false, remindPlan: false, remindClass: false, streak: true } } },
     location: { pathname: '/ultra/course' }, window: {}, CARD: 'article[id^="course-list-course-"]', cards: true, tabFrame: '',
     document: { querySelector: () => (ctx.cards ? {} : null) },
     need: async (file) => { asked.push([].concat(file).join(' ')); },
-    GZ_TODO_UI: { sync: (on) => asked.push(`todo ${on}`) }, GZ_CARD_TASKS: { sync: (on) => asked.push(`cards ${on}`) }, GZ_REMIND_UI: { sync: (on) => asked.push(`remind ${on}`) },
+    GZ_TODO_UI: { sync: (on) => asked.push(`todo ${on}`) }, GZ_CARD_TASKS: { sync: (on) => asked.push(`cards ${on}`), stream: (on) => on && asked.push('stream true') }, GZ_REMIND_UI: { sync: (on) => asked.push(`remind ${on}`) },
   };
   ctx.window.top = ctx.window;
   ctx.solo = true;
@@ -236,6 +236,11 @@ test('content-ultra.js loads each where it goes: Better To Do on the Courses pag
   const TODO = 'courses/ultra.js planner/todo.js planner/page/todo.js'; // one load: the list, its data and Ultra's reader
   const run = async (path, cards = true) => { asked.length = 0; ctx.location.pathname = path; ctx.cards = cards; await Promise.all(ctx.all()); return [...asked]; };
   assert.deepEqual(await run('/ultra/course'), [TODO, 'courses/page/cardtasks.js', 'planner/page/reminders.js', 'todo true', 'cards true', 'remind true']);
+  // Activity's cards get their submission status from the same module, while stream.status is on.
+  assert.deepEqual(await run('/ultra/stream'), ['todo false', 'courses/page/cardtasks.js', 'cards false', 'planner/page/reminders.js', 'stream true', 'remind true']);
+  ctx.I.settings.stream.status = false;
+  assert.deepEqual(await run('/ultra/stream'), ['todo false', 'cards false', 'planner/page/reminders.js', 'remind true'], 'Submission status off');
+  ctx.I.settings.stream.status = true;
   assert.deepEqual(await run('/ultra/course', false), [TODO, 'cards false', 'planner/page/reminders.js', 'todo true', 'remind true'], 'no cards drawn yet: none asked');
   assert.deepEqual(await run('/ultra/courses/_101_1/outline'), [TODO, 'cards false', 'planner/page/reminders.js', 'todo true', 'remind true']);
   assert.deepEqual(await run('/ultra/courses/_101_1/grades'), ['todo false', 'cards false', 'planner/page/reminders.js', 'remind true']);

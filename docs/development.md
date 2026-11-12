@@ -80,7 +80,10 @@ it does not establish support for Pearson tests, other products, or native Safar
 Blackboard's Stream notification settings contain a Glaze section, also available at
 Settings → Course pages → Blackboard Dashboard → More options → Activity Stream. Timeline dates default to due dates for deadline
 notifications and posted dates for other updates. Choose posted dates or both, relative due
-dates, compact cards, and whether encouragement appears. The exact deadline and time zone
+dates, compact cards, whether encouragement appears, and Submission status (on by default): each card that
+names an assignment the planner holds gets its status chip, matched by course and title
+(`GZ_STREAM.find`) and drawn by `courses/page/cardtasks.js` from the card tasks' planner answer
+(`checks/courses/stream-status-check.js`). The exact deadline and time zone
 remain available on the date's accessible label and hover title. Relative dates fall back to
 calendar dates if Blackboard's zone differs from the browser's. These controls save Glaze
 preferences immediately; Blackboard's notification delivery settings are unchanged.

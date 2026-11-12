@@ -79,6 +79,7 @@ NOUVEAUTÉS DE LA VERSION 4.0.7
 • Chrome : Agents se reconnecte de lui-même après le redémarrage du navigateur.
 • Writer sur Canvas est nouveau : les zones de texte des devoirs, les réponses aux discussions et aux annonces, la boîte de réception et les questions de rédaction des quiz s’ouvrent dans Glaze Writer, avec votre Look. Un interrupteur sous Writer, dans les Réglages, le désactive.
 • Sur Canvas, l’IA de Writer lit dans la page les consignes du devoir, ou le sujet et le message auquel vous répondez.
+• Les cartes Activité de Blackboard indiquent si chaque devoir est remis, en retard, noté ou manquant. Un interrupteur sous Activity Stream, dans les Réglages, le désactive.
 • Les pages de Canvas flottent sur les panneaux de votre Look, comme celles de Blackboard.
 • Firefox : la synchronisation avec Google Drive fusionne élément par élément les tâches, les emplois du temps, le dictionnaire, les favoris et les sources enregistrées lorsque deux appareils les ont modifiés.
 • Firefox : Agents se reconnecte de lui-même après le redémarrage du navigateur.

@@ -12,13 +12,14 @@ All notable changes to Glaze are documented here. The format follows
 
 - Glaze Writer on Canvas: assignment text boxes (classic and Assignments 2), discussion and announcement replies, the Inbox and classic quiz essays open in Writer, in your Look. Submit, Reply and Send wait until Canvas holds exactly what you wrote. Settings → Writer → Glaze Writer turns it off. New Quizzes is not covered.
 - Writer on Canvas keeps what you write on this device and offers it back when a box opens empty.
-- Writer's AI on Canvas reads the assignment's instructions, or the topic and the post you are replying to, off the page. Nothing is read on a quiz or in the Inbox.
+- Writer's AI on Canvas reads the assignment's instructions, or the post you are replying to. Nothing is read on a quiz or in the Inbox.
+- Blackboard's Activity cards say whether each assignment is submitted, late, graded or missing.
 
 ### Changed
 
 - Canvas pages float on your Look's panels, as Blackboard's do.
 - Sync to Google Drive merges To Do, class schedules, GPA terms, dashboard notes, Looks history, favorites, the dictionary and saved sources item by item when two devices changed them.
-- Agents: a connected app reconnects by itself after the browser restarts or agent access goes off and on. `glaze-mcp setup` picks a safe Node.js and says which, or says it isn't set up.
+- Agents reconnect by themselves after the browser restarts, and `glaze-mcp setup` picks a safe Node.js or says it isn't set up.
 - Ask Rime saves a memory only from your own words, and its answers link only to your school's site or to addresses Glaze read for that answer.
 - AI suggests grammar and word-choice changes in Writer instead of making them as you type. Autocorrect sends a cloud model only the sentence and its candidate fixes.
 - A spreadsheet cell using a function Glaze can't calculate keeps the file's own value. Documents holds at most 2,000 documents.

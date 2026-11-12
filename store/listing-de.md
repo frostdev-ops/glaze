@@ -79,6 +79,7 @@ NEU IN 4.0.7
 • Chrome: Agenten verbinden sich nach einem Neustart des Browsers von selbst wieder.
 • Writer auf Canvas ist neu: Textfelder von Aufgaben, Antworten in Diskussionen und Ankündigungen, der Posteingang und Essayfragen in Tests öffnen sich in Glaze Writer, in deinem Look. Ein Schalter unter Writer in den Einstellungen schaltet es aus.
 • Die KI von Writer liest auf Canvas die Aufgabenstellung oder das Thema und den Beitrag, auf den du antwortest, von der Seite.
+• Die Aktivitätskarten in Blackboard zeigen, ob jede Aufgabe abgegeben, verspätet, bewertet oder fehlend ist. Ein Schalter unter Activity Stream in den Einstellungen schaltet es aus.
 • Canvas-Seiten liegen auf den Flächen deines Looks, wie die von Blackboard.
 • Firefox: Die Synchronisierung mit Google Drive führt To-dos, Stundenpläne, das Wörterbuch, Favoriten und gespeicherte Quellen Eintrag für Eintrag zusammen, wenn zwei Geräte sie geändert haben.
 • Firefox: Agenten verbinden sich nach einem Neustart des Browsers von selbst wieder.

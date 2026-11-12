@@ -113,7 +113,7 @@ const GZ_SPEC = {
     feedback: [true, 'bool'],
   },
   docreview: { compact: [true, 'bool'], fullscreen: [true, 'bool'], focus: [true, 'bool'], hideBars: [true, 'bool'], remember: [false, 'bool'] },
-  stream: { dates: ['smart', ['smart', 'posted', 'both']], relative: [false, 'bool'], compact: [false, 'bool'], encouragement: [true, 'bool'] },
+  stream: { dates: ['smart', ['smart', 'posted', 'both']], relative: [false, 'bool'], compact: [false, 'bool'], encouragement: [true, 'bool'], status: [true, 'bool'] },
   // looks/page/lookx.js. pointer: the student's over every Look's (x.pointer): 'look' the Look's, 'own' their picture (on
   // this device); pointerOn off: the system's. pointerAnim: the Look's pointer animation (x.cursor). Never in a Look's code.
   extras: { pointer: ['look', ['look', 'aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'frostdev', 'own']], pointerOn: [true, 'bool'], pointerAnim: [true, 'bool'], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },

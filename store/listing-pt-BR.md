@@ -79,6 +79,7 @@ NOVO NA 4.0.7
 • Chrome: Agentes se reconecta sozinho depois que o navegador reinicia.
 • O Writer no Canvas é novidade: as caixas de texto das tarefas, as respostas em discussões e avisos, a Caixa de entrada e as questões dissertativas dos testes abrem no Glaze Writer, com o seu Look. Uma chave em Writer, nas Configurações, desliga.
 • No Canvas, a IA do Writer lê na página as instruções da tarefa, ou o tópico e a postagem que você está respondendo.
+• Os cartões de Atividade do Blackboard mostram se cada tarefa foi entregue, atrasada, avaliada ou está faltando. Uma chave em Activity Stream, nas Configurações, desliga.
 • As páginas do Canvas flutuam sobre os painéis do seu Look, como as do Blackboard.
 • Firefox: a sincronização com o Google Drive mescla item por item as tarefas, os horários de aula, o dicionário, os favoritos e as fontes salvas quando dois dispositivos os alteraram.
 • Firefox: Agentes se reconecta sozinho depois que o navegador reinicia.

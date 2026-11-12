@@ -45,9 +45,9 @@ test('relative dates use the browser zone; an unrecognized/different zone keeps 
 });
 
 test('old settings gain smart dates without hiding notifications; invalid imports fall back safely', () => {
-  assert.deepEqual(D.GZ_SANITIZE({}).stream, { dates: 'smart', relative: false, compact: false, encouragement: true });
+  assert.deepEqual(D.GZ_SANITIZE({}).stream, { dates: 'smart', relative: false, compact: false, encouragement: true, status: true });
   assert.deepEqual(D.GZ_SANITIZE({ stream: { dates: 'evil', compact: 'yes', encouragement: false, extra: 1 } }).stream,
-    { dates: 'smart', relative: false, compact: false, encouragement: false });
+    { dates: 'smart', relative: false, compact: false, encouragement: false, status: true });
   for (const dates of ['smart', 'posted', 'both']) assert.equal(D.GZ_SANITIZE({ stream: { dates } }).stream.dates, dates);
 });
 

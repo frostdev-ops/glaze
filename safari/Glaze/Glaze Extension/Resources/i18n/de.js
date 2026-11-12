@@ -72,6 +72,7 @@
   "Due and posted dates": "Fälligkeit und Veröffentlichung",
   "Relative due dates": "Relative Fälligkeit",
   "Compact cards": "Kompakte Karten",
+  "Submission status": "Abgabestatus",
   "Show encouragement": "Ermutigungen anzeigen",
   "Posted {when}": "Veröffentlicht {when}",
   "Could not save. Try again.": "Speichern fehlgeschlagen. Erneut versuchen.",

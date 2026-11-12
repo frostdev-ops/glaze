@@ -79,6 +79,7 @@ NOVEDADES DE 4.0.7
 • Chrome: Agentes se vuelve a conectar solo después de reiniciar el navegador.
 • Writer en Canvas es nuevo: los cuadros de texto de las tareas, las respuestas en foros y anuncios, la bandeja de entrada y las preguntas de ensayo de los exámenes se abren en Glaze Writer, con tu Look. Un interruptor en Writer, en Ajustes, lo desactiva.
 • La IA de Writer en Canvas lee de la página las instrucciones de la tarea, o el tema y la publicación a la que respondes.
+• Las tarjetas de Actividad de Blackboard muestran si cada tarea está entregada, tarde, calificada o faltante. Un interruptor en Activity Stream, en Ajustes, lo desactiva.
 • Las páginas de Canvas flotan sobre los paneles de tu Look, como las de Blackboard.
 • Firefox: la sincronización con Google Drive combina elemento por elemento las tareas, los horarios de clase, el diccionario, los favoritos y las fuentes guardadas cuando dos dispositivos los cambiaron.
 • Firefox: Agentes se vuelve a conectar solo después de reiniciar el navegador.

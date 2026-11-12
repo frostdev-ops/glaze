@@ -59,7 +59,7 @@ var GZ_STREAM_UI = globalThis.GZ_STREAM_UI || (() => {
     const box = document.createElement('fieldset'), legend = document.createElement('legend'); legend.textContent = 'Glaze'; box.append(legend);
     for (const [key, label, options] of [
       ['dates', 'Timeline dates', [['smart', 'Due dates when available'], ['posted', 'Posted dates'], ['both', 'Due and posted dates']]],
-      ['relative', 'Relative due dates'], ['compact', 'Compact cards'], ['encouragement', 'Show encouragement'],
+      ['relative', 'Relative due dates'], ['compact', 'Compact cards'], ['encouragement', 'Show encouragement'], ['status', 'Submission status'],
     ]) {
       const row = document.createElement('label'), text = document.createElement('span'); row.className = options ? 'choice' : ''; text.textContent = t(label);
       const el = document.createElement(options ? 'select' : 'input'); el.dataset.key = key;

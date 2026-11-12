@@ -72,6 +72,7 @@
   "Due and posted dates": "Vencimiento y publicación",
   "Relative due dates": "Vencimientos relativos",
   "Compact cards": "Tarjetas compactas",
+  "Submission status": "Estado de la entrega",
   "Show encouragement": "Mostrar mensajes de ánimo",
   "Posted {when}": "Publicado {when}",
   "Could not save. Try again.": "No se pudo guardar. Inténtalo de nuevo.",

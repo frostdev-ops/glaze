@@ -26,6 +26,26 @@ var GZ_STREAM = globalThis.GZ_STREAM || (() => {
       : at.toLocaleDateString(locale, { month: 'short', day: 'numeric', ...(at.getFullYear() !== now.getFullYear() && { year: 'numeric' }) });
     return { label, full };
   };
-  return { json, deadline, encouragement, date };
+  // The assignment an Activity card names, among the planner's Ultra items (courses/ultra.js due(): id the gradebook column,
+  // content its content item, cid its course): by the ids in its links, else by its title in the course a link or its
+  // course name gives. A title that two items share, or with no course to tell it by, names nothing.
+  const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const find = (items, { links = [], title = '', course = '' } = {}) => {
+    const cids = new Set();
+    for (const href of links) {
+      let u;
+      try { u = new URL(href, 'https://x.invalid/'); } catch { continue; }
+      const m = /^\/ultra\/courses\/(_\d+_\d+)\/(?:.*\/)?(_\d+_\d+)(?:\/|$)/.exec(u.pathname) || /^\/ultra\/courses\/(_\d+_\d+)/.exec(u.pathname);
+      const cid = m?.[1] || u.searchParams.get('courseId'), ids = [m?.[2], ...u.pathname.match(/_\d+_\d+/g) || [], u.searchParams.get('contentId')].filter((x) => x && x !== cid);
+      if (!cid) continue;
+      cids.add(cid);
+      const hit = items.find((i) => i.cid === cid && ids.some((x) => x === i.content || x === i.id));
+      if (hit) return hit;
+    }
+    const t = norm(title), c = norm(course);
+    const same = t ? items.filter((i) => norm(i.title) === t && (cids.has(i.cid) || (!!c && norm(i.course) === c))) : [];
+    return same.length === 1 ? same[0] : null;
+  };
+  return { json, deadline, encouragement, date, find };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_STREAM; else GZ_STREAM;

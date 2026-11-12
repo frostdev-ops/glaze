@@ -495,15 +495,15 @@ html[data-gz-dash]:not([data-gz-dash="ip"]) institution-page-home { display: non
 #gz-todo .gz-todo-meta { display: flex; flex-wrap: wrap; gap: 0.15rem 0.45rem; margin-top: 0.1rem; font-size: 0.75rem; color: var(--gz-ink-muted); }
 #gz-todo .gz-todo-meta > :not(:first-child)::before { content: "·"; margin-inline-end: 0.45rem; color: var(--gz-ink-faint); }
 #gz-todo .gz-todo-meta > .gz-todo-chip::before, #gz-todo .gz-todo-meta > .gz-todo-chip + *::before { content: none; }
-:is(#gz-todo, .gz-ct) .gz-todo-chip { padding: 0 0.45em; border-radius: 999px; font-weight: 600; color: var(--gz-on-soft, var(--gz-accent)); background: var(--gz-accent-soft); }
-:is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="ok"] { color: var(--gz-ok); background: color-mix(in srgb, var(--gz-ok) 14%, transparent); }
-:is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="warn"] { color: var(--gz-warn); background: color-mix(in srgb, var(--gz-warn) 14%, transparent); }
-:is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="err"] { color: var(--gz-err); background: color-mix(in srgb, var(--gz-err) 14%, transparent); }
+:is(#gz-todo, .gz-ct, .gz-stream-status) .gz-todo-chip { padding: 0 0.45em; border-radius: 999px; font-weight: 600; color: var(--gz-on-soft, var(--gz-accent)); background: var(--gz-accent-soft); }
+:is(#gz-todo, .gz-ct, .gz-stream-status) .gz-todo-chip[data-tone="ok"] { color: var(--gz-ok); background: color-mix(in srgb, var(--gz-ok) 14%, transparent); }
+:is(#gz-todo, .gz-ct, .gz-stream-status) .gz-todo-chip[data-tone="warn"] { color: var(--gz-warn); background: color-mix(in srgb, var(--gz-warn) 14%, transparent); }
+:is(#gz-todo, .gz-ct, .gz-stream-status) .gz-todo-chip[data-tone="err"] { color: var(--gz-err); background: color-mix(in srgb, var(--gz-err) 14%, transparent); }
 /* Light Looks: a toned chip darkens its own tone toward the ink (currentColor in `color` is the parent's). */
-html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone] { color: color-mix(in srgb, currentColor 70%, var(--gz-ink)); }
-html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="ok"] { color: color-mix(in srgb, var(--gz-ok) 70%, var(--gz-ink)); }
-html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="warn"] { color: color-mix(in srgb, var(--gz-warn) 70%, var(--gz-ink)); }
-html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="err"] { color: color-mix(in srgb, var(--gz-err) 70%, var(--gz-ink)); }
+html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct, .gz-stream-status) .gz-todo-chip[data-tone] { color: color-mix(in srgb, currentColor 70%, var(--gz-ink)); }
+html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct, .gz-stream-status) .gz-todo-chip[data-tone="ok"] { color: color-mix(in srgb, var(--gz-ok) 70%, var(--gz-ink)); }
+html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct, .gz-stream-status) .gz-todo-chip[data-tone="warn"] { color: color-mix(in srgb, var(--gz-warn) 70%, var(--gz-ink)); }
+html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct, .gz-stream-status) .gz-todo-chip[data-tone="err"] { color: color-mix(in srgb, var(--gz-err) 70%, var(--gz-ink)); }
 #gz-todo .gz-todo-plan { color: var(--gz-accent); }
 #gz-todo .gz-todo-more, #gz-todo .gz-todo-small {
   padding: 0.05rem 0.5rem; border: 1px solid transparent; border-radius: 999px; background: none; cursor: pointer;
@@ -566,6 +566,8 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct) .gz-todo-chip[data-tone="er
 :is(#application, #site-wrap) p.gz-ct { padding-block: 0.5rem; color: var(--gz-ink-muted); }
 :is(#application, #site-wrap) .gz-ct .gz-ct-part { padding: 0.2rem 0.3rem; font-size: 0.92em; color: var(--gz-ink-muted); }
 :is(#application, #site-wrap) .gz-ct .gz-todo-chip { font-size: 0.92em; }
+/* An Activity card's submission status (courses/page/cardtasks.js), under its name. */
+#site-wrap .gz-stream-status { margin-block-start: 0.25rem; font-size: 0.8125rem; line-height: 1.35; }
 
 /* Reminders and streak (planner/page/reminders.js): the streak and the bell in the To Do header, one toast in the page's
    corner (it never takes focus; it doesn't slide in under reduced motion), and the hub, a dialog. */

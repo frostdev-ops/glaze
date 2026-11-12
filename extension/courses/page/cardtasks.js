@@ -5,6 +5,8 @@
 // The site is asked only when that answer is missing or over two minutes old and the To Do list isn't on the page to ask
 // itself, and what comes back is kept there for the list (and on Canvas the popup) too. Reads only: nothing here writes
 // to the site. Classic script, through GZ_CTX; a second injection keeps the first.
+// On Ultra's Activity page (stream.status, its own switch: stream(on)) the same answer gives each card that names an
+// assignment where it stands, in the card tasks' words and colours, "Not submitted" for open work Blackboard has a standing for.
 var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   const ctx = globalThis.GZ_CTX;
   const t = (k, v) => ctx.t(k, v);
@@ -14,7 +16,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   const TONE = { Missing: 'err', 'Submitted late': 'warn', Submitted: 'ok', Graded: 'ok', Excused: 'ok', Done: 'ok' };
   let L = null; // planner/todo.js
   let tz, uid = '', key = '', o = null, data = null, cache = null;
-  let on = false, starting = null, asking = null, failed = 0, listed = false;
+  let on = false, cards = false, streamOn = false, starting = null, asking = null, failed = 0, listed = false;
   let gs = null; // Gradescope's items for this site (planner/todo.js gradescope)
   let asked = null; // Gradescope's one-time question, while it's on the page
 
@@ -22,7 +24,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   const readPrefs = () => new Promise((res) => { try { chrome.storage.sync.get('todo', (r) => res(r?.todo)); } catch { res(); } })
     .then((raw) => { o = GZ_SANITIZE({ todo: raw }).todo; });
   const make = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.filter((k) => k != null && k !== false)); return e; };
-  const chip = (s) => { const e = make('span', { className: 'gz-todo-chip', textContent: t(s) }); e.dataset.tone = TONE[s]; return e; };
+  const chip = (s) => { const e = make('span', { className: 'gz-todo-chip', textContent: t(s) }); if (TONE[s]) e.dataset.tone = TONE[s]; return e; };
   // The cards: [selector, the card's course id, where the list goes after, the course's name]. Ultra's card is a link to
   // its course as a whole (a click anywhere on it opens the course), so the list keeps its own clicks and keys.
   const ultra = ctx.site === 'ultra';
@@ -123,8 +125,30 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     if (rows.length) box.setAttribute('aria-label', t('Tasks for {course}', { course }));
     if (was) was.replaceWith(box); else head.after(box);
   };
+  // Activity cards: a status after the card's name, drawn again only when its word changes.
+  let streamed = false;
+  const unstream = () => { if (!streamed) return; streamed = false; for (const e of document.querySelectorAll('.gz-stream-status')) e.remove(); };
+  const paintStream = () => {
+    const S = globalThis.GZ_STREAM;
+    if (!S?.find) return;
+    for (const row of document.querySelectorAll('#activity-stream .stream-item-container')) {
+      const details = row.querySelector('.element-details'), name = details?.querySelector(':scope > .name');
+      let box = details?.querySelector(':scope > .gz-stream-status');
+      const i = name && cache && S.find(cache.items || [], { links: [...row.querySelectorAll('a[href]')].map((a) => a.getAttribute('href')), title: name.textContent, course: details.querySelector(':scope > .context')?.textContent });
+      const word = i ? L.status(i, L.isDone(i, o.done, data.items[`${i.type}:${i.id}`]?.done)) || (i.sub ? 'Not submitted' : '') : '';
+      if (!word) { box?.remove(); continue; }
+      if (box?.dataset.word === word && box.previousElementSibling === name) continue;
+      box?.remove();
+      box = make('div', { className: 'gz-stream-status' }, chip(word));
+      box.dataset.word = word;
+      name.after(box);
+      streamed = true;
+    }
+  };
   const paint = () => {
     if (!on || !data || !mine) return;
+    if (streamOn) paintStream(); else unstream();
+    if (!cards) { for (const e of document.querySelectorAll('.gz-ct')) e.remove(); asked?.remove(); asked = null; return; }
     const now = Date.now();
     const [sel, idOf, headOf, nameOf] = CARDS;
     for (const el of document.querySelectorAll(sel)) {
@@ -190,18 +214,25 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
   };
   // If it can't start (no profile), the cards stay as Canvas has them, and it tries again after a minute. Drawn for
   // another student than the one signed in: those tasks go, and it starts again.
-  const sync = (want) => {
-    on = !!want;
-    if (!on) { for (const e of document.querySelectorAll('.gz-ct')) e.remove(); asked?.remove(); asked = null; return; }
+  const sync = (want) => { cards = !!want; run(); };
+  const stream = (want) => {
+    streamOn = ultra && !!want;
+    if (streamOn && !globalThis.GZ_STREAM) ctx.need('courses/stream.js', () => globalThis.GZ_STREAM).then(paint, () => {});
+    run();
+  };
+  const run = () => {
+    on = cards || streamOn;
+    if (!on) { for (const e of document.querySelectorAll('.gz-ct')) e.remove(); unstream(); asked?.remove(); asked = null; return; }
     const list = !!document.getElementById('gz-todo');
     // Started: whether the list is here now counts as seen, so its going later is noticed whenever it goes.
     if (!starting) starting = start().then(() => { listed = !!document.getElementById('gz-todo'); paint(); return sure(); }).then((ok) => {
       mine = ok;
       if (ok) { paint(); if (ultra && fresh(cache, Date.now())) setTimeout(() => { if (on) refresh(true); }, 0); else return refresh(); }
       for (const e of document.querySelectorAll('.gz-ct')) e.remove();
+      unstream();
       cache = data = null;
       starting = null;
-      sync(on);
+      run();
     }, () => { setTimeout(() => { starting = null; }, 60000); });
     else {
       paint();
@@ -210,7 +241,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     if (L) listed = list;
   };
 
-  return { sync, render };
+  return { sync, stream, render };
 })();
 
 GZ_CARD_TASKS;
