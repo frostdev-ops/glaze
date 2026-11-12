@@ -1003,6 +1003,9 @@ var GZ_MEDIA = globalThis.GZ_MEDIA || (() => {
   // How long a fetch may take, and the most bytes a file of each type may be (the editor's put and every fetch below count the same).
   const WAIT = { video: 60000, image: 30000, lottie: LIMIT.fetch };
   const capOf = (type) => (type === 'video' ? LIMIT.bg.video : type === 'image' ? LIMIT.bg.image.bytes : LIMIT.bg.lottie);
+  // An address that answered with a redirect or a refusal answers the same a moment later (final: the page does not ask
+  // again); the server's own trouble (5xx), a wait (408, 429) or a fetch that did not get through may pass.
+  const refused = (r) => ({ ok: false, error: 'network', ...((r.type === 'opaqueredirect' || r.redirected || (r.status < 500 && r.status !== 408 && r.status !== 429)) && { final: true }) });
   // A response's body, counted as it arrives: → { bytes }, or { error: 'big' | 'network' } with the rest left unread.
   const pull = async (r, cap) => {
     if (Number(r.headers.get('content-length')) > cap) { r.body?.cancel?.().catch(() => {}); return { error: 'big' }; }
@@ -1035,7 +1038,7 @@ var GZ_MEDIA = globalThis.GZ_MEDIA || (() => {
       r = await env.fetch(url, { method: 'GET', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'manual', signal: AbortSignal.timeout(LIMIT.fetch) });
     } catch { return { ok: false, error: 'network' }; }
     // A redirect is refused rather than followed to somewhere the Look did not name.
-    if (r.type === 'opaqueredirect' || r.redirected || !r.ok || (r.status >= 300 && r.status < 400)) { r.body?.cancel?.().catch(() => {}); return { ok: false, error: 'network' }; }
+    if (r.type === 'opaqueredirect' || r.redirected || !r.ok || (r.status >= 300 && r.status < 400)) { r.body?.cancel?.().catch(() => {}); return refused(r); }
     const body = await pull(r, LIMIT.bg.lottie);
     if (!body.bytes) return { ok: false, error: body.error };
     const got = lottie(td.decode(body.bytes));
@@ -1058,7 +1061,7 @@ var GZ_MEDIA = globalThis.GZ_MEDIA || (() => {
     } catch { return { ok: false, error: 'network' }; }
     // A redirect is refused rather than followed to somewhere the Look did not name (the worker is not held to the page's
     // rules about the local network, so where a request lands matters).
-    if (r.type === 'opaqueredirect' || r.redirected || !r.ok || (r.status >= 300 && r.status < 400)) { r.body?.cancel?.().catch(() => {}); return { ok: false, error: 'network' }; }
+    if (r.type === 'opaqueredirect' || r.redirected || !r.ok || (r.status >= 300 && r.status < 400)) { r.body?.cancel?.().catch(() => {}); return refused(r); }
     const body = await pull(r, capOf(kind));
     if (!body.bytes) return { ok: false, error: body.error };
     const got = check(body.bytes, 'bg');

@@ -66,9 +66,9 @@ const filed = (r, type) => {
   return bytes && { bytes, mime: r.mime };
 };
 // Whether the worker's answer leaves a second try a chance: no answer (the worker waking), its own 'failed' (a storage read that
-// threw) or 'network' (a fetch that did not get through) may pass a moment later; 'missing' (the file is not here), a refusal or
-// a file past a limit never will. start() makes the second tries.
-const again = (r) => !r || r.error === 'failed' || r.error === 'network';
+// threw) or 'network' (a fetch that did not get through) may pass a moment later; 'missing' (the file is not here), a refusal,
+// an address that answered with one or with a redirect (final) or a file past a limit never will. start() makes the second tries.
+const again = (r) => !r || r.error === 'failed' || (r.error === 'network' && !r.final);
 const gone = (r) => Object.assign(new Error('file'), { why: 'file', again: again(r) });
 // A file kept on this computer, as bytes, from the worker that keeps it ('glaze:keptFile'). It was checked and named by its
 // SHA-256 when it was kept, and only the worker writes it, so it isn't hashed again on every page.
