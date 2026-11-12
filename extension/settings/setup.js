@@ -37,7 +37,7 @@ var GZ_SETUP = globalThis.GZ_SETUP || (() => {
   const OWN = C.OWN;
   const LOOKS = [OWN, ...D.GZ_LOOKS.filter((L) => !L.old)];
   const theme = C.theme;
-  const worn = (s) => LOOKS.find((L) => D.GZ_LOOK_ON(s, L)) || null;
+  const worn = (s) => (D.GZ_LOOK_ON(s, OWN) ? OWN : D.GZ_LOOKS.find((L) => D.GZ_LOOK_ON(s, L))) || null;
   // The motion the page shows: the student's level, off where the system asks for less and they follow it.
   const level = (s, reduced) => (s.motion.followSystem && reduced ? 'off' : s.motion.level);
   // A place in the wizard: { step, slide } from a hash and back; Next and Back walk the feature slides first.
@@ -230,7 +230,7 @@ if (typeof document !== 'undefined' && globalThis.chrome?.runtime?.id) (() => {
     lookCards.forEach((b, i) => {
       const yes = S.LOOKS[i] === on;
       b.setAttribute('aria-checked', String(yes));
-      b.tabIndex = yes || (!on && i === 0) ? 0 : -1;
+      b.tabIndex = yes || (!S.LOOKS.includes(on) && i === 0) ? 0 : -1;
     });
   };
 
