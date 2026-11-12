@@ -35,6 +35,7 @@ All notable changes to Glaze are documented here. The format follows
 - Search skips folders a cut-short read never reached. Moodle drops courses you've left.
 - Look animations go off on a quiz opened inside Blackboard in Firefox before 147.
 - AI setup shows Connected only once site access is granted, and Your key turns AI on only once a key works. Study help lists every Blackboard to-do item.
+- Blackboard: a dropdown in a test question opens on top of the questions below it.
 - Agents on Blackboard get a fresh planner.
 - Settings: `/` opens search again with a switch focused, and Clear all papers and documents also removes spreadsheets, PDFs and slide decks.
 - Selected rows, chips, field edges and the To Do count are easier to read in the light Looks.
