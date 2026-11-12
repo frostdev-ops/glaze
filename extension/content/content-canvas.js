@@ -75,7 +75,10 @@ var GZ_SITE_CANVAS = globalThis.GZ_SITE_CANVAS || ((I) => {
     }]));
     // Blackboard's and other schools' stay; Canvas ids alone are only unique within their own host. This host's are the
     // signed-in student's whole list: another account's on this browser leave (an empty or cut-short one drops nothing).
-    seenPut({ key: 'seenCourses', set: seen, drop: list.complete !== false });
+    const drop = list.complete !== false, own = canvasCourseKey('0').slice(0, -1);
+    // The page's list at once, as the worker will merge it: the course tabs wait for it.
+    try { chrome.storage.local.get('seenCourses', (r) => I.setCourseList({ ...Object.fromEntries(Object.entries(r?.seenCourses || {}).filter(([k]) => !(drop && Object.keys(seen).length && k.startsWith(own) && /^\d+$/.test(k.slice(own.length))))), ...seen })); } catch { /* reloaded */ }
+    seenPut({ key: 'seenCourses', set: seen, drop });
   });
 
   // ---- code on demand ------------------------------------------------------------------------------
