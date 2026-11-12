@@ -72,6 +72,21 @@ test('a Look is put on as Settings puts it on, and Glaze\'s own theme leaves lig
   assert.equal(S.LOOKS.length, G.GZ_LOOKS.filter((l) => !l.old).length + 1);
 });
 
+test('setup recognizes a retired worn Look and keeps its offered theme cards keyboard reachable', () => {
+  const vm = require('node:vm'), fs = require('node:fs'), path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/settings/setup.js'), 'utf8');
+  const render = source.slice(source.indexOf('  const renderLooks = () => {'), source.indexOf('\n  // ---- radio groups:'));
+  for (const L of G.GZ_LOOKS.filter((L) => L.old)) {
+    const s = G.GZ_SANITIZE({ ...G.GZ_DEFAULTS, ...G.GZ_LOOK_APPLY(G.GZ_DEFAULTS, L) });
+    assert.equal(S.worn(s), L, `${L.name} must keep its name and parts in setup`);
+    assert.ok(!S.LOOKS.includes(L), 'recognition does not offer the retired Look');
+    const lookCards = S.LOOKS.map(() => ({ attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } }));
+    vm.runInNewContext(`${render}\nrenderLooks();`, { S, s, lookCards });
+    assert.deepEqual(lookCards.flatMap((b, i) => b.tabIndex === 0 ? [i] : []), [0]);
+    assert.ok(lookCards.every((b) => b.attrs['aria-checked'] === 'false'));
+  }
+});
+
 test('the page shows the motion chosen, off where the system asks and the student follows it', () => {
   const s = G.GZ_SANITIZE({});
   assert.equal(S.level(s, false), 'expressive');
