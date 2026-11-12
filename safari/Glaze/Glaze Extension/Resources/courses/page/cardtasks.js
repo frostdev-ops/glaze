@@ -259,7 +259,7 @@ var GZ_CARD_TASKS = globalThis.GZ_CARD_TASKS || (() => {
     if (!starting) starting = start(g).then(() => { if (!current(g)) return; listed = !!document.getElementById('gz-todo'); paint(); return sure(); }).then((ok) => {
       if (!current(g)) return;
       mine = ok;
-      if (ok) { paint(); if (ultra && fresh(cache, Date.now())) setTimeout(() => { if (on) refresh(true); }, 0); else return refresh(); }
+      if (ok) { paint(); if (ultra && fresh(cache, Date.now())) return void setTimeout(() => { if (on) refresh(true); }, 0); return refresh(); }
       for (const e of document.querySelectorAll('.gz-ct')) e.remove();
       unstream();
       cache = data = null;
