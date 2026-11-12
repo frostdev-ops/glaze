@@ -62,7 +62,7 @@ out.data.renderer = info ? dbg.getParameter(info.UNMASKED_RENDERER_WEBGL) : 'unk
 const EXAMPLES = {};
 for (const f of ['aurora', 'starfield', 'liquid']) EXAMPLES[f] = await fetchText(`/assets/shaders/${f}.glsl`);
 const MIN = 'vec4 scene(vec2 uv) { return vec4(uv, 0., 1.); }';
-const NAMES = ['mist', 'orbs', 'borealis', 'lava', 'contours', 'horizon', 'graveyard', 'pumpkins', 'harvest', 'turkeys', 'waves', 'dust'];
+const NAMES = ['mist', 'orbs', 'borealis', 'lava', 'contours', 'horizon', 'graveyard', 'pumpkins', 'harvest', 'turkeys', 'hearth', 'waves', 'dust'];
 
 // ---- builtins: the same shaders and the same pixels as before, alone and as a single layer -------------------------------
 if (run.includes('builtins')) {
@@ -95,7 +95,7 @@ if (run.includes('builtins')) {
     check(`${name}: as the only layer, at full amount, it is the same picture as the scene, or as close as it is to itself`, row.layerDifferingBytes <= row.repeat, `${row.layerDifferingBytes} bytes differ; drawing it twice differs by ${row.repeat}`);
   }
   // Animated, with the guard watching, for a few seconds each: the dearest built-ins on this GPU must not be stepped down.
-  for (const name of ['mist', 'graveyard', 'pumpkins', 'harvest', 'turkeys', 'waves']) {
+  for (const name of ['mist', 'graveyard', 'pumpkins', 'harvest', 'turkeys', 'hearth', 'waves']) {
     const c = mkCanvas(), w = watch(mod, c);
     w.scene.update({ ...OPTS, name, speed: 1 });
     const r = await rate(2500);

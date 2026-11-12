@@ -69,7 +69,7 @@ test('the pointer sets\' hotspots are the art README\'s, inside their 32 × 32 f
   for (const [, set, kind, x, y] of rows) assert.deepEqual(L.CURSORS[set][kind], [+x, +y], `${set}/${kind}`);
   // The SVG sets: one row per set, both hotspots.
   const svg = [...readme.matchAll(/`cursors\/(\w+)\/` \([^)]+\) \| [^|]+ \| (\d+), (\d+) \| (\d+), (\d+) \|/g)];
-  assert.equal(svg.length, 11);
+  assert.equal(svg.length, 14);
   for (const [, set, dx, dy, px, py] of svg) assert.deepEqual([L.CURSORS[set].default, L.CURSORS[set].pointer, L.CURSORS[set].svg], [[+dx, +dy], [+px, +py], true], set);
   // Every set a Look part may name, and 'own'.
   assert.deepEqual([...Object.keys(L.CURSORS), 'own'], MX.POINTERS);
@@ -263,7 +263,7 @@ test('extras settings: off by default, sanitized', () => {
 test('the pointer setting: the Look\'s, any bundled set or the student\'s own picture, kept as chosen', () => {
   // Every set a Look may name (and 'own'), after the Look's. The system's is the switch (pointerOn), not a choice.
   assert.deepEqual(G.GZ_SPEC.extras.pointer, ['look', ['look', ...MX.POINTERS]]);
-  assert.equal(G.GZ_SPEC.extras.pointer[1].length, 18, 'the thirteen Look sets, aqua, lilac, pearl and own, after look');
+  assert.equal(G.GZ_SPEC.extras.pointer[1].length, 19, 'the fourteen Look sets, aqua, lilac, pearl and own, after look');
   assert.deepEqual(G.GZ_SPEC.extras.pointerOn, [true, 'bool']);
   for (const v of G.GZ_SPEC.extras.pointer[1]) assert.equal(G.GZ_SANITIZE({ extras: { pointer: v } }).extras.pointer, v);
   for (const v of ['', 'Pumpkin', 'none', 'standard', 'cursor', 0, null, ['lava'], { set: 'lava' }]) assert.equal(G.GZ_SANITIZE({ extras: { pointer: v } }).extras.pointer, 'look', JSON.stringify(v));

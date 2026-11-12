@@ -62,7 +62,7 @@ const GZ_SPEC = {
     // The gradient's shape: style, direction (degrees), blend (100 melts the colors together, 0 is
     // hard bands) and spread (how much of the screen the change of color covers, in %).
     style: ['linear', ['linear', 'radial', 'conic', 'mesh']], angle: [135, [0, 360]], blend: [100, [0, 100]], spread: [100, [20, 200]],
-    scene: ['mist', ['mist', 'orbs', 'borealis', 'lava', 'waves', 'dust', 'contours', 'horizon', 'graveyard', 'pumpkins', 'harvest', 'turkeys', 'topography']], intensity: [50, [0, 100]],
+    scene: ['mist', ['mist', 'orbs', 'borealis', 'lava', 'waves', 'dust', 'contours', 'horizon', 'graveyard', 'pumpkins', 'harvest', 'turkeys', 'hearth', 'topography']], intensity: [50, [0, 100]],
   },
   nav: {
     k: ['default', ['default', 'solid', 'gradient', 'image']], c: ['#243447', 'hex'], d: ['#57748c', 'hex'], a: [135, [0, 360]],
@@ -116,7 +116,7 @@ const GZ_SPEC = {
   stream: { dates: ['smart', ['smart', 'posted', 'both']], relative: [false, 'bool'], compact: [false, 'bool'], encouragement: [true, 'bool'], status: [true, 'bool'] },
   // looks/page/lookx.js. pointer: the student's over every Look's (x.pointer): 'look' the Look's, 'own' their picture (on
   // this device); pointerOn off: the system's. pointerAnim: the Look's pointer animation (x.cursor). Never in a Look's code.
-  extras: { pointer: ['look', ['look', 'aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'harvest', 'feather', 'frostdev', 'own']], pointerOn: [true, 'bool'], pointerAnim: [true, 'bool'], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
+  extras: { pointer: ['look', ['look', 'aqua', 'lilac', 'pearl', 'aurora', 'quill', 'terminal', 'lava', 'neon', 'clear', 'lagoon', 'rose', 'ghost', 'pumpkin', 'harvest', 'feather', 'hearth', 'frostdev', 'own']], pointerOn: [true, 'bool'], pointerAnim: [true, 'bool'], stickers: [true, 'bool'], rotate: ['off', ['off', '6h', '12h', '24h', 'week', 'daily']], at: ['08:00', 'time'] },
   declutter: { help: [false, 'bool'], banner: [false, 'bool'], faculty: [false, 'bool'], tabs: [[], 'tabs'] },
   // mods/blocklist.js
   mods: { blocklist: [true, 'bool'] },
@@ -341,7 +341,7 @@ const GZ_LOOKS = [
   ['Clear', 'Frost', { font: 'atkinson', scale: 1.1, leading: 1.7, density: 'roomy', glass: 0, radius: 10 }, { kind: 'solid' }],
   ['Lagoon', 'Frost', { font: 'figtree', radius: 14, glass: 14 }, { kind: 'gradient', style: 'mesh', colors: ['#22d3ee', '#6366f1', '#34d399'], dim: 70 }],
   ['Rose Garden', 'Rose', { font: 'nunito', head: 'lora', radius: 18 }, { kind: 'aurora', colors: ['#f472b6', '#a78bfa', '#fb923c'], dim: 75 }],
-  // Thanksgiving. October's two follow as `old`: no longer offered (they are in the Looks gallery), still worn where chosen.
+  // Thanksgiving, the third by the fire. October's two follow as `old`: no longer offered (they are in the Looks gallery), still worn where chosen.
   ['Harvest Moon', GZ_PALETTE(
     '#f5a524', '#fcd27b', '#3d2a08', '#1f1300',
     '#1b1830', '#0f0e1f', '#f6f0e6', '#b9b0c4', '#857d99', '#2a2745', '#413d66',
@@ -350,6 +350,10 @@ const GZ_LOOKS = [
     '#f0784a', '#f9ad8c', '#3f1a0c', '#200a02',
     '#231712', '#170e0b', '#fbf1e4', '#cbb5a3', '#8f7b6c', '#35241c', '#523a2e',
     '#a3c585', '#f2c14e', '#f47c7c'), { font: 'nunito', head: 'fredoka', radius: 20, glass: 16, depth: 2 }, { kind: 'scene', scene: 'turkeys', intensity: 60, colors: ['#f0784a', '#b83a4b', '#f2c14e'] }],
+  ['Hearthside', GZ_PALETTE(
+    '#ffd28a', '#ffe6bd', '#45290f', '#241300',
+    '#2a1614', '#190d0c', '#fdf1e4', '#d6bcb0', '#9b8178', '#3d2320', '#5c3832',
+    '#a3cf8e', '#ffa45c', '#ff8f8f'), { font: 'nunito', head: 'lora', radius: 14, glass: 14, depth: 2 }, { kind: 'scene', scene: 'hearth', intensity: 60, colors: ['#f5893b', '#a8432f', '#ffd98a'] }],
   ['Graveyard', GZ_PALETTE(
     '#6ee7b7', '#a7f3d0', '#12352e', '#05201a',
     '#171a2e', '#0c0e1d', '#eef0ff', '#a6abc9', '#767b9e', '#262a45', '#3a3f63',

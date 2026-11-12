@@ -14,7 +14,7 @@ const L = require('../../extension/looks/lookx.js');
 const read = (f) => fs.readFileSync(path.join(__dirname, '../../extension', f), 'utf8');
 
 test('the store listing counts the available built-in scenes and Looks', () => {
-  const listing = read('../store/listing.md'), counts = { ten: 10, eleven: 11, thirteen: 13 };
+  const listing = read('../store/listing.md'), counts = { ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14 };
   assert.equal(counts[listing.match(/one of (\w+) animated scenes/)[1]], G.GZ_SPEC.bg.scene[1].length, 'the advertised scene count');
   assert.equal(counts[listing.match(/one of (\w+) Looks/)[1]], G.GZ_LOOKS.filter((L) => !L.old).length, 'the advertised Look count');
 });
