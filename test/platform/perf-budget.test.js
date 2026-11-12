@@ -350,10 +350,10 @@ const STREAM_COURSE = { ultra: 635 + 23, canvas: 23, moodle: 23 };
 // content-ultra.js guards its sessionStorage jump and asks the Look's page modules to look at the route each pass: 720 bytes on
 // Ultra, 604 on Canvas. Measured against ad0660a31.
 const PAGES_FIXES = { ultra: 720, canvas: 604, moodle: 0 };
-// Thanksgiving's two Looks (a named raise under the owner's 2026-10-19 approval, 2026-11-12): defaults.js gains Harvest Moon and
-// Turkey Trot, their scenes' and pointers' names, and keeps October's two as `old` for whoever wears them: 797 bytes on every
-// site. Measured against 23bef0825.
-const THANKSGIVING = 797;
+// Thanksgiving's three Looks (a named raise under the owner's 2026-10-19 approval, 2026-11-12): defaults.js gains Harvest Moon,
+// Turkey Trot and Hearthside, their scenes' and pointers' names, and keeps October's two as `old` for whoever wears them: 797
+// bytes on every site for the first two, 401 for Hearthside. Measured against 23bef0825 and f387cc71e.
+const THANKSGIVING = 797 + 401;
 // Each site's first script is the manifest's: Ultra's, Canvas's, and MoodleCloud's, which is what background/background.js registers
 // for other Moodle hosts: Canvas's without its part.
 const entry = (has) => m.content_scripts.find(has).js;

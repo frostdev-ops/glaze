@@ -104,7 +104,7 @@ const stub = (required) => {
       await settle();
       st = await step(page);
       check(st.hash === '#/theme' && st.shown.join() === 'theme', 'wizard: Start goes to the theme');
-      check(await page.evaluate(() => document.querySelectorAll('#looks .look').length) === 12, 'wizard: Glaze\'s own theme and the eleven Looks');
+      check(await page.evaluate(() => document.querySelectorAll('#looks .look').length) === 13, 'wizard: Glaze\'s own theme and the twelve Looks');
       check(JSON.stringify(await checked(page, '#looks .look')) === '["Frost"]' && await accent(page) === '#17c8f4', 'wizard: a fresh install wears Glaze\'s own theme, and the page wears it too');
       await shot(page, `${w}-w2-theme`);
       await page.click('.look[data-look="Synthwave"]');

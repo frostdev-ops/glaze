@@ -252,7 +252,7 @@ test('course tint never costs a contrast pair, and at full strength is the cours
 });
 
 test('looks apply cleanly: every value is one Glaze accepts, contrast holds, and the look reads as on', () => {
-  assert.equal(G.GZ_LOOKS.filter((L) => !L.old).length, 11);
+  assert.equal(G.GZ_LOOKS.filter((L) => !L.old).length, 12);
   assert.deepEqual(G.GZ_LOOKS.filter((L) => L.old).map((L) => L.name), ['Graveyard', 'Pumpkin Patch'], 'October\'s two are no longer offered, and still worn where chosen');
   const mine = G.GZ_SANITIZE({ look: { tooltips: false, scale: 1.2, font: 'mono' }, bg: { image: 'https://example.com/a.jpg', kind: 'image' }, auto: { on: true } });
   for (const L of G.GZ_LOOKS) {
