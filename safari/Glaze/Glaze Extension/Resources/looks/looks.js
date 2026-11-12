@@ -66,9 +66,11 @@ var GZ_CATALOG = globalThis.GZ_CATALOG || (() => {
   // ---- reading it --------------------------------------------------------------------------------------------------
   // The kept Looks of a stored catalogue (storage.local is Glaze's own, but an old or hand-edited one mustn't break a page).
   const looks = (cat) => (Array.isArray(cat?.looks) ? cat.looks.filter((E) => E && ID.test(E.id) && typeof E.name === 'string' && E.colors && E.look && E.bg) : []);
-  // Every Look on offer (a built-in gone to the gallery, `old`, is worn where it was chosen and offered nowhere): { id, name, kind, colors, look, bg } and, for a built-in, L (for GZ_LOOK_APPLY and its parts).
-  const list = (cat) => [...G.GZ_LOOKS.filter((L) => !L.old).map((L) => ({ id: L.name, name: L.name, kind: 'builtin', colors: L.colors, look: L.look, bg: L.bg, L })), ...looks(cat)];
-  const find = (all, id) => all.find((E) => E.id === id) || null;
+  const builtin = (L) => ({ id: L.name, name: L.name, kind: 'builtin', colors: L.colors, look: L.look, bg: L.bg, L });
+  // Offered Looks exclude retired built-ins. Name resolution and worn identity still recognize those already chosen.
+  const list = (cat) => [...G.GZ_LOOKS.filter((L) => !L.old).map(builtin), ...looks(cat)];
+  const retired = (match) => { const L = G.GZ_LOOKS.find((L) => L.old && match(L)); return L ? builtin(L) : null; };
+  const find = (all, id) => all.find((E) => E.id === id) || retired((L) => L.name === id);
   // [[group, entries]] of the groups with any, in order: 'builtin', 'saved', 'gallery' (with the backgrounds).
   const groups = (all) => ['builtin', 'saved', 'gallery'].map((g) => [g, all.filter((E) => (E.kind === 'background' ? 'gallery' : E.kind) === g)]).filter(([, l]) => l.length);
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -78,7 +80,7 @@ var GZ_CATALOG = globalThis.GZ_CATALOG || (() => {
   const carries = (a, b) => Object.keys(b).every((k) => same(a[k], b[k]));
   const on = (s, E) => (E.L ? G.GZ_LOOK_ON(s, E.L) : !s.auto.on && carries(s.colors, E.colors) && carries(s.look, E.look) && carries(s.bg, E.bg) && (!('parts' in s) || px(s.parts) === E.px));
   // The one Look worn: a kept one first (it is the more particular), else a built-in, else null.
-  const worn = (s, all) => all.find((E) => !E.L && on(s, E)) || all.find((E) => E.L && on(s, E)) || null;
+  const worn = (s, all) => all.find((E) => !E.L && on(s, E)) || all.find((E) => E.L && on(s, E)) || retired((L) => G.GZ_LOOK_ON(s, L));
   // A card's strip: its background's colors, else its palette's accents (a solid one stays plain).
   const tone = (E) => (E.bg.colors?.length ? E.bg.colors : E.bg.kind === 'solid' ? [E.colors['--gz-surface-2']] : [E.colors['--gz-accent'], E.colors['--gz-accent-hi']]);
 

@@ -153,7 +153,7 @@ const GZ_UI = (() => {
         if (!visual) b.style.color = c['--gz-ink'];
         if (!visual) b.style.borderColor = c['--gz-line-strong'];
         if (!visual) b.style.background = `linear-gradient(90deg, ${c['--gz-accent']} 0 4px, transparent 4px), linear-gradient(120deg, ${c['--gz-surface']} 45%, ${GZ_CATALOG.tone(E).join(', ')})`;
-        if (visual) { b.tabIndex = E === worn || (!worn && E === all[0]) ? 0 : -1; b.setAttribute('aria-label', E.name); }
+        if (visual) { b.tabIndex = E === worn || (!all.includes(worn) && E === all[0]) ? 0 : -1; b.setAttribute('aria-label', E.name); }
         b.addEventListener('click', () => onPick(E));
         box.append(b);
         if (focused === E.id) b.focus({ preventScroll: true });
