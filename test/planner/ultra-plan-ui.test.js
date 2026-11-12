@@ -476,6 +476,26 @@ test('an ambiguous Activity course label cannot choose the first course, even wi
   assert.equal(chip()?.text, 'Submitted', 'a unique course code still works without a link');
 });
 
+// Another Ultra page (Better To Do, the sidebar) kept an answer under two minutes ago: Activity starts once from it.
+test('Activity after another Ultra page kept a fresh answer: the chip stays, it starts once and asks again once', async () => {
+  const lab = { ...ITEMS[0], sub: { submitted: true } };
+  const p = page({ path: '/ultra/stream', items: [lab], stored: keptFor('_900_1', [lab]) });
+  const chip = activity(p), timers = [];
+  p.c.setTimeout = (f) => { timers.push(f); return 0; };
+  // Storage answers at once here, so a start that keeps restarting is cut off after a few reads rather than hang.
+  const get = p.c.chrome.storage.local.get;
+  let reads = 0;
+  p.c.chrome.storage.local.get = (k, cb) => { if (++reads <= 5) get(k, cb); };
+  vm.runInContext(read('courses/page/cardtasks.js'), p.c);
+  p.c.GZ_CARD_TASKS.stream(true); await settle();
+  assert.equal(reads, 1, 'started once');
+  assert.equal(chip()?.text, 'Submitted', 'the kept answer is drawn');
+  assert.equal(timers.length, 1);
+  timers.splice(0).forEach((f) => f()); await settle();
+  assert.equal(p.due.length, 1, 'asked again once');
+  assert.equal(chip()?.text, 'Submitted');
+});
+
 test('Activity chips clear on an identity refresh and wait for the new account before reading or publishing', async () => {
   const submitted = { ...ITEMS[0], sub: { submitted: true } };
   const p = page({ path: '/ultra/stream', items: [submitted] });

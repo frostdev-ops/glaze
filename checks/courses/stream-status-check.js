@@ -81,6 +81,18 @@ const check = (ok, message) => { if (!ok) throw Error(message); checks++; consol
     await tab.evaluate(() => { for (const e of document.querySelectorAll('.gz-stream-status')) e.gzKept = true; document.querySelector('#activity-stream h2').append(' '); });
     await new Promise((r) => setTimeout(r, 600));
     check(await tab.evaluate(() => { const l = [...document.querySelectorAll('.gz-stream-status')]; return l.length === 4 && l.every((e) => e.gzKept); }), 'a pass over unchanged cards draws nothing again');
+    // Another Ultra page first keeps a fresh planner answer (under two minutes old); Activity opened after it, in the app
+    // and by a full load, still says where each assignment stands.
+    await worker.evaluate(() => chrome.storage.local.remove('todoCache'));
+    await tab.goto(`${site}/ultra/course`);
+    await until(() => worker.evaluate(async () => !!(await chrome.storage.local.get('todoCache')).todoCache), 'the Courses page keeping its answer');
+    await tab.evaluate(() => { history.pushState({}, '', `${location.origin}/ultra/stream`); document.querySelector('#activity-stream h2').append(' '); });
+    await until(async () => JSON.stringify(await words()) === JSON.stringify(want), 'Activity in the app after the Courses page');
+    check(true, 'Activity opened in the app after another Ultra page: the same words');
+    await tab.goto(`${site}/ultra/course`);
+    await tab.goto(`${site}/ultra/stream`);
+    await until(async () => JSON.stringify(await words()) === JSON.stringify(want), 'Activity loaded after the Courses page');
+    check(true, 'Activity loaded after another Ultra page: the same words');
     check(!errors.length, `no page errors ${JSON.stringify(errors)}`);
     console.log(`${checks} checks passed`);
   } catch (e) {
