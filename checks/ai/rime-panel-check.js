@@ -100,8 +100,10 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
     env.noFirstRun(context);
     context.setDefaultTimeout(15000);
     const asked = [], errors = [];
-    // The Sunday scene's planner on Canvas, so the page's own refresh keeps the scenario's items.
-    let sunday = null;
+    // The Sunday scene's planner on Canvas, so the page's own refresh keeps the scenario's items; on Ultra its calendar and
+    // the course's name, which the tool's own fresh read asks for (the shapes of test/fixtures/ultra-calendar-items.json
+    // and ultra-memberships.json).
+    let sunday = null, sundayUltra = null;
     await context.route('**/*', (r) => {
       const req = r.request(), u = new URL(req.url());
       if (u.protocol === 'chrome-extension:') return r.continue();
@@ -112,6 +114,8 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
         if (u.pathname.endsWith('/users/me')) return json({ id: '_42_1' });
         if (u.pathname === '/learn/api/public/v1/courses/_101_1/announcements') return json({ results: ULTRA_NEWS });
         if (u.pathname === '/learn/api/public/v1/courses/_101_1/announcements/_801_1') return json({ ...ULTRA_NEWS[0], created: new Date(now - DAY).toISOString() });
+        if (sundayUltra && u.pathname === '/learn/api/v1/calendars/calendarItems') return json({ results: sundayUltra.calendar, paging: { nextPage: '' } });
+        if (sundayUltra && u.pathname === '/learn/api/v1/users/_42_1/memberships') return json({ results: sundayUltra.memberships, paging: { nextPage: '' } });
         return json({ results: [] });
       }
       if (u.origin === 'https://cdn.school.test' && u.pathname.endsWith('.css')) return r.fulfill({ contentType: 'text/css', body: '' });
@@ -306,6 +310,13 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
           .map(([id, title, at, submitted]) => ({ type: 'assignment', id: canvas ? id : `_${id}_1`, cid, course: 'BIO 1100', title, at, sub: { submitted, graded: false, late: false, missing: false } }));
         if (canvas) sunday = items.map((i) => ({ plannable_type: 'assignment', plannable_id: Number(i.id), course_id: 25, context_name: 'BIO 1100', plannable_date: new Date(i.at).toISOString(),
           html_url: `${CANVAS}/courses/25/assignments/${i.id}`, plannable: { title: i.title }, submissions: { submitted: i.sub.submitted, excused: false, graded: false, late: false, missing: false, redo_request: false } }));
+        else {
+          const fixture = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8')).results;
+          const shape = fixture('ultra-calendar-items.json').find((i) => /\.GradableItem$/.test(i.itemSourceType) && !/forumlink/.test(i.dynamicCalendarItemProps?.handle || ''));
+          const member = fixture('ultra-memberships.json').find((m) => m.courseId === cid);
+          sundayUltra = { calendar: items.map((i) => ({ ...shape, itemSourceId: i.id, calendarId: cid, title: i.title, startDate: new Date(i.at).toISOString(), endDate: new Date(i.at).toISOString() })),
+            memberships: [{ ...member, userId: '_42_1', course: { ...member.course, name: 'BIO 1100', displayName: 'BIO 1100' } }] };
+        }
         await worker.evaluate(({ acct, items, now, DAY }) => chrome.storage.local.set({ todoCache: { key: `todo:${acct}`, at: now - 36e5, start: new Date(now - 8 * DAY).toISOString(), end: new Date(now + 8 * DAY).toISOString(), teach: false, progress: null, items, grading: [], sums: {} } }), { acct, items, now, DAY });
         const AT = require('../../extension/ai/tasks/agent-tools.js');
         const due = JSON.parse(AT.readable({ due: monday }, 'UTC', { locale: 'en', now })).due;
@@ -327,7 +338,7 @@ const tomorrow = new Date(now + DAY).toISOString().slice(0, 10);
           assert.ok(runs.some((r) => r.windows), 'the model saw the resolved windows');
           if (scene === 'fallback') assert.equal((await seen()).filter((r) => r.task === 'agent.tools').length, 3, 'the call, the answer, the corrected answer');
           return { text, due, files: await snap(site, scene, '#gz-ask') };
-        } finally { sunday = null; await records(site); }
+        } finally { sunday = sundayUltra = null; await records(site); }
       });
 
       await check(`${site}: a reminder that fired shows as a card on the next school page; its Ask Rime asks about it`, async () => {
