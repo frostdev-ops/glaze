@@ -272,6 +272,9 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if (!asis) s = L().advance(L().advance(s, { step: 'save' }), { step: 'build' });
       const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && box.ready && box.frame === transaction.frame && box.frame?.isConnected && box.port === transaction.port && ok() && armed.has(box) && assignment(box) && Date.now() < end;
       if (!here()) return fail('page');
+      // Ultra keeps its editor off while it saves the attempt's files (writer/writer-ultra.js editable): Quill drops a
+      // write then, and an upload waits for the one before it to be saved.
+      const settled = () => until(() => globalThis.GZ_WRITER_ULTRA?.editable(box.editor), 15000, 100, here);
       if (!await permit('claim')) return fail('claimed');
       claimed = true;
       if (!here()) return fail('page');
@@ -287,6 +290,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       };
       if (!alone) {
         file = name;
+        if (!await settled()) return fail('page');
         const a = await handIn(box, { name, mime: asis ? m.mime : L().mimeOf(name), bytes }, here);
         bytes = null; m.bytes = null;
         if (a) return fail(a);
@@ -296,6 +300,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
         let reply = stream ? await request(i) : { ok: true, bytes: f.bytes };
         if (!reply.ok) return fail(reply.error === 'changed' ? 'changed' : 'file');
         if (stream && (!(reply.bytes instanceof ArrayBuffer) || reply.bytes.byteLength !== f.size)) return fail('file');
+        if (!await settled()) return fail('page');
         const a = await handIn(box, { name: f.name, mime: f.mime, bytes: reply.bytes }, here);
         reply = null;
         if (!stream) f.bytes = null;
@@ -306,6 +311,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if (!here()) return fail('page');
       if (d || note) {
         say(box, { type: 'submit:step', run: m.run, step: 'text' });
+        if (!await settled()) return fail(here() ? 'text' : 'page');
         written.add(box);
         const w = note ? add(box, note) : write(box, d);
         if (w) return fail(w);
