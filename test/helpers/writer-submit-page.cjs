@@ -29,7 +29,7 @@ module.exports = ({ off = false, listed = true, enabled = true, worker, settings
   const setEnabled = (on) => { const b = button(); b.disabled = !on; if (on) { b.removeAttribute('disabled'); b.className = ''; } else b.setAttribute('disabled', ''); };
   setEnabled(enabled);
   const addRow = (name) => { const row = new El('span', doc); row.textContent = name; row.getClientRects = () => [{}]; L.areaOf(editor).append(row); return row; };
-  L.uploadInput(L.areaOf(editor)).addEventListener('change', (e) => { const file = e.target.files[0]; uploads.push(file); if (off) editor.setAttribute('contenteditable', 'false'); if (listed) addRow(file.name); });
+  L.uploadInput(L.areaOf(editor)).addEventListener('change', (e) => { const file = e.target.files[0]; file.savesBefore = saves.length; uploads.push(file); if (off) editor.setAttribute('contenteditable', 'false'); if (listed) addRow(file.name); });
   const ctx = vm.createContext({ document: doc, location, console, ArrayBuffer, Uint8Array, File, Event, CustomEvent, crypto: { randomUUID: () => crypto.randomUUID(), subtle: { digest } },
     Date: class extends Date { static now() { return clock; } },
     setTimeout: (fn, ms) => { timers.set(++id, { fn, ms }); return id; }, clearTimeout: (n) => timers.delete(n),
@@ -40,7 +40,10 @@ module.exports = ({ off = false, listed = true, enabled = true, worker, settings
   });
   // Stand-in Event has no target setter. The real DOM supplies it during dispatch.
   const setText = (text) => { editor.replaceChildren(...text.replace(/\n$/, '').split('\n').map((line) => { const p = new El('p', doc); p.textContent = line; return p; })); };
-  doc.addEventListener('gz-writer:set', (e) => { const m = JSON.parse(e.detail); if (editor.getAttribute('contenteditable') === 'true') setText(m.delta.map((o) => o.insert).join('')); doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: true }) })); });
+  // Ultra saves the attempt as its box changes, then says so in its footer's status (live: "Last saved 2:51:12 PM").
+  const status = doc.querySelector('footer [class*="makeStylesstatus-"]'), saves = [];
+  const saved = () => { saves.push(editor.textContent); status.textContent = `Last saved ${saves.length}`; };
+  doc.addEventListener('gz-writer:set', (e) => { const m = JSON.parse(e.detail); const was = editor.textContent; if (editor.getAttribute('contenteditable') === 'true') setText(m.delta.map((o) => o.insert).join('')); if (editor.textContent !== was) saved(); doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: true }) })); });
   const input = L.uploadInput(L.areaOf(editor));
   input.dispatchEvent = (e) => { for (const l of input.listeners.filter((x) => x.type === e.type)) l.f({ type: e.type, target: input }); return true; };
   vm.runInContext(fs.readFileSync(process.env.WRITER_SUBMIT_SOURCE || path.join(__dirname, '../../extension/writer/page/writer-submit.js'), 'utf8'), ctx);
@@ -50,5 +53,5 @@ module.exports = ({ off = false, listed = true, enabled = true, worker, settings
   const flush = async () => { for (let i = 0; i < 15; i++) { await Promise.all([...hashes]); await new Promise(setImmediate); } };
   const tick = async (ms = 1000) => { clock += ms; for (const [n, t] of [...timers]) { timers.delete(n); t.fn(); } await flush(); };
   const go = async (extra = {}) => { hear({ type: 'submit:go', run: 1, key: 'school.blackboard.com|_900_1|_101_1|_7_1', name: 'Rivera_Essay2.docx', bytes: new Uint8Array([1, 2, 3]).buffer, note: '', text: null, until: clock + 80000, ...extra }); await flush(); };
-  return { settle: () => editor.setAttribute('contenteditable', 'true'), doc, ctx, box, sent, uploads, clicks, fire, hear, go, flush, tick, addRow, button, setEnabled, setText, input, timers, own: (v) => { owned = v; }, now: () => clock };
+  return { saves, uploadedAfter: () => uploads.map(() => saves.length), settle: () => editor.setAttribute('contenteditable', 'true'), doc, ctx, box, sent, uploads, clicks, fire, hear, go, flush, tick, addRow, button, setEnabled, setText, input, timers, own: (v) => { owned = v; }, now: () => clock };
 };

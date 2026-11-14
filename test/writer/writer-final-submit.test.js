@@ -52,6 +52,29 @@ test('Ultra\'s editor off while it saves the upload: the note waits for it rathe
   assert.equal(p.clicks.filter((b) => b === p.button()).length, 1);
 });
 
+test('D13: an attempt that holds nothing yet is saved with text before any upload, so Ultra creates its draft in place', async () => {
+  // Live Ultra 4001.4, 2026-11-14: a draft its first file creates redraws the whole submission editor, and Writer's frame
+  // with it; one a text save creates doesn't.
+  const p = page({ enabled: false });
+  p.doc.querySelector('#bb-editorassignment-attempt-authoring-submission').replaceChildren();
+  await p.go({ note: 'Hi Professor' });
+  await p.tick(100);
+  assert.equal(p.uploads[0]?.savesBefore, 1, 'the note saved before the upload');
+  p.setEnabled(true);
+  for (let i = 0; i < 5 && !done(p).length; i++) await p.tick(100);
+  assert.deepEqual(done(p), ['ok']);
+  assert.equal(boxText(p), 'Hi Professor');
+  const q = page({ enabled: false });
+  q.doc.querySelector('#bb-editorassignment-attempt-authoring-submission').replaceChildren();
+  await q.go();
+  await q.tick(100);
+  assert.equal(q.uploads[0]?.savesBefore, 1, 'with nothing to write, a placeholder saved first');
+  q.setEnabled(true);
+  for (let i = 0; i < 5 && !done(q).length; i++) await q.tick(100);
+  assert.deepEqual(done(q), ['ok']);
+  assert.equal(boxText(q), '', 'and taken out again before Submit');
+});
+
 // Ultra's confirmation of the Submit Writer pressed (live Ultra 4001.4, 2026-11-14): its Cancel and its own Submit.
 const confirmation = (p) => {
   const { El } = require('../stand-in-dom.js');
