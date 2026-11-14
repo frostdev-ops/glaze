@@ -39,6 +39,9 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     if (due == null || Number.isNaN(due)) return periods.reduce((a, p) => (!a || p.end > a.end ? p : a), null)?.id ?? null;
     return periods.find((p) => p.start < due && due <= p.end)?.id ?? null;
   };
+  // An item's scale: points (the score as points), percent (shown as a share of its points), letter (a letter on the
+  // course's scale stands for a percent) or complete (full points or none).
+  const CANVAS_SCALES = { points: 'points', percent: 'percent', letter_grade: 'letter', gpa_scale: 'letter', pass_fail: 'complete' };
   const fromApi = (groups, info = {}) => {
     const periods = Array.isArray(info.periods) && info.periods.length
       ? info.periods.map((p) => ({ id: String(p.id), start: minute(Date.parse(p.start_date)), end: minute(Date.parse(p.end_date)), weight: num(p.weight) }))
@@ -63,7 +66,11 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
             score: s.score == null || s.score === '' ? null : num(s.score),
             excused: s.excused === true,
             pending: s.workflow_state === 'pending_review',
-            counts: !a.omit_from_final_grade && !(types.length === 1 && types[0] === 'not_graded') && a.workflow_state !== 'unpublished' && a.published !== false,
+            // How the course grades it (Canvas's grading_type), whether Canvas marks it missing, and the grade it writes.
+            scale: CANVAS_SCALES[a.grading_type] || 'points',
+            missing: s.missing === true,
+            shown: typeof s.grade === 'string' ? s.grade.slice(0, 20) : '',
+            counts: !a.omit_from_final_grade && a.grading_type !== 'not_graded' && !(types.length === 1 && types[0] === 'not_graded') && a.workflow_state !== 'unpublished' && a.published !== false,
             anon: !!a.anonymize_students,
             period: periodOf(a.due_at ? minute(Date.parse(a.due_at)) : null, periods),
           };
@@ -264,6 +271,50 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     return at((i) => { const f = share(r.groups[groupOf.get(i.id)]?.current) ?? course; return f == null ? null : round2(f * i.possible); });
   };
 
+  // ---- typing scores and targets -----------------------------------------------------------------------------------
+  // A number as a student types it: digits with a point or a comma for decimals ("44,5"), never signs or exponents.
+  const NUM = String.raw`(\d+(?:[.,]\d+)?|[.,]\d+)`;
+  const FRAC = new RegExp(String.raw`^${NUM}\s*\/\s*${NUM}$`);
+  const PCT = new RegExp(String.raw`^${NUM}\s*%$`);
+  const PLAIN = new RegExp(`^${NUM}$`);
+  const toNum = (x) => Number(x.replace(',', '.'));
+  const within = (v) => (Number.isFinite(v) && v >= 0 && v <= 1e6 ? v : null);
+  const dashes = (x) => String(x ?? '').trim().replace(/[−–]/g, '-');
+  // A score typed for an item → its points: "8" (points, or a percent when `percent`), "8/10", "80%", or a letter of the
+  // item's own scale (letters: [[letter, the percent it stands for]]). undefined when nothing is typed, null when it isn't
+  // a score. An item worth no points (extra credit) takes points only: a percent of nothing means nothing.
+  const readScore = (text, item, percent = false) => {
+    const s = dashes(text);
+    if (!s) return undefined;
+    const p = item.possible;
+    let m;
+    if ((m = s.match(FRAC))) { const of = toNum(m[2]); return of > 0 ? within(p > 0 ? (toNum(m[1]) / of) * p : toNum(m[1])) : null; }
+    if ((m = s.match(PCT))) return p > 0 ? within((toNum(m[1]) / 100) * p) : null;
+    if ((m = s.match(PLAIN))) return within(percent && p > 0 ? (toNum(m[1]) / 100) * p : toNum(m[1]));
+    const letter = (item.letters || []).find(([n]) => n.toLowerCase() === s.toLowerCase());
+    return letter && p > 0 ? within((letter[1] / 100) * p) : null;
+  };
+  // Points shown back as typed: in points, or as a percent of the item's points; to two places.
+  const scoreText = (points, item, percent = false) => String(round2(percent && item.possible > 0 ? (points / item.possible) * 100 : points));
+  // A target overall grade → a percent: "90", "90%", "450/500", points of the course's total (total), or a letter of
+  // its scale (scheme: [[letter, lowest %]]). null when it isn't one.
+  const readTarget = (text, o = {}) => {
+    const s = dashes(text);
+    let m;
+    if ((m = s.match(FRAC))) { const of = toNum(m[2]); return of > 0 ? within((toNum(m[1]) / of) * 100) : null; }
+    if ((m = s.match(PCT))) return within(toNum(m[1]));
+    if ((m = s.match(PLAIN))) return within(o.total > 0 ? (toNum(m[1]) / o.total) * 100 : toNum(m[1]));
+    return (o.scheme || []).find(([n]) => n.toLowerCase() === s.toLowerCase())?.[1] ?? null;
+  };
+  // A Canvas letter's score (GradingStandard#grade_to_score): the top letter is 100%; any other is one point under the
+  // next letter's cut-off, or a tenth where that cut-off is less than a point above its own. scheme: [[letter, lowest
+  // %]], highest first. → [[letter, %]].
+  const canvasLetters = (scheme) => (scheme || []).map(([n, min], i) => {
+    if (!i) return [n, 100];
+    const up = scheme[i - 1][1];
+    return [n, round2(up - (Math.abs(up - min) >= 1 ? 1 : 0.1))];
+  });
+
   // ---- what-if scores kept on this device ---------------------------------------------------------------------
   // A course's record: { s: { assignment id: [what-if points, the real grade when it was saved] }, h: [hidden
   // ids], p: [pretend: { id, g (group), n (name), s (score), pp (possible), pd (grading period) }], c: a what-if
@@ -381,9 +432,23 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
   const UNCHECKED = 'Blackboard shows no overall number to check it against';
   // A course's grade by name, not a category's average or subtotal ("Homework Total", "Overall Homework Grade").
   const OVERALL = /^(?:(?:overall|total)(?:\s+grade)?|(?:overall\s+)?course\s+(?:grade|total)|final\s+(?:course\s+)?grade)$/i;
-  const model = (results, names = {}) => {
+  // schemas: the course's gradebook/schemas (public v1: scaleType Score, Percent, CompleteIncomplete, Tabular, Text; a
+  // Tabular symbol's absoluteValue is the percent its letter stands for; Ultra's own answer says TABULAR, symbol and
+  // absoluteTranslation): each item's scale, letters and the grade written for it (displayGrade.grade), and missing
+  // where Ultra scored it zero on its own (scoredByAutomaticZero).
+  const ULTRA_SCALES = { score: 'points', text: 'points', percent: 'percent', completeincomplete: 'complete', complete: 'complete', tabular: 'letter' };
+  const model = (results, names = {}, schemas = []) => {
     const rows = (Array.isArray(results) ? results : []).filter((g) => g?.column);
     const overallRow = rows.find((g) => g.column.externalGrade);
+    const schemaOf = new Map((Array.isArray(schemas) ? schemas : []).filter((x) => x?.id).map((x) => [x.id, x]));
+    const scaleOf = (g) => {
+      const x = schemaOf.get(g.column.gradingSchemaId);
+      const scale = ULTRA_SCALES[String(x?.scaleType || '').toLowerCase()] || 'points';
+      const letters = scale === 'letter' ? (Array.isArray(x.symbols) ? x.symbols : []).map((y) => [String(y?.text ?? y?.symbol ?? '').slice(0, 20), Number(y?.absoluteValue ?? y?.absoluteTranslation)])
+        .filter(([n, v]) => n && Number.isFinite(v)) : [];
+      const shown = g.displayGrade?.grade ?? g.displayGrade?.text;
+      return { scale, ...(letters.length ? { letters } : {}), missing: g.displayGrade?.scoredByAutomaticZero === true, shown: typeof shown === 'string' ? shown.slice(0, 20) : '' };
+    };
     const item = (g, calculated = false) => ({
       id: String(g.columnId),
       name: columnName(g.column),
@@ -391,7 +456,7 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
       catName: calculated ? '' : String(g.column.gradebookCategory?.title || ''), catOwn: g.column.gradebookCategory?.isUserDefined === true, catKey: calculated ? '' : g.column.gradebookCategory?.localizableTitle?.languageKey || '',
       possible: Number(g.column.possible) || 0,
       score: calculated ? figureOf(g) : isGraded(g) && g.displayGrade?.score != null ? Number(g.displayGrade.score) : null,
-      excused: !!g.isExempt, pending: false, counts: true, anon: false, period: null,
+      excused: !!g.isExempt, pending: false, counts: true, anon: false, period: null, ...scaleOf(g),
     });
     const all = rows.filter((g) => isItem(g) && g.column.scorable !== false).map((g) => item(g));
     const items = all.filter((i) => !i.excused);
@@ -427,10 +492,27 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
       const mine = m.percent();
       return mine == null || Math.abs(mine - figure) > 0.01 ? { why: MISMATCH } : { m };
     };
+    // A recipe Glaze can't read that is no weighting (a points total, say) is still exact where the plain share of
+    // points comes out at Blackboard's figure, read as a percent or as points of the column's own total; as a running
+    // total, else with work not graded yet as zero. Never for a weighting (one with dropped scores could match today and
+    // part ways at the next score), nor one Glaze reads that doesn't come out.
+    const total = (row) => {
+      const figure = figureOf(row);
+      const possible = Number(row.column.possible);
+      const want = [figure, possible > 0 && figure != null ? (figure / possible) * 100 : null].filter((x) => x != null);
+      for (const running of [true, false]) {
+        const m = build({ cats: null, running });
+        const mine = m.percent();
+        if (mine != null && want.some((w) => Math.abs(mine - w) <= 0.01)) return { ...m, points: true };
+      }
+      return null;
+    };
+    const exact = (row, r) => (r.m ? r.m : ![MISMATCH, UNCHECKED].includes(r.why) && !/BBCalColElem\(wgt:/.test(String(row.column.calculatedFormula?.formula || '')) && total(row));
     const no = (why, row = overallRow, column) => ({ kind: 'unsupported', note: `Glaze can't work out this course's overall grade: ${why}.`, why, items, overall: figureOf(row), columnId: row?.columnId, ...(column ? { column } : {}) });
     if (overallRow) {
       const r = check(overallRow);
-      return r.m ? { ...r.m, kind: 'weighted', note: '', overall: figureOf(overallRow), columnId: overallRow.columnId } : no(r.why);
+      const m = exact(overallRow, r);
+      return m ? { ...m, kind: 'weighted', note: '', overall: figureOf(overallRow), columnId: overallRow.columnId } : no(r.why);
     }
     // No overall grade for the student: a teacher's own column for it, where there is just one that is marked or named so.
     // One only named so counts when its recipe is a weighting Glaze reads; one marked as a total is reported either way.
@@ -440,7 +522,8 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     if (own.length && !(own.length > 1 && rank(own[1]) === rank(own[0]))) {
       const r = check(own[0]);
       const column = columnName(own[0].column);
-      return r.m ? { ...r.m, kind: 'weighted', note: '', overall: figureOf(own[0]), column, columnId: own[0].columnId } : no(r.why, own[0], column);
+      const m = exact(own[0], r);
+      return m ? { ...m, kind: 'weighted', note: '', overall: figureOf(own[0]), column, columnId: own[0].columnId } : no(r.why, own[0], column);
     }
     return { ...build({ cats: null, running: true }), overall: null, kind: 'points', note: 'This course has no overall grade in Blackboard. These figures are your share of the points in graded work, which may not be how the course is graded.' };
   };
@@ -672,7 +755,7 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     };
   };
 
-  return { num, round2, real, fromApi, periodOf, drop, calc, remaining, need, fill, reconcile, whatOf, store, withCourseGrade, cleanRecord, applyWhatIf, SCHEME, reaches, reachFrom, letter, schemeOf, parseScheme, schemeText, points, gpaRow, gpa, cleanGpa, patchGpa, CREDITS, parse, model, ULTRA_CATS, oldScores, moveLegacy };
+  return { num, round2, real, fromApi, periodOf, drop, calc, remaining, need, fill, readScore, scoreText, readTarget, canvasLetters, reconcile, whatOf, store, withCourseGrade, cleanRecord, applyWhatIf, SCHEME, reaches, reachFrom, letter, schemeOf, parseScheme, schemeText, points, gpaRow, gpa, cleanGpa, patchGpa, CREDITS, parse, model, ULTRA_CATS, oldScores, moveLegacy };
 })();
 
 // Node takes the module; a page that loaded this on demand gets it as the script's last value, which is how

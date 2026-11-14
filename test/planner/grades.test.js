@@ -363,7 +363,9 @@ test("a points total Glaze can't read is exact where the plain share of points c
   // Neither: still unsupported, and why.
   const off = C.model([...work(), tot(60, 100)]);
   assert.deepEqual([off.kind, off.why], ['unsupported', "its overall grade is a points total Glaze can't read yet"]);
-  // A weighting Glaze reads that doesn't come out is never swapped for a share of points that happens to.
+  // A weighting Glaze reads that doesn't come out is never swapped for a share of points that happens to, nor one with
+  // rules it can't read (dropped scores) that comes out at the same figure today.
   const w = C.model([g('_1_1', 10, 8), g('_2_1', 30, 15), overall(weights([['c_1', 50], ['c_2', 50]]), 57.5)]);
   assert.deepEqual([w.kind, w.why], ['unsupported', "its recipe doesn't come out at Blackboard's own figure"]);
+  assert.equal(C.model([g('_1_1', 10, 5), overall(weights([['c_1', 100, { drop_lowest: 1 }]]), 50)]).kind, 'unsupported');
 });
