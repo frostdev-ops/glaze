@@ -647,6 +647,10 @@ const HARNESS = require('../mocks/ultra-attempt-harness.js');
     ({ p, el, fr } = await openAttempt('empty'));
     await give(p, '[class*="makeStylesinputContainer-"]', 'Rivera_Essay2.docx', MIME, essay);
     await until(() => p.evaluate(() => __uploads.length === 1), 'Ultra took the drop');
+    // The first file made Ultra's draft, which redraws the submission editor (live Ultra): Writer's frame is a new one.
+    await until(() => p.evaluate(() => __log.includes('redrawn')), 'Ultra redrew its editor');
+    el = await until(async () => { const x = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); return x && await x.evaluate((f) => !f.style.opacity && f.offsetHeight > 500) && x; }, 'paper frame shown again', 30000);
+    fr = await until(() => el.contentFrame(), 'its document');
     await p.setInputFiles('[class*="makeStylessubmission-"] input[type=file]', path.join(files, 'Rivera_Essay2.pdf'));
     await until(() => p.evaluate(() => __uploads.length === 2), 'Ultra took the choice');
     await quiet(() => fr.evaluate(() => !!document.querySelector('.gi-layer, .gs-layer')), 'Writer showed a card or sheet');
@@ -949,6 +953,11 @@ const HARNESS = require('../mocks/ultra-attempt-harness.js');
     await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact');
     await give(p, '[class*="makeStylesinputContainer-"]', 'Rivera_Essay2.pdf', 'application/pdf', pdf);
     await until(() => p.evaluate(() => __uploads.length === 1), 'Ultra took the PDF');
+    // The PDF made Ultra's draft, which redraws the submission editor (live Ultra): Writer's frame is a new one.
+    await until(() => p.evaluate(() => __log.includes('redrawn')), 'Ultra redrew its editor');
+    el = await until(async () => { const x = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); return x && await x.evaluate((f) => !f.style.opacity) && x; }, 'compact frame shown again', 30000);
+    fr = await until(() => el.contentFrame(), 'its document');
+    await until(() => fr.evaluate(() => document.documentElement.dataset.view === 'compact'), 'compact again');
     check(await p.evaluate(() => __uploads[0].via === 'drop') && await fr.evaluate(() => !document.querySelector('.gi-layer, .gs-layer')), 'PDFs off: a PDF on Ultra\'s file area is Ultra\'s, to send with the text');
     await setPdf(true);
     h0 = await frameH(el);

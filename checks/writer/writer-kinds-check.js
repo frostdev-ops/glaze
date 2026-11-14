@@ -477,6 +477,9 @@ const holds = (bytes, value) => {
     await quiet(() => p.evaluate(() => !!document.querySelector('button[data-gz-open-glaze]')), 'Open in Glaze with PDFs off', 2000);
     await give(p, 'Field trip form.pdf', 'application/pdf', pdfBytes);
     await until(() => p.evaluate(() => __uploads.length === 1), 'Ultra took the PDF');
+    // The PDF made Ultra's draft, which redraws the submission editor (live Ultra): Writer's frame is a new one.
+    await until(() => p.evaluate(() => __log.includes('redrawn')), 'Ultra redrew its editor');
+    fr = await until(async () => { const x = await p.$('iframe.gz-writer[data-gz-writer-frame="assignment"]'); return x && await x.evaluate((f) => !f.style.opacity) && x.contentFrame(); }, 'Writer\'s frame again', 30000);
     check(await p.evaluate(() => __uploads[0].via === 'drop' && !document.querySelector('button[data-gz-open-glaze]')) && await fr.evaluate(() => !document.querySelector('.gi-layer, .gs-layer') && !document.documentElement.dataset.doc), 'PDFs and Slides off: a PDF on Ultra\'s file area is Ultra\'s, no card, no viewer, no Open in Glaze beside the attachment');
     await p.close();
 
