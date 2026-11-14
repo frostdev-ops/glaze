@@ -1,5 +1,5 @@
 {
- "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. A course whose overall grade for the student is the teacher's own calculated column (isTotalCalculation, not externalGrade), weighting categories and single items, one of them a calculated average column; one item renamed to a dot (measured 2026-11-14).",
+ "_note": "Glaze test fixture: Blackboard Ultra (Learn 4001) response shape, synthetic values. A course whose overall grade for the student is the teacher's own calculated column (isTotalCalculation, not externalGrade), weighting categories and single items, one of them a calculated average column; one item renamed to a dot (measured 2026-11-14); a discussion missed past its due date, scored zero by Ultra on its own (scoredByAutomaticZero).",
  "paging": {
   "previousPage": "",
   "nextPage": "",
@@ -269,7 +269,8 @@
    "columnUrl": "https://lms.example.edu/learn/api/v1/courses/_103_1/gradebook/columns/_619_1",
    "status": "GRADED",
    "displayGrade": {
-    "isOverride": false,
+    "scoredByAutomaticZero": true,
+    "isOverride": true,
     "requiresSchemaKnowledgeToDisplay": false,
     "score": 0
    },

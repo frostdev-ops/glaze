@@ -2134,3 +2134,142 @@ test("Ultra what-if: a Clear all, here or in another tab, takes a fill's Undo wi
   assert.equal(byText(p.box(), 'Undo').hidden, true);
   assert.equal(store.data[UKEY]?._101_1, undefined);
 });
+
+// ---- scales, Points or Percent, scores typed in any form, points totals, targets in points or a letter ----
+const schemaAnswer = { results: [...ufix('schemas').results, { id: '_404_1', scaleType: 'CompleteIncomplete', symbols: [] }] };
+const scaled = () => {
+  const rows = structuredClone(ufix('grades').results);
+  const col = (id) => rows.find((r) => r.columnId === id);
+  col('_603_1').column.gradingSchemaId = '_403_1'; // Lab Report 3 on a letter scale: A 95, B 85
+  col('_605_1').column.gradingSchemaId = '_404_1'; // Discussion: Cells, complete or incomplete
+  col('_605_1').displayGrade = { ...col('_605_1').displayGrade, grade: 'Complete' };
+  return rows;
+};
+const legendOf = (p, start) => find(p.box(), (e) => e.tagName === 'LEGEND' && e.children[0].textContent.startsWith(start));
+
+test('Ultra what-if: each item on its own scale: a letter for a letter item, Complete or Incomplete for one graded so, asked once on opening', async () => {
+  const p = ultraPage({ books: { _101_1: scaled() }, answers: { '/gradebook/schemas': schemaAnswer } });
+  p.UI.render();
+  await settle(10);
+  assert.deepEqual(p.state.asked, [], 'closed, nothing asked');
+  await open(p);
+  await settle(14);
+  assert.deepEqual(p.state.asked.map(([, , u]) => u.split('?')[0]), ['/learn/api/public/v1/courses/_101_1/gradebook/schemas']);
+  const lab3 = scoreOf(p, '_603_1');
+  lab3.value = 'b';
+  lab3.fire('input');
+  await settle(10);
+  assert.deepEqual(p.store.data[UKEY]._101_1.s._603_1.slice(0, 2), [85, null], 'B stands for 85%');
+  assert.equal(totals(p)[1], '87%');
+  lab3.fire('change');
+  assert.equal(scoreOf(p, '_603_1').value, '85', 'shown back as points once typed');
+  const cells = scoreOf(p, '_605_1');
+  assert.equal(cells.tagName, 'SELECT');
+  assert.deepEqual(cells.children.map((o) => o.textContent), ['Complete', 'Complete', 'Incomplete']);
+  cells.value = '0';
+  cells.fire('change');
+  await settle(10);
+  assert.deepEqual(p.store.data[UKEY]._101_1.s._605_1.slice(0, 2), [0, 10]);
+  assert.equal(totals(p)[1], '67%', 'Discussion (20%) at nothing');
+});
+
+test('Ultra what-if: Points or Percent, kept on this device, with scores typed as points, a fraction or a percent', async () => {
+  const store = shared();
+  const p = ultraPage({ store });
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  await settle(10);
+  const quiz = () => scoreOf(p, '_604_1');
+  assert.equal(quiz().placeholder, '40');
+  assert.match(quiz().parentNode.textContent, /\/ 50$/);
+  find(p.box(), (e) => e.dataset.f === 'unit:percent').fire('click');
+  await settle(10);
+  assert.equal(store.data.calcUnit, 'percent');
+  assert.equal(find(p.box(), (e) => e.dataset.f === 'unit:percent').getAttribute('aria-pressed'), 'true');
+  assert.equal(quiz().placeholder, '80');
+  assert.match(quiz().parentNode.textContent, /%$/);
+  quiz().value = '90';
+  quiz().fire('input');
+  await settle(10);
+  assert.deepEqual(store.data[UKEY]._101_1.s._604_1.slice(0, 2), [45, 40], '90% of 50 points');
+  // Any form, whichever is shown: a fraction, a percent with its sign; something else is marked and changes nothing.
+  const lab3 = scoreOf(p, '_603_1');
+  for (const [typed, pts] of [['45/50', 90], ['95%', 95], ['8,5', 8.5]]) {
+    lab3.value = typed;
+    lab3.fire('input');
+    await settle(10);
+    assert.equal(store.data[UKEY]._101_1.s._603_1[0], pts, typed);
+  }
+  lab3.value = 'abc';
+  lab3.fire('input');
+  await settle(10);
+  assert.equal(lab3.getAttribute('aria-invalid'), 'true');
+  assert.equal(store.data[UKEY]._101_1.s._603_1[0], 8.5, 'unchanged');
+  // Another page starts as the student left it.
+  const q = ultraPage({ store });
+  q.UI.render();
+  await settle(10);
+  await open(q);
+  await settle(10);
+  assert.match(scoreOf(q, '_604_1').parentNode.textContent, /%$/);
+});
+
+test('Ultra what-if: a course graded by points shows the points beside the percents, takes a target in points, and marks missing work', async () => {
+  const p = ultraPage({ path: '/ultra/courses/_102_1/grades', books: { _102_1: ufix('grades-status').results } });
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  await settle(10);
+  assert.equal(find(p.box(), (e) => e.className === 'gz-calc-pts')?.textContent, '85 / 100 points');
+  assert.match(legendOf(p, 'Assignment').textContent, /85 \/ 100 · 85%$/);
+  assert.match(p.box().textContent, /Aim for  of 300 points/);
+  const target = find(p.box(), (e) => e.dataset.f === 'target');
+  target.value = '255';
+  target.fire('input');
+  await settle(10);
+  assert.match(p.box().textContent, /You'd need about 85% on each of the 2 items left\./);
+  // A weighted course shows no points total: its points don't add up to its grade.
+  const w = ultraPage();
+  w.UI.render();
+  await settle(10);
+  await open(w);
+  await settle(10);
+  assert.equal(find(w.box(), (e) => e.className === 'gz-calc-pts'), undefined);
+  // Ultra scored a missed discussion zero on its own: marked, and still shown with Only work not graded yet.
+  const t = ultraPage({ path: '/ultra/courses/_103_1/grades', books: { _103_1: ufix('grades-teacher').results } });
+  t.UI.render();
+  await settle(10);
+  await open(t);
+  await settle(10);
+  const row = scoreOf(t, '_619_1').closest('li');
+  assert.ok(row.all((e) => e.className === 'gz-calc-tag' && e.textContent === 'Missing' && !e.hidden).length);
+  const only = find(t.box(), (e) => e.dataset.f === 'todo');
+  only.checked = true;
+  only.fire('change');
+  await settle(10);
+  assert.ok(scoreOf(t, '_619_1'), 'missing work stays in view');
+});
+
+test("Canvas what-if: a letter typed for a letter-graded item scores as Canvas would, pass/fail is Complete or Incomplete, and the figures carry the course's letter", async () => {
+  const groups = [{ id: '9001', name: 'Work', group_weight: 0, rules: {}, assignments: [
+    { id: '9101', name: 'Essay', points_possible: 10, grading_type: 'letter_grade', submission_types: ['online_text_entry'], published: true, submission: { score: null, workflow_state: 'unsubmitted' } },
+    { id: '9102', name: 'Check-in', points_possible: 10, grading_type: 'pass_fail', submission_types: ['online_text_entry'], published: true, submission: { score: 10, grade: 'complete', workflow_state: 'graded' } },
+    { id: '9103', name: 'Quiz', points_possible: 10, grading_type: 'points', submission_types: ['online_quiz'], published: true, submission: { score: 8, workflow_state: 'graded', missing: false } },
+  ] }];
+  const list = [row({ enrollments: [{ type: 'student', user_id: '3', computed_current_score: 90, computed_final_score: 60, computed_current_grade: 'A-' }] })];
+  const p = gradesPage({ groups, list });
+  await ready(p);
+  const essay = find(p.box(), (e) => e.dataset.f === 's:9101');
+  essay.value = 'B';
+  essay.fire('input');
+  await settle(10);
+  assert.deepEqual(p.store.data[KEY][String(BIO.course.id)].s['9101'].slice(0, 2), [8.6, null], "B: one point under B+'s 87%");
+  assert.match(totals(p)[1], /^88% · B\+$/, '26.6 of 30, with its letter on the default scale');
+  const check = find(p.box(), (e) => e.dataset.f === 's:9102');
+  assert.equal(check.tagName, 'SELECT');
+  check.value = '0';
+  check.fire('change');
+  await settle(10);
+  assert.match(totals(p)[1], /^55\.33% · F$/);
+});
