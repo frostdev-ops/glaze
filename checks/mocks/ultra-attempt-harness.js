@@ -1,6 +1,7 @@
 // Ultra's side of the synthetic assignment attempt (test/fixtures/ultra-writer-attempt.html) for the Writer checks
 // (writer-submit-check.js, writer-kinds-check.js): Quill 1.3.7 over its box, its file area taking files at its root (input's
-// change, or a drop), recording them and listing each after a moment, its footer's Save and Close and Submit disabled
+// change, or a drop), recording them and listing each after a moment, its editor turned off (contenteditable false) from
+// the upload until a moment after the listing, as live Ultra does while it saves the attempt's files (4001.4, 2026-11-14), its footer's Save and Close and Submit disabled
 // (Mui-style) while there's no text and no file, and recording clicks; a Submit click shows a stand-in confirmation.
 // ?mode=: empty, noinput, gone, never, stuck (writer-submit-check.js says what each does). Served as /gz-check/harness.js.
 const SUBMIT = '[data-analytics-id="assignment.attempt.authoring.footer.submit"]', SAVE = '[data-analytics-id="course.content.assessment.footer.buttons.saveAndClose"]';
@@ -38,7 +39,9 @@ const HARNESS = `(() => {
   state();
   const take = async (list, via) => {
     for (const f of list) { window.__uploads.push({ name: f.name, type: f.type, size: f.size, via, bytes: Array.from(new Uint8Array(await f.arrayBuffer())) }); log.push('upload'); }
-    if (mode.includes('never')) return;
+    q.disable(); log.push('disabled');
+    const enable = (ms) => setTimeout(() => { q.enable(); log.push('enabled'); }, ms);
+    if (mode.includes('never')) { enable(750); return; }
     setTimeout(() => {
       for (const f of list) {
         files.push(f);
@@ -49,6 +52,7 @@ const HARNESS = `(() => {
       }
       log.push('row');
       state();
+      enable(300);
     }, 400);
   };
   root.addEventListener('change', (e) => { if (e.target.matches('input[type=file]')) take([...e.target.files], 'input'); });

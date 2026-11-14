@@ -190,6 +190,20 @@ test('an unrendered assignment panel is unknown until its submission editor exis
   assert.equal(U.pageKind(body, undefined, '_7_1'), '', 'a template shell does not establish that isAssignment() was rendered');
 });
 
+test('Ultra turning the submission editor off while it saves the attempt\'s files keeps it the assignment, and never offers it new', () => {
+  // Live Ultra (4001.4, 2026-11-14) sets contenteditable="false" on the submission editor for the ~750 ms it saves an upload
+  // or a removal, then back: the box Writer holds must stay the assignment's, as must the page's kind.
+  const body = page('ultra-writer-attempt.html'), [box] = U.boxes(body, { path: ATTEMPT });
+  box.editor.setAttribute('contenteditable', 'false');
+  assert.equal(U.editable(box.editor), false);
+  assert.equal(U.kindOf(box.editor, { path: ATTEMPT }), 'assignment');
+  assert.equal(U.pageKind(body, undefined, '_7_1'), 'assignment');
+  assert.deepEqual(U.boxes(body, { path: ATTEMPT }), [], 'a disabled editor is never taken new');
+  assert.equal(U.kindOf(body.querySelector('#bb-editorassignment-attempt-authoring-instructions'), { path: ATTEMPT }), 'unknown', 'the read-only instructions stay nothing');
+  box.editor.setAttribute('contenteditable', 'true');
+  assert.equal(U.editable(box.editor), true);
+});
+
 test('native attachments and formatting outside the frame schema are never taken over and discarded', () => {
   for (const make of [
     (doc) => new El('img', doc),
