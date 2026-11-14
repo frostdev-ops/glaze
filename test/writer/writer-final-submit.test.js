@@ -76,6 +76,38 @@ test('D13: an attempt that holds nothing yet is saved with text before any uploa
   assert.equal(boxText(q), '', 'and taken out again before Submit');
 });
 
+test('D14: a file of the same name already in Ultra\'s draft stops the run until the student asks to replace it', async () => {
+  const p = page();
+  p.addRow('Rivera_Essay2.docx', { removable: true });
+  await p.go();
+  const failed = p.sent.find((m) => m.type === 'submit:done');
+  assert.deepEqual([failed.error, failed.file, p.uploads.length, p.deletes.length], ['exists', 'Rivera_Essay2.docx', 0, 0]);
+  await p.go({ run: 2, replace: ['Rivera_Essay2.docx'] });
+  for (let i = 0; i < 5 && done(p).length < 2; i++) await p.tick(100);
+  assert.deepEqual(done(p), ['exists', 'ok']);
+  assert.deepEqual([p.deletes, p.uploads.length, p.clicks.length], [['Rivera_Essay2.docx'], 1, 1], 'Ultra\'s own delete, then the upload, then Submit once');
+  const q = page();
+  q.addRow('Rivera_Essay2.docx', { removable: true });
+  await q.go({ replace: ['Notes.pdf'] });
+  assert.deepEqual([done(q), q.deletes.length], [['exists'], 0], 'only the file the student named');
+});
+
+test('D14: the sheet offers Replace for a file Ultra already has, and sends that name with the next run', async () => {
+  const sheet = require('../helpers/writer-submit-sheet.cjs');
+  const s = sheet();
+  await s.open(); s.builds[0].resolve(); await s.flush();
+  s.click('.gs-primary'); await s.flush();
+  const go = s.messages.find((m) => m.type === 'submit:go');
+  s.handles['submit:done']({ run: go.run, ok: false, error: 'exists', file: 'Rivera_Essay2.docx' }); await s.flush();
+  const replace = s.doc.querySelector('.gs-replace');
+  assert.ok(replace && !replace.hidden, 'Replace beside Blackboard editor');
+  s.click('.gs-replace'); await s.flush();
+  const again = s.messages.filter((m) => m.type === 'submit:go');
+  assert.equal(again.length, 2);
+  assert.deepEqual(again[1].replace, ['Rivera_Essay2.docx']);
+  assert.equal(again[0].replace, undefined, 'never without the student\'s word');
+});
+
 // Ultra's confirmation of the Submit Writer pressed (live Ultra 4001.4, 2026-11-14): its Cancel and its own Submit.
 const confirmation = (p) => {
   const { El } = require('../stand-in-dom.js');

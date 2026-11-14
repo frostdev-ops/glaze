@@ -28,7 +28,23 @@ module.exports = ({ off = false, listed = true, enabled = true, worker, settings
   const button = () => L.footer(editor).submit;
   const setEnabled = (on) => { const b = button(); b.disabled = !on; if (on) { b.removeAttribute('disabled'); b.className = ''; } else b.setAttribute('disabled', ''); };
   setEnabled(enabled);
-  const addRow = (name) => { const row = new El('span', doc); row.textContent = name; row.getClientRects = () => [{}]; L.areaOf(editor).append(row); return row; };
+  // removable: Ultra's own row, its × asking to confirm the delete (live Ultra 4001.4, 2026-11-14); deleted names in deletes.
+  const deletes = [];
+  const addRow = (name, { removable = false } = {}) => {
+    const row = new El('span', doc); row.textContent = name; row.getClientRects = () => [{}];
+    if (!removable) { L.areaOf(editor).append(row); return row; }
+    const holder = new El('div', doc), x = new El('button', doc);
+    x.setAttribute('data-analytics-id', `assignment.attempt.authoring.fileUpload.fileViewer.${name}.deleteFile`);
+    x.addEventListener('click', () => {
+      const d = new El('div', doc), ok = new El('button', doc);
+      d.setAttribute('role', 'dialog');
+      ok.setAttribute('data-analytics-id', 'assignment.attempt.authoring.fileUpload.confirm.delete.dialog.dialog.confirm.button');
+      ok.addEventListener('click', () => { deletes.push(name); holder.remove(); d.remove(); });
+      d.append(ok); doc.body.append(d);
+    });
+    holder.append(row, x); L.areaOf(editor).append(holder);
+    return row;
+  };
   L.uploadInput(L.areaOf(editor)).addEventListener('change', (e) => { const file = e.target.files[0]; file.savesBefore = saves.length; file.settled = !!status.firstElementChild && !status.firstElementChild.firstElementChild; uploads.push(file); if (off) editor.setAttribute('contenteditable', 'false'); if (listed) addRow(file.name); });
   const ctx = vm.createContext({ document: doc, location, console, ArrayBuffer, Uint8Array, File, Event, CustomEvent, crypto: { randomUUID: () => crypto.randomUUID(), subtle: { digest } },
     Date: class extends Date { static now() { return clock; } },
@@ -59,5 +75,5 @@ module.exports = ({ off = false, listed = true, enabled = true, worker, settings
   const flush = async () => { for (let i = 0; i < 15; i++) { await Promise.all([...hashes]); await new Promise(setImmediate); } };
   const tick = async (ms = 1000) => { clock += ms; for (const [n, t] of [...timers]) { timers.delete(n); t.fn(); } await flush(); };
   const go = async (extra = {}) => { hear({ type: 'submit:go', run: 1, key: 'school.blackboard.com|_900_1|_101_1|_7_1', name: 'Rivera_Essay2.docx', bytes: new Uint8Array([1, 2, 3]).buffer, note: '', text: null, until: clock + 80000, ...extra }); await flush(); };
-  return { saves, uploadedAfter: () => uploads.map(() => saves.length), settle: () => editor.setAttribute('contenteditable', 'true'), doc, ctx, box, sent, uploads, clicks, fire, hear, go, flush, tick, addRow, button, setEnabled, setText, input, timers, own: (v) => { owned = v; }, now: () => clock };
+  return { deletes, saves, uploadedAfter: () => uploads.map(() => saves.length), settle: () => editor.setAttribute('contenteditable', 'true'), doc, ctx, box, sent, uploads, clicks, fire, hear, go, flush, tick, addRow, button, setEnabled, setText, input, timers, own: (v) => { owned = v; }, now: () => clock };
 };
