@@ -99,6 +99,8 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   // The submission's part of the panel: its editor and, outside the editor, the separate file area.
   const areaOf = (ed) => ed?.closest?.('[class*="makeStylessubmission-"]') || panelOf(ed);
   const footer = (ed) => { const p = panelOf(ed); return { submit: p?.querySelector(SUBMIT) || null, save: p?.querySelector(SAVE) || null }; };
+  // What the footer says of Ultra's last save ("Last saved 2:51:12 PM"), changed by each one; null without a footer.
+  const saved = (ed) => panelOf(ed)?.querySelector('footer [class*="makeStylesstatus-"]')?.textContent ?? null;
   const ACTIONS = { 'assignment.attempt.authoring.footer.submit': 'submit', 'course.content.assessment.footer.buttons.saveAndClose': 'save' };
   const actionOf = (b) => (b?.tagName === 'BUTTON' && Object.hasOwn(ACTIONS, b.getAttribute('data-analytics-id') || '') ? ACTIONS[b.getAttribute('data-analytics-id')] : null);
   // Ultra disables Submit and Save and Close while the attempt is empty (Mui marks them three ways).
@@ -160,7 +162,7 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   };
   const may = (s, name) => step(s) === name;
 
-  return { MAX_ATTACH, handInError, attachName, noteWith, MAX_NOTE, MIME, EXT, SWITCH, switched, kindOf, mimeOf, shortTitle, fileName, safeName, paperKey, MAX_FILE, fileError, fileBytes, kb, route, asIsName, tag, pagesOf, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
+  return { MAX_ATTACH, handInError, attachName, noteWith, MAX_NOTE, MIME, EXT, SWITCH, switched, kindOf, mimeOf, shortTitle, fileName, safeName, paperKey, MAX_FILE, fileError, fileBytes, kb, route, asIsName, tag, pagesOf, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, saved, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SUBMIT_LIB;
 GZ_WRITER_SUBMIT_LIB;
