@@ -128,7 +128,8 @@
     if (!Number.isSafeInteger(file?.size) || file.size <= 0 || file.size > GZ_DOC_KINDS.KINDS.paper.max) throw new RangeError('Choose a Word file smaller than 15 MB.');
     const p = typeof progress === 'function' ? progress : () => {};
     p({ stage: 'read', done: 0, total: file.size });
-    await GZ_WRITER_PAPER.need(['writer/writer-styles.js', 'writer/writer-format.js', 'documents/doc-home.js', ...DOCX]);
+    // writer-format.js reads its citation shapes from writer-sources.js: a Word file's format check needs both.
+    await GZ_WRITER_PAPER.need(['writer/writer-sources.js', 'writer/writer-styles.js', 'writer/writer-format.js', 'documents/doc-home.js', ...DOCX]);
     const ST = GZ_WRITER_STYLES, F = GZ_WRITER_FORMAT;
     const id = await chrome.storage.sync.get('writer').then((r) => r?.writer?.format, () => null);
     const format = ST.FORMATS[ST.IDS.includes(id) ? id : 'mla9'];
@@ -179,7 +180,7 @@
   // ---- the home
   const home = async (error = '') => {
     if (!look.whole) { look.whole = true; look.sheet(); look.paint(); }
-    await GZ_WRITER_PAPER.need(['writer/writer-styles.js', 'writer/writer-format.js', 'writer/writer-thumb.js', 'documents/doc-home.js']);
+    await GZ_WRITER_PAPER.need(['writer/writer-sources.js', 'writer/writer-styles.js', 'writer/writer-format.js', 'writer/writer-thumb.js', 'documents/doc-home.js']);
     const ST = GZ_WRITER_STYLES, F = GZ_WRITER_FORMAT, PA = GZ_WRITER_PAPERS, DK = GZ_DOC_KINDS, DH = GZ_DOC_HOME, TH = GZ_WRITER_THUMB;
     const st = papers(), { INDEX, PAPER } = PA.KEYS;
     const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
