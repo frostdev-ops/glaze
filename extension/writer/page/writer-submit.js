@@ -396,14 +396,20 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const confirming = (box, draft) => {
     const at = Date.now();
     let seen = false, sent = false;
-    const press = (e) => { if (e.target?.closest?.(CONFIRMATION.submit)) sent = true; };
+    const press = (e) => {
+      // Cancel, Escape or the backdrop can close the dialog before its first polling tick.
+      seen ||= !!document.querySelector(CONFIRMATION.cancel);
+      if (e.type === 'click' && e.target?.closest?.(CONFIRMATION.submit)) sent = true;
+    };
     document.addEventListener('click', press, true);
+    document.addEventListener('keydown', press, true);
     const look = () => {
       const open = !!document.querySelector(CONFIRMATION.cancel);
       seen ||= open;
       const over = sent || (seen && !open) || !box.editor.isConnected || (!seen && Date.now() - at > 15000);
       if (!over) { setTimeout(look, 150); return; }
       document.removeEventListener('click', press, true);
+      document.removeEventListener('keydown', press, true);
       if (!seen || open || sent) return;
       box.unsent = draft;
       submitted.delete(box);

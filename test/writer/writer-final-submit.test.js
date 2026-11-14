@@ -242,6 +242,22 @@ test('review: a confirmation retry cannot pass Submit after another page has cla
   assert.equal(p.sent.at(-1).type, 'submit:open', 'the sheet can explain the conflict');
 });
 
+test('review: a confirmation dismissed between polling ticks still frees the attempt', async () => {
+  for (const how of ['cancel', 'escape', 'backdrop']) {
+    const u = ultra(), p = await u.visit('doc-1');
+    await p.go();
+    const c = confirmation(p);
+    // No tick while the dialog is open: a fast dismissal can precede the 150 ms poll.
+    if (how === 'escape') p.fire(c.cancel, 'keydown', { key: 'Escape' });
+    else p.fire(how === 'cancel' ? c.cancel : c.d, 'click');
+    c.d.remove();
+    await p.tick(200);
+    assert.equal(Object.values(u.store.local).some((v) => v?.sent?.length), false, `${how} frees the worker fence`);
+    p.fire(p.button(), 'click');
+    assert.equal(p.sent.at(-1).again, true, `${how} frees the local retry`);
+  }
+});
+
 test('D12: a cancelled confirmation, the paper edited since: the next run finds its own upload and offers Replace', async () => {
   const p = page();
   await p.go();
