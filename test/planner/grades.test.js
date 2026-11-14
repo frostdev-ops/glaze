@@ -324,3 +324,46 @@ test('a category total is not selected as the course grade merely because its na
     assert.equal(C.model([...rows, calcCol(508, name, 100, 100, formula)]).kind, 'weighted', name);
   }
 });
+
+// The scales an Ultra course grades its items on (gradebook/schemas, public v1, measured 2026-11-14): every item's
+// displayGrade.score is points; CompleteIncomplete and Tabular add the grade written ("Complete", "C"); a Tabular symbol's
+// absoluteValue is the percent that letter stands for; missing work past due is scored zero automatically.
+const SCHEMAS = [{ id: '_1_9', scaleType: 'Score' }, { id: '_2_9', scaleType: 'Percent' }, { id: '_3_9', scaleType: 'CompleteIncomplete', symbols: [] },
+  { id: '_4_9', scaleType: 'Tabular', symbols: [{ text: 'A', absoluteValue: 96.5 }, { text: 'B', absoluteValue: 85 }] }, { id: '_5_9', scaleType: 'Text' }];
+const on = (row, schema, shown = {}) => { row.column.gradingSchemaId = schema; row.displayGrade = row.displayGrade && { ...row.displayGrade, ...shown }; return row; };
+
+test("Ultra's item scales from the course's schemas: points, percent, complete/incomplete, letters with what each stands for", () => {
+  const rows = [on(g('_1_1', 10, 8), '_1_9'), on(g('_1_1', 100, 50), '_2_9'), on(g('_1_1', 10, 10), '_3_9', { grade: 'Complete' }),
+    on(g('_1_1', 50, 42.5), '_4_9', { grade: 'B' }), on(g('_1_1', 10, 0), '_1_9', { scoredByAutomaticZero: true }), on(g('_1_1', 10, 7), '_5_9')];
+  const m = C.model(rows, {}, SCHEMAS);
+  assert.deepEqual(m.items.map((i) => [i.scale, i.missing, i.shown]), [['points', false, ''], ['percent', false, ''], ['complete', false, 'Complete'],
+    ['letter', false, 'B'], ['points', true, ''], ['points', false, '']]);
+  assert.deepEqual(m.items[3].letters, [['A', 96.5], ['B', 85]]);
+  // Ultra's own answer for a schema (private v1) names its letters symbol and absoluteTranslation.
+  const own = [{ id: '_4_9', scaleType: 'TABULAR', symbols: [{ symbol: 'A', absoluteTranslation: 96.5 }] }];
+  assert.deepEqual(C.model([on(g('_1_1', 50, 42.5), '_4_9', { grade: 'B' })], {}, own).items[0].letters, [['A', 96.5]]);
+  // No schemas: every item in points, the grade written still read.
+  assert.deepEqual(C.model(rows).items.map((i) => i.scale), ['points', 'points', 'points', 'points', 'points', 'points']);
+  assert.equal(C.model(rows).items[3].shown, 'B');
+});
+
+test("a points total Glaze can't read is exact where the plain share of points comes out at Blackboard's figure", () => {
+  const tot = (score, possible) => { const o = overall({ isTotalCalculation: true, formula: '<math><mi>@X@BBCalColElem(tot:{"running":true})@X@</mi></math>', aliases: {} }, score); o.column.possible = possible; return o; };
+  const work = () => [g('_1_1', 10, 8), g('_2_1', 30, 15), g('_2_1', 60, null)];
+  // Shown as a percent: 23 of 40 graded points.
+  const pct = C.model([...work(), tot(57.5, 100)]);
+  assert.deepEqual([pct.kind, pct.points, pct.zeros, pct.overall], ['weighted', true, false, 57.5]);
+  assert.ok(Math.abs(pct.percent() - 57.5) < 1e-9);
+  assert.deepEqual(pct.course.groups.map((x) => x.id), ['_1_1', '_2_1']);
+  // Shown as points of the column's own total: 23 of 40.
+  assert.equal(C.model([...work(), tot(23, 40)]).kind, 'weighted');
+  // Counting work not graded yet as zero: 23 of 100.
+  const zeros = C.model([...work(), tot(23, 100)]);
+  assert.deepEqual([zeros.kind, zeros.zeros], ['weighted', true]);
+  // Neither: still unsupported, and why.
+  const off = C.model([...work(), tot(60, 100)]);
+  assert.deepEqual([off.kind, off.why], ['unsupported', "its overall grade is a points total Glaze can't read yet"]);
+  // A weighting Glaze reads that doesn't come out is never swapped for a share of points that happens to.
+  const w = C.model([g('_1_1', 10, 8), g('_2_1', 30, 15), overall(weights([['c_1', 50], ['c_2', 50]]), 57.5)]);
+  assert.deepEqual([w.kind, w.why], ['unsupported', "its recipe doesn't come out at Blackboard's own figure"]);
+});

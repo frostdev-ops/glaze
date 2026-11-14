@@ -151,6 +151,47 @@ test('fill: work not graded yet at full marks, at its group\'s average so far, o
   assert.deepEqual(Object.values(G.fill(periods, {}, 'full', null, { period: '1' }).scores), [10]);
 });
 
+test("scales: Canvas's grading types, missing work and the grade it shows", () => {
+  const c = G.fromApi([g(0, [a(10, 8, { grading_type: 'percent' }), a(10, 10, { grading_type: 'pass_fail', sub: { grade: 'complete' } }),
+    a(10, 8.6, { grading_type: 'letter_grade', sub: { grade: 'B' } }), a(10, 8.6, { grading_type: 'gpa_scale', sub: { grade: 'B' } }),
+    a(10, 0, { sub: { missing: true } }), a(10, null, { grading_type: 'not_graded' }), a(10, 7)])]);
+  assert.deepEqual(c.groups[0].items.map((i) => [i.scale, i.missing, i.shown, i.counts]), [
+    ['percent', false, '', true], ['complete', false, 'complete', true], ['letter', false, 'B', true], ['letter', false, 'B', true],
+    ['points', true, '', true], ['points', false, '', false], ['points', false, '', true]]);
+});
+
+test("letters by Canvas's own rule: the top letter is 100%, any other one point under the next letter's cut-off", () => {
+  assert.deepEqual(G.canvasLetters(G.SCHEME).slice(0, 4), [['A', 100], ['A-', 93], ['B+', 89], ['B', 86]]);
+  assert.deepEqual(G.canvasLetters(G.SCHEME).at(-1), ['F', 60]);
+  // Cut-offs under a point apart step down a tenth, as Canvas does.
+  assert.deepEqual(G.canvasLetters([['A', 94], ['A-', 93.5], ['B', 80]]), [['A', 100], ['A-', 93.9], ['B', 92.5]]);
+  assert.deepEqual(G.canvasLetters(null), []);
+});
+
+test('a score typed in any form: points, a fraction, a percent, a letter of its own scale, a decimal comma', () => {
+  const item = { possible: 50, letters: [['A', 96.5], ['B+', 88.5]] };
+  const r = (text, percent) => G.readScore(text, item, percent);
+  assert.deepEqual([r('45'), r('45', true), r('45/50'), r('9/10'), r('90%'), r('90 %'), r(' 45 '), r('44,5'), r('.5')], [45, 22.5, 45, 45, 45, 45, 45, 44.5, 0.5]);
+  assert.equal(r('b+'), 44.25);
+  assert.equal(r('B−'), null, 'a letter not on its scale');
+  assert.deepEqual([r(''), r('  ')], [undefined, undefined]);
+  assert.deepEqual([r('abc'), r('-3'), r('5/0'), r('1e3'), r('9999999')], [null, null, null, null, null]);
+  // Worth no points (extra credit): a percent means nothing; a number or a fraction's top is the points.
+  const extra = { possible: 0 };
+  assert.deepEqual([G.readScore('90%', extra), G.readScore('7', extra), G.readScore('7', extra, true), G.readScore('7/10', extra)], [null, 7, 7, 7]);
+  // Shown back in the unit asked for, to two places.
+  assert.deepEqual([G.scoreText(22.5, item), G.scoreText(22.5, item, true), G.scoreText(50 / 3, item), G.scoreText(5, extra, true)], ['22.5', '45', '16.67', '5']);
+});
+
+test('a target typed as a percent, a fraction, points of the course total or a letter', () => {
+  const t = (text, o) => G.readTarget(text, o);
+  assert.deepEqual([t('90'), t('90%'), t('450/500'), t('89,5')], [90, 90, 90, 89.5]);
+  assert.equal(t('450', { total: 500 }), 90, 'points of the total');
+  assert.equal(t('90%', { total: 500 }), 90);
+  assert.equal(t('b+', { scheme: G.SCHEME }), 87);
+  assert.deepEqual([t(''), t('Z', { scheme: G.SCHEME }), t('B+'), t('-5'), t('450/0')], [null, null, null, null, null]);
+});
+
 test('what you need: the percent shown is the smallest tenth that still reaches the target, so a whole target shows itself', () => {
   const left = G.fromApi([g(0, [a(100, null)])]);
   const two = G.fromApi([g(0, [a(50, null), a(50, null)])]);
