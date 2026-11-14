@@ -29,7 +29,7 @@ module.exports = ({ off = false, listed = true, enabled = true, worker, settings
   const setEnabled = (on) => { const b = button(); b.disabled = !on; if (on) { b.removeAttribute('disabled'); b.className = ''; } else b.setAttribute('disabled', ''); };
   setEnabled(enabled);
   const addRow = (name) => { const row = new El('span', doc); row.textContent = name; row.getClientRects = () => [{}]; L.areaOf(editor).append(row); return row; };
-  L.uploadInput(L.areaOf(editor)).addEventListener('change', (e) => { const file = e.target.files[0]; file.savesBefore = saves.length; uploads.push(file); if (off) editor.setAttribute('contenteditable', 'false'); if (listed) addRow(file.name); });
+  L.uploadInput(L.areaOf(editor)).addEventListener('change', (e) => { const file = e.target.files[0]; file.savesBefore = saves.length; file.settled = !!status.firstElementChild && !status.firstElementChild.firstElementChild; uploads.push(file); if (off) editor.setAttribute('contenteditable', 'false'); if (listed) addRow(file.name); });
   const ctx = vm.createContext({ document: doc, location, console, ArrayBuffer, Uint8Array, File, Event, CustomEvent, crypto: { randomUUID: () => crypto.randomUUID(), subtle: { digest } },
     Date: class extends Date { static now() { return clock; } },
     setTimeout: (fn, ms) => { timers.set(++id, { fn, ms }); return id; }, clearTimeout: (n) => timers.delete(n),
@@ -40,9 +40,15 @@ module.exports = ({ off = false, listed = true, enabled = true, worker, settings
   });
   // Stand-in Event has no target setter. The real DOM supplies it during dispatch.
   const setText = (text) => { editor.replaceChildren(...text.replace(/\n$/, '').split('\n').map((line) => { const p = new El('p', doc); p.textContent = line; return p; })); };
-  // Ultra saves the attempt as its box changes, then says so in its footer's status (live: "Last saved 2:51:12 PM").
+  // Ultra saves the attempt as its box changes: a spinner in its footer's status, then a status drawn anew (live: "Last
+  // saved 2:56:04 PM" once the save returns).
   const status = doc.querySelector('footer [class*="makeStylesstatus-"]'), saves = [];
-  const saved = () => { saves.push(editor.textContent); status.textContent = `Last saved ${saves.length}`; };
+  const said = () => { const d = new El('div', doc); d.setAttribute('role', 'status'); d.textContent = `Last saved ${saves.length}`; status.replaceChildren(d); };
+  const saved = () => {
+    saves.push(editor.textContent);
+    const spin = new El('div', doc), ring = new El('div', doc); spin.setAttribute('role', 'status'); spin.append(ring); status.replaceChildren(spin);
+    timers.set(++id, { fn: said, ms: 2000 });
+  };
   doc.addEventListener('gz-writer:set', (e) => { const m = JSON.parse(e.detail); const was = editor.textContent; if (editor.getAttribute('contenteditable') === 'true') setText(m.delta.map((o) => o.insert).join('')); if (editor.textContent !== was) saved(); doc.dispatchEvent(new CustomEvent('gz-writer:done', { detail: JSON.stringify({ id: m.id, ok: true }) })); });
   const input = L.uploadInput(L.areaOf(editor));
   input.dispatchEvent = (e) => { for (const l of input.listeners.filter((x) => x.type === e.type)) l.f({ type: e.type, target: input }); return true; };

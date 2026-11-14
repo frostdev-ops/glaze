@@ -281,11 +281,11 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       // A file an earlier run left in Ultra that this one doesn't send is the student's to review.
       if ([...(attached.get(box)?.keys() || [])].some((n) => !names.includes(n.toLowerCase()))) return fail('review');
       say(box, { type: 'submit:step', run: m.run, step: 'attach' });
-      // An attempt that holds nothing yet (Ultra's Submit off) may have no draft, and a draft its first file creates redraws
+      // An attempt that holds nothing yet (Ultra's box empty, its Submit off) may have no draft, and a draft its first file creates redraws
       // the whole submission editor, Writer's frame and this run with it; one a text save creates doesn't (live Ultra 4001.4,
-      // 2026-11-14). So the text goes in first, or a space the text step takes out again, and Ultra's footer says it saved.
+      // 2026-11-14). So the text goes in first, or a space the text step takes out again, until Ultra's footer says it saved.
       const first = L().footer(box.editor).submit;
-      if (!alone && first && !L().enabled(first)) {
+      if (!alone && !held && first && !L().enabled(first)) {
         if (!await settled()) return fail('page');
         const was = L().saved(box.editor);
         written.add(box);
@@ -296,7 +296,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
           s = L().start({ text: true, asis });
           if (!asis) s = L().advance(L().advance(s, { step: 'save' }), { step: 'build' });
         }
-        if (!await until(() => L().saved(box.editor) !== was, 15000, 100, here)) return fail(here() ? 'text' : 'page');
+        if (!await until(() => { const x = L().saved(box.editor); return !!x && x !== was; }, 15000, 100, here)) return fail(here() ? 'text' : 'page');
       }
       const request = async (index) => {
         const pending = transaction.pending = { index, reply: null };

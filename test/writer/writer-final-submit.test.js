@@ -60,6 +60,7 @@ test('D13: an attempt that holds nothing yet is saved with text before any uploa
   await p.go({ note: 'Hi Professor' });
   await p.tick(100);
   assert.equal(p.uploads[0]?.savesBefore, 1, 'the note saved before the upload');
+  assert.equal(p.uploads[0].settled, true, 'once Ultra\'s footer says it saved, never while its spinner turns');
   p.setEnabled(true);
   for (let i = 0; i < 5 && !done(p).length; i++) await p.tick(100);
   assert.deepEqual(done(p), ['ok']);

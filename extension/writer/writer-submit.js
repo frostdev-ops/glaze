@@ -99,8 +99,9 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   // The submission's part of the panel: its editor and, outside the editor, the separate file area.
   const areaOf = (ed) => ed?.closest?.('[class*="makeStylessubmission-"]') || panelOf(ed);
   const footer = (ed) => { const p = panelOf(ed); return { submit: p?.querySelector(SUBMIT) || null, save: p?.querySelector(SAVE) || null }; };
-  // What the footer says of Ultra's last save ("Last saved 2:51:12 PM"), changed by each one; null without a footer.
-  const saved = (ed) => panelOf(ed)?.querySelector('footer [class*="makeStylesstatus-"]')?.textContent ?? null;
+  // The footer's word that Ultra saved the attempt ("Last saved 2:56:04 PM"): an element drawn anew by each save, once a
+  // spinner in its place has gone (live Ultra 4001.4, 2026-11-14); null while it saves or before its first save.
+  const saved = (ed) => { const s = panelOf(ed)?.querySelector('footer [class*="makeStylesstatus-"] [role="status"]'); return s && !s.firstElementChild && s.textContent.trim() ? s : null; };
   const ACTIONS = { 'assignment.attempt.authoring.footer.submit': 'submit', 'course.content.assessment.footer.buttons.saveAndClose': 'save' };
   const actionOf = (b) => (b?.tagName === 'BUTTON' && Object.hasOwn(ACTIONS, b.getAttribute('data-analytics-id') || '') ? ACTIONS[b.getAttribute('data-analytics-id')] : null);
   // Ultra disables Submit and Save and Close while the attempt is empty (Mui marks them three ways).
