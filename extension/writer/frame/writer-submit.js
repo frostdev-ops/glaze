@@ -113,6 +113,11 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
   };
 
   let sheet = null, runs = 0, waiting = null, openings = 0;
+  // What the last run that reached Ultra's Submit sent, for Ultra's confirmation cancelled (submit:open again): the paper
+  // as it was then, or a file submitted as is.
+  let sent = null;
+  const asSent = (api) => !!sent && sent.api === api && sent.key === api.key() &&
+    (sent.asis || (sent.doc === (api.editor?.view?.state.doc ?? null) && sent.format === JSON.stringify(api.format?.() ?? null)));
   const close = () => {
     openings++;
     if (!sheet) return;
@@ -481,6 +486,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
           const r = await send(run, { key: snapshot.key, name, bytes, note: x.note, text: null, ...ultra, asis: true, mime: file.type || '', files: x.files });
           if (mine.cancelled || sheet !== mine) return;
           if (!r.ok) throw r;
+          sent = { api, key: snapshot.key, asis: true };
           mine.back = null;
           lock(false);
           close();
@@ -506,13 +512,14 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
         if (mine.cancelled || !same() || !L().may(s, 'attach') || sheet !== mine) throw 'page';
         // A kind's file names its own extension (a spreadsheet with macros: .xlsm): the one sent says it too.
         if (renameOwn(out)) throw 'page'; // the student must review changed names before a fresh Submit
-        const sent = name;
-        const mime = out.mime || L().mimeOf(sent);
+        const sentName = name;
+        const mime = out.mime || L().mimeOf(sentName);
         built = null;
         const bytes = bufferOf(out.bytes); out = null;
-        const r = await send(run, { key: snapshot.key, name: sent, bytes, note: x.note, text, files: x.files, ...ultra, kind: kindId, mime, version: sending.version?.id ?? null });
+        const r = await send(run, { key: snapshot.key, name: sentName, bytes, note: x.note, text, files: x.files, ...ultra, kind: kindId, mime, version: sending.version?.id ?? null });
         if (mine.cancelled || sheet !== mine) return;
         if (!r.ok) throw r;
+        sent = { api, key: snapshot.key, doc: snapshot.doc, format: snapshot.format };
         mine.back = null;
         lock(false);
         close();
@@ -532,7 +539,12 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
 
   // The page catches Ultra's Submit from the frame's ready, a moment before the paper mounts: a press waits for the paper.
   const paper = async () => { for (let i = 0; i < 150 && !P()?.current(); i++) await new Promise((r) => setTimeout(r, 100)); return P()?.current() || null; };
-  frame.handle('submit:open', async () => { const api = P()?.current() || await paper(); if (api) open(api); });
+  frame.handle('submit:open', async (m) => {
+    const api = P()?.current() || await paper();
+    if (!api) return;
+    if (m?.again === true && !sheet && asSent(api)) frame.say({ type: 'submit:pass' });
+    else open(api);
+  });
   frame.handle('submit:step', (m) => { if (waiting && m.run === waiting.run) waiting.step(m.step); });
   frame.handle('submit:held', (m) => { sheet?.held?.(m.text); });
   frame.handle('submit:unavailable', (m) => P()?.current()?.notify?.(m.action === 'save' ? 'Not saved. Try again in a moment.' : 'Nothing was submitted. Try again in a moment.'));

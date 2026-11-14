@@ -75,7 +75,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
         mark();
         if (!box.ready || !box.port) { setTimeout(open, 100); return; }
         box.opening = null; busy(marked, false);
-        box.frame?.focus(); say(box, { type: 'submit:open' });
+        box.frame?.focus(); say(box, { type: 'submit:open', ...(box.unsent && { again: true }) });
       };
       busy(b, true);
       open();
@@ -335,6 +335,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       permit('commit').catch(() => {});
       submitted.add(box);
       pass(b);
+      confirming(box, new Map([...(alone ? [] : [name]), ...files.map((f) => f.name)].map((n) => [n, attached.get(box)?.get(n)?.row])));
       say(box, { type: 'submit:done', run: m.run, ok: true });
       return true;
     } catch (e) { console.error(e); return fail('page'); } finally {
@@ -342,6 +343,35 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       // Nothing of this box ever reached Ultra's file area: a reload or a re-render may submit.
       if (claimed && !attached.has(box)) permit('release').catch(() => {});
     }
+  };
+  // Ultra's confirmation of the Submit Writer pressed (live Ultra 4001.4, 2026-11-14). Closed without its own Submit (its
+  // Cancel, its ×, Escape, a click beside it), nothing was submitted: the attempt stays fenced against a second run, and
+  // Ultra's Submit pressed again asks the frame (submit:open again), whose submit:pass, the paper being as it was sent,
+  // sends that press on to Ultra once Ultra still lists each file the run attached, its draft holding the file and text.
+  const CONFIRMATION = { cancel: '[data-analytics-id="assignment.attempt.submit.confirmation.dialog.cancel.button"]',
+    submit: '[data-analytics-id="course.content.assessment.test.modal.confirmSubmitAttemptAlert.submit"]' };
+  const confirming = (box, rows) => {
+    const at = Date.now();
+    let seen = false, sent = false;
+    const press = (e) => { if (e.target?.closest?.(CONFIRMATION.submit)) sent = true; };
+    document.addEventListener('click', press, true);
+    const look = () => {
+      const open = !!document.querySelector(CONFIRMATION.cancel);
+      seen ||= open;
+      const over = sent || (seen && !open) || !box.editor.isConnected || (!seen && Date.now() - at > 15000);
+      if (!over) { setTimeout(look, 150); return; }
+      document.removeEventListener('click', press, true);
+      if (seen && !open && !sent) box.unsent = { rows };
+    };
+    look();
+  };
+  const again = (box) => {
+    const u = box.unsent, b = L().footer(box.editor).submit, area = L().areaOf(box.editor);
+    if (!u || running) return;
+    box.unsent = null;
+    if (!b || !L().enabled(b) || ![...u.rows].every(([n, row]) => { const rows = L().listings(area, n, visible); return !!row && rows.length === 1 && rows[0] === row; })) { box.frame?.focus(); say(box, { type: 'submit:open' }); return; }
+    pass(b);
+    confirming(box, u.rows);
   };
   // The student has Blackboard's editor before them (the sheet's button): what a run left in the attempt is theirs to see.
   const review = (box) => {
@@ -399,6 +429,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     else if (m.type === 'submit:go' && armed.has(box)) go(box, m, ok);
     else if (m.type === 'submit:held' && armed.has(box)) say(box, { type: 'submit:held', text: heldOf(box).slice(0, 1e6) });
     else if (m.type === 'submit:review' && armed.has(box)) review(box);
+    else if (m.type === 'submit:pass' && armed.has(box)) again(box);
   };
   // armed(box): this step has the box's Ultra buttons (writer/page/writer.js holds a press until it does).
   const press = (box, b, type = 'click') => { if (live().has(box) && box.full && ownerOf(b) === box) act(box, b, { type, preventDefault() {}, stopImmediatePropagation() {} }); };
