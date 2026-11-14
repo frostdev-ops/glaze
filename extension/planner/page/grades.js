@@ -461,7 +461,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
         return c;
       };
       for (const i of items) {
-        if (st.todo && (i.excused || i.score != null)) continue;
+        if (st.todo && (i.excused || (i.score != null && !i.pending))) continue;
         const saved = rec.s[i.id];
         const real = i.excused ? null : i.score;
         const toPts = (x) => (unit(i) ? (x / 100) * i.possible : x);

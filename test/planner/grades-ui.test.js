@@ -2061,6 +2061,26 @@ test('Canvas what-if: the same tools, filling by the course\'s own rules', async
   assert.equal(totals(p)[1], before);
 });
 
+test('Canvas what-if: Only work not graded yet includes a quiz waiting for review even when it has a provisional score', async () => {
+  const groups = structuredClone(BIO.groups);
+  const quiz = groups.flatMap((g) => g.assignments).find((a) => String(a.id) === '175');
+  Object.assign(quiz.submission, { score: 30, workflow_state: 'pending_review' });
+  const p = gradesPage({ groups });
+  await ready(p);
+  const before = totals(p);
+  const only = find(p.box(), (e) => e.dataset.f === 'todo');
+  only.checked = true;
+  only.fire('change');
+  await settle(10);
+  assert.ok(scoreOf(p, '175'), 'a provisional quiz score is still waiting for a grade');
+  assert.deepEqual(totals(p), before, 'filtering does not change the calculation');
+  const score = scoreOf(p, '175');
+  score.value = '80';
+  score.fire('input');
+  await settle(10);
+  assert.deepEqual(p.store.data[KEY][BIO.course.id].s['175'].slice(0, 2), [80, 30]);
+});
+
 test("Ultra what-if: the page's gradebook coming in while what you saved is still being read waits for it, so nothing saved is lost", async () => {
   const store = shared({ [UKEY]: { _101_1: { s: { _603_1: [100, null, U_NOW - 1000] }, h: [], ht: {}, p: [], c: null, at: U_NOW - 1000 } } });
   const held = { on: true, queue: [] };
