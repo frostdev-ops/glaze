@@ -377,7 +377,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       submitted.add(box);
       box.unsent = null;
       pass(b);
-      confirming(box, { key, user, token, version, rows: new Map([...(alone ? [] : [name]), ...files.map((f) => f.name)].map((n) => [n, attached.get(box)?.get(n)?.row])) });
+      confirming(box, { key, user, token, version, text: heldOf(box), rows: new Map([...(alone ? [] : [name]), ...files.map((f) => f.name)].map((n) => [n, attached.get(box)?.get(n)?.row])) });
       say(box, { type: 'submit:done', run: m.run, ok: true });
       return true;
     } catch (e) { console.error(e); return fail('page'); } finally {
@@ -424,7 +424,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if (!here() || !await permit('claim')) { open(); return; }
       claimed = true;
       const b = L().footer(box.editor).submit, area = L().areaOf(box.editor);
-      if (!here() || !b || !L().enabled(b) || ![...u.rows].every(([n, row]) => { const rows = L().listings(area, n, visible); return !!row && rows.length === 1 && rows[0] === row; })) { open(); return; }
+      if (!here() || !b || !L().enabled(b) || flat(heldOf(box)) !== flat(u.text) || ![...u.rows].every(([n, row]) => { const rows = L().listings(area, n, visible); return !!row && rows.length === 1 && rows[0] === row; })) { open(); return; }
       claimed = false;
       permit('commit').catch(() => {});
       submitted.add(box);

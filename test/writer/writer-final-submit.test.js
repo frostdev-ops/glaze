@@ -267,6 +267,17 @@ test('D12: a cancelled confirmation whose upload Ultra no longer lists goes nowh
   assert.equal(p.sent.filter((m) => m.type === 'submit:open').length, 2, 'the sheet opens instead');
 });
 
+test('review: a confirmation retry rechecks Ultra text as well as its attachment rows', async () => {
+  const p = page();
+  await p.go({ note: 'Hi Professor' });
+  const c = confirmation(p);
+  await p.tick(200); p.fire(c.cancel, 'click'); c.d.remove(); await p.tick(200);
+  p.setText('A different note\n');
+  p.fire(p.button(), 'click'); p.hear({ type: 'submit:pass' }); await p.flush();
+  assert.equal(p.clicks.filter((b) => b === p.button()).length, 1, 'changed native text needs consent on the sheet');
+  assert.equal(p.sent.at(-1).type, 'submit:open');
+});
+
 test('D12: the frame sends Ultra\'s Submit back only for the paper exactly as it was sent', async () => {
   const sheet = require('../helpers/writer-submit-sheet.cjs');
   const s = sheet();
