@@ -196,7 +196,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
         // Glaze 2.2's scores, saved against no grade (C.oldScores): those whose grade has come in are gone, with a word.
         const old = st.rec ? {} : C.oldScores({ [cid]: st.old }, cid);
         const was = C.reconcile({ s: old }, st.course);
-        Object.assign(st, { rec: r.kept, what: r.what, gone: [...r.gone, ...was.gone], status: 'ready', fails: 0, soon: false });
+        Object.assign(st, { rec: r.kept, what: r.what, gone: [...r.gone, ...was.gone], status: 'ready', fails: 0, soon: false, undo: null });
         if (st.gone.length) st.open = true;
         if (r.gone.length) keep(st);
         if (Object.keys(old).length) migrate(st, old, Object.keys(was.kept.s));

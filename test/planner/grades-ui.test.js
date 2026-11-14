@@ -1750,6 +1750,26 @@ test('review: partial gradebook recovery preserves current edits', async () => {
   assert.equal(totals(p)[1], '90%', 'the current what-if survives the partial answer');
 });
 
+test('Ultra what-if: Undo cannot resurrect a regraded score after partial gradebook recovery', async () => {
+  const p = ultraPage();
+  p.UI.render(); await settle(10); await open(p); await settle(10);
+  await typeScore(p, '_601_1', 80);
+  byText(p.box(), 'Full marks').fire('click');
+  await settle(10);
+  assert.equal(byText(p.box(), 'Undo').hidden, false);
+  p.books._101_1 = Object.defineProperty(ufix('grades').results, 'complete', { value: false });
+  p.UI.render(); await settle(10);
+  p.books._101_1 = regraded({ _601_1: 95 }, 90);
+  p.UI.render(); await settle(10);
+  assert.equal(scoreOf(p, '_601_1').value, '', 'the regrade removes the old what-if');
+  const undo = byText(p.box(), 'Undo');
+  if (!undo.hidden) undo.fire('click');
+  await settle(10);
+  assert.equal(scoreOf(p, '_601_1').value, '', 'Undo must not restore the score saved against the old grade');
+  assert.equal(p.store.data[UKEY]?._101_1?.s?._601_1, undefined);
+  assert.equal(undo.hidden, true, 'the recovered gradebook invalidates the old Undo');
+});
+
 test('review: category endpoint preserves teacher names and localizes system metadata', async () => {
   const rows = ufix('grades').results;
   const cats = [];
