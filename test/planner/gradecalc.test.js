@@ -124,6 +124,33 @@ test('what you need: the even share of the rest, through weights and drops', () 
   assert.equal(G.need(G.fromApi([g(0, [a(10, 8)])]), {}, 80).left, 0);
 });
 
+test('fill: work not graded yet at full marks, at its group\'s average so far, or at what the target needs; blanks only', () => {
+  // Two weighted groups: homework 40% (8/10 graded, two left), exams 60% (nothing graded, one left).
+  const course = G.fromApi([g(40, [a(10, 8), a(10, null), a(20, null)]), g(60, [a(100, null)])], { weighted: true });
+  const [hw, exams] = course.groups;
+  const [, h2, h3] = hw.items.map((i) => i.id);
+  const ex = exams.items[0].id;
+  assert.deepEqual(G.fill(course, {}, 'full').scores, { [h2]: 10, [h3]: 20, [ex]: 100 });
+  // Each at its group's share so far; a group with nothing graded at the course's share so far (80%).
+  assert.deepEqual(G.fill(course, {}, 'pace').scores, { [h2]: 8, [h3]: 16, [ex]: 80 });
+  // What you typed stays; excused, left-out and graded work is never filled.
+  assert.deepEqual(Object.keys(G.fill(course, { scores: { [h2]: 3 }, hidden: [ex] }, 'full').scores), [h3]);
+  // The target: the same even share need() finds, rounded up to the hundredth so the target is still reached.
+  const r = G.fill(course, {}, 'need', 90);
+  const at = G.calc(course, { scores: r.scores }).final;
+  assert.ok(at >= 90 && at < 90.05, String(at));
+  assert.deepEqual(Object.keys(r.scores).sort(), [h2, h3, ex].sort());
+  // Out of reach, or nothing left: nothing to fill.
+  assert.deepEqual(G.fill(course, {}, 'need', 99).scores, {});
+  assert.deepEqual(G.fill(G.fromApi([g(0, [a(10, 8)])]), {}, 'full').scores, {});
+  // Nothing graded anywhere: no average to go by.
+  assert.deepEqual(G.fill(G.fromApi([g(0, [a(10, null)])]), {}, 'pace').scores, {});
+  // Only the grading period asked for.
+  const P = [{ id: 1, start_date: '2026-01-01T00:00:00Z', end_date: '2026-04-01T00:00:00Z', weight: 50 }, { id: 2, start_date: '2026-04-01T00:00:00Z', end_date: '2026-07-01T00:00:00Z', weight: 50 }];
+  const periods = G.fromApi([g(0, [a(10, 8, { due_at: '2026-02-10T12:00:00Z' }), a(10, null, { due_at: '2026-03-10T12:00:00Z' }), a(10, null, { due_at: '2026-05-10T12:00:00Z' })])], { periods: P });
+  assert.deepEqual(Object.values(G.fill(periods, {}, 'full', null, { period: '1' }).scores), [10]);
+});
+
 test('what you need: the percent shown is the smallest tenth that still reaches the target, so a whole target shows itself', () => {
   const left = G.fromApi([g(0, [a(100, null)])]);
   const two = G.fromApi([g(0, [a(50, null), a(50, null)])]);

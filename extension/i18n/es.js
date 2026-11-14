@@ -492,7 +492,7 @@
   "its overall grade uses a formula Glaze can't read": 'su nota global usa una fórmula que Glaze no sabe leer',
   "its overall grade is a points total Glaze can't read yet": 'su nota global es un total de puntos que Glaze aún no sabe leer',
   "its overall grade uses rules Glaze can't read": 'su nota global usa reglas que Glaze no sabe leer',
-  "its overall grade uses rules Glaze can't read, like dropped scores or single weighted items": 'su nota global usa reglas que Glaze no sabe leer, como descartar notas o ponderar elementos sueltos',
+  "its overall grade uses rules Glaze can't read, like dropped scores": 'su nota global usa reglas que Glaze no sabe leer, como descartar notas',
   "its overall grade names a category Glaze can't find": 'su nota global cita una categoría que Glaze no encuentra',
   "Tint and look for {name}": "Tinte y aspecto de {name}",
   "Change the colour and nickname in its card’s menu on Canvas’s Dashboard. Canvas keeps them.": "Cambia el color y el apodo en el menú de su tarjeta en el panel de Canvas. Canvas los guarda.",

@@ -492,7 +492,7 @@
   "its overall grade uses a formula Glaze can't read": 'het gebruikt een formule die Glaze niet kan lezen',
   "its overall grade is a points total Glaze can't read yet": 'het is een puntentotaal dat Glaze nog niet kan lezen',
   "its overall grade uses rules Glaze can't read": 'het gebruikt regels die Glaze niet kan lezen',
-  "its overall grade uses rules Glaze can't read, like dropped scores or single weighted items": 'het gebruikt regels die Glaze niet kan lezen, zoals geschrapte cijfers of los gewogen onderdelen',
+  "its overall grade uses rules Glaze can't read, like dropped scores": 'het gebruikt regels die Glaze niet kan lezen, zoals geschrapte cijfers',
   "its overall grade names a category Glaze can't find": 'het noemt een categorie die Glaze niet kan vinden',
   "Tint and look for {name}": "Tint en uiterlijk voor {name}",
   "Change the colour and nickname in its card’s menu on Canvas’s Dashboard. Canvas keeps them.": "Wijzig de kleur en bijnaam in het menu van de kaart op het dashboard van Canvas. Canvas bewaart ze.",

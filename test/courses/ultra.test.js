@@ -351,7 +351,7 @@ test("grades: the teacher's own overall column (no externalGrade) is the course'
   rows.find((r) => r.column.effectiveColumnName === 'Overall Grade').displayGrade.score = 80;
   const e = U.grade(rows);
   assert.deepEqual([e.kind, e.estimate, e.overall, e.column], ['points', true, 80, 'Overall Grade']);
-  assert.equal(e.percent(), 55);
+  assert.ok(Math.abs(e.percent() - 55) < 1e-9);
   assert.equal(e.why, "its recipe doesn't come out at Blackboard's own figure");
 });
 

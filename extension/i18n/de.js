@@ -492,7 +492,7 @@
   "its overall grade uses a formula Glaze can't read": 'sie nutzt eine Formel, die Glaze nicht lesen kann',
   "its overall grade is a points total Glaze can't read yet": 'sie ist eine Punktesumme, die Glaze noch nicht lesen kann',
   "its overall grade uses rules Glaze can't read": 'sie nutzt Regeln, die Glaze nicht lesen kann',
-  "its overall grade uses rules Glaze can't read, like dropped scores or single weighted items": 'sie nutzt Regeln, die Glaze nicht lesen kann, etwa gestrichene Noten oder einzeln gewichtete Elemente',
+  "its overall grade uses rules Glaze can't read, like dropped scores": 'sie nutzt Regeln, die Glaze nicht lesen kann, etwa gestrichene Noten',
   "its overall grade names a category Glaze can't find": 'sie nennt eine Kategorie, die Glaze nicht findet',
   "Tint and look for {name}": "Tönung und Aussehen für {name}",
   "Change the colour and nickname in its card’s menu on Canvas’s Dashboard. Canvas keeps them.": "Ändere Farbe und Spitznamen im Menü seiner Karte auf dem Dashboard von Canvas. Canvas speichert sie.",
