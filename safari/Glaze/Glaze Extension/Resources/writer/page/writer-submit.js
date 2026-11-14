@@ -167,10 +167,13 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const remove = async (box, area, name, here) => {
     const id = `assignment.attempt.authoring.fileUpload.fileViewer.${name}.deleteFile`;
     const x = [...area.querySelectorAll('button[data-analytics-id]')].filter((b) => b.getAttribute('data-analytics-id') === id);
-    if (x.length !== 1 || L().listings(area, name, visible).length !== 1) return false;
+    const rows = L().listings(area, name, visible);
+    // A confirmation already on the page belongs to an earlier action, possibly for another file.
+    if (!here() || x.length !== 1 || rows.length !== 1 || document.querySelector(DELETE) || document.querySelector('[role="dialog"][aria-labelledby="file-properties-dialog-title"]')) return false;
     x[0].click();
     const ok = await until(() => document.querySelector(DELETE), 5000, 100, here);
-    if (!ok) return false;
+    // The sheet can be cancelled or handed back while Ultra opens the dialog.
+    if (!here() || !ok?.isConnected || document.querySelector(DELETE) !== ok || L().listings(area, name, visible)[0] !== rows[0]) return false;
     ok.click();
     return !!await until(() => !L().listed(area, name, visible) && globalThis.GZ_WRITER_ULTRA?.editable(box.editor), 15000, 100, here);
   };

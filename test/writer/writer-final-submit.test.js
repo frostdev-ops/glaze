@@ -109,6 +109,30 @@ test('D14: the sheet offers Replace for a file Ultra already has, and sends that
   assert.equal(again[0].replace, undefined, 'never without the student\'s word');
 });
 
+test('review: cancelling Replace as Ultra opens its delete dialog never confirms the deletion', async () => {
+  const p = page();
+  p.addRow('Rivera_Essay2.docx', { removable: true });
+  p.doc.addEventListener('click', (e) => {
+    if (e.target.getAttribute('data-analytics-id')?.endsWith('.deleteFile')) queueMicrotask(() => p.hear({ type: 'submit:cancel', run: 1 }));
+  });
+  await p.go({ replace: ['Rivera_Essay2.docx'] });
+  assert.equal(p.deletes.length, 0, 'the run lost permission before the destructive confirmation');
+  assert.equal(p.uploads.length, 0);
+  assert.deepEqual(done(p), ['page']);
+});
+
+test('review: Replace never confirms an already open delete dialog for another file', async () => {
+  const p = page();
+  p.addRow('Other.pdf', { removable: true });
+  p.addRow('Rivera_Essay2.docx', { removable: true });
+  const other = p.doc.querySelectorAll('button[data-analytics-id]').find((b) => b.getAttribute('data-analytics-id').endsWith('Other.pdf.deleteFile'));
+  other.click();
+  await p.go({ replace: ['Rivera_Essay2.docx'] });
+  assert.deepEqual(p.deletes, [], 'the student only consented to replace the named paper');
+  assert.equal(p.uploads.length, 0);
+  assert.deepEqual(done(p), ['review']);
+});
+
 test('D15: bytes from another realm (Firefox hands a content script the port\'s data in the page\'s) still submit', async () => {
   const vm = require('node:vm');
   const foreign = (a) => vm.runInNewContext(`new Uint8Array(${JSON.stringify(a)}).buffer`);
