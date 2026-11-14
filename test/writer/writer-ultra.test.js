@@ -119,6 +119,30 @@ test('native compose keeps supported telephone links eligible for Writer', () =>
   assert.equal(U.canEdit(ed), false);
 });
 
+test('Ultra\'s own markup for what Writer wrote stays Writer\'s after a reload: its alignment style and its links', () => {
+  // Live Ultra 4001.4 (2026-11-14) keeps alignment as a style and a link as its own blot: <a target="_blank"
+  // class="wants-props-update" tabindex="-1">, "#" where a bare address was written (Writer's links until then).
+  const at = (f, path, i, kids) => { const body = page(f), ed = U.boxes(body, { path })[i].editor; ed.replaceChildren(...kids(ed.doc)); return ed; };
+  const p = (doc, style, text) => { const e = new El('p', doc); if (style) e.setAttribute('style', style); e.textContent = text; return e; };
+  const link = (doc, href, cls = 'wants-props-update', more = {}) => {
+    const q = new El('p', doc), a = new El('a', doc);
+    a.setAttribute('href', href); a.setAttribute('target', '_blank'); a.setAttribute('tabindex', '-1'); if (cls) a.setAttribute('class', cls);
+    for (const [k, v] of Object.entries(more)) a.setAttribute(k, v);
+    a.textContent = 'doi.org/10.1/x'; q.append(a); return q;
+  };
+  const post = (kids) => at('ultra-writer-discussion.html', DISCUSSION, 1, kids);
+  for (const align of ['center', 'right', 'justify']) assert.equal(U.canEdit(post((d) => [p(d, `text-align: ${align};`, 'Title')])), true, align);
+  assert.equal(U.canEdit(post((d) => [p(d, 'color: red;', 'Title')])), false, 'any other style stays Ultra\'s');
+  assert.equal(U.canEdit(post((d) => [p(d, 'text-align: center; color: red;', 'Title')])), false);
+  assert.equal(U.canEdit(post((d) => [link(d, 'https://doi.org/10.1/x')])), true, 'Ultra\'s link to an address');
+  assert.equal(U.canEdit(post((d) => [link(d, '#')])), false, 'a dead link in a post: compose would drop it');
+  assert.equal(U.canEdit(post((d) => [link(d, 'https://doi.org/10.1/x', 'other')])), false, 'another class stays Ultra\'s');
+  assert.equal(U.canEdit(post((d) => [link(d, 'https://x.test/f', 'wants-props-update', { 'data-bbfile': '{}' })])), false, 'a Blackboard file link stays Ultra\'s');
+  const paper = (kids) => { const body = page('ultra-writer-attempt.html'); body.querySelector('#bb-editorassignment-attempt-authoring-submission').replaceChildren(...kids(body.doc)); return body; };
+  assert.equal(U.boxes(paper((d) => [p(d, 'text-align: center;', 'The Cheap Price'), link(d, '#')]), { path: ATTEMPT }).length, 1, 'a paper takes its own draft back, dead links and all: its stored copy rewrites them');
+  assert.equal(U.boxes(paper((d) => [link(d, '#', 'other')]), { path: ATTEMPT }).length, 0);
+});
+
 test('an assignment attempt: a paper in Ultra\'s authoring panel, its Submit, its instructions as the prompt', () => {
   const body = page('ultra-writer-attempt.html');
   const at = (attempt) => U.boxes(body, { path: ATTEMPT, attempt });

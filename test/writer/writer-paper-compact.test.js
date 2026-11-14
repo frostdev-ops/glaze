@@ -43,10 +43,12 @@ test('project: past compose\'s input limit (50k tags or 2 MB) nothing is project
 });
 
 // writer/writer-main.js in the page's world, over a stand-in Quill: what it answers for the projection's ops.
-const main = (delta) => {
+// ultra: Ultra's own link format, which takes { href, target } and draws a bare address as href="#" (live, 2026-11-14).
+const main = (delta, { ultra = false } = {}) => {
   const listeners = {}, said = [];
   const root = { innerHTML: '', isConnected: true };
-  const quill = { root, setContents(d) { quill.set = d; }, getText: () => '' };
+  const link = { create: (v) => ({ getAttribute: (k) => (k === 'href' ? (ultra ? (typeof v === 'object' && v ? v.href : '#') : v) : null) }) };
+  const quill = { root, setContents(d) { quill.set = d; }, getText: () => '', constructor: { import: (n) => (n === 'formats/link' ? link : null) } };
   const box = { __quill: quill, querySelector: () => root };
   const doc = { documentElement: { hasAttribute: () => false, setAttribute() {} }, querySelector: () => box,
     addEventListener: (type, fn) => { (listeners[type] ||= []).push(fn); }, dispatchEvent: (e) => { for (const fn of listeners[e.type] || []) fn(e); } };
@@ -63,6 +65,14 @@ test('project: Ultra\'s page-world helper takes its ops as they are, for a whole
     assert.deepEqual(r.set, p.delta);
   }
   assert.equal(main(S.delta(paper())).ok, false, 'the paper\'s own ops (Heading 1) would be refused');
+});
+
+test('project: a link goes to Ultra\'s own link format as { href, target }, never as a bare address it draws as "#"', () => {
+  const d = [{ insert: 'See ' }, { insert: 'doi.org/x', attributes: { link: 'https://doi.org/x', italic: true } }, { insert: '\n', attributes: { align: 'center' } }];
+  const r = main(d, { ultra: true });
+  assert.equal(r.ok, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(r.set)), [{ insert: 'See ' }, { insert: 'doi.org/x', attributes: { link: { href: 'https://doi.org/x', target: '_blank' }, italic: true } }, { insert: '\n', attributes: { align: 'center' } }]);
+  assert.deepEqual(main(d).set, d, 'a Quill whose link takes the address keeps it as it is');
 });
 
 test('compact: Ultra\'s Submit and Save and Close stay Ultra\'s; the full view\'s open the sheet', () => {
