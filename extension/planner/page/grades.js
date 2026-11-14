@@ -54,7 +54,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       const cleared = (key) => key && marks[key] !== was[key];
       for (const s of W.values()) {
         if (!s.rec || !cleared(s.key)) continue;
-        Object.assign(s, { rec: { s: {}, h: [], p: [], c: null }, gone: [], cut: (s.cut || 0) + 1 });
+        Object.assign(s, { rec: { s: {}, h: [], p: [], c: null }, gone: [], cut: (s.cut || 0) + 1, undo: null });
         s.what = C.whatOf(s.rec);
         s.v++;
       }
@@ -146,7 +146,8 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const g = GZ_ULTRA.grade(rows, [], st.names);
     const r = C.reconcile(st.rec, g.course);
     const changed = JSON.stringify(r.kept) !== JSON.stringify(st.rec);
-    Object.assign(st, { g, course: g.course, book, rec: r.kept, what: r.what, gone: [...st.gone, ...r.gone], v: st.v + 1 });
+    // A fill's Undo is for the scores it was made over, not this record.
+    Object.assign(st, { g, course: g.course, book, rec: r.kept, what: r.what, gone: [...st.gone, ...r.gone], v: st.v + 1, undo: null });
     if (r.gone.length) st.open = true;
     if (changed) keep(st);
   };
@@ -398,8 +399,6 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     updates.push(() => {
       const left = C.remaining(course, st.what, opts).length;
       fillFull.hidden = fillPace.hidden = !left;
-      const goal = goalOf();
-      fillNeed.hidden = !left || !Number.isFinite(goal) || !(C.need(course, st.what, goal, opts).share > 0);
       fills.hidden = !left && !st.undo;
     });
 
@@ -411,8 +410,11 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     need.setAttribute('aria-live', 'polite');
     updates.push(() => {
       const goal = goalOf();
+      fillNeed.hidden = true;
       if (!Number.isFinite(goal)) { need.textContent = ''; return; }
       const r = C.need(course, st.what, goal, opts);
+      // What you need fills in only a share worth filling: some left, within reach and above zero.
+      fillNeed.hidden = !(r.left && r.share > 0);
       need.textContent = !r.left ? t('Nothing left to change: {pct}.', { pct: show(C.calc(course, st.what, opts).final) })
         : r.reachable === false ? t('Out of reach: full marks on the {n} items left would make {pct}.', { n: r.left, pct: show(r.best) })
           : r.share === 0 ? t("You'd stay at {pct} or above even with zeros on what's left.", { pct: show(goal) })
@@ -431,7 +433,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const step = (input) => input.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
       e.preventDefault();
-      const list = box.querySelectorAll('input').filter((x) => /^s:/.test(x.dataset.f || ''));
+      const list = [...box.querySelectorAll('input')].filter((x) => /^s:/.test(x.dataset.f || ''));
       const next = list[list.indexOf(input) + (e.shiftKey ? -1 : 1)];
       next?.focus();
       next?.select?.();
@@ -527,7 +529,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       if (r?.ok) {
         for (const s of W.values()) {
           if (s.key !== st.key || !s.rec) continue;
-          Object.assign(s, { rec: { s: {}, h: [], p: [], c: null }, gone: [], cut: (s.cut || 0) + 1 });
+          Object.assign(s, { rec: { s: {}, h: [], p: [], c: null }, gone: [], cut: (s.cut || 0) + 1, undo: null });
           s.what = C.whatOf(s.rec);
           s.v++;
         }

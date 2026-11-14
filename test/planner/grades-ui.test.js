@@ -2024,3 +2024,26 @@ test('Ultra what-if: the change is the difference between the figures as shown, 
   // (96.666… x 40 + 80 x 40 + 100 x 20) / 100 = 90.666…, shown 90.66%: 2.66 up from 88%, not the rounded 2.67.
   assert.deepEqual([totals(p)[1], delta(p)], ['90.66%', '+2.66']);
 });
+
+test("Ultra what-if: a Clear all, here or in another tab, takes a fill's Undo with it, so it can't bring cleared scores back", async () => {
+  const store = shared();
+  const p = ultraPage({ store });
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  await settle(10);
+  byText(p.box(), 'Full marks').fire('click');
+  await settle(10);
+  // Another tab clears everything for this student.
+  await store.send({ type: 'glaze:whatif', op: 'clear', key: UKEY, at: U_NOW + 100 }, { id: WORKER_ID, tab: { id: 2 }, frameId: 0, url: `${UO}/ultra/grades` });
+  await settle(10);
+  assert.equal(byText(p.box(), 'Undo').hidden, true);
+  assert.equal(scoreOf(p, '_603_1').value, '');
+  // Here: fill, Clear all courses, and Undo is gone too.
+  byText(p.box(), 'Full marks').fire('click');
+  await settle(10);
+  byText(p.box(), 'Clear all courses').fire('click');
+  await settle(14);
+  assert.equal(byText(p.box(), 'Undo').hidden, true);
+  assert.equal(store.data[UKEY]?._101_1, undefined);
+});
