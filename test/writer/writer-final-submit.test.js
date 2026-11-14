@@ -109,6 +109,25 @@ test('D14: the sheet offers Replace for a file Ultra already has, and sends that
   assert.equal(again[0].replace, undefined, 'never without the student\'s word');
 });
 
+test('D15: bytes from another realm (Firefox hands a content script the port\'s data in the page\'s) still submit', async () => {
+  const vm = require('node:vm');
+  const foreign = (a) => vm.runInNewContext(`new Uint8Array(${JSON.stringify(a)}).buffer`);
+  const p = page();
+  await p.go({ bytes: foreign([1, 2, 3]) });
+  assert.deepEqual(done(p), ['ok'], 'the attempt\'s own file');
+  const q = page();
+  await q.go({ files: [{ name: 'Notes.pdf', mime: 'application/pdf', size: 2 }], stream: true });
+  const ask = q.sent.find((m) => m.type === 'submit:file' && m.index === 0);
+  q.hear({ type: 'submit:file', run: 1, index: 0, ok: true, bytes: foreign([7, 8]) });
+  for (let i = 0; i < 6 && !done(q).length; i++) { await q.tick(200); const last = q.sent.filter((m) => m.type === 'submit:file').at(-1); if (last && last.index === 1) q.hear({ type: 'submit:file', run: 1, index: 1, ok: true }); }
+  assert.ok(ask, 'the attached file asked for');
+  assert.deepEqual(done(q), ['ok'], 'and a streamed attachment');
+  assert.equal(q.uploads.length, 2);
+  const L = require('../../extension/writer/writer-submit.js');
+  assert.equal(L.handInError({ name: 'a.pdf', mime: 'application/pdf', bytes: foreign([1]) }), null);
+  assert.equal(L.fileBytes({ name: 'a.pdf', size: 1, type: 'application/pdf' }, foreign([1])), true);
+});
+
 // Ultra's confirmation of the Submit Writer pressed (live Ultra 4001.4, 2026-11-14): its Cancel and its own Submit.
 const confirmation = (p) => {
   const { El } = require('../stand-in-dom.js');

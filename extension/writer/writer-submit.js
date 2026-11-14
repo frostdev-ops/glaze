@@ -44,7 +44,9 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   const MAX_FILE = 50e6;
   const fileError = (f) => f?.size > MAX_FILE ? 'That file is too large.' :
     !f || !asIsName(f.name) || !Number.isSafeInteger(f.size) || f.size <= 0 || typeof f.type !== 'string' || f.type.length > 200 ? 'That file could not be read.' : null;
-  const fileBytes = (f, bytes) => bytes instanceof ArrayBuffer && bytes.byteLength === f.size && !fileError(f);
+  // An ArrayBuffer from any realm: Firefox hands a content script what a port carries in the page's (live, 2026-11-14).
+  const buffer = (x) => x instanceof ArrayBuffer || Object.prototype.toString.call(x) === '[object ArrayBuffer]';
+  const fileBytes = (f, bytes) => buffer(bytes) && bytes.byteLength === f.size && !fileError(f);
   const kb = (bytes) => Math.max(1, Math.round((Number(bytes) || 0) / 1024));
 
   // ---- the hand-in: a file from any source ({ name, mime, bytes }: a document of Documents exported by its kind's file(),
@@ -52,7 +54,7 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   const MAX_ATTACH = 10;
   // → null, or why not: 'large' (over 50 MB), 'file' (no bytes, a name a file can't have, no type).
   const handInError = (f) => {
-    const n = f?.bytes instanceof ArrayBuffer || ArrayBuffer.isView(f?.bytes) ? f.bytes.byteLength : -1;
+    const n = buffer(f?.bytes) || ArrayBuffer.isView(f?.bytes) ? f.bytes.byteLength : -1;
     if (n > MAX_FILE) return 'large';
     return n > 0 && asIsName(f.name) && typeof f.mime === 'string' && f.mime.length <= 200 ? null : 'file';
   };
@@ -163,7 +165,7 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   };
   const may = (s, name) => step(s) === name;
 
-  return { MAX_ATTACH, handInError, attachName, noteWith, MAX_NOTE, MIME, EXT, SWITCH, switched, kindOf, mimeOf, shortTitle, fileName, safeName, paperKey, MAX_FILE, fileError, fileBytes, kb, route, asIsName, tag, pagesOf, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, saved, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
+  return { buffer, MAX_ATTACH, handInError, attachName, noteWith, MAX_NOTE, MIME, EXT, SWITCH, switched, kindOf, mimeOf, shortTitle, fileName, safeName, paperKey, MAX_FILE, fileError, fileBytes, kb, route, asIsName, tag, pagesOf, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, saved, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SUBMIT_LIB;
 GZ_WRITER_SUBMIT_LIB;
