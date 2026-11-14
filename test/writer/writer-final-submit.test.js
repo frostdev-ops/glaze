@@ -85,7 +85,7 @@ test('D14: a file of the same name already in Ultra\'s draft stops the run until
   await p.go({ run: 2, replace: ['Rivera_Essay2.docx'] });
   for (let i = 0; i < 5 && done(p).length < 2; i++) await p.tick(100);
   assert.deepEqual(done(p), ['exists', 'ok']);
-  assert.deepEqual([p.deletes, p.uploads.length, p.clicks.length], [['Rivera_Essay2.docx'], 1, 1], 'Ultra\'s own delete, then the upload, then Submit once');
+  assert.deepEqual([p.deletes, p.uploads.length, p.clicks.filter((b) => b === p.button()).length], [['Rivera_Essay2.docx'], 1, 1], 'Ultra\'s own delete, then the upload, then Submit once');
   const q = page();
   q.addRow('Rivera_Essay2.docx', { removable: true });
   await q.go({ replace: ['Notes.pdf'] });
@@ -102,9 +102,10 @@ test('D14: the sheet offers Replace for a file Ultra already has, and sends that
   const replace = s.doc.querySelector('.gs-replace');
   assert.ok(replace && !replace.hidden, 'Replace beside Blackboard editor');
   s.click('.gs-replace'); await s.flush();
+  for (const b of s.builds) b.resolve(); await s.flush();
   const again = s.messages.filter((m) => m.type === 'submit:go');
   assert.equal(again.length, 2);
-  assert.deepEqual(again[1].replace, ['Rivera_Essay2.docx']);
+  assert.deepEqual([...again[1].replace], ['Rivera_Essay2.docx']);
   assert.equal(again[0].replace, undefined, 'never without the student\'s word');
 });
 

@@ -35,13 +35,16 @@ module.exports = ({ off = false, listed = true, enabled = true, worker, settings
     if (!removable) { L.areaOf(editor).append(row); return row; }
     const holder = new El('div', doc), x = new El('button', doc);
     x.setAttribute('data-analytics-id', `assignment.attempt.authoring.fileUpload.fileViewer.${name}.deleteFile`);
-    x.addEventListener('click', () => {
+    const asked = (e) => {
+      if (e.target !== x) return;
       const d = new El('div', doc), ok = new El('button', doc);
       d.setAttribute('role', 'dialog');
       ok.setAttribute('data-analytics-id', 'assignment.attempt.authoring.fileUpload.confirm.delete.dialog.dialog.confirm.button');
-      ok.addEventListener('click', () => { deletes.push(name); holder.remove(); d.remove(); });
+      const sure = (f) => { if (f.target !== ok) return; doc.removeEventListener('click', sure); deletes.push(name); holder.remove(); d.remove(); };
+      doc.addEventListener('click', sure);
       d.append(ok); doc.body.append(d);
-    });
+    };
+    doc.addEventListener('click', asked);
     holder.append(row, x); L.areaOf(editor).append(holder);
     return row;
   };

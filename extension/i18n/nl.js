@@ -3328,6 +3328,7 @@
   "The attempt page changed. Nothing was submitted.": "De pagina van de poging is veranderd. Er is niets ingeleverd.",
   "This attempt is already being submitted or needs review. Use Blackboard editor to continue.": "Deze poging wordt al ingeleverd of moet worden gecontroleerd. Ga verder in de Blackboard-editor.",
   "Ultra may already have the file. Use Blackboard editor to review or remove it before submitting.": "Ultra heeft het bestand misschien al. Controleer of verwijder het in de Blackboard-editor voordat je inlevert.",
+  "Ultra already has a file with this name. Nothing was submitted.": "Ultra heeft al een bestand met deze naam. Er is niets ingeleverd.",
   "Submission stopped. Use Blackboard editor to review or remove any upload before submitting.": "Inleveren gestopt. Controleer of verwijder uploads in de Blackboard-editor voordat je inlevert.",
   "Spelling": "Spelling",
   "Grammar": "Grammatica",

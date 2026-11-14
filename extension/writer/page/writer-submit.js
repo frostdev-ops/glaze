@@ -161,7 +161,22 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     try { for (const type of ['dragenter', 'dragover', 'drop']) zone.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt })); } finally { giving = false; }
     return true;
   };
-  const attach = async (box, file, bytes, here) => {
+  // Ultra's own delete of a file it lists (its ×, then its confirmation: live Ultra 4001.4, 2026-11-14), once the student
+  // has asked to replace it (the sheet's Replace): true once Ultra lists it no more and its editor is back, the removal saved.
+  const DELETE = '[data-analytics-id="assignment.attempt.authoring.fileUpload.confirm.delete.dialog.dialog.confirm.button"]';
+  const remove = async (box, area, name, here) => {
+    const id = `assignment.attempt.authoring.fileUpload.fileViewer.${name}.deleteFile`;
+    const x = [...area.querySelectorAll('button[data-analytics-id]')].filter((b) => b.getAttribute('data-analytics-id') === id);
+    if (x.length !== 1 || L().listings(area, name, visible).length !== 1) return false;
+    x[0].click();
+    const ok = await until(() => document.querySelector(DELETE), 5000, 100, here);
+    if (!ok) return false;
+    ok.click();
+    return !!await until(() => !L().listed(area, name, visible) && globalThis.GZ_WRITER_ULTRA?.editable(box.editor), 15000, 100, here);
+  };
+  // replace: the student asked to replace a file of this name Ultra already lists; without it such a file stops the run
+  // ('exists'), the sheet offering Replace.
+  const attach = async (box, file, bytes, here, replace = false) => {
     const area = L().areaOf(box.editor), panel = L().panelOf(box.editor);
     if (!area || !panel) return 'page';
     if (!here()) return 'page';
@@ -169,13 +184,17 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', data))].map((n) => n.toString(16).padStart(2, '0')).join('');
     if (!here()) return 'page';
     const old = attached.get(box)?.get(file.name);
-    if (old) {
-      if (old.name !== file.name || old.size !== data.byteLength || old.hash !== hash || old.mime !== file.type) return 'review';
+    if (old && old.name === file.name && old.size === data.byteLength && old.hash === hash && old.mime === file.type) {
       // Reuse only the same bytes and the very row the completed upload produced.
       const rows = L().listings(area, file.name, visible);
       return rows.length === 1 && rows[0] === old.row ? null : 'review';
     }
-    if (L().listed(area, file.name, visible) || document.querySelector('[role="dialog"][aria-labelledby="file-properties-dialog-title"]')) return 'review';
+    if (old || L().listed(area, file.name, visible)) {
+      if (!replace) return 'exists';
+      if (!await remove(box, area, file.name, here)) return here() ? 'review' : 'page';
+      attached.get(box)?.delete(file.name);
+    }
+    if (document.querySelector('[role="dialog"][aria-labelledby="file-properties-dialog-title"]')) return 'review';
     const input = L().uploadInput(area) || await until(() => L().uploadInput(area), 1500, 100, here);
     if (!here()) return 'page';
     const zone = !input && L().dropZone(area);
@@ -199,7 +218,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   };
   // One file from any source; byte views use only their byteOffset/byteLength. Never reject the promise for bad input.
   // → null, large, file, page (here revoked), upload, attach, or review (an upload may already be in Ultra).
-  const handIn = async (box, f, here = () => true) => {
+  const handIn = async (box, f, here = () => true, replace = false) => {
     let data, file;
     try {
       const why = L().handInError(f);
@@ -208,7 +227,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       data = f.bytes instanceof ArrayBuffer ? new Uint8Array(f.bytes) : new Uint8Array(f.bytes.buffer, f.bytes.byteOffset, f.bytes.byteLength);
       file = new File([data], f.name, { type: f.mime, lastModified: Date.now() });
     } catch { return 'file'; }
-    try { return await attach(box, file, data, here); } catch { return 'page'; }
+    try { return await attach(box, file, data, here, replace); } catch { return 'page'; }
   };
   const sameText = (box, d) => {
     const want = d.map((o) => o.insert).join('').split('\n').slice(0, -1).map(squash).join('\n');
@@ -249,6 +268,8 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const fileError = (f) => stream ? (!f || !L().asIsName(f.name) || typeof f.mime !== 'string' || f.mime.length > 200 || !Number.isSafeInteger(f.size) || f.size <= 0 ? 'file' : f.size > L().MAX_FILE ? 'large' : null) : L().handInError(f) || (!(f.bytes instanceof ArrayBuffer) ? 'file' : null);
     const names = [...(alone ? [] : [name]), ...files.map((f) => f?.name)].map((n) => String(n).toLowerCase());
     if (files.length > L().MAX_ATTACH || files.some(fileError) || new Set(names).size !== names.length || (alone && (!files.length || !append))) return fail(files.some((f) => fileError(f) === 'large') ? 'large' : 'page');
+    // The files the student asked to replace (the sheet's Replace), each one this run sends.
+    const replace = new Set((Array.isArray(m.replace) ? m.replace : []).filter((n) => typeof n === 'string' && names.includes(n.toLowerCase())));
     if (!key || key !== L().paperKey(box.context?.paper) || !(alone || ((asis ? L().asIsName(name) && typeof m.mime === 'string' && m.mime.length <= 200 : L().safeName(name, kind)) && bytes instanceof ArrayBuffer && bytes.byteLength && bytes.byteLength <= 50e6)) || typeof m.note !== 'string' || m.note.length > L().MAX_NOTE ||
       (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || (m.held != null && (typeof m.held !== 'string' || m.held.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
@@ -308,7 +329,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if (!alone) {
         file = name;
         if (!await settled()) return fail('page');
-        const a = await handIn(box, { name, mime: asis ? m.mime : L().mimeOf(name), bytes }, here);
+        const a = await handIn(box, { name, mime: asis ? m.mime : L().mimeOf(name), bytes }, here, replace.has(name));
         bytes = null; m.bytes = null;
         if (a) return fail(a);
       }
@@ -318,7 +339,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
         if (!reply.ok) return fail(reply.error === 'changed' ? 'changed' : 'file');
         if (stream && (!(reply.bytes instanceof ArrayBuffer) || reply.bytes.byteLength !== f.size)) return fail('file');
         if (!await settled()) return fail('page');
-        const a = await handIn(box, { name: f.name, mime: f.mime, bytes: reply.bytes }, here);
+        const a = await handIn(box, { name: f.name, mime: f.mime, bytes: reply.bytes }, here, replace.has(f.name));
         reply = null;
         if (!stream) f.bytes = null;
         if (a) return fail(a);

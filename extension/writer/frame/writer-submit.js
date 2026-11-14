@@ -42,6 +42,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     page: 'The attempt page changed. Nothing was submitted.',
     busy: 'This attempt is already being submitted or needs review. Use Blackboard editor to continue.',
     review: 'Ultra may already have the file. Use Blackboard editor to review or remove it before submitting.',
+    exists: 'Ultra already has a file with this name. Nothing was submitted.',
     cancel: 'Submission stopped. Use Blackboard editor to review or remove any upload before submitting.',
     claimed: 'This attempt is already being submitted or needs review. Use Blackboard editor to continue.',
     large: 'A file is larger than 50 MB. Nothing was submitted.',
@@ -166,6 +167,9 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     const kept = [h('label', { class: 'gs-toggle', for: 'gs-keep' }, h('span', { id: 'gs-keep-label', text: t('Keep the text already in the text box') }), keep), h('div', { class: 'gs-field' }, shown)];
     const err = h('div', { class: 'gs-err', role: 'alert' });
     const native = h('button', { type: 'button', class: 'gs-native gs-review', text: t('Blackboard editor'), hidden: true });
+    // A file of that name Ultra already has (exists): Replace runs again, Ultra's own delete removing it first.
+    const replaceB = h('button', { type: 'button', class: 'gs-replace gs-review', text: t('Replace'), hidden: true });
+    let replacing = null, conflict = null;
     const cancel = h('button', { type: 'button', class: 'gs-btn', text: t('Cancel') });
     const submit = h('button', { type: 'button', class: 'gs-btn gs-primary', text: t('Submit') });
     const review = issues ? h('button', { type: 'button', class: 'gs-review', text: t('Review') }) : null;
@@ -185,7 +189,7 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
           file || other || only ? null : h('label', { class: 'gs-toggle', for: 'gs-paste' }, h('span', { text: t('Also paste the text in the text box') }), sw),
           atts, attachB, driveB,
           review ? h('div', { class: 'gs-open' }, h('span', { class: 'gs-dot' }), h('span', { class: 'gs-grow', text: t('{n} checks open', { n: issues }) }), review) : null,
-          err, native),
+          err, h('div', { class: 'gs-fix' }, replaceB, native)),
           h('div', { class: 'gs-foot' }, cancel, submit))));
     const inert = [...document.body.children].map((el) => [el, el.inert]);
     for (const [el] of inert) el.inert = true;
@@ -462,14 +466,16 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
           return { ok: true, bytes };
         } catch (e) { return { ok: false, error: e?.error || 'file', file: e?.file }; }
       };
-      frame.say({ type: 'submit:go', run, ...m, stream: true, until: Date.now() + 80000 + more }, m.bytes ? [m.bytes] : []);
+      frame.say({ type: 'submit:go', run, ...m, ...(replacing && { replace: replacing }), stream: true, until: Date.now() + 80000 + more }, m.bytes ? [m.bytes] : []);
     }).finally(() => { if (waiting?.run === run) waiting = null; });
-    submit.addEventListener('click', async (e) => {
-      if (!e.isTrusted || mine.busy || mine.cancelled || picking || making > 0) return;
+    submit.addEventListener('click', (e) => { if (e.isTrusted) { replacing = null; run(); } });
+    replaceB.addEventListener('click', (e) => { if (!e.isTrusted || mine.busy || !conflict) return; replacing = [conflict]; run(); });
+    const run = async () => {
+      if (mine.busy || mine.cancelled || picking || making > 0) return;
       const x = extras();
       if (only && !x.files.length) return;
       lock(true);
-      err.textContent = ''; native.hidden = true;
+      err.textContent = ''; native.hidden = true; replaceB.hidden = true;
       const run = mine.run = ++runs, paste = !file && !other && sw.getAttribute('aria-checked') === 'true', ultra = { held, keep: !!held && keep.getAttribute('aria-checked') === 'true' };
       const text = paste ? api.editor.text() : null;
       if (remember && !file && !other) globalThis.GZ_WRITER_SETTINGS?.patch((w) => ({ ...w, submit: { ...w.submit, text: paste } })).catch((e) => console.error(e));
@@ -530,11 +536,13 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
         if (mine.cancelled || sheet !== mine) return;
         lock(false);
         native.hidden = false;
+        conflict = detail?.error === 'exists' && typeof detail.file === 'string' ? detail.file : null;
+        replaceB.hidden = !conflict;
         err.textContent = [detail?.file ? t('File: {name}.', { name: detail.file }) : '', t(SAYS[detail?.error || code] || SAYS.page), detail?.retained?.length ? t('Use Blackboard editor to review or remove these uploads: {names}.', { names: detail.retained.join(', ') }) : ''].filter(Boolean).join(' ');
         for (const a of list) if (a.name === detail?.file) { a.ui.el.setAttribute('data-error', ''); a.ui.sizeEl.textContent = t('Not attached'); }
         ask();
       }
-    });
+    };
   };
 
   // The page catches Ultra's Submit from the frame's ready, a moment before the paper mounts: a press waits for the paper.
