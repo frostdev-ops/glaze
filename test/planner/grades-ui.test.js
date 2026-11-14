@@ -1886,16 +1886,16 @@ test('Ultra what-if: the target sits under the figures, and What you need fills 
   target.value = '90';
   target.fire('input');
   await settle(10);
-  assert.match(p.box().textContent, /You'd need about 95% on each of the 2 items left\./);
+  assert.match(p.box().textContent, /You'd need about 97.5% on each of the 2 items left\./);
   byText(p.box(), 'What you need').fire('click');
   await settle(10);
-  assert.deepEqual([scoreOf(p, '_602_1').value, scoreOf(p, '_603_1').value], [95, 95]);
+  assert.deepEqual([scoreOf(p, '_602_1').value, scoreOf(p, '_603_1').value], [97.5, 97.5]);
   assert.equal(totals(p)[1], '90%');
   assert.equal(find(p.box(), (e) => e.dataset.f === 'target').value, '90', 'the target stays');
   // Out of reach: nothing to fill with.
-  const far = find(p.box(), (e) => e.dataset.f === 'target');
   byText(p.box(), 'Undo').fire('click');
   await settle(10);
+  const far = find(p.box(), (e) => e.dataset.f === 'target');
   far.value = '99';
   far.fire('input');
   await settle(10);
@@ -1992,4 +1992,23 @@ test('Canvas what-if: the same tools, filling by the course\'s own rules', async
   byText(p.box(), 'Undo').fire('click');
   await settle(10);
   assert.equal(totals(p)[1], before);
+});
+
+test("Ultra what-if: the page's gradebook coming in while what you saved is still being read waits for it, so nothing saved is lost", async () => {
+  const store = shared({ [UKEY]: { _101_1: { s: { _603_1: [100, null, U_NOW - 1000] }, h: [], ht: {}, p: [], c: null, at: U_NOW - 1000 } } });
+  const held = { on: true, queue: [] };
+  const books = {};
+  const p = ultraPage({ store, held, books });
+  p.UI.render();
+  await settle(10);
+  books._101_1 = ufix('grades').results;
+  p.UI.render();
+  await settle(10);
+  p.release();
+  await settle(14);
+  await open(p);
+  await settle(10);
+  assert.equal(scoreOf(p, '_603_1').value, 100);
+  assert.equal(totals(p)[1], '90%');
+  assert.deepEqual(store.data[UKEY]._101_1.s._603_1.slice(0, 2), [100, null]);
 });
