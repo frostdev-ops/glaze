@@ -1110,6 +1110,37 @@ test('Ultra what-if migration: a whole-record write while the move is on its way
   }
 });
 
+test('Ultra what-if: Fill and Undo preserve a saved score whose migration answers late', async () => {
+  const store = shared({
+    whatIf: { _101_1: { _603_1: 60 } },
+    [UKEY]: { _101_1: { s: {}, h: ['_603_1'], p: [], c: null, at: U_NOW - 1000 } },
+  });
+  const release = lateMove(store);
+  const p = ultraPage({ store });
+  p.UI.render();
+  await settle(14);
+  await open(p);
+  // Lab Report 3 is left out, so a fill changes only Lab Report 2. A native disabled button cannot be clicked.
+  const fill = byText(p.box(), 'Full marks');
+  if (!fill.disabled) fill.fire('click');
+  release();
+  await settle(20);
+  const undo = byText(p.box(), 'Undo');
+  if (!undo.hidden) undo.fire('click');
+  await settle(14);
+  assert.equal(scoreOf(p, '_603_1').value, 60, 'Undo must not remove the saved score that arrived after the fill');
+  assert.equal(store.data[UKEY]._101_1.s._603_1?.[0], 60, 'the migrated score stays stored');
+  // Once migration has finished, the fill is available and Undo still preserves the saved score.
+  assert.ok(!byText(p.box(), 'Full marks').disabled);
+  byText(p.box(), 'Full marks').fire('click');
+  await settle(10);
+  assert.equal(scoreOf(p, '_602_1').value, 100);
+  byText(p.box(), 'Undo').fire('click');
+  await settle(14);
+  assert.equal(scoreOf(p, '_602_1').value, '');
+  assert.equal(store.data[UKEY]._101_1.s._603_1?.[0], 60);
+});
+
 test('Ultra what-if: a course with no overall grade is an estimate from the share of points, and says so', async () => {
   const p = ultraPage({ path: '/ultra/courses/_102_1/grades', books: { _102_1: ufix('grades-status').results } });
   p.UI.render();

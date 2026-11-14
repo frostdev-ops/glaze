@@ -244,11 +244,12 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       .then((x) => {
         st.moving = null;
         const add = (x?.ok ? x.moved || [] : []).filter((id) => old[id] && !(id in st.rec.s));
-        if (st.cut !== cut || !add.length) return;
-        const r = C.reconcile({ s: Object.fromEntries(add.map((id) => [id, old[id]])) }, st.course);
-        Object.assign(st.rec.s, r.kept.s);
-        st.gone = [...st.gone, ...r.gone];
-        if (r.gone.length) { st.open = true; keep(st); } else st.what = C.whatOf(st.rec);
+        if (st.cut === cut && add.length) {
+          const r = C.reconcile({ s: Object.fromEntries(add.map((id) => [id, old[id]])) }, st.course);
+          Object.assign(st.rec.s, r.kept.s);
+          st.gone = [...st.gone, ...r.gone];
+          if (r.gone.length) { st.open = true; keep(st); } else st.what = C.whatOf(st.rec);
+        }
         st.v++;
         whatIf();
       }));
@@ -369,6 +370,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     };
     const byId = new Map(course.groups.flatMap((g) => g.items.map((i) => [i.id, i])));
     const fillWith = (how) => {
+      if (st.moving) return;
       const r = C.fill(course, st.what, how, goalOf(), opts);
       if (!Object.keys(r.scores).length) return;
       st.undo = { s: { ...rec.s } };
@@ -387,7 +389,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     });
     const typed = () => { st.undo = null; undo.hidden = true; };
     const fillButton = (how, text) => {
-      const b = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t(text) });
+      const b = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t(text), disabled: !!st.moving });
       b.dataset.f = `fill:${how}`;
       b.addEventListener('click', () => fillWith(how));
       return b;
