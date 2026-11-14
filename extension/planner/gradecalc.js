@@ -379,8 +379,8 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
   const NO_DROPS = { lo: 0, hi: 0, never: [] };
   const MISMATCH = "its recipe doesn't come out at Blackboard's own figure";
   const UNCHECKED = 'Blackboard shows no overall number to check it against';
-  // A course's grade by name; not "current grade", which teachers give a category's average ("Homework Current Grade").
-  const OVERALL = /overall|total|(?:course|final) grade/i;
+  // A course's grade by name, not a category's average or subtotal ("Homework Total", "Overall Homework Grade").
+  const OVERALL = /^(?:(?:overall|total)(?:\s+grade)?|(?:overall\s+)?course\s+(?:grade|total)|final\s+(?:course\s+)?grade)$/i;
   const model = (results, names = {}) => {
     const rows = (Array.isArray(results) ? results : []).filter((g) => g?.column);
     const overallRow = rows.find((g) => g.column.externalGrade);
@@ -434,7 +434,7 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     }
     // No overall grade for the student: a teacher's own column for it, where there is just one that is marked or named so.
     // One only named so counts when its recipe is a weighting Glaze reads; one marked as a total is reported either way.
-    const rank = (g) => (g.column.calculatedFormula?.isTotalCalculation === true ? 2 : 0) + (OVERALL.test(columnName(g.column)) ? 1 : 0);
+    const rank = (g) => (g.column.calculatedFormula?.isTotalCalculation === true ? 2 : 0) + (OVERALL.test(columnName(g.column).trim()) ? 1 : 0);
     const own = rows.filter((g) => g.column.calculationType !== 'NON_CALCULATED' && g.column.calculatedFormula && (rank(g) > 1 || (rank(g) && !parse(g.column).error)))
       .sort((a, b) => rank(b) - rank(a));
     if (own.length && !(own.length > 1 && rank(own[1]) === rank(own[0]))) {

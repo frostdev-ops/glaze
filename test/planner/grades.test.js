@@ -310,3 +310,17 @@ test("an item whose name Ultra keeps only as punctuation reads by its column's o
   Object.assign(blank.column, { effectiveColumnName: ' ', columnName: '' });
   assert.deepEqual(C.model([row, blank]).items.map((i) => i.name), ['Module 6: Assignment 1', 'Untitled']);
 });
+
+test('a category total is not selected as the course grade merely because its name contains total or overall', () => {
+  const rows = [g('_1_1', 100, 100), g('_2_1', 100, 0)];
+  const formula = weights([['c_1', 100]]); // a correct recipe for the homework alone, not the whole course
+  for (const name of ['Homework Total', 'Quiz subtotal', 'Overall Homework Grade', 'Total Quizzes']) {
+    const m = C.model([...rows, calcCol(508, name, 100, 100, formula)]);
+    assert.equal(m.kind, 'points', name);
+    assert.equal(m.percent(), 50, `${name} must not turn a 50% points estimate into a trusted 100% course grade`);
+    assert.equal(m.column, undefined);
+  }
+  for (const name of ['Overall Grade', 'Overall', 'Total', 'Total Grade', 'Course Total', 'Course Grade', 'Final Grade', 'Overall Course Grade']) {
+    assert.equal(C.model([...rows, calcCol(508, name, 100, 100, formula)]).kind, 'weighted', name);
+  }
+});
