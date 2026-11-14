@@ -143,6 +143,22 @@ test('Ultra\'s own markup for what Writer wrote stays Writer\'s after a reload: 
   assert.equal(U.boxes(paper((d) => [link(d, '#', 'other')]), { path: ATTEMPT }).length, 0);
 });
 
+for (const paper of [false, true]) test(`Ultra file-link metadata stays native in ${paper ? 'paper' : 'compose'} mode`, () => {
+  for (const attr of ['data-bbid', 'data-bbtype', 'data-bbfile', 'data-mce-href']) {
+    for (const value of ['', 'https://school.blackboard.com/bbcswebdav/file']) {
+      const body = page(paper ? 'ultra-writer-attempt.html' : 'ultra-writer-discussion.html');
+      const at = { path: paper ? ATTEMPT : DISCUSSION }, ed = U.boxes(body, at)[0].editor;
+      const p = new El('p', body.doc), a = new El('a', body.doc);
+      a.setAttribute('href', 'https://school.blackboard.com/bbcswebdav/file');
+      a.setAttribute('class', 'wants-props-update');
+      a.setAttribute('target', '_blank'); a.setAttribute('tabindex', '-1');
+      a.setAttribute(attr, value); a.textContent = 'Assignment file'; p.append(a); ed.replaceChildren(p);
+      assert.equal(U.canEdit(ed, { paper }), false, `${attr}=${JSON.stringify(value)}`);
+      assert.ok(!U.boxes(body, at).some((b) => b.editor === ed), 'the file link must stay in Blackboard');
+    }
+  }
+});
+
 test('an assignment attempt: a paper in Ultra\'s authoring panel, its Submit, its instructions as the prompt', () => {
   const body = page('ultra-writer-attempt.html');
   const at = (attempt) => U.boxes(body, { path: ATTEMPT, attempt });
