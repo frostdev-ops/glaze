@@ -59,8 +59,18 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
   const CLASS = { P: /^(ql-indent-[1-8]|ql-align-(center|right|justify))$/, H3: null, H4: null, LI: null, PRE: /^ql-syntax$/, SPAN: /^ql-cursor$/ };
   CLASS.H3 = CLASS.H4 = CLASS.LI = CLASS.P;
   const classes = (e) => { const c = (e.getAttribute('class') || '').split(/\s+/).filter(Boolean); return !c.length || (!!CLASS[e.tagName] && c.every((k) => CLASS[e.tagName].test(k))); };
-  const canEdit = (ed) => [...ed.querySelectorAll('*')].every((e) => TAGS.has(e.tagName) && !e.getAttribute('style') && classes(e) &&
-    (e.tagName !== 'A' || /^(https?:|mailto:|tel:\+?\d)/i.test(e.getAttribute('href') || '')) && !e.hasAttribute('dir') && !e.hasAttribute('start'));
+  // Ultra's own markup for what Writer writes (live Ultra 4001.4, 2026-11-14): alignment as a style where Quill writes a
+  // class, and a link as its own blot (target, tabindex, class wants-props-update; "#" for one written as a bare address,
+  // Writer's way until then). A paper takes such a dead link back, its stored copy rewriting it; a post would lose it.
+  const ALIGN = /^text-align:\s*(center|right|justify);?$/, ALIGNED = new Set(['P', 'H3', 'H4', 'LI']), ULTRA_LINK = 'wants-props-update';
+  const styled = (e) => { const s = (e.getAttribute('style') || '').trim(); return !s || (ALIGNED.has(e.tagName) && ALIGN.test(s)); };
+  const linkOk = (e, paper) => {
+    const href = e.getAttribute('href') || '', cls = (e.getAttribute('class') || '').trim();
+    if (Object.keys(e.dataset || {}).some((k) => /^bb/.test(k)) || (cls && cls !== ULTRA_LINK)) return false;
+    return /^(https?:|mailto:|tel:\+?\d)/i.test(href) || (paper && href === '#' && cls === ULTRA_LINK);
+  };
+  const canEdit = (ed, { paper = false } = {}) => [...ed.querySelectorAll('*')].every((e) => TAGS.has(e.tagName) && styled(e) &&
+    (e.tagName === 'A' ? linkOk(e, paper) : classes(e)) && !e.hasAttribute('dir') && !e.hasAttribute('start'));
 
 
   const top = (e) => { while (e.parentNode) e = e.parentNode; return e; };
@@ -117,7 +127,7 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
     }
     // A journal's new entry opens on a click too, drawing its toolbar and its Cancel and Post; Cancel removes them again.
     if (kind === 'journal' && (!rootOf(editor).querySelector('.bb-editor-toolbar') || !sendOf(editor, kind))) return null;
-    if (kind === 'unknown' || !container || !canEdit(editor)) return null;
+    if (kind === 'unknown' || !container || !canEdit(editor, { paper: MODE[kind] === 'paper' })) return null;
     const context = contextOf(editor, kind);
     return { editor, container, root: rootOf(editor), kind, mode: MODE[kind] || 'compose', send: sendOf(editor, kind), context, identity: kind === 'reply' ? context.post?.id || '' : '' };
   }).filter(Boolean);

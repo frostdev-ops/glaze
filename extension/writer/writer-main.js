@@ -48,9 +48,14 @@
       const extra = fn(q, m); done({ id: m.id, ok: true, html: q.root.innerHTML, text: q.getText(), ...extra });
     } catch { done({ id: m?.id, ok: false }); }
   });
+  // Ultra's own link format takes { href, target } and draws a bare address as href="#" (live Ultra 4001.4, 2026-11-14):
+  // a link goes to it in its form; a Quill whose link takes the address keeps it as written.
+  const PROBE = 'https://glaze.invalid/';
+  const objectLinks = (q) => { try { const n = q.constructor?.import?.('formats/link')?.create?.(PROBE); return !!n && n.getAttribute?.('href') !== PROBE; } catch { return false; } };
+  const linked = (q, d) => (objectLinks(q) ? d.map((op) => (op.attributes?.link ? { ...op, attributes: { ...op.attributes, link: { href: op.attributes.link, target: '_blank' } } } : op)) : d);
   on('gz-writer:set', (q, m) => {
     if (!ops(m.delta)) throw new Error('delta');
-    q.setContents(m.delta, 'user');
+    q.setContents(linked(q, m.delta), 'user');
   });
   on('gz-writer:append', (q, m) => {
     if (typeof m.text !== 'string' || !m.text.trim() || m.text.length > 20000 || /[\u0000-\u0009\u000b-\u001f\u007f]/.test(m.text)) throw new Error('text');

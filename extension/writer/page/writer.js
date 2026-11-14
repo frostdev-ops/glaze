@@ -314,8 +314,9 @@ var GZ_WRITER = globalThis.GZ_WRITER || (() => {
       if (!sameBox(box)) return;
       const native = A().read(ed);
       // On Canvas the box can stop being editable with its text unchanged (the Inbox's field disabled while it translates).
-      if (native.html === box.nativeHTML && (!A().HOLD || A().canEdit(ed))) return;
-      if (!A().canEdit(ed)) { if (A().HOLD && box.unsynced) recover(box); else drop(box); return; }
+      const paper = { paper: box.mode === 'paper' };
+      if (native.html === box.nativeHTML && (!A().HOLD || A().canEdit(ed, paper))) return;
+      if (!A().canEdit(ed, paper)) { if (A().HOLD && box.unsynced) recover(box); else drop(box); return; }
       if (box.unsynced) return;
       const now = squash(native.text);
       if (now === box.text) return;
