@@ -1189,6 +1189,22 @@ test("Ultra GPA: on Grades, above the terms, this term's courses with Blackboard
   assert.ok(books.every(([m, r, u]) => m === 'GET' && r === 'error' && u.startsWith('/learn/api/v1/courses/')));
 });
 
+test("Ultra GPA: the teacher's overall column uses its grading scale instead of the default", async () => {
+  const rows = ufix('grades-teacher').results;
+  rows.find((r) => r.column.effectiveColumnName === 'Overall Grade').column.gradingSchemaId = '_403_1';
+  const schemas = ufix('schemas').results;
+  schemas.find((s) => s.id === '_403_1').symbols.forEach((s, i) => { s.lowerBound = [85, 75, 65, 55, 0][i]; });
+  const p = ultraPage({ path: '/ultra/grades', enhance: { gpa: true }, books: {}, answers: {
+    '/gradebook/schemas': { results: schemas },
+    '/courses/_101_1/gradebook/grades?': { results: rows },
+    '/gradebook/grades?': { results: [] },
+  } });
+  p.UI.render();
+  await settle(20);
+  assert.equal(p.gpa().querySelector('.gz-gpa-grade').textContent, 'B · 75% · 3.00');
+  assert.equal(p.state.asked.filter(([, , u]) => /schemas/.test(u)).length, 1, 'the selected teacher column needs its schema too');
+});
+
 // The public content API's answer for a course, as B4 measured it: id, parentId, title, body, contentHandler.id and
 // availability.available only. An Ultra document is a page whose text can sit in its blocks (its children).
 for (const part of ['grades', 'schemas']) test(`GZ-01: truncated ${part} suppress GPA totals and current-term history calculations`, async () => {

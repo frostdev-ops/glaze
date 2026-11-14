@@ -577,8 +577,8 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const e = c.enrollments[0];
     if (!rows) return e;
     if (rows.complete === false || D.raw.get(c.id)?.complete === false) return Object.assign(e, { computed_current_score: null, computed_current_grade: null });
-    if (rows.some((r) => r?.column?.externalGrade)) schemeFor(c.id); // a scale is its overall column's, so only with one
     const g = GZ_ULTRA.grade(rows, D.raw.get(c.id) || []);
+    if (g.columnId) schemeFor(c.id); // the selected overall column's scale, including a teacher's own column
     if (D.raw.get(c.id)) D.schemes.set(c.id, g.scale || false);
     const score = g.overall ?? g.percent();
     return Object.assign(e, { computed_current_score: score, computed_current_grade: g.letter || (score != null && g.scale ? C.letter(score, g.scale) : null), est: score != null && g.overall == null });

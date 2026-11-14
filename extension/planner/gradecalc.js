@@ -338,7 +338,7 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     return { cats, running: body.running !== false };
   };
 
-  // results (gradebook/grades?expand=column) → { kind, note, why, items, overall (Blackboard's, as a %), column, course, zeros,
+  // results (gradebook/grades?expand=column) → { kind, note, why, items, overall (Blackboard's, as a %), column, columnId, course, zeros,
   // percent(overrides), need(target, overrides), remaining(overrides) }; overrides: Map columnId → score.
   // course is the calculator's own shape, so calc, need, reconcile and the what-if read it as they read Canvas's: a
   // group per category of the recipe, weighted as Blackboard weights it (each category's share of points, or for an
@@ -427,10 +427,10 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
       const mine = m.percent();
       return mine == null || Math.abs(mine - figure) > 0.01 ? { why: MISMATCH } : { m };
     };
-    const no = (why, row = overallRow, column) => ({ kind: 'unsupported', note: `Glaze can't work out this course's overall grade: ${why}.`, why, items, overall: figureOf(row), ...(column ? { column } : {}) });
+    const no = (why, row = overallRow, column) => ({ kind: 'unsupported', note: `Glaze can't work out this course's overall grade: ${why}.`, why, items, overall: figureOf(row), columnId: row?.columnId, ...(column ? { column } : {}) });
     if (overallRow) {
       const r = check(overallRow);
-      return r.m ? { ...r.m, kind: 'weighted', note: '', overall: figureOf(overallRow) } : no(r.why);
+      return r.m ? { ...r.m, kind: 'weighted', note: '', overall: figureOf(overallRow), columnId: overallRow.columnId } : no(r.why);
     }
     // No overall grade for the student: a teacher's own column for it, where there is just one that is marked or named so.
     // One only named so counts when its recipe is a weighting Glaze reads; one marked as a total is reported either way.
@@ -440,7 +440,7 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     if (own.length && !(own.length > 1 && rank(own[1]) === rank(own[0]))) {
       const r = check(own[0]);
       const column = columnName(own[0].column);
-      return r.m ? { ...r.m, kind: 'weighted', note: '', overall: figureOf(own[0]), column } : no(r.why, own[0], column);
+      return r.m ? { ...r.m, kind: 'weighted', note: '', overall: figureOf(own[0]), column, columnId: own[0].columnId } : no(r.why, own[0], column);
     }
     return { ...build({ cats: null, running: true }), overall: null, kind: 'points', note: 'This course has no overall grade in Blackboard. These figures are your share of the points in graded work, which may not be how the course is graded.' };
   };

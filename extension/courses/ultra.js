@@ -278,7 +278,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     if (rows?.complete === false || schemas?.complete === false) throw Object.assign(new Error('Incomplete Ultra gradebook'), { code: 'incomplete' });
     const G = calc();
     const m = G.model(rows, names);
-    const overallRow = arr(rows).find((r) => r?.column?.externalGrade);
+    const overallRow = arr(rows).find((r) => r?.column?.externalGrade) || arr(rows).find((r) => m.columnId && r?.columnId === m.columnId);
     const schema = arr(schemas).find((s) => s?.id && s.id === overallRow?.column?.gradingSchemaId);
     // A symbol's lowerBound, where Ultra sends one ([I]). [M] (B4) a student's answer carries only each letter and its
     // absoluteValue (private: symbol, absoluteTranslation): what an entered letter stands for [I], not where it starts,
@@ -293,7 +293,7 @@ var GZ_ULTRA = globalThis.GZ_ULTRA || (() => {
     if (m.kind === 'weighted') return { ...m, estimate: false, why: '', ...more };
     // The share of points in graded work: the items alone, with no calculated column to stand for an overall grade.
     const pts = G.model(arr(rows).filter((r) => r?.column?.calculationType === 'NON_CALCULATED' && !r.column.externalGrade), names);
-    return { ...pts, estimate: true, overall: m.overall ?? null, column: m.column, why: m.kind === 'unsupported' ? m.why : '', ...more };
+    return { ...pts, estimate: true, overall: m.overall ?? null, column: m.column, columnId: m.columnId, why: m.kind === 'unsupported' ? m.why : '', ...more };
   };
   // The course's grade over the term, for Insights (planner/insights.js along): grade()'s figure after each graded item, in
   // the order of its due date, else when it was graded or handed in. tz: the student's time zone (the browser's: Ultra

@@ -355,6 +355,25 @@ test("grades: the teacher's own overall column (no externalGrade) is the course'
   assert.equal(e.why, "its recipe doesn't come out at Blackboard's own figure");
 });
 
+test("grades: a teacher's overall column supplies its own letter and grading scale", () => {
+  const rows = clone(load('grades-teacher').results);
+  const overall = rows.find((r) => r.column.effectiveColumnName === 'Overall Grade');
+  overall.column.gradingSchemaId = '_403_1';
+  overall.displayGrade.text = 'B';
+  const schemas = clone(load('schemas').results);
+  schemas.find((s) => s.id === '_403_1').symbols.forEach((s, i) => { s.lowerBound = [85, 75, 65, 55, 0][i]; });
+  const scale = [['A', 85], ['B', 75], ['C', 65], ['D', 55], ['F', 0]];
+  const exact = U.grade(rows, schemas);
+  assert.equal(exact.letter, 'B', 'use the letter on the column whose figure was selected');
+  assert.deepEqual(exact.scale, scale);
+  // Even when the recipe cannot be reproduced, its displayed figure and letter still belong to that column.
+  overall.displayGrade.score = 80;
+  const estimate = U.grade(rows, schemas);
+  assert.equal(estimate.estimate, true);
+  assert.equal(estimate.letter, 'B');
+  assert.deepEqual(estimate.scale, scale);
+});
+
 // ACA-5: what an overall column writes is a letter only when its schema is a letter scale (or the text is a letter with grade
 // points). A Percent or Score column writes its figure, and the GPA must compute the letter from that.
 test('the overall column\'s text is the course letter only for a letter scale or a letter with points', () => {
