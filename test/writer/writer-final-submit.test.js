@@ -40,6 +40,18 @@ test('D9: once Writer has clicked Ultra\'s Submit, Ultra\'s Save and Close works
   assert.equal(p.clicks.filter((b) => b === save).length, 1, 'then Ultra\'s own Save and Close goes on');
 });
 
+test('Ultra\'s editor off while it saves the upload: the note waits for it rather than a write Quill drops, then Submit once', async () => {
+  const p = page({ off: true });
+  await p.go({ note: 'Hi Professor' });
+  await p.tick(100);
+  assert.deepEqual([done(p), p.clicks.length, p.uploads.length], [[], 0, 1], 'attached, then waiting for Ultra\'s editor');
+  p.settle();
+  for (let i = 0; i < 5 && !done(p).length; i++) await p.tick(100);
+  assert.deepEqual(done(p), ['ok']);
+  assert.equal(boxText(p), 'Hi Professor');
+  assert.equal(p.clicks.filter((b) => b === p.button()).length, 1);
+});
+
 // The frame between its ready (the page is armed and catches Ultra's file area and Submit) and the paper's mount.
 const early = (file) => {
   const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
