@@ -66,7 +66,7 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
   const styled = (e) => { const s = (e.getAttribute('style') || '').trim(); return !s || (ALIGNED.has(e.tagName) && ALIGN.test(s)); };
   const linkOk = (e, paper) => {
     const href = e.getAttribute('href') || '', cls = (e.getAttribute('class') || '').trim();
-    if (Object.keys(e.dataset || {}).some((k) => /^bb/.test(k)) || (cls && cls !== ULTRA_LINK)) return false;
+    if (Object.keys(e.dataset || {}).some((k) => /^bb/.test(k)) || e.hasAttribute('data-mce-href') || (cls && cls !== ULTRA_LINK)) return false;
     return /^(https?:|mailto:|tel:\+?\d)/i.test(href) || (paper && href === '#' && cls === ULTRA_LINK);
   };
   const canEdit = (ed, { paper = false } = {}) => [...ed.querySelectorAll('*')].every((e) => TAGS.has(e.tagName) && styled(e) &&
