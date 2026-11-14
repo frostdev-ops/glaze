@@ -117,8 +117,9 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
   // What the last run that reached Ultra's Submit sent, for Ultra's confirmation cancelled (submit:open again): the paper
   // as it was then, or a file submitted as is.
   let sent = null;
+  // PDF/spreadsheet viewers have no immutable editor document to compare. Reopen their sheet so file() exports anew.
   const asSent = (api) => !!sent && sent.api === api && sent.key === api.key() &&
-    (sent.asis || (sent.doc === (api.editor?.view?.state.doc ?? null) && sent.format === JSON.stringify(api.format?.() ?? null)));
+    (sent.asis || (sent.doc != null && sent.doc === api.editor?.view?.state.doc && sent.format === JSON.stringify(api.format?.() ?? null)));
   const close = () => {
     openings++;
     if (!sheet) return;

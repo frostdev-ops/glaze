@@ -294,6 +294,27 @@ test('D12: the frame sends Ultra\'s Submit back only for the paper exactly as it
   assert.ok(s.doc.querySelector('.gs-sheet'), 'edited since: the sheet');
 });
 
+test('review: document viewers without a paper snapshot reopen the sheet after confirmation Cancel', async () => {
+  const sheet = require('../helpers/writer-submit-sheet.cjs');
+  for (const kind of ['pdf', 'sheet']) {
+    const s = sheet();
+    // writer-kinds.js surfaces expose file/save, without a ProseMirror editor or format.
+    delete s.api.editor; delete s.api.format;
+    s.api.kind = () => kind;
+    s.api.ext = () => kind === 'pdf' ? '.pdf' : '.xlsx';
+    let bytes = new Uint8Array([1]);
+    s.api.file = async () => ({ bytes, mime: kind === 'pdf' ? 'application/pdf' : L.mimeOf('a.xlsx') });
+    await s.open(); await s.flush();
+    s.click('.gs-primary'); await s.flush();
+    const go = s.messages.find((m) => m.type === 'submit:go');
+    s.handles['submit:done']({ run: go.run, ok: true }); await s.flush();
+    bytes = new Uint8Array([2]); // a PDF field or spreadsheet cell changed since the upload
+    await s.handles['submit:open']({ again: true }); await s.flush();
+    assert.ok(s.doc.querySelector('.gs-sheet'), `${kind}: no immutable paper snapshot can prove the file unchanged`);
+    assert.equal(s.messages.some((m) => m.type === 'submit:pass'), false);
+  }
+});
+
 // The frame between its ready (the page is armed and catches Ultra's file area and Submit) and the paper's mount.
 const early = (file) => {
   const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
