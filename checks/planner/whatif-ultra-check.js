@@ -117,6 +117,9 @@ const calc = async (where) => {
     await tools.getByRole('button', { name: 'Undo', exact: true }).evaluate((e) => e.click());
     await until(() => said().then((t) => t[0] === '88%'));
     check(await tools.locator('#gz-calc [data-f="s:_603_1"]').inputValue() === '', 'Undo empties them again');
+    await tools.locator('#gz-calc [data-f="s:_602_1"]').focus();
+    await tools.keyboard.press('Enter');
+    check(await tools.evaluate(() => document.activeElement?.dataset.f) === 's:_603_1', 'Enter moves to the next score');
     await tools.getByLabel('Only work not graded yet').evaluate((e) => e.click());
     await until(() => tools.locator('#gz-calc [data-f="s:_601_1"]').count().then((n) => n === 0));
     check(await tools.locator('#gz-calc [data-f="s:_603_1"]').count() === 1, 'Only work not graded yet keeps the rows left to grade');
