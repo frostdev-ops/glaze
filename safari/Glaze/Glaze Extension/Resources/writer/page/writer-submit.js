@@ -372,8 +372,9 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       claimed = false;
       permit('commit').catch(() => {});
       submitted.add(box);
+      box.unsent = null;
       pass(b);
-      confirming(box, new Map([...(alone ? [] : [name]), ...files.map((f) => f.name)].map((n) => [n, attached.get(box)?.get(n)?.row])));
+      confirming(box, { key, user, token, version, rows: new Map([...(alone ? [] : [name]), ...files.map((f) => f.name)].map((n) => [n, attached.get(box)?.get(n)?.row])) });
       say(box, { type: 'submit:done', run: m.run, ok: true });
       return true;
     } catch (e) { console.error(e); return fail('page'); } finally {
@@ -389,7 +390,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   // holding the file and text; else the sheet opens, its run finding the earlier upload (Replace).
   const CONFIRMATION = { cancel: '[data-analytics-id="assignment.attempt.submit.confirmation.dialog.cancel.button"]',
     submit: '[data-analytics-id="course.content.assessment.test.modal.confirmSubmitAttemptAlert.submit"]' };
-  const confirming = (box, rows) => {
+  const confirming = (box, draft) => {
     const at = Date.now();
     let seen = false, sent = false;
     const press = (e) => { if (e.target?.closest?.(CONFIRMATION.submit)) sent = true; };
@@ -401,20 +402,35 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if (!over) { setTimeout(look, 150); return; }
       document.removeEventListener('click', press, true);
       if (!seen || open || sent) return;
-      box.unsent = { rows };
+      box.unsent = draft;
       submitted.delete(box);
       Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op: 'reopen', token: tokens.get(box), user: box.context?.paper?.user, page: location.href })).catch(() => {});
     };
     look();
   };
-  const again = (box) => {
-    const u = box.unsent, b = L().footer(box.editor).submit, area = L().areaOf(box.editor);
+  const again = async (box) => {
+    const u = box.unsent, frame = box.frame, port = box.port;
     if (!u || running) return;
     box.unsent = null;
-    if (!b || !L().enabled(b) || ![...u.rows].every(([n, row]) => { const rows = L().listings(area, n, visible); return !!row && rows.length === 1 && rows[0] === row; })) { box.frame?.focus(); say(box, { type: 'submit:open' }); return; }
-    submitted.add(box);
-    pass(b);
-    confirming(box, u.rows);
+    running = true;
+    let claimed = false;
+    const here = () => live().has(box) && armed.get(box)() && box.ready && box.frame === frame && box.port === port && L().paperKey(box.context?.paper) === u.key;
+    const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token: u.token, user: u.user, page: location.href, ...(op === 'commit' && u.version && { version: u.version }) }))?.ok === true;
+    const open = () => { if (here()) { box.frame?.focus(); say(box, { type: 'submit:open' }); } };
+    try {
+      if (!here() || !await permit('claim')) { open(); return; }
+      claimed = true;
+      const b = L().footer(box.editor).submit, area = L().areaOf(box.editor);
+      if (!here() || !b || !L().enabled(b) || ![...u.rows].every(([n, row]) => { const rows = L().listings(area, n, visible); return !!row && rows.length === 1 && rows[0] === row; })) { open(); return; }
+      claimed = false;
+      permit('commit').catch(() => {});
+      submitted.add(box);
+      pass(b);
+      confirming(box, u);
+    } catch { open(); } finally {
+      running = false;
+      if (claimed) permit('release').catch(() => {});
+    }
   };
   // The student has Blackboard's editor before them (the sheet's button): what a run left in the attempt is theirs to see.
   const review = (box) => {

@@ -149,14 +149,14 @@ test('D12: Ultra\'s confirmation cancelled, its Submit pressed again goes to Ult
   await p.tick(200);
   p.fire(b, 'click');
   assert.deepEqual(opens(), [true], 'the frame is asked whether the paper is still as it was sent');
-  p.hear({ type: 'submit:pass' });
+  p.hear({ type: 'submit:pass' }); await p.flush();
   assert.equal(p.clicks.filter((x) => x === b).length, 2, 'Writer\'s press, then this one: Ultra\'s draft holds the file and text');
   c = confirmation(p);
   await p.tick(200);
   p.fire(c.submit, 'click'); c.d.remove();
   await p.tick(200);
   p.fire(b, 'click');
-  p.hear({ type: 'submit:pass' });
+  p.hear({ type: 'submit:pass' }); await p.flush();
   assert.deepEqual(opens(), [true, false], 'confirmed: nothing to press again');
   assert.equal(p.clicks.filter((x) => x === b).length, 2);
 });
@@ -181,6 +181,43 @@ test('D12: a cancelled confirmation frees the attempt Ultra numbered for the pag
   assert.deepEqual(done(r), ['claimed'], 'a dispatch never cancelled stays fenced');
 });
 
+test('review: passing Submit after a cancelled confirmation restores the worker fence, and a second Cancel clears it', async () => {
+  const u = ultra(), url = 'https://school.blackboard.com/ultra/courses/_101_1/assessment/_7_1/attempt/_31_1';
+  const p = await u.visit('doc-1', {}, { url });
+  p.ctx.location.pathname = new URL(url).pathname;
+  await p.go();
+  for (let i = 0; i < 2; i++) {
+    const c = confirmation(p);
+    await p.tick(200);
+    p.fire(c.cancel, 'click'); c.d.remove();
+    await p.tick(200);
+    assert.equal(Object.values(u.store.local).some((v) => v?.sent?.length), false, 'Cancel frees the attempt');
+    p.fire(p.button(), 'click'); p.hear({ type: 'submit:pass' }); await p.flush();
+    assert.equal(p.clicks.filter((b) => b === p.button()).length, i + 2);
+    assert.equal(Object.values(u.store.local).some((v) => v?.sent?.length), true, 'every passed Submit records its dispatch');
+  }
+  const c = confirmation(p);
+  await p.tick(200); p.fire(c.submit, 'click'); c.d.remove(); await p.tick(200);
+  const q = await u.visit('doc-2', {}, { url });
+  q.ctx.location.pathname = new URL(url).pathname;
+  await q.go();
+  assert.deepEqual(done(q), ['claimed'], 'the confirmed retry stays fenced after reload');
+});
+
+test('review: a confirmation retry cannot pass Submit after another page has claimed the attempt', async () => {
+  const u = ultra();
+  const p = await u.visit('doc-1');
+  await p.go();
+  const c = confirmation(p);
+  await p.tick(200); p.fire(c.cancel, 'click'); c.d.remove(); await p.tick(200);
+  const q = await u.visit('doc-2', { listed: false }, { tab: 2 });
+  await q.go();
+  Object.assign(u.at, { doc: 'doc-1', tab: 1 });
+  p.fire(p.button(), 'click'); p.hear({ type: 'submit:pass' }); await p.flush();
+  assert.equal(p.clicks.filter((b) => b === p.button()).length, 1, 'the other page owns the attempt');
+  assert.equal(p.sent.at(-1).type, 'submit:open', 'the sheet can explain the conflict');
+});
+
 test('D12: a cancelled confirmation, the paper edited since: the next run finds its own upload and offers Replace', async () => {
   const p = page();
   await p.go();
@@ -201,7 +238,7 @@ test('D12: a cancelled confirmation whose upload Ultra no longer lists goes nowh
   await p.tick(200);
   for (const row of p.doc.querySelectorAll('span')) if (row.textContent === 'Rivera_Essay2.docx') row.remove();
   p.fire(b, 'click');
-  p.hear({ type: 'submit:pass' });
+  p.hear({ type: 'submit:pass' }); await p.flush();
   assert.equal(p.clicks.filter((x) => x === b).length, 1);
   assert.equal(p.sent.filter((m) => m.type === 'submit:open').length, 2, 'the sheet opens instead');
 });
