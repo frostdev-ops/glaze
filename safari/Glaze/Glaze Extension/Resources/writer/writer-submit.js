@@ -44,7 +44,9 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   const MAX_FILE = 50e6;
   const fileError = (f) => f?.size > MAX_FILE ? 'That file is too large.' :
     !f || !asIsName(f.name) || !Number.isSafeInteger(f.size) || f.size <= 0 || typeof f.type !== 'string' || f.type.length > 200 ? 'That file could not be read.' : null;
-  const fileBytes = (f, bytes) => bytes instanceof ArrayBuffer && bytes.byteLength === f.size && !fileError(f);
+  // An ArrayBuffer from any realm: Firefox hands a content script what a port carries in the page's (live, 2026-11-14).
+  const buffer = (x) => x instanceof ArrayBuffer || Object.prototype.toString.call(x) === '[object ArrayBuffer]';
+  const fileBytes = (f, bytes) => buffer(bytes) && bytes.byteLength === f.size && !fileError(f);
   const kb = (bytes) => Math.max(1, Math.round((Number(bytes) || 0) / 1024));
 
   // ---- the hand-in: a file from any source ({ name, mime, bytes }: a document of Documents exported by its kind's file(),
@@ -52,7 +54,7 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   const MAX_ATTACH = 10;
   // → null, or why not: 'large' (over 50 MB), 'file' (no bytes, a name a file can't have, no type).
   const handInError = (f) => {
-    const n = f?.bytes instanceof ArrayBuffer || ArrayBuffer.isView(f?.bytes) ? f.bytes.byteLength : -1;
+    const n = buffer(f?.bytes) || ArrayBuffer.isView(f?.bytes) ? f.bytes.byteLength : -1;
     if (n > MAX_FILE) return 'large';
     return n > 0 && asIsName(f.name) && typeof f.mime === 'string' && f.mime.length <= 200 ? null : 'file';
   };
@@ -99,6 +101,9 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   // The submission's part of the panel: its editor and, outside the editor, the separate file area.
   const areaOf = (ed) => ed?.closest?.('[class*="makeStylessubmission-"]') || panelOf(ed);
   const footer = (ed) => { const p = panelOf(ed); return { submit: p?.querySelector(SUBMIT) || null, save: p?.querySelector(SAVE) || null }; };
+  // The footer's word that Ultra saved the attempt ("Last saved 2:56:04 PM"): an element drawn anew by each save, once a
+  // spinner in its place has gone (live Ultra 4001.4, 2026-11-14); null while it saves or before its first save.
+  const saved = (ed) => { const s = panelOf(ed)?.querySelector('footer [class*="makeStylesstatus-"] [role="status"]'); return s && !s.firstElementChild && s.textContent.trim() ? s : null; };
   const ACTIONS = { 'assignment.attempt.authoring.footer.submit': 'submit', 'course.content.assessment.footer.buttons.saveAndClose': 'save' };
   const actionOf = (b) => (b?.tagName === 'BUTTON' && Object.hasOwn(ACTIONS, b.getAttribute('data-analytics-id') || '') ? ACTIONS[b.getAttribute('data-analytics-id')] : null);
   // Ultra disables Submit and Save and Close while the attempt is empty (Mui marks them three ways).
@@ -160,7 +165,7 @@ var GZ_WRITER_SUBMIT_LIB = globalThis.GZ_WRITER_SUBMIT_LIB || (() => {
   };
   const may = (s, name) => step(s) === name;
 
-  return { MAX_ATTACH, handInError, attachName, noteWith, MAX_NOTE, MIME, EXT, SWITCH, switched, kindOf, mimeOf, shortTitle, fileName, safeName, paperKey, MAX_FILE, fileError, fileBytes, kb, route, asIsName, tag, pagesOf, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
+  return { buffer, MAX_ATTACH, handInError, attachName, noteWith, MAX_NOTE, MIME, EXT, SWITCH, switched, kindOf, mimeOf, shortTitle, fileName, safeName, paperKey, MAX_FILE, fileError, fileBytes, kb, route, asIsName, tag, pagesOf, PANEL, SUBMIT, SAVE, panelOf, areaOf, footer, saved, actionOf, enabled, uploadInput, dropZone, listings, listed, lines, delta, STEPS, start, step, advance, may };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_SUBMIT_LIB;
 GZ_WRITER_SUBMIT_LIB;

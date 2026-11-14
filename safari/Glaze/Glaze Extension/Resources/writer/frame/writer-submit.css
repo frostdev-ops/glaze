@@ -42,6 +42,8 @@
 .gs-review { color: var(--gz-accent-hi); font-weight: 600; }
 :root:not([data-dark]) .gs-review { color: var(--gz-accent); }
 .gs-err { color: var(--gz-err); font-size: 13px; }
+.gs-fix { display: flex; gap: 18px; }
+.gs-fix:not(:has(> :not([hidden]))) { display: none; }
 .gs-err:empty { display: none; }
 .gs-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
 .gs-btn { padding: 8px 18px; border-radius: 999px; border: 1px solid var(--gz-line-strong); font-weight: 600; }

@@ -3328,6 +3328,7 @@
   "The attempt page changed. Nothing was submitted.": "La página del intento cambió. No se entregó nada.",
   "This attempt is already being submitted or needs review. Use Blackboard editor to continue.": "Este intento ya se está entregando o necesita revisión. Usa el Editor de Blackboard para continuar.",
   "Ultra may already have the file. Use Blackboard editor to review or remove it before submitting.": "Puede que Ultra ya tenga el archivo. Usa el Editor de Blackboard para revisarlo o quitarlo antes de entregar.",
+  "Ultra already has a file with this name. Nothing was submitted.": "Ultra ya tiene un archivo con este nombre. No se entregó nada.",
   "Submission stopped. Use Blackboard editor to review or remove any upload before submitting.": "Entrega detenida. Usa el Editor de Blackboard para revisar o quitar cualquier carga antes de entregar.",
   "Spelling": "Ortografía",
   "Grammar": "Gramática",

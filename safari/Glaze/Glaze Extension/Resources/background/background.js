@@ -2543,10 +2543,14 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
   const present = m.op === 'commit' && aiKeptRead ? new Set(aiAttempts.keys()) : null;
   const task = (brokerTurn ||= GZ_CARDS.queue())(async () => {
     const no = { ok: false };
-    if (s.id !== chrome.runtime.id || !s.tab || s.frameId !== 0 || !['claim', 'commit', 'release', 'review'].includes(m.op) ||
+    if (s.id !== chrome.runtime.id || !s.tab || s.frameId !== 0 || !['claim', 'commit', 'release', 'review', 'reopen'].includes(m.op) ||
       !/^[\w-]{32,64}$/.test(m.token || '') || !/^_\d+_\d+$/.test(m.user || '')) return no;
+    // The page's own address, from the sender's origin: Chrome's sender.url stays at the address the document loaded at
+    // (the assignment's overview) once Ultra opens the attempt in-app (live, 2026-11-14). A claim or review still needs
+    // the worker's evidence, read from the document itself, that it is this assignment's attempt (aiAttempt); a commit or
+    // release settles only the run this page's token claimed at that address.
     let u;
-    try { u = new URL(addressOf(s)); } catch { return no; }
+    try { const from = new URL(addressOf(s)); u = typeof m.page === 'string' ? new URL(m.page) : from; if (u.origin !== from.origin) return no; } catch { return no; }
     const at = /^\/ultra\/courses\/(_\d+_\d+)\/assessment\/(_\d+_\d+)\/attempt\/(create|_\d+_\d+)\/?$/.exec(u.pathname);
     const settings = await chrome.storage.sync.get(['enabled', 'enhance']);
     // A commit or release only settles the page's own claim, which was checked to be an assignment's.
@@ -2564,13 +2568,18 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     } else if (m.op === 'review') {
       if (!run || (run.owner !== owner && now < run.until)) return no;
       await keep({ run: null, sent });
+    } else if (m.op === 'reopen') {
+      // Ultra's confirmation of this page's dispatch closed without its Submit: nothing was submitted, the attempt free.
+      const i = sent.findIndex((x) => x.token === m.token && x.owners[0] === owner);
+      if (i < 0) return no;
+      await keep({ run, sent: sent.filter((x, k) => k !== i) });
     } else if (!mine) return no;
     else if (m.op === 'release') await keep({ run: null, sent });
     else {
       await aiKept();
       const here = `${u.origin}/ultra/courses/${course}/assessment/${content}/attempt/`;
       const owners = [owner, ...[...aiAttempts].filter(([k, v]) => k !== owner && (!present || present.has(k)) && v.page?.startsWith(here)).map(([k]) => k)].slice(0, 32);
-      await keep({ run: null, sent: [{ owners, attempts: [...new Set([run.attempt, attempt])].filter((x) => x !== 'create') }, ...sent].slice(0, 20) });
+      await keep({ run: null, sent: [{ owners, attempts: [...new Set([run.attempt, attempt])].filter((x) => x !== 'create'), token: m.token }, ...sent].slice(0, 20) });
       if (typeof m.version === 'string' && /^[a-z0-9]{1,12}-[a-z0-9]{1,8}$/.test(m.version)) {
         try {
           await openPapers().submitted(GZ_WRITER_PAPERS.keyOf({ school: u.host, user: m.user, course, content }), m.version);

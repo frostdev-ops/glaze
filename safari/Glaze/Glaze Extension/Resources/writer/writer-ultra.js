@@ -18,12 +18,16 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
   };
   const ASSIGNMENT = 'bb-assignment-attempt-authoring-panel[ng-if="assessmentAttempt.contentData.courseContent.isAssignment()"]';
   const SUBMISSION = 'bb-editorassignment-attempt-authoring-submission';
+  // Ultra turns the submission editor off (contenteditable false) for the moment it saves the attempt's files, an upload or
+  // a removal (live Ultra 4001.4, 2026-11-14): off, it is still the assignment's, though never taken new (boxes) or written.
+  const editable = (ed) => !!ed && ed.closest?.(EDITOR) === ed;
+  const submission = (ed) => editable(ed) || (ed?.id === SUBMISSION && ed.closest?.('.ql-editor') === ed);
   // The attempt page's kind: a test where Ultra draws its attempt canvas or the gradebook says Test, an assignment where it
   // draws its guarded React panel and submission editor (a template shell alone proves nothing), else ''. Live columns carry no assessmentSubtype
   // (owner's Ultra, 2026-10-27), so the page decides.
   const pageKind = (doc, rows, content) => {
     if (doc?.querySelector?.('bb-attempt-canvas') || attemptKind(rows, content) === 'test') return 'test';
-    return doc?.querySelector?.(ASSIGNMENT)?.querySelector(`#${SUBMISSION}${EDITOR}`) ? 'assignment' : '';
+    return submission(doc?.querySelector?.(ASSIGNMENT)?.querySelector(`#${SUBMISSION}`)) ? 'assignment' : '';
   };
 
   // Kinds: 'post' | 'reply' | 'message' | 'journal' | 'assignment' | 'test', else 'unknown' (left to Ultra). An attempt is
@@ -34,7 +38,7 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
   const KINDS = ['post', 'reply', 'message', 'journal', 'assignment', 'test', 'comment', 'unknown'];
   const JOURNAL = 'journal-responses-panel[analytics-id="course.content.journal"]';
   const kindOf = (ed, { path = '', attempt = '' } = {}) => {
-    if (ed?.closest?.(EDITOR) !== ed) return 'unknown';
+    if (!submission(ed)) return 'unknown';
     if (attemptAt(path)) {
       if (ed.closest('bb-attempt-canvas')) return 'test';
       return ed.id === SUBMISSION && ed.closest(ASSIGNMENT) ? (attempt === 'test' || pageKind(top(ed)) === 'test' ? 'test' : 'assignment') : 'unknown';
@@ -130,7 +134,7 @@ var GZ_WRITER_ULTRA = globalThis.GZ_WRITER_ULTRA || (() => {
   const selection = (box, main) => main('get', { id: box.id }).find((r) => r?.ok && r.html === box.editor.innerHTML && r.selection)?.selection;
   const NATIVE = 'Blackboard editor';
 
-  return { EDITOR, KINDS, NATIVE, boxes, kindOf, rootOf, containerOf, identity, sendOf, enabled, contextOf, replyTo, canEdit, read, write, watch, selection, attemptAt, attemptKind, pageKind };
+  return { EDITOR, KINDS, NATIVE, boxes, kindOf, editable, rootOf, containerOf, identity, sendOf, enabled, contextOf, replyTo, canEdit, read, write, watch, selection, attemptAt, attemptKind, pageKind };
 })();
 if (typeof module !== 'undefined') module.exports = GZ_WRITER_ULTRA;
 GZ_WRITER_ULTRA;

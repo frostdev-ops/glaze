@@ -75,7 +75,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
         mark();
         if (!box.ready || !box.port) { setTimeout(open, 100); return; }
         box.opening = null; busy(marked, false);
-        box.frame?.focus(); say(box, { type: 'submit:open' });
+        box.frame?.focus(); say(box, { type: 'submit:open', ...(box.unsent && { again: true }) });
       };
       busy(b, true);
       open();
@@ -161,7 +161,22 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     try { for (const type of ['dragenter', 'dragover', 'drop']) zone.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt })); } finally { giving = false; }
     return true;
   };
-  const attach = async (box, file, bytes, here) => {
+  // Ultra's own delete of a file it lists (its ×, then its confirmation: live Ultra 4001.4, 2026-11-14), once the student
+  // has asked to replace it (the sheet's Replace): true once Ultra lists it no more and its editor is back, the removal saved.
+  const DELETE = '[data-analytics-id="assignment.attempt.authoring.fileUpload.confirm.delete.dialog.dialog.confirm.button"]';
+  const remove = async (box, area, name, here) => {
+    const id = `assignment.attempt.authoring.fileUpload.fileViewer.${name}.deleteFile`;
+    const x = [...area.querySelectorAll('button[data-analytics-id]')].filter((b) => b.getAttribute('data-analytics-id') === id);
+    if (x.length !== 1 || L().listings(area, name, visible).length !== 1) return false;
+    x[0].click();
+    const ok = await until(() => document.querySelector(DELETE), 5000, 100, here);
+    if (!ok) return false;
+    ok.click();
+    return !!await until(() => !L().listed(area, name, visible) && globalThis.GZ_WRITER_ULTRA?.editable(box.editor), 15000, 100, here);
+  };
+  // replace: the student asked to replace a file of this name Ultra already lists; without it such a file stops the run
+  // ('exists'), the sheet offering Replace.
+  const attach = async (box, file, bytes, here, replace = false) => {
     const area = L().areaOf(box.editor), panel = L().panelOf(box.editor);
     if (!area || !panel) return 'page';
     if (!here()) return 'page';
@@ -169,13 +184,17 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', data))].map((n) => n.toString(16).padStart(2, '0')).join('');
     if (!here()) return 'page';
     const old = attached.get(box)?.get(file.name);
-    if (old) {
-      if (old.name !== file.name || old.size !== data.byteLength || old.hash !== hash || old.mime !== file.type) return 'review';
+    if (old && old.name === file.name && old.size === data.byteLength && old.hash === hash && old.mime === file.type) {
       // Reuse only the same bytes and the very row the completed upload produced.
       const rows = L().listings(area, file.name, visible);
       return rows.length === 1 && rows[0] === old.row ? null : 'review';
     }
-    if (L().listed(area, file.name, visible) || document.querySelector('[role="dialog"][aria-labelledby="file-properties-dialog-title"]')) return 'review';
+    if (old || L().listed(area, file.name, visible)) {
+      if (!replace) return 'exists';
+      if (!await remove(box, area, file.name, here)) return here() ? 'review' : 'page';
+      attached.get(box)?.delete(file.name);
+    }
+    if (document.querySelector('[role="dialog"][aria-labelledby="file-properties-dialog-title"]')) return 'review';
     const input = L().uploadInput(area) || await until(() => L().uploadInput(area), 1500, 100, here);
     if (!here()) return 'page';
     const zone = !input && L().dropZone(area);
@@ -199,16 +218,16 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   };
   // One file from any source; byte views use only their byteOffset/byteLength. Never reject the promise for bad input.
   // → null, large, file, page (here revoked), upload, attach, or review (an upload may already be in Ultra).
-  const handIn = async (box, f, here = () => true) => {
+  const handIn = async (box, f, here = () => true, replace = false) => {
     let data, file;
     try {
       const why = L().handInError(f);
       if (why) return why;
       if (typeof here !== 'function' || !here()) return 'page';
-      data = f.bytes instanceof ArrayBuffer ? new Uint8Array(f.bytes) : new Uint8Array(f.bytes.buffer, f.bytes.byteOffset, f.bytes.byteLength);
+      data = L().buffer(f.bytes) ? new Uint8Array(f.bytes) : new Uint8Array(f.bytes.buffer, f.bytes.byteOffset, f.bytes.byteLength);
       file = new File([data], f.name, { type: f.mime, lastModified: Date.now() });
     } catch { return 'file'; }
-    try { return await attach(box, file, data, here); } catch { return 'page'; }
+    try { return await attach(box, file, data, here, replace); } catch { return 'page'; }
   };
   const sameText = (box, d) => {
     const want = d.map((o) => o.insert).join('').split('\n').slice(0, -1).map(squash).join('\n');
@@ -246,10 +265,12 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     // from the compact box's sheet, which adds the note after Ultra's text (append).
     let bytes = m.bytes;
     const files = Array.isArray(m.files) ? m.files : [], stream = m.stream === true, alone = name == null && bytes == null, append = alone && m.append === true;
-    const fileError = (f) => stream ? (!f || !L().asIsName(f.name) || typeof f.mime !== 'string' || f.mime.length > 200 || !Number.isSafeInteger(f.size) || f.size <= 0 ? 'file' : f.size > L().MAX_FILE ? 'large' : null) : L().handInError(f) || (!(f.bytes instanceof ArrayBuffer) ? 'file' : null);
+    const fileError = (f) => stream ? (!f || !L().asIsName(f.name) || typeof f.mime !== 'string' || f.mime.length > 200 || !Number.isSafeInteger(f.size) || f.size <= 0 ? 'file' : f.size > L().MAX_FILE ? 'large' : null) : L().handInError(f) || (!L().buffer(f.bytes) ? 'file' : null);
     const names = [...(alone ? [] : [name]), ...files.map((f) => f?.name)].map((n) => String(n).toLowerCase());
     if (files.length > L().MAX_ATTACH || files.some(fileError) || new Set(names).size !== names.length || (alone && (!files.length || !append))) return fail(files.some((f) => fileError(f) === 'large') ? 'large' : 'page');
-    if (!key || key !== L().paperKey(box.context?.paper) || !(alone || ((asis ? L().asIsName(name) && typeof m.mime === 'string' && m.mime.length <= 200 : L().safeName(name, kind)) && bytes instanceof ArrayBuffer && bytes.byteLength && bytes.byteLength <= 50e6)) || typeof m.note !== 'string' || m.note.length > L().MAX_NOTE ||
+    // The files the student asked to replace (the sheet's Replace), each one this run sends.
+    const replace = new Set((Array.isArray(m.replace) ? m.replace : []).filter((n) => typeof n === 'string' && names.includes(n.toLowerCase())));
+    if (!key || key !== L().paperKey(box.context?.paper) || !(alone || ((asis ? L().asIsName(name) && typeof m.mime === 'string' && m.mime.length <= 200 : L().safeName(name, kind)) && L().buffer(bytes) && bytes.byteLength && bytes.byteLength <= 50e6)) || typeof m.note !== 'string' || m.note.length > L().MAX_NOTE ||
       (m.text != null && (typeof m.text !== 'string' || m.text.length > 1e6)) || (m.held != null && (typeof m.held !== 'string' || m.held.length > 1e6)) || !Number.isFinite(m.until)) return fail('page');
     running = true;
     // Each attached file has a minute more for its upload to be listed.
@@ -258,7 +279,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const token = tokens.get(box) || crypto.randomUUID();
     tokens.set(box, token);
     const version = typeof m.version === 'string' && /^[a-z0-9-]{3,40}$/.test(m.version) ? m.version : null;
-    const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user, ...(op === 'commit' && version && { version }) }))?.ok === true;
+    const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user, page: location.href, ...(op === 'commit' && version && { version }) }))?.ok === true;
     let claimed = false;
     try {
       // Ultra's text box goes as the sheet says: kept as it showed it (Keep), the note and text after it; else replaced by
@@ -266,18 +287,38 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       const held = heldOf(box), shown = flat(m.held ?? '') === flat(held), keep = m.keep === true && !!held, extra = L().delta({ note: m.note, text: m.text || '' });
       if (!append && keep && !shown) return fail('page');
       if (!append && !extra && !keep && written.has(box) && !shown) return fail('review');
-      const d = append ? null : keep && !extra ? null : L().delta({ kept: keep ? held : '', note: m.note, text: m.text || '' }) || (held ? [{ insert: '\n' }] : null);
+      let d = append ? null : keep && !extra ? null : L().delta({ kept: keep ? held : '', note: m.note, text: m.text || '' }) || (held ? [{ insert: '\n' }] : null);
       const note = append && L().lines(m.note).length ? m.note : '';
       let s = L().start({ text: !!d || !!note, asis });
       if (!asis) s = L().advance(L().advance(s, { step: 'save' }), { step: 'build' });
       const here = () => L().paperKey(box.context?.paper) === key && !transaction.cancelled && box.ready && box.frame === transaction.frame && box.frame?.isConnected && box.port === transaction.port && ok() && armed.has(box) && assignment(box) && Date.now() < end;
       if (!here()) return fail('page');
+      // Ultra keeps its editor off while it saves the attempt's files (writer/writer-ultra.js editable): Quill drops a
+      // write then, and an upload waits for the one before it to be saved.
+      const settled = () => until(() => globalThis.GZ_WRITER_ULTRA?.editable(box.editor), 15000, 100, here);
       if (!await permit('claim')) return fail('claimed');
       claimed = true;
       if (!here()) return fail('page');
       // A file an earlier run left in Ultra that this one doesn't send is the student's to review.
       if ([...(attached.get(box)?.keys() || [])].some((n) => !names.includes(n.toLowerCase()))) return fail('review');
       say(box, { type: 'submit:step', run: m.run, step: 'attach' });
+      // An attempt that holds nothing yet (Ultra's box empty, its Submit off) may have no draft, and a draft its first file creates redraws
+      // the whole submission editor, Writer's frame and this run with it; one a text save creates doesn't (live Ultra 4001.4,
+      // 2026-11-14). So the text goes in first, or a space the text step takes out again, until Ultra's footer says it saved.
+      const first = L().footer(box.editor).submit;
+      if (!alone && !held && first && !L().enabled(first)) {
+        if (!await settled()) return fail('page');
+        const was = L().saved(box.editor);
+        written.add(box);
+        const w = note ? add(box, note) : write(box, d || [{ insert: ' \n' }]);
+        if (w) return fail(w);
+        if (!d && !note) {
+          d = [{ insert: '\n' }];
+          s = L().start({ text: true, asis });
+          if (!asis) s = L().advance(L().advance(s, { step: 'save' }), { step: 'build' });
+        }
+        if (!await until(() => { const x = L().saved(box.editor); return !!x && x !== was; }, 15000, 100, here)) return fail(here() ? 'text' : 'page');
+      }
       const request = async (index) => {
         const pending = transaction.pending = { index, reply: null };
         say(box, { type: 'submit:file', run: m.run, index });
@@ -287,7 +328,8 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       };
       if (!alone) {
         file = name;
-        const a = await handIn(box, { name, mime: asis ? m.mime : L().mimeOf(name), bytes }, here);
+        if (!await settled()) return fail('page');
+        const a = await handIn(box, { name, mime: asis ? m.mime : L().mimeOf(name), bytes }, here, replace.has(name));
         bytes = null; m.bytes = null;
         if (a) return fail(a);
       }
@@ -295,8 +337,9 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
         const f = files[i]; file = f.name;
         let reply = stream ? await request(i) : { ok: true, bytes: f.bytes };
         if (!reply.ok) return fail(reply.error === 'changed' ? 'changed' : 'file');
-        if (stream && (!(reply.bytes instanceof ArrayBuffer) || reply.bytes.byteLength !== f.size)) return fail('file');
-        const a = await handIn(box, { name: f.name, mime: f.mime, bytes: reply.bytes }, here);
+        if (stream && (!L().buffer(reply.bytes) || reply.bytes.byteLength !== f.size)) return fail('file');
+        if (!await settled()) return fail('page');
+        const a = await handIn(box, { name: f.name, mime: f.mime, bytes: reply.bytes }, here, replace.has(f.name));
         reply = null;
         if (!stream) f.bytes = null;
         if (a) return fail(a);
@@ -306,6 +349,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if (!here()) return fail('page');
       if (d || note) {
         say(box, { type: 'submit:step', run: m.run, step: 'text' });
+        if (!await settled()) return fail(here() ? 'text' : 'page');
         written.add(box);
         const w = note ? add(box, note) : write(box, d);
         if (w) return fail(w);
@@ -329,6 +373,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       permit('commit').catch(() => {});
       submitted.add(box);
       pass(b);
+      confirming(box, new Map([...(alone ? [] : [name]), ...files.map((f) => f.name)].map((n) => [n, attached.get(box)?.get(n)?.row])));
       say(box, { type: 'submit:done', run: m.run, ok: true });
       return true;
     } catch (e) { console.error(e); return fail('page'); } finally {
@@ -337,12 +382,46 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       if (claimed && !attached.has(box)) permit('release').catch(() => {});
     }
   };
+  // Ultra's confirmation of the Submit Writer pressed (live Ultra 4001.4, 2026-11-14). Closed without its own Submit (its
+  // Cancel, its ×, Escape, a click beside it), nothing was submitted: the attempt is free again, here and in the worker (a
+  // reload may submit it), and Ultra's Submit pressed again asks the frame (submit:open again), whose submit:pass, the
+  // paper being as it was sent, sends that press on to Ultra once Ultra still lists each file the run attached, its draft
+  // holding the file and text; else the sheet opens, its run finding the earlier upload (Replace).
+  const CONFIRMATION = { cancel: '[data-analytics-id="assignment.attempt.submit.confirmation.dialog.cancel.button"]',
+    submit: '[data-analytics-id="course.content.assessment.test.modal.confirmSubmitAttemptAlert.submit"]' };
+  const confirming = (box, rows) => {
+    const at = Date.now();
+    let seen = false, sent = false;
+    const press = (e) => { if (e.target?.closest?.(CONFIRMATION.submit)) sent = true; };
+    document.addEventListener('click', press, true);
+    const look = () => {
+      const open = !!document.querySelector(CONFIRMATION.cancel);
+      seen ||= open;
+      const over = sent || (seen && !open) || !box.editor.isConnected || (!seen && Date.now() - at > 15000);
+      if (!over) { setTimeout(look, 150); return; }
+      document.removeEventListener('click', press, true);
+      if (!seen || open || sent) return;
+      box.unsent = { rows };
+      submitted.delete(box);
+      Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op: 'reopen', token: tokens.get(box), user: box.context?.paper?.user, page: location.href })).catch(() => {});
+    };
+    look();
+  };
+  const again = (box) => {
+    const u = box.unsent, b = L().footer(box.editor).submit, area = L().areaOf(box.editor);
+    if (!u || running) return;
+    box.unsent = null;
+    if (!b || !L().enabled(b) || ![...u.rows].every(([n, row]) => { const rows = L().listings(area, n, visible); return !!row && rows.length === 1 && rows[0] === row; })) { box.frame?.focus(); say(box, { type: 'submit:open' }); return; }
+    submitted.add(box);
+    pass(b);
+    confirming(box, u.rows);
+  };
   // The student has Blackboard's editor before them (the sheet's button): what a run left in the attempt is theirs to see.
   const review = (box) => {
     if (running) return;
     const token = tokens.get(box) || crypto.randomUUID();
     tokens.set(box, token);
-    Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op: 'review', token, user: box.context?.paper?.user })).catch(() => {});
+    Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op: 'review', token, user: box.context?.paper?.user, page: location.href })).catch(() => {});
   };
 
   // ---- Ultra's own file area, caught before Ultra
@@ -393,6 +472,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     else if (m.type === 'submit:go' && armed.has(box)) go(box, m, ok);
     else if (m.type === 'submit:held' && armed.has(box)) say(box, { type: 'submit:held', text: heldOf(box).slice(0, 1e6) });
     else if (m.type === 'submit:review' && armed.has(box)) review(box);
+    else if (m.type === 'submit:pass' && armed.has(box)) again(box);
   };
   // armed(box): this step has the box's Ultra buttons (writer/page/writer.js holds a press until it does).
   const press = (box, b, type = 'click') => { if (live().has(box) && box.full && ownerOf(b) === box) act(box, b, { type, preventDefault() {}, stopImmediatePropagation() {} }); };
