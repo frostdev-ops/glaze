@@ -35,6 +35,8 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   // Ultra writes a grade cut, not rounded, to two places (82.456 is 82.45%); Canvas rounds it.
   const cut = (x) => (ultra ? Math.floor(x * 100 + 1e-9) / 100 : C.round2(x));
   const pct = (x) => GZ_I18N.pct(cut(x), locale());
+  // A number to type over or read in a box: to two places, in the student's decimals, never grouped ("1000", "8,5").
+  const numIn = (x) => new Intl.NumberFormat(GZ_I18N.locale(locale()), { useGrouping: false, maximumFractionDigits: 2 }).format(C.round2(x));
   // A GPA to two places, a half up in decimal like the percents (3.825 is 3.83 though its float is 3.8249999999999997).
   const two = (x) => (x == null ? '–' : new Intl.NumberFormat(GZ_I18N.locale(locale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(C.round2(x)));
   const studentIn = (c) => c?.enrollments?.find((e) => e.type === 'student');
@@ -48,6 +50,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === 'local' && D.tkey && changes[D.tkey]) pastIn(changes[D.tkey].newValue);
+      if (area === 'local' && changes.calcUnit) unitIs(changes.calcUnit.newValue);
       const marks = area === 'local' && changes.whatIfCleared?.newValue;
       if (!marks) return;
       const was = changes.whatIfCleared.oldValue || {};
@@ -90,6 +93,16 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
 
   // ---- what-if calculator ------------------------------------------------------------------------------------------
   const W = new Map(); // course id → { status: start|none|idle|loading|ready|failed, v (drawn version), … }
+  // Points or Percent: how scores show and are typed, for every course on this device (storage.local calcUnit). Any
+  // form is read either way ("8", "8/10", "80%").
+  let unitPct = false;
+  function unitIs(v) {
+    if ((v === 'percent') === unitPct) return;
+    unitPct = v === 'percent';
+    for (const st of W.values()) st.v++;
+    whatIf();
+  }
+  getArea('local', 'calcUnit').then(unitIs);
   const GRADES = ultra ? /^\/ultra\/courses\/_\d+_\d+\/grades/ : /^\/courses\/\d+\/grades\/?$/;
   const courseHere = () => (ultra ? X.courseId() : canvasCourseId());
 
@@ -106,7 +119,14 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     if (!me || (ultra && !/^_\d+_\d+$/.test(me.user_id || ''))) return none();
     Object.assign(st, { row, me, key: whatIfKey(me), status: 'idle' });
     // With the weights the student's syllabus lists, if one was imported (planner/page/syllabus.js): shown, never used.
-    const [saved, syl, old] = await Promise.all([readArea('local', st.key), getArea('local', `syllabus:${location.origin}/${me.user_id}/${st.cid}`), ultra ? readArea('local', 'whatIf') : {}]);
+    // And the scale the student gave the course for the GPA (gpaCourses), for letters where the course shows none.
+    const [saved, syl, old, prefs] = await Promise.all([readArea('local', st.key), getArea('local', `syllabus:${location.origin}/${me.user_id}/${st.cid}`), ultra ? readArea('local', 'whatIf') : {},
+      getArea('sync', 'gpaCourses')]);
+    // (planner/gradecalc.js may still be on its way here: Ultra's page reads its gradebook first.)
+    st.own = await calcIn().then(() => {
+      const pref = C.cleanGpa(prefs)[`${ultra ? 'ultra' : 'canvas'}:${location.origin}/${st.cid}`];
+      return pref?.s ? C.parseScheme(pref.s) : null;
+    }, () => null);
     // What you saved couldn't be read: no calculator over it (a change from here would replace it), asked again later.
     if (!saved.ok) return none();
     st.saved = saved.v?.[st.cid];
@@ -137,13 +157,14 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       const cats = await reader().all(`/learn/api/v1/courses/${st.cid}/gradebook/categories`).catch(() => []);
       st.names = Object.fromEntries(cats.map((c) => [c?.id, { title: String(c?.title || '').slice(0, 100), isUserDefined: c?.isUserDefined === true, localizableTitle: c?.localizableTitle }]));
     }
-    return { g: GZ_ULTRA.grade(rows, [], st.names), book: b.results ? b.key : null };
+    return { g: GZ_ULTRA.grade(rows, st.schemas || [], st.names), book: b.results ? b.key : null, rows };
   };
   // Ultra's page asked for the course's gradebook again (content-ultra.js, at most once a minute) and the answer changed:
   // the course is read anew and what you have now (not what was saved when the page loaded) is checked against it as at
   // load. A grade that arrived or changed takes the what-if typed for it away, with a word, and the record is kept so.
   const rebuild = (st, rows, book) => {
-    const g = GZ_ULTRA.grade(rows, [], st.names);
+    const g = GZ_ULTRA.grade(rows, st.schemas || [], st.names);
+    st.rows = rows;
     const r = C.reconcile(st.rec, g.course);
     const changed = JSON.stringify(r.kept) !== JSON.stringify(st.rec);
     // A fill's Undo is for the scores it was made over, not this record.
@@ -190,8 +211,8 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     whatIf();
     const { cid, row } = st;
     if (ultra) {
-      return (st.p = ultraGrade(st).then(({ g, book }) => {
-        Object.assign(st, { g, course: g.course, book, scheme: C.SCHEME, period: null, truth: null, anon: false });
+      return (st.p = ultraGrade(st).then(({ g, book, rows }) => {
+        Object.assign(st, { g, course: g.course, book, rows, scheme: C.SCHEME, period: null, truth: null, anon: false });
         const r = C.reconcile(st.rec || st.saved, st.course);
         // Glaze 2.2's scores, saved against no grade (C.oldScores): those whose grade has come in are gone, with a word.
         const old = st.rec ? {} : C.oldScores({ [cid]: st.old }, cid);
@@ -205,11 +226,19 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     return (st.p = Promise.all([
       getAll(`/courses/${cid}/assignment_groups?include[]=assignments&include[]=submission&exclude_response_fields[]=description&exclude_response_fields[]=rubric&per_page=100`),
       row.has_grading_periods ? capi(`/courses/${cid}/grading_periods`).then((j) => j.grading_periods) : null,
-      row.restrict_quantitative_data ? capi(`/courses/${cid}?include[]=grading_scheme`).then((j) => j.grading_scheme) : null,
+      // The course's letters: where it shows letters only, or gives one for the course (computed_current_grade).
+      row.restrict_quantitative_data || st.me.computed_current_grade != null ? capi(`/courses/${cid}?include[]=grading_scheme`).then((j) => j?.grading_scheme, () => null) : null,
       calcIn(),
     ]).then(([groups, periods, scheme]) => {
       st.course = C.fromApi(groups, { weighted: row.apply_assignment_group_weights, periods, weightedPeriods: row.has_weighted_grading_periods });
+      // Work graded by letter needs the course's letters too; with none, Canvas's default scheme is the one it uses.
+      const lettered = st.course.groups.some((g) => g.items.some((i) => i.scale === 'letter'));
+      return scheme == null && lettered ? capi(`/courses/${cid}?include[]=grading_scheme`).then((j) => j?.grading_scheme, () => null) : scheme;
+    }).then((scheme) => {
       st.scheme = C.schemeOf(scheme) || C.SCHEME;
+      st.lettered = !!row.restrict_quantitative_data || st.me.computed_current_grade != null;
+      const letters = C.canvasLetters(st.scheme);
+      for (const g of st.course.groups) for (const i of g.items) if (i.scale === 'letter') i.letters = letters;
       // The page's grading period: the one picked, or Canvas's current one; 0 is all of them.
       const picked = st.whole ? null : new URLSearchParams(location.search).get('grading_period_id') ?? (row.has_grading_periods ? st.me.current_grading_period_id : null);
       st.period = picked && picked !== '0' ? String(picked) : null;
@@ -255,6 +284,20 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       }));
   };
 
+  // Ultra: the course's grading schemas (each item's scale and letters), asked once the calculator is open; where they
+  // can't be read every item is in points.
+  const schemasIn = (st) => {
+    if (!ultra || st.schemas !== undefined || st.status !== 'ready') return;
+    st.schemas = null;
+    reader().schemas(st.cid).then((list) => (Array.isArray(list) && list.complete !== false ? list : []), () => []).then((list) => {
+      st.schemas = list;
+      if (st.status !== 'ready' || !st.rows || !list.length) return;
+      try { st.g = GZ_ULTRA.grade(st.rows, list, st.names); } catch { return; }
+      st.course = st.g.course;
+      st.v++;
+      whatIf();
+    });
+  };
   const whatIf = () => {
     const old = document.getElementById('gz-calc');
     if (ultra) { pauseRetries(); if (!shown()) return; }
@@ -298,6 +341,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       if (!box.isConnected || box.open === opened) return;
       st.open = opened = box.open;
       if (box.open && (st.status === 'idle' || st.status === 'failed')) retry(st);
+      if (box.open) schemasIn(st);
     });
     if (st.status !== 'ready') {
       // Another try on its way is still loading.
@@ -311,11 +355,15 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       }
       return box;
     }
+    if (st.open) schemasIn(st);
     const { course, rec } = st;
     const rqd = !!st.row.restrict_quantitative_data;
     const opts = { period: st.period, anon: st.anon };
-    // Letters only where the course shows letters only (restricted quantitative data).
-    const show = (x) => (x == null ? '–' : rqd ? C.letter(x, st.scheme) : pct(x));
+    // Letters only where the course shows letters only (restricted quantitative data); beside the percent where its letters
+    // are known: the scale the student gave it, else (Canvas) the course's own.
+    const letters = st.own || (!ultra && st.lettered ? st.scheme : null);
+    const share = (x) => (x == null ? '–' : rqd ? C.letter(x, st.scheme) : pct(x));
+    const show = (x) => (x == null || rqd || !letters ? share(x) : `${pct(x)} · ${C.letter(x, letters)}`);
     // An Ultra recipe that counts work not graded yet as zero (not a running total) makes the final figure its grade.
     const pick = (r) => (course.zeros ? r.final : r.current);
     const base = C.calc(course, {}, opts);
@@ -338,6 +386,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     const outFinal = make('b');
     // How far your changes move it from where it is, in points.
     const outDelta = make('small', { className: 'gz-calc-delta' });
+    // A course graded by points: its points, as Canvas and Blackboard show them (a weighted one's don't add up to its grade).
+    const byPoints = !course.weighted && !rqd;
+    const outPts = make('small', { className: 'gz-calc-pts' });
     const row = (name, dd) => make('div', {}, make('dt', { textContent: name }), dd);
     // A teacher's own overall column stands for Blackboard's (planner/gradecalc.js model): named as theirs.
     const nowName = ultra && st.g.column ? t('{name} now', { name: st.g.column }) : t(lms('Canvas now', 'Blackboard now'));
@@ -345,7 +396,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       // An estimate is shown beside Blackboard's own figure, where it has one, never in its place.
       ...(est ? [canvas != null && row(nowName, make('dd', { textContent: show(canvas) })), row(t('Estimate now'), make('dd', { textContent: show(pick(base)) }))]
         : [row(nowName, make('dd', { textContent: show(canvas ?? pick(base)) }))]).filter(Boolean),
-      row(t('With your changes'), make('dd', {}, outNow, outDelta)),
+      row(t('With your changes'), make('dd', {}, outNow, outDelta, ...(byPoints ? [outPts] : []))),
       ...(course.zeros ? [] : [row(t('With work not graded yet as zero'), make('dd', {}, outFinal))]));
     totals.setAttribute('aria-live', 'polite');
     box.append(totals);
@@ -359,15 +410,18 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       outFinal.textContent = show(r.final);
       const d = rqd || pick(r) == null || pick(base) == null ? 0 : C.round2(cut(pick(r)) - cut(pick(base)));
       outDelta.textContent = d ? `${d > 0 ? '+' : '−'}${GZ_I18N.num(Math.abs(d), locale())}` : '';
+      const all = Object.values(r.groups).map((x) => x[course.zeros ? 'final' : 'current']);
+      const got = all.reduce((n, x) => n + x.score, 0), of = all.reduce((n, x) => n + x.possible, 0);
+      outPts.textContent = of > 0 ? t('{score} / {possible} points', { score: numIn(got), possible: numIn(of) }) : '';
       for (const f of updates) f(r);
     };
     const changed = () => { keep(st); update(); };
     const redraw = () => { keep(st); st.v++; whatIf(); };
     // Fill what's left, and undo it (st.undo: the scores before the fill), until a score is typed.
-    const goalOf = () => {
-      const raw = st.target.trim();
-      return rqd ? st.scheme.find(([n]) => n.toLowerCase() === raw.toLowerCase())?.[1] ?? parseFloat(raw) : parseFloat(raw);
-    };
+    // The target: a percent, a fraction, a letter where the course's letters are known, or in Points on a course graded by
+    // points, points of its whole total (work not graded yet included).
+    const totalPts = byPoints && !unitPct ? Object.values(base.groups).reduce((n, x) => n + x.final.possible, 0) : 0;
+    const goalOf = () => C.readTarget(st.target, { scheme: rqd ? st.scheme : letters, total: totalPts }) ?? NaN;
     const byId = new Map(course.groups.flatMap((g) => g.items.map((i) => [i.id, i])));
     const fillWith = (how) => {
       if (st.moving) return;
@@ -405,8 +459,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     });
 
     // What you'd need: one even share of every item left, for a percentage (or, letters only, a letter's lowest).
-    const target = label(make('input', { type: rqd ? 'text' : 'number', min: 0, step: 'any', value: st.target, placeholder: rqd ? st.scheme[0][0] : '90' }),
-      t(rqd ? 'Target overall grade' : 'Target overall grade, in percent'));
+    const target = label(make('input', { type: 'text', inputMode: rqd || letters ? 'text' : 'decimal', autocomplete: 'off', spellcheck: false, value: st.target,
+      placeholder: rqd ? st.scheme[0][0] : totalPts ? numIn(Math.round(totalPts * 0.9)) : '90' }),
+      t(rqd ? 'Target overall grade' : totalPts ? 'Target overall grade, in points' : 'Target overall grade, in percent'));
     target.dataset.f = 'target';
     const need = make('p', { className: 'gz-calc-out' });
     need.setAttribute('aria-live', 'polite');
@@ -423,14 +478,26 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
             : t("You'd need about {pct} on each of the {n} items left.", { n: r.left, pct: rqd ? C.letter(r.share * 100, st.scheme) : GZ_I18N.pct(r.pct, locale()) });
     });
     target.addEventListener('input', () => { st.target = target.value; update(); });
-    const [before, after] = t('Aim for {target}% overall').split('{target}');
+    const [before, after] = (totalPts ? t('Aim for {target} of {total} points', { total: numIn(totalPts) }) : t('Aim for {target}% overall')).split('{target}');
     // Only work not graded yet: the rows of graded work left out of the list (they still count).
     const todo = make('input', { type: 'checkbox', checked: !!st.todo });
     todo.dataset.f = 'todo';
     todo.addEventListener('change', () => { st.todo = todo.checked; st.focus = 'todo'; st.v++; whatIf(); });
+    const unitButton = (u, text) => {
+      const b = make('button', { type: 'button', className: 'gz-calc-seg', textContent: t(text) });
+      b.setAttribute('aria-pressed', String(unitPct === (u === 'percent')));
+      b.dataset.f = `unit:${u}`;
+      b.addEventListener('click', () => {
+        st.focus = `unit:${u}`;
+        try { chrome.storage.local.set({ calcUnit: u }); } catch { /* reloaded */ }
+        unitIs(u);
+      });
+      return b;
+    };
+    const units = label(make('div', { className: 'gz-calc-units', role: 'group' }, unitButton('points', 'Points'), unitButton('percent', 'Percent')), t('Show scores as'));
     box.append(make('div', { className: 'gz-calc-tools' },
       make('label', { className: 'gz-calc-target' }, before, target, rqd ? after.replace(/^\s*%/, '') : after), need, fills,
-      make('label', { className: 'gz-calc-only' }, todo, ` ${t('Only work not graded yet')}`)));
+      make('div', { className: 'gz-calc-view' }, ...(rqd ? [] : [units]), make('label', { className: 'gz-calc-only' }, todo, ` ${t('Only work not graded yet')}`))));
     // Enter goes to the next score (Shift+Enter the one before), as in a spreadsheet.
     const step = (input) => input.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
@@ -448,7 +515,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       const gOut = make('b');
       updates.push((r) => {
         const x = r.groups[g.id]?.current;
-        gOut.textContent = x?.possible > 0 ? show((x.score / x.possible) * 100) : '–';
+        // In Points, the category's points too (an equal category's items count alike, so it has none to show).
+        gOut.textContent = !(x?.possible > 0) ? '–' : unitPct || rqd || g.equal ? share((x.score / x.possible) * 100)
+          : `${numIn(x.score)} / ${numIn(x.possible)} · ${share((x.score / x.possible) * 100)}`;
       });
       // Ultra's own categories (sys) in the student's language; work in none, so headed.
       const heading = g.sys ? t(g.name) : g.name || (g.id === 'none' ? t('No category') : '');
@@ -461,40 +530,67 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
         return c;
       };
       for (const i of items) {
-        if (st.todo && (i.excused || (i.score != null && !i.pending))) continue;
+        // Work Ultra or Canvas marks missing stays in view: it can still change.
+        if (st.todo && (i.excused || (i.score != null && !i.pending && !i.missing))) continue;
         const saved = rec.s[i.id];
         const real = i.excused ? null : i.score;
-        const toPts = (x) => (unit(i) ? (x / 100) * i.possible : x);
-        const fromPts = (x) => (unit(i) ? C.round2((x / i.possible) * 100) : x);
-        const input = make('input', { type: 'number', min: 0, step: 'any', value: saved ? fromPts(saved[0]) : '',
-          placeholder: i.excused ? t('Excused') : real == null ? '–' : unit(i) ? C.letter(fromPts(real), st.scheme) : GZ_I18N.num(real, locale()) });
-        label(input, unit(i) ? t('Score for {name}, in percent', { name: i.name }) : t('Score for {name}, out of {n}', { name: i.name, n: i.possible }));
-        input.dataset.f = `s:${i.id}`;
-        // A what-if score is marked, so it reads apart from a real one.
-        const mark = () => { if (rec.s[i.id]) input.dataset.set = ''; else delete input.dataset.set; };
-        mark();
-        step(input);
-        input.addEventListener('input', () => {
-          const v = parseFloat(input.value);
-          if (Number.isFinite(v) && v >= 0) rec.s[i.id] = [toPts(v), C.real(i)]; else delete rec.s[i.id];
-          mark();
+        // Shown and typed as a percent: in Percent, for work graded as a percent, or where the course shows letters only.
+        const asPct = i.possible > 0 && (unitPct || rqd || i.scale === 'percent');
+        let field;
+        const set = (v) => {
+          if (v === undefined) delete rec.s[i.id]; else rec.s[i.id] = [v, C.real(i)];
+          if (rec.s[i.id]) field.dataset.set = ''; else delete field.dataset.set;
           typed();
           changed();
-        });
+        };
+        if (i.scale === 'complete' && i.possible > 0) {
+          // Complete or Incomplete: full points or none, as the course grades it. A share some fill gave it stays listed.
+          const was = i.excused ? t('Excused') : real == null ? '–' : real >= i.possible ? t('Complete') : real > 0 ? numIn(real) : t('Incomplete');
+          const odd = saved && saved[0] > 0 && saved[0] < i.possible;
+          field = make('select', {}, make('option', { value: '', textContent: was }), make('option', { value: '1', textContent: t('Complete') }),
+            make('option', { value: '0', textContent: t('Incomplete') }), ...(odd ? [make('option', { value: 'x', textContent: `${numIn(saved[0])} / ${numIn(i.possible)}` })] : []));
+          field.value = !saved ? '' : odd ? 'x' : saved[0] >= i.possible ? '1' : '0';
+          field.addEventListener('change', () => { if (field.value !== 'x') set(field.value === '' ? undefined : field.value === '1' ? i.possible : 0); });
+        } else {
+          field = make('input', { type: 'text', inputMode: i.scale === 'letter' ? 'text' : 'decimal', autocomplete: 'off', spellcheck: false,
+            value: saved ? numIn(Number(C.scoreText(saved[0], i, asPct))) : '',
+            placeholder: i.excused ? t('Excused') : real == null ? '–' : rqd && i.possible > 0 ? C.letter((real / i.possible) * 100, st.scheme) : numIn(Number(C.scoreText(real, i, asPct))) });
+          // Any form: points, a fraction, a percent, a letter of the item's scale; something else is marked and changes nothing.
+          field.addEventListener('input', () => {
+            const v = C.readScore(field.value, i, asPct);
+            field.setAttribute('aria-invalid', String(v === null));
+            if (v !== null) set(v);
+          });
+          // Once typed, shown back as it counts.
+          field.addEventListener('change', () => { const v = C.readScore(field.value, i, asPct); if (v != null) field.value = numIn(Number(C.scoreText(v, i, asPct))); });
+          step(field);
+        }
+        label(field, asPct ? t('Score for {name}, in percent', { name: i.name }) : t('Score for {name}, out of {n}', { name: i.name, n: i.possible }));
+        field.dataset.f = `s:${i.id}`;
+        // A what-if score is marked, so it reads apart from a real one.
+        if (saved) field.dataset.set = '';
         const tag = make('span', { className: 'gz-calc-tag', textContent: t('Dropped'), hidden: true });
         updates.push((r) => { tag.hidden = !r.groups[g.id]?.current.dropped.includes(i.id); });
-        list.append(make('li', {}, count(i.id, i.name), make('span', { className: 'gz-calc-name', textContent: i.name, title: i.name }), tag,
-          make('span', { className: 'gz-calc-score' }, input, unit(i) ? ' %' : ` / ${GZ_I18N.num(i.possible, locale())}`)));
+        // The grade the course wrote (a letter), and work it marks missing.
+        const tags = [...(i.scale === 'letter' && i.shown && real != null ? [make('span', { className: 'gz-calc-tag', textContent: i.shown })] : []),
+          ...(i.missing ? [make('span', { className: 'gz-calc-tag gz-calc-missing', textContent: t('Missing') })] : []), tag];
+        list.append(make('li', {}, count(i.id, i.name), make('span', { className: 'gz-calc-name', textContent: i.name, title: i.name }), make('span', { className: 'gz-calc-tags' }, ...tags),
+          make('span', { className: 'gz-calc-score' }, field, i.scale === 'complete' && i.possible > 0 ? '' : asPct ? ' %' : ` / ${numIn(i.possible)}`)));
       }
       for (const p of pretend) {
         const name = label(make('input', { type: 'text', className: 'gz-calc-pname', value: p.n, maxLength: 100 }), t('Name of the pretend assignment'));
         name.dataset.f = `n:${p.id}`;
         name.addEventListener('change', () => { p.n = name.value.trim().slice(0, 100) || t('Pretend assignment'); redraw(); });
+        // Its score in any form against its own points; its points as a number.
         const num = (key, what) => {
-          const el = label(make('input', { type: 'number', min: 0, step: 'any', value: p[key] }), what);
+          const el = label(make('input', { type: 'text', inputMode: 'decimal', autocomplete: 'off', spellcheck: false, value: numIn(p[key]) }), what);
           el.dataset.f = `${key}:${p.id}`;
           step(el);
-          el.addEventListener('input', () => { const v = parseFloat(el.value); if (Number.isFinite(v) && v >= 0 && v <= 1e6) { p[key] = v; changed(); } });
+          el.addEventListener('input', () => {
+            const v = C.readScore(el.value, key === 's' ? { possible: p.pp } : { possible: 0 });
+            el.setAttribute('aria-invalid', String(v === null));
+            if (v != null) { p[key] = v; changed(); }
+          });
           return el;
         };
         const drop = label(make('button', { type: 'button', className: 'gz-calc-x', textContent: '×' }), t('Remove {name}', { name: p.n }));

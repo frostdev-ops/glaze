@@ -846,7 +846,8 @@ test("Ultra what-if: under the overall grade, by the course's own recipe (Blackb
   assert.equal(p.store.data[UKEY]._101_1.p.length, 1);
   assert.match(p.box().textContent, /Assignment · 40%/);
   assert.match(p.box().textContent, /Blackboard never sees these scores/);
-  assert.deepEqual(p.state.asked, [], 'nothing asked of Ultra: the page had the gradebook');
+  // Nothing asked for the figures (the page had the gradebook); opened, the course's scales, once.
+  assert.deepEqual(p.state.asked.map(([, , u]) => u.split('?')[0]), ['/learn/api/public/v1/courses/_101_1/gradebook/schemas']);
 });
 
 test("Ultra what-if: the page's gradebook in hand before planner/gradecalc.js has come still loads", async () => {
@@ -1128,13 +1129,13 @@ test('Ultra what-if: Fill and Undo preserve a saved score whose migration answer
   const undo = byText(p.box(), 'Undo');
   if (!undo.hidden) undo.fire('click');
   await settle(14);
-  assert.equal(scoreOf(p, '_603_1').value, 60, 'Undo must not remove the saved score that arrived after the fill');
+  assert.equal(scoreOf(p, '_603_1').value, '60', 'Undo must not remove the saved score that arrived after the fill');
   assert.equal(store.data[UKEY]._101_1.s._603_1?.[0], 60, 'the migrated score stays stored');
   // Once migration has finished, the fill is available and Undo still preserves the saved score.
   assert.ok(!byText(p.box(), 'Full marks').disabled);
   byText(p.box(), 'Full marks').fire('click');
   await settle(10);
-  assert.equal(scoreOf(p, '_602_1').value, 100);
+  assert.equal(scoreOf(p, '_602_1').value, '100');
   byText(p.box(), 'Undo').fire('click');
   await settle(14);
   assert.equal(scoreOf(p, '_602_1').value, '');
@@ -1916,7 +1917,7 @@ test('Ultra what-if: Fill what\'s left puts full marks or your average so far in
   assert.equal(byText(p.box(), 'Undo').hidden, true, 'nothing to undo yet');
   byText(p.box(), 'Full marks').fire('click');
   await settle(10);
-  assert.deepEqual([scoreOf(p, '_602_1').value, scoreOf(p, '_603_1').value], [50, 100]);
+  assert.deepEqual([scoreOf(p, '_602_1').value, scoreOf(p, '_603_1').value], ['50', '100']);
   assert.deepEqual(p.store.data[UKEY]._101_1.s._603_1.slice(0, 2), [100, null], 'kept like a typed score');
   // Assignment (50 + 90 + 100) / 300: 80%; overall (80 x 40 + 80 x 40 + 100 x 20) / 100.
   assert.equal(totals(p)[1], '84%');
@@ -1925,13 +1926,13 @@ test('Ultra what-if: Fill what\'s left puts full marks or your average so far in
   assert.equal(scoreOf(p, '_601_1').dataset.set, undefined, 'a real one is not');
   byText(p.box(), 'Undo').fire('click');
   await settle(10);
-  assert.deepEqual([scoreOf(p, '_602_1').value, scoreOf(p, '_603_1').value], [50, '']);
+  assert.deepEqual([scoreOf(p, '_602_1').value, scoreOf(p, '_603_1').value], ['50', '']);
   assert.equal(p.store.data[UKEY]._101_1.s._603_1, undefined);
   assert.equal(byText(p.box(), 'Undo').hidden, true);
   // Your average so far: Lab Report 3 at Assignment's share without the typed 50 is (90 + 50) / 200 = 70%.
   byText(p.box(), 'Your average so far').fire('click');
   await settle(10);
-  assert.equal(scoreOf(p, '_603_1').value, 70);
+  assert.equal(scoreOf(p, '_603_1').value, '70');
   // Typing after a fill: Undo goes, so it can't take the typing with it.
   const lab3 = scoreOf(p, '_603_1');
   lab3.value = '95';
@@ -1956,7 +1957,7 @@ test('Ultra what-if: the target sits under the figures, and What you need fills 
   assert.match(p.box().textContent, /You'd need about 97.5% on each of the 2 items left\./);
   byText(p.box(), 'What you need').fire('click');
   await settle(10);
-  assert.deepEqual([scoreOf(p, '_602_1').value, scoreOf(p, '_603_1').value], [97.5, 97.5]);
+  assert.deepEqual([scoreOf(p, '_602_1').value, scoreOf(p, '_603_1').value], ['97.5', '97.5']);
   assert.equal(totals(p)[1], '90%');
   assert.equal(find(p.box(), (e) => e.dataset.f === 'target').value, '90', 'the target stays');
   // Out of reach: nothing to fill with.
@@ -2095,7 +2096,7 @@ test("Ultra what-if: the page's gradebook coming in while what you saved is stil
   await settle(14);
   await open(p);
   await settle(10);
-  assert.equal(scoreOf(p, '_603_1').value, 100);
+  assert.equal(scoreOf(p, '_603_1').value, '100');
   assert.equal(totals(p)[1], '90%');
   assert.deepEqual(store.data[UKEY]._101_1.s._603_1.slice(0, 2), [100, null]);
 });
@@ -2243,7 +2244,7 @@ test('Ultra what-if: a course graded by points shows the points beside the perce
   await open(t);
   await settle(10);
   const row = scoreOf(t, '_619_1').closest('li');
-  assert.ok(row.all((e) => e.className === 'gz-calc-tag' && e.textContent === 'Missing' && !e.hidden).length);
+  assert.ok(row.all((e) => /\bgz-calc-tag\b/.test(e.className) && e.textContent === 'Missing' && !e.hidden).length);
   const only = find(t.box(), (e) => e.dataset.f === 'todo');
   only.checked = true;
   only.fire('change');
@@ -2257,7 +2258,7 @@ test("Canvas what-if: a letter typed for a letter-graded item scores as Canvas w
     { id: '9102', name: 'Check-in', points_possible: 10, grading_type: 'pass_fail', submission_types: ['online_text_entry'], published: true, submission: { score: 10, grade: 'complete', workflow_state: 'graded' } },
     { id: '9103', name: 'Quiz', points_possible: 10, grading_type: 'points', submission_types: ['online_quiz'], published: true, submission: { score: 8, workflow_state: 'graded', missing: false } },
   ] }];
-  const list = [row({ enrollments: [{ type: 'student', user_id: '3', computed_current_score: 90, computed_final_score: 60, computed_current_grade: 'A-' }] })];
+  const list = [row({ apply_assignment_group_weights: false, enrollments: [{ type: 'student', user_id: '3', computed_current_score: 90, computed_final_score: 60, computed_current_grade: 'A-' }] })];
   const p = gradesPage({ groups, list });
   await ready(p);
   const essay = find(p.box(), (e) => e.dataset.f === 's:9101');
@@ -2265,11 +2266,11 @@ test("Canvas what-if: a letter typed for a letter-graded item scores as Canvas w
   essay.fire('input');
   await settle(10);
   assert.deepEqual(p.store.data[KEY][String(BIO.course.id)].s['9101'].slice(0, 2), [8.6, null], "B: one point under B+'s 87%");
-  assert.match(totals(p)[1], /^88% · B\+$/, '26.6 of 30, with its letter on the default scale');
+  assert.equal(totals(p)[1], '88.67% · B+', '26.6 of 30, with its letter on the default scale');
   const check = find(p.box(), (e) => e.dataset.f === 's:9102');
   assert.equal(check.tagName, 'SELECT');
   check.value = '0';
   check.fire('change');
   await settle(10);
-  assert.match(totals(p)[1], /^55\.33% · F$/);
+  assert.equal(totals(p)[1], '55.33% · F');
 });
