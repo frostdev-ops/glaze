@@ -142,6 +142,26 @@ test('D12: Ultra\'s confirmation cancelled, its Submit pressed again goes to Ult
   assert.equal(p.clicks.filter((x) => x === b).length, 2);
 });
 
+test('D12: a cancelled confirmation frees the attempt Ultra numbered for the page after a reload', async () => {
+  const u = ultra(), url = 'https://school.blackboard.com/ultra/courses/_101_1/assessment/_7_1/attempt/_31_1';
+  const p = await u.visit('doc-1', {}, { url });
+  p.ctx.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/_31_1';
+  await p.go(); await p.flush();
+  assert.deepEqual(done(p), ['ok']);
+  const c = confirmation(p);
+  await p.tick(200);
+  p.fire(c.cancel, 'click'); c.d.remove();
+  await p.tick(200); await p.flush();
+  const q = await u.visit('doc-2', {}, { url });
+  q.ctx.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/_31_1';
+  await q.go();
+  assert.deepEqual(done(q), ['ok'], 'nothing was submitted: the reloaded page may submit the attempt');
+  const r = await u.visit('doc-3', {}, { url });
+  r.ctx.location.pathname = '/ultra/courses/_101_1/assessment/_7_1/attempt/_31_1';
+  await r.go();
+  assert.deepEqual(done(r), ['claimed'], 'a dispatch never cancelled stays fenced');
+});
+
 test('D12: a cancelled confirmation whose upload Ultra no longer lists goes nowhere near Ultra\'s Submit', async () => {
   const p = page();
   await p.go();
