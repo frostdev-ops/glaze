@@ -52,6 +52,69 @@ test('Ultra\'s editor off while it saves the upload: the note waits for it rathe
   assert.equal(p.clicks.filter((b) => b === p.button()).length, 1);
 });
 
+// Ultra's confirmation of the Submit Writer pressed (live Ultra 4001.4, 2026-11-14): its Cancel and its own Submit.
+const confirmation = (p) => {
+  const { El } = require('../stand-in-dom.js');
+  const d = new El('div', p.doc), cancel = new El('button', p.doc), submit = new El('button', p.doc);
+  d.setAttribute('role', 'dialog');
+  cancel.setAttribute('data-analytics-id', 'assignment.attempt.submit.confirmation.dialog.cancel.button');
+  submit.setAttribute('data-analytics-id', 'course.content.assessment.test.modal.confirmSubmitAttemptAlert.submit');
+  d.append(cancel, submit); p.doc.body.append(d);
+  return { d, cancel, submit };
+};
+
+test('D12: Ultra\'s confirmation cancelled, its Submit pressed again goes to Ultra once the frame says the paper is as sent', async () => {
+  const p = page();
+  await p.go();
+  const b = p.button(), opens = () => p.sent.filter((m) => m.type === 'submit:open').map((m) => m.again === true);
+  let c = confirmation(p);
+  await p.tick(200);
+  p.fire(c.cancel, 'click'); c.d.remove();
+  await p.tick(200);
+  p.fire(b, 'click');
+  assert.deepEqual(opens(), [true], 'the frame is asked whether the paper is still as it was sent');
+  p.hear({ type: 'submit:pass' });
+  assert.equal(p.clicks.filter((x) => x === b).length, 2, 'Writer\'s press, then this one: Ultra\'s draft holds the file and text');
+  c = confirmation(p);
+  await p.tick(200);
+  p.fire(c.submit, 'click'); c.d.remove();
+  await p.tick(200);
+  p.fire(b, 'click');
+  p.hear({ type: 'submit:pass' });
+  assert.deepEqual(opens(), [true, false], 'confirmed: nothing to press again');
+  assert.equal(p.clicks.filter((x) => x === b).length, 2);
+});
+
+test('D12: a cancelled confirmation whose upload Ultra no longer lists goes nowhere near Ultra\'s Submit', async () => {
+  const p = page();
+  await p.go();
+  const b = p.button(), c = confirmation(p);
+  await p.tick(200);
+  p.fire(c.cancel, 'click'); c.d.remove();
+  await p.tick(200);
+  for (const row of p.doc.querySelectorAll('span')) if (row.textContent === 'Rivera_Essay2.docx') row.remove();
+  p.fire(b, 'click');
+  p.hear({ type: 'submit:pass' });
+  assert.equal(p.clicks.filter((x) => x === b).length, 1);
+  assert.equal(p.sent.filter((m) => m.type === 'submit:open').length, 2, 'the sheet opens instead');
+});
+
+test('D12: the frame sends Ultra\'s Submit back only for the paper exactly as it was sent', async () => {
+  const sheet = require('../helpers/writer-submit-sheet.cjs');
+  const s = sheet();
+  await s.open(); s.builds[0].resolve(); await s.flush();
+  s.click('.gs-primary'); await s.flush();
+  const go = s.messages.find((m) => m.type === 'submit:go');
+  s.handles['submit:done']({ run: go.run, ok: true }); await s.flush();
+  assert.equal(s.doc.querySelector('.gs-sheet'), null);
+  await s.handles['submit:open']({ again: true }); await s.flush();
+  assert.equal(s.messages.at(-1).type, 'submit:pass');
+  assert.equal(s.doc.querySelector('.gs-sheet'), null);
+  s.edit();
+  await s.handles['submit:open']({ again: true }); await s.flush();
+  assert.ok(s.doc.querySelector('.gs-sheet'), 'edited since: the sheet');
+});
+
 // The frame between its ready (the page is armed and catches Ultra's file area and Submit) and the paper's mount.
 const early = (file) => {
   const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
