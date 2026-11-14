@@ -2545,8 +2545,12 @@ chrome.runtime.onMessage.addListener((m, s, reply) => {
     const no = { ok: false };
     if (s.id !== chrome.runtime.id || !s.tab || s.frameId !== 0 || !['claim', 'commit', 'release', 'review'].includes(m.op) ||
       !/^[\w-]{32,64}$/.test(m.token || '') || !/^_\d+_\d+$/.test(m.user || '')) return no;
+    // The page's own address, from the sender's origin: Chrome's sender.url stays at the address the document loaded at
+    // (the assignment's overview) once Ultra opens the attempt in-app (live, 2026-11-14). A claim or review still needs
+    // the worker's evidence, read from the document itself, that it is this assignment's attempt (aiAttempt); a commit or
+    // release settles only the run this page's token claimed at that address.
     let u;
-    try { u = new URL(addressOf(s)); } catch { return no; }
+    try { const from = new URL(addressOf(s)); u = typeof m.page === 'string' ? new URL(m.page) : from; if (u.origin !== from.origin) return no; } catch { return no; }
     const at = /^\/ultra\/courses\/(_\d+_\d+)\/assessment\/(_\d+_\d+)\/attempt\/(create|_\d+_\d+)\/?$/.exec(u.pathname);
     const settings = await chrome.storage.sync.get(['enabled', 'enhance']);
     // A commit or release only settles the page's own claim, which was checked to be an assignment's.

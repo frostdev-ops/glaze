@@ -258,7 +258,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     const token = tokens.get(box) || crypto.randomUUID();
     tokens.set(box, token);
     const version = typeof m.version === 'string' && /^[a-z0-9-]{3,40}$/.test(m.version) ? m.version : null;
-    const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user, ...(op === 'commit' && version && { version }) }))?.ok === true;
+    const permit = async (op) => (await chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op, token, user, page: location.href, ...(op === 'commit' && version && { version }) }))?.ok === true;
     let claimed = false;
     try {
       // Ultra's text box goes as the sheet says: kept as it showed it (Keep), the note and text after it; else replaced by
@@ -348,7 +348,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     if (running) return;
     const token = tokens.get(box) || crypto.randomUUID();
     tokens.set(box, token);
-    Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op: 'review', token, user: box.context?.paper?.user })).catch(() => {});
+    Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op: 'review', token, user: box.context?.paper?.user, page: location.href })).catch(() => {});
   };
 
   // ---- Ultra's own file area, caught before Ultra
