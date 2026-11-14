@@ -6,7 +6,8 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 // A copy holding the school's host, as the student's grant does (tools/dev/check-env.js staged).
-const ext = require('../../tools/dev/check-env.js').staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
+const env = require('../../tools/dev/check-env.js');
+const ext = env.staged(process.env.EXT || path.join(__dirname, '../../extension'), ['https://bb.school.test/*']);
 const site = 'https://bb.school.test', user = '_900_1';
 const G = require(path.join(ext, 'content/defaults.js'));
 const fixture = (f) => fs.readFileSync(path.join(__dirname, '../../test/fixtures', f), 'utf8');
@@ -14,6 +15,8 @@ const html = fixture('ultra-course.html');
 // The fixture course's gradebook, its Discussion category titled with Ultra's language key as a real course's is.
 const grades = JSON.parse(fixture('ultra-grades.json'));
 for (const r of grades.results) if (r.column.gradebookCategory?.title === 'Discussion') r.column.gradebookCategory.title = 'DISCUSSION.NAME';
+// A course whose overall grade is the teacher's own column, weighting single items too (measured 2026-11-14).
+const teacher = fixture('ultra-grades-teacher.json');
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-whatif-ultra-'));
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -26,7 +29,8 @@ const results = [];
 const check = (value, message) => { assert.ok(value, message); results.push(message); console.log(`ok ${message}`); };
 // Ultra's overall grade header, which the calculator goes under; then the calculator opened and read once it settles.
 const calc = async (where) => {
-  await where.evaluate(() => { const a = document.createElement('aside'); a.className = 'student-grade-overview'; a.textContent = 'Overall grade'; document.body.append(a); });
+  // Inside Ultra's page (#site-wrap), as on a real Gradebook, where Glaze's styles for it apply.
+  await where.evaluate(() => { const a = document.createElement('aside'); a.className = 'student-grade-overview'; a.textContent = 'Overall grade'; (document.getElementById('main-content') || document.getElementById('site-wrap') || document.body).append(a); });
   await where.waitForSelector('#gz-calc');
   // What it says before anyone opens it: opening it after a failure would try again and hide that failure.
   await pause(1500);
@@ -34,7 +38,7 @@ const calc = async (where) => {
   await where.evaluate(() => { const d = document.getElementById('gz-calc'); if (!d.open) d.querySelector('summary').click(); });
   return until(() => where.evaluate((shut) => {
     const d = document.getElementById('gz-calc'), text = d?.textContent || '';
-    return /couldn't load|Blackboard now/.test(text) && { shut, text, totals: [...d.querySelectorAll('dd')].map((e) => e.textContent), groups: [...d.querySelectorAll('legend > span')].map((e) => e.textContent) };
+    return /couldn't load|With your changes/.test(text) && { shut, text, totals: [...d.querySelectorAll('dd')].map((e) => e.textContent), groups: [...d.querySelectorAll('legend > span')].map((e) => e.textContent) };
   }, shut));
 };
 (async () => {
@@ -55,18 +59,21 @@ const calc = async (where) => {
       if (u.origin === site && u.pathname === `/learn/api/v1/users/${user}/memberships`) return json(fixture('ultra-memberships.json'));
       if (u.origin === site && /^\/learn\/api\/v1\/courses\/_10\d_1\/gradebook\/grades$/.test(u.pathname)) {
         bookReads++;
-        return failBooks ? route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }) : json(grades);
+        return failBooks ? route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }) : json(u.pathname.includes('_103_1') ? teacher : grades);
       }
       if (u.origin === site && u.pathname.startsWith('/learn/api/')) return json({ results: [] });
       if (u.origin === 'https://cdn.school.test' && u.pathname.endsWith('.css')) return route.fulfill({ contentType: 'text/css', body: '' });
       return route.abort();
     });
     const opts = await ctx.newPage(); await opts.goto(`chrome-extension://${id}/options.html`);
+    // The new profile's install writes first; the site's content script is registered once it is approved.
+    await env.installed(opts);
     await opts.evaluate(async ({ settings, site, user }) => {
       await chrome.storage.sync.clear(); await chrome.storage.local.clear(); await chrome.storage.sync.set(settings);
       await chrome.storage.local.set({ ultra: [site] }); // the student's yes to this Ultra site (background/background.js approved)
       await chrome.storage.local.set({ [`ctabs:${site}:${user}`]: { tabs: [{ cid: '_102_1', name: 'Synthetic course 2', path: '/ultra/courses/_102_1/grades', top: 0, at: 1, pin: false }] } });
     }, { settings: { ...G.GZ_DEFAULTS, enhance: { ...G.GZ_DEFAULTS.enhance, calc: true, tabs: true }, tabs: { ahead: false, keep: false } }, site, user }); // frames load cold and items open in place here (ultra-standby-check.js, ultra-keep-content-check.js cover those)
+    await env.ultraReady(opts);
     const page = await ctx.newPage();
     const errors = []; page.on('pageerror', (e) => errors.push(String(e)));
     await page.goto(`${site}/ultra/courses/_101_1/grades`);
@@ -87,6 +94,43 @@ const calc = async (where) => {
     check(errors.length === 0, `no page errors (${errors.join(' | ')})`);
     await page.close();
     await opts.evaluate(async () => { const { enhance } = await chrome.storage.sync.get('enhance'); await chrome.storage.sync.set({ enhance: { ...enhance, tabs: false } }); });
+    // Ultra's own rule for inputs (measured 2026-11-14: display block, 38 px tall), under which a score's "/ 100" fell to
+    // its own line; then the tools: Full marks in the blanks, Undo, Only work not graded yet.
+    const tools = await ctx.newPage();
+    tools.on('pageerror', (e) => errors.push(String(e)));
+    await tools.goto(`${site}/ultra/courses/_101_1/grades`);
+    await tools.evaluate(() => { const s = document.createElement('style'); s.textContent = 'input { display: block; height: 38px; }'; document.head.append(s); });
+    const opened = await calc(tools);
+    check(/88%/.test(opened.shut), `closed, it already shows the figure (${opened.shut})`);
+    const cell = await tools.evaluate(() => {
+      const box = (e) => e.getBoundingClientRect();
+      const input = document.querySelector('#gz-calc [data-f="s:_603_1"]');
+      const score = input.closest('.gz-calc-score');
+      return { input: box(input).height, score: box(score).height, row: box(score.closest('li')).height };
+    });
+    check(cell.score <= cell.input + 2 && cell.row < 40, `a score and its "/ 100" sit on one line (${JSON.stringify(cell)})`);
+    const said = () => tools.evaluate(() => [...document.querySelectorAll('#gz-calc dd b')].map((e) => e.textContent));
+    await tools.getByRole('button', { name: 'Full marks', exact: true }).evaluate((e) => e.click()); // the fixture's panel lies over the page
+    await until(() => said().then((t) => t[0] === '90.66%'));
+    check(await tools.locator('#gz-calc [data-f="s:_603_1"]').inputValue() === '100', 'Full marks fills the work left');
+    check(await tools.locator('#gz-calc .gz-calc-delta').textContent() === '+2.66', 'the change shows beside it');
+    await tools.getByRole('button', { name: 'Undo', exact: true }).evaluate((e) => e.click());
+    await until(() => said().then((t) => t[0] === '88%'));
+    check(await tools.locator('#gz-calc [data-f="s:_603_1"]').inputValue() === '', 'Undo empties them again');
+    await tools.getByLabel('Only work not graded yet').evaluate((e) => e.click());
+    await until(() => tools.locator('#gz-calc [data-f="s:_601_1"]').count().then((n) => n === 0));
+    check(await tools.locator('#gz-calc [data-f="s:_603_1"]').count() === 1, 'Only work not graded yet keeps the rows left to grade');
+    await tools.close();
+
+    // The teacher's own overall column, under its name.
+    const own = await ctx.newPage();
+    own.on('pageerror', (e) => errors.push(String(e)));
+    await own.goto(`${site}/ultra/courses/_103_1/grades`);
+    const theirs = await calc(own);
+    const names = await own.evaluate(() => [...document.querySelectorAll('#gz-calc dt')].map((e) => e.textContent));
+    check(names[0] === 'Overall Grade now' && theirs.totals[0] === '75%' && !/Estimate/.test(theirs.text), `the teacher's Overall Grade column is the figure (${names[0]} ${theirs.totals[0]})`);
+    check(theirs.groups.includes('Publisher Homework Current Grade · 45%'), `single weighted items are groups of their own (${theirs.groups.join(', ')})`);
+    check(errors.length === 0, `no page errors with the tools (${errors.join(' | ')})`);
     failBooks = true;
     const retryPage = await ctx.newPage();
     retryPage.on('pageerror', (e) => errors.push(String(e)));

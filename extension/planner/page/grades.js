@@ -33,7 +33,8 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     try { chrome.storage[area].get(key, (r) => res(chrome.runtime.lastError || !r || typeof r !== 'object' ? { ok: false } : { ok: true, v: r[key] })); } catch { res({ ok: false }); }
   });
   // Ultra writes a grade cut, not rounded, to two places (82.456 is 82.45%); Canvas rounds it.
-  const pct = (x) => GZ_I18N.pct(ultra ? Math.floor(x * 100 + 1e-9) / 100 : C.round2(x), locale());
+  const cut = (x) => (ultra ? Math.floor(x * 100 + 1e-9) / 100 : C.round2(x));
+  const pct = (x) => GZ_I18N.pct(cut(x), locale());
   // A GPA to two places, a half up in decimal like the percents (3.825 is 3.83 though its float is 3.8249999999999997).
   const two = (x) => (x == null ? '–' : new Intl.NumberFormat(GZ_I18N.locale(locale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(C.round2(x)));
   const studentIn = (c) => c?.enrollments?.find((e) => e.type === 'student');
@@ -354,7 +355,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       now.textContent = show(pick(r));
       outNow.textContent = show(pick(r));
       outFinal.textContent = show(r.final);
-      const d = rqd || pick(r) == null || pick(base) == null ? 0 : C.round2(pick(r) - pick(base));
+      const d = rqd || pick(r) == null || pick(base) == null ? 0 : C.round2(cut(pick(r)) - cut(pick(base)));
       outDelta.textContent = d ? `${d > 0 ? '+' : '−'}${GZ_I18N.num(Math.abs(d), locale())}` : '';
       for (const f of updates) f(r);
     };

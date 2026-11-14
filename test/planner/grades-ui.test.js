@@ -2012,3 +2012,15 @@ test("Ultra what-if: the page's gradebook coming in while what you saved is stil
   assert.equal(totals(p)[1], '90%');
   assert.deepEqual(store.data[UKEY]._101_1.s._603_1.slice(0, 2), [100, null]);
 });
+
+test('Ultra what-if: the change is the difference between the figures as shown, cut as Ultra cuts them', async () => {
+  const p = ultraPage();
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  await settle(10);
+  byText(p.box(), 'Full marks').fire('click');
+  await settle(10);
+  // (96.666… x 40 + 80 x 40 + 100 x 20) / 100 = 90.666…, shown 90.66%: 2.66 up from 88%, not the rounded 2.67.
+  assert.deepEqual([totals(p)[1], delta(p)], ['90.66%', '+2.66']);
+});
