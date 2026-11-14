@@ -383,9 +383,10 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     }
   };
   // Ultra's confirmation of the Submit Writer pressed (live Ultra 4001.4, 2026-11-14). Closed without its own Submit (its
-  // Cancel, its ×, Escape, a click beside it), nothing was submitted: the attempt stays fenced against a second run, and
-  // Ultra's Submit pressed again asks the frame (submit:open again), whose submit:pass, the paper being as it was sent,
-  // sends that press on to Ultra once Ultra still lists each file the run attached, its draft holding the file and text.
+  // Cancel, its ×, Escape, a click beside it), nothing was submitted: the attempt is free again, here and in the worker (a
+  // reload may submit it), and Ultra's Submit pressed again asks the frame (submit:open again), whose submit:pass, the
+  // paper being as it was sent, sends that press on to Ultra once Ultra still lists each file the run attached, its draft
+  // holding the file and text; else the sheet opens, its run finding the earlier upload (Replace).
   const CONFIRMATION = { cancel: '[data-analytics-id="assignment.attempt.submit.confirmation.dialog.cancel.button"]',
     submit: '[data-analytics-id="course.content.assessment.test.modal.confirmSubmitAttemptAlert.submit"]' };
   const confirming = (box, rows) => {
@@ -399,7 +400,10 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       const over = sent || (seen && !open) || !box.editor.isConnected || (!seen && Date.now() - at > 15000);
       if (!over) { setTimeout(look, 150); return; }
       document.removeEventListener('click', press, true);
-      if (seen && !open && !sent) box.unsent = { rows };
+      if (!seen || open || sent) return;
+      box.unsent = { rows };
+      submitted.delete(box);
+      Promise.resolve(chrome.runtime.sendMessage({ type: 'glaze:writerSubmit', op: 'reopen', token: tokens.get(box), user: box.context?.paper?.user, page: location.href })).catch(() => {});
     };
     look();
   };
@@ -408,6 +412,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     if (!u || running) return;
     box.unsent = null;
     if (!b || !L().enabled(b) || ![...u.rows].every(([n, row]) => { const rows = L().listings(area, n, visible); return !!row && rows.length === 1 && rows[0] === row; })) { box.frame?.focus(); say(box, { type: 'submit:open' }); return; }
+    submitted.add(box);
     pass(b);
     confirming(box, u.rows);
   };

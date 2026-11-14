@@ -162,6 +162,17 @@ test('D12: a cancelled confirmation frees the attempt Ultra numbered for the pag
   assert.deepEqual(done(r), ['claimed'], 'a dispatch never cancelled stays fenced');
 });
 
+test('D12: a cancelled confirmation, the paper edited since: the next run finds its own upload and offers Replace', async () => {
+  const p = page();
+  await p.go();
+  const c = confirmation(p);
+  await p.tick(200);
+  p.fire(c.cancel, 'click'); c.d.remove();
+  await p.tick(200);
+  await p.go({ run: 2, bytes: new Uint8Array([4, 5, 6]).buffer });
+  assert.deepEqual(done(p), ['ok', 'exists'], 'not "already being submitted": the edited paper meets its earlier upload');
+});
+
 test('D12: a cancelled confirmation whose upload Ultra no longer lists goes nowhere near Ultra\'s Submit', async () => {
   const p = page();
   await p.go();
