@@ -309,7 +309,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
       // the whole submission editor, Writer's frame and this run with it; one a text save creates doesn't (live Ultra 4001.4,
       // 2026-11-14). So the text goes in first, or a space the text step takes out again, until Ultra's footer says it saved.
       const first = L().footer(box.editor).submit;
-      if (!alone && !held && first && !L().enabled(first)) {
+      if (!held && first && !L().enabled(first)) {
         if (!await settled()) return fail('page');
         const was = L().saved(box.editor);
         written.add(box);

@@ -76,6 +76,24 @@ test('D13: an attempt that holds nothing yet is saved with text before any uploa
   assert.equal(boxText(q), '', 'and taken out again before Submit');
 });
 
+test('review: Attach from Documents on an empty compact attempt saves its draft before the first file', async () => {
+  const p = page({ enabled: false, full: false });
+  p.box.editor.replaceChildren();
+  p.doc.addEventListener('gz-writer:append', (e) => {
+    const m = JSON.parse(e.detail);
+    const text = [boxText(p), m.text].filter(Boolean).join('\n\n') + '\n';
+    p.doc.dispatchEvent(new CustomEvent('gz-writer:set', { detail: JSON.stringify({ id: m.id, delta: [{ insert: text }] }) }));
+  });
+  await p.go({ name: null, bytes: null, append: true, note: 'Attached: Notes.pdf', files: [{ name: 'Notes.pdf', mime: 'application/pdf', bytes: new Uint8Array([4]).buffer }] });
+  await p.tick(100);
+  assert.equal(p.uploads[0]?.savesBefore, 1, 'an attachment-only sheet also creates Ultra\'s draft with text');
+  assert.equal(p.uploads[0].settled, true);
+  p.setEnabled(true);
+  for (let i = 0; i < 5 && !done(p).length; i++) await p.tick(100);
+  assert.deepEqual(done(p), ['ok']);
+  assert.equal(boxText(p), 'Attached: Notes.pdf', 'the note is appended only once');
+});
+
 test('D14: a file of the same name already in Ultra\'s draft stops the run until the student asks to replace it', async () => {
   const p = page();
   p.addRow('Rivera_Essay2.docx', { removable: true });
