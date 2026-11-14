@@ -13,7 +13,7 @@ module.exports = ({ off = false, listed = true, enabled = true, worker, settings
   doc.body = parse(fs.readFileSync(path.join(__dirname, '../fixtures/ultra-writer-attempt.html'), 'utf8'), doc);
   for (const n of ['querySelector', 'querySelectorAll', 'addEventListener', 'removeEventListener', 'dispatchEvent']) doc[n] = El.prototype[n].bind(doc.root);
   const editor = doc.querySelector('#bb-editorassignment-attempt-authoring-submission');
-  const location = { origin: 'https://school.blackboard.com', pathname: '/ultra/courses/_101_1/assessment/_7_1/attempt/create' };
+  const location = { origin: 'https://school.blackboard.com', pathname: '/ultra/courses/_101_1/assessment/_7_1/attempt/create', get href() { return this.origin + this.pathname; } };
   let owned = true, clock = Date.now(), id = 0;
   const box = { id: 'gzw-test', editor, kind: 'assignment', mode: 'paper', full, path: location.pathname, context: { paper: { school: 'school.blackboard.com', user: '_900_1', course: '_101_1', content: '_7_1' } }, frame: { focus() {} }, port: { postMessage: (m) => sent.push(m) } };
   box.frame = new El('iframe', doc); doc.body.append(box.frame); box.ready = true;

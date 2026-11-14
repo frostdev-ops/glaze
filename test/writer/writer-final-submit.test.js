@@ -104,14 +104,15 @@ const ultra = () => {
   let clock = Date.now();
   class Clock extends Date { static now() { return clock; } }
   const w = make({ store, globals: { Date: Clock } });
-  const at = { url: 'https://school.blackboard.com/ultra/courses/_101_1/assessment/_7_1/attempt/create', doc: 'doc-1', tab: 1 };
-  const sender = () => ({ id: 'glaze', url: at.url, frameId: 0, documentId: at.doc, tab: { id: at.tab, url: at.url } });
+  // from: the address Chrome's sender still names (the page the document loaded at) once Ultra has opened the attempt in-app.
+  const at = { url: 'https://school.blackboard.com/ultra/courses/_101_1/assessment/_7_1/attempt/create', doc: 'doc-1', tab: 1, from: null };
+  const sender = () => ({ id: 'glaze', url: at.from || at.url, frameId: 0, documentId: at.doc, tab: { id: at.tab, url: at.url } });
   w.context.chrome.tabs.get = async () => sender().tab;
   w.context.chrome.scripting.executeScript = async () => [{ frameId: 0, documentId: at.doc, result: { href: at.url, origin: 'https://school.blackboard.com', ancestors: [] } }];
   const ops = [], hooks = {};
   const worker = async (m) => { ops.push(m.op); hooks[m.op]?.(m); return w.send(m, sender()); };
-  const visit = async (doc, opts = {}, { url = at.url, tab = at.tab } = {}) => {
-    Object.assign(at, { doc, url, tab });
+  const visit = async (doc, opts = {}, { url = at.url, tab = at.tab, from = null } = {}) => {
+    Object.assign(at, { doc, url, tab, from });
     await w.send({ type: 'glaze:attempt-kind', kind: 'assignment', page: url }, sender());
     return page({ ...opts, worker });
   };
@@ -135,6 +136,24 @@ for (const why of ['a same-named file already listed', 'a Cancel heard while the
     });
   }
 }
+
+test('D11: an attempt Ultra opened in-app, its sender still naming the course page it loaded at, claims and submits', async () => {
+  // Live Ultra, 2026-11-14: the overview's "View instructions" opens /attempt/create without a new document, and Chrome's
+  // sender.url stays at /overview.
+  const u = ultra(), from = 'https://school.blackboard.com/ultra/courses/_101_1/assessment/_7_1/overview?courseId=_101_1';
+  const p = await u.visit('doc-1', {}, { from });
+  await p.go();
+  assert.deepEqual(done(p), ['ok']);
+  assert.equal(p.clicks.length, 1);
+  const q = await u.visit('doc-2', {}, { from });
+  await q.go();
+  assert.deepEqual(done(q), ['ok'], 'the dispatch was recorded under the attempt: the next attempt is free');
+  const other = 'https://school.blackboard.com/ultra/courses/_101_1/assessment/_9_1/attempt/create';
+  const r = await u.w.send({ type: 'glaze:writerSubmit', op: 'claim', token: crypto.randomUUID(), user: '_900_1', page: other }, u.sender());
+  assert.equal(r.ok, false, 'an address the worker never saw this document at claims nothing');
+  const x = await u.w.send({ type: 'glaze:writerSubmit', op: 'claim', token: crypto.randomUUID(), user: '_900_1', page: 'https://elsewhere.test/ultra/courses/_101_1/assessment/_7_1/attempt/create' }, u.sender());
+  assert.equal(x.ok, false, 'another origin claims nothing');
+});
 
 test('D1: a run that may have uploaded keeps the attempt fenced until the student reviews it in Blackboard\'s editor', async () => {
   const u = ultra();
