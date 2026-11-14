@@ -260,6 +260,18 @@ test('review: a confirmation retry cannot pass Submit after another page has cla
   assert.equal(p.sent.at(-1).type, 'submit:open', 'the sheet can explain the conflict');
 });
 
+test('review: a paper edited while a retry waits for its worker claim cannot pass the earlier upload', async () => {
+  const u = ultra(); let unchanged = true;
+  const p = await u.visit('doc-1', { unchanged: () => unchanged });
+  await p.go();
+  const c = confirmation(p);
+  await p.tick(200); p.fire(c.cancel, 'click'); c.d.remove(); await p.tick(200);
+  u.hooks.claim = () => { unchanged = false; };
+  p.fire(p.button(), 'click'); p.hear({ type: 'submit:pass' }); await p.flush();
+  assert.equal(p.clicks.filter((b) => b === p.button()).length, 1, 'the paper must still match after the asynchronous claim');
+  assert.equal(p.sent.at(-1).type, 'submit:open');
+});
+
 test('review: a confirmation dismissed between polling ticks still frees the attempt', async () => {
   for (const how of ['cancel', 'escape', 'backdrop']) {
     const u = ultra(), p = await u.visit('doc-1');
@@ -323,7 +335,13 @@ test('D12: the frame sends Ultra\'s Submit back only for the paper exactly as it
   await s.handles['submit:open']({ again: true }); await s.flush();
   assert.equal(s.messages.at(-1).type, 'submit:pass');
   assert.equal(s.doc.querySelector('.gs-sheet'), null);
+  s.handles['submit:verify']?.({ request: 'check-1' });
+  assert.equal(s.messages.at(-1).type, 'submit:verified');
+  assert.equal(s.messages.at(-1).request, 'check-1');
+  assert.equal(s.messages.at(-1).ok, true);
   s.edit();
+  s.handles['submit:verify']?.({ request: 'check-2' });
+  assert.equal(s.messages.at(-1).ok, false);
   await s.handles['submit:open']({ again: true }); await s.flush();
   assert.ok(s.doc.querySelector('.gs-sheet'), 'edited since: the sheet');
 });

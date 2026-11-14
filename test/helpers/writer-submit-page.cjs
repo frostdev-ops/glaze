@@ -6,7 +6,7 @@ const L = require('../../extension/writer/writer-submit.js');
 // settings: what the module reads through GZ_CTX (enhance.writerUploads catches Ultra's own file area). full: the paper's
 // view (writer/page/writer.js box.full); false, its compact box. off: Ultra turns its editor off from an upload until
 // settle() (live Ultra while it saves the attempt's files); Quill drops a write meanwhile.
-module.exports = ({ off = false, listed = true, enabled = true, worker, settings = null, full = true, hash = (...args) => crypto.subtle.digest(...args) } = {}) => {
+module.exports = ({ off = false, listed = true, enabled = true, worker, settings = null, full = true, unchanged = () => true, hash = (...args) => crypto.subtle.digest(...args) } = {}) => {
   const doc = { activeElement: null }, sent = [], uploads = [], clicks = [], timers = new Map(), hashes = new Set();
   const digest = (...args) => { const p = hash(...args); hashes.add(p); p.finally(() => hashes.delete(p)); return p; };
   doc.root = new El('html', doc); doc.documentElement = doc.root;
@@ -15,7 +15,10 @@ module.exports = ({ off = false, listed = true, enabled = true, worker, settings
   const editor = doc.querySelector('#bb-editorassignment-attempt-authoring-submission');
   const location = { origin: 'https://school.blackboard.com', pathname: '/ultra/courses/_101_1/assessment/_7_1/attempt/create', get href() { return this.origin + this.pathname; } };
   let owned = true, clock = Date.now(), id = 0;
-  const box = { id: 'gzw-test', editor, kind: 'assignment', mode: 'paper', full, path: location.pathname, context: { paper: { school: 'school.blackboard.com', user: '_900_1', course: '_101_1', content: '_7_1' } }, frame: { focus() {} }, port: { postMessage: (m) => sent.push(m) } };
+  const box = { id: 'gzw-test', editor, kind: 'assignment', mode: 'paper', full, path: location.pathname, context: { paper: { school: 'school.blackboard.com', user: '_900_1', course: '_101_1', content: '_7_1' } }, frame: { focus() {} }, port: { postMessage: (m) => {
+    sent.push(m);
+    if (m.type === 'submit:verify') hear({ type: 'submit:verified', request: m.request, ok: unchanged() });
+  } } };
   box.frame = new El('iframe', doc); doc.body.append(box.frame); box.ready = true;
   for (const e of doc.root.all()) e.getClientRects = () => [e.getBoundingClientRect()];
   const fire = (target, type, more = {}) => {

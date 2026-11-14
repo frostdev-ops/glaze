@@ -554,6 +554,10 @@ var GZ_WRITER_SUBMIT_SHEET = globalThis.GZ_WRITER_SUBMIT_SHEET || (() => {
     if (m?.again === true && !sheet && asSent(api)) frame.say({ type: 'submit:pass' });
     else open(api);
   });
+  frame.handle('submit:verify', (m) => {
+    const api = P()?.current();
+    frame.say({ type: 'submit:verified', request: m.request, ok: !!api && !sheet && asSent(api) });
+  });
   frame.handle('submit:step', (m) => { if (waiting && m.run === waiting.run) waiting.step(m.step); });
   frame.handle('submit:held', (m) => { sheet?.held?.(m.text); });
   frame.handle('submit:unavailable', (m) => P()?.current()?.notify?.(m.action === 'save' ? 'Not saved. Try again in a moment.' : 'Nothing was submitted. Try again in a moment.'));

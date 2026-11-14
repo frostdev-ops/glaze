@@ -30,6 +30,7 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
   const armed = new Map(); // box → whether it's still writer/page/writer.js's
   const submitted = new WeakSet();
   const runs = new WeakMap(), cancelled = new WeakMap(), tokens = new WeakMap();
+  const verifying = new WeakMap();
   const attached = new WeakMap(); // box → each file's name → its byte digest and the row its upload produced
   const appended = new WeakMap(); // the exact note and complete native text after an append, for a safe retry
   const written = new WeakSet(); // boxes a run has written into
@@ -429,14 +430,20 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     try {
       if (!here() || !await permit('claim')) { open(); return; }
       claimed = true;
+      // The paper can change while the worker checks the claim. Ask its frame again after that asynchronous boundary.
+      const check = { request: crypto.randomUUID(), reply: null };
+      verifying.set(box, check);
+      say(box, { type: 'submit:verify', request: check.request });
+      const verified = await until(() => check.reply, 5000, 100, here);
       const b = L().footer(box.editor).submit, area = L().areaOf(box.editor);
-      if (!here() || !b || !L().enabled(b) || flat(heldOf(box)) !== flat(u.text) || ![...u.rows].every(([n, row]) => { const rows = L().listings(area, n, visible); return !!row && rows.length === 1 && rows[0] === row; })) { open(); return; }
+      if (!verified?.ok || !here() || !b || !L().enabled(b) || flat(heldOf(box)) !== flat(u.text) || ![...u.rows].every(([n, row]) => { const rows = L().listings(area, n, visible); return !!row && rows.length === 1 && rows[0] === row; })) { open(); return; }
       claimed = false;
       permit('commit').catch(() => {});
       submitted.add(box);
       pass(b);
       confirming(box, u);
     } catch { open(); } finally {
+      verifying.delete(box);
       running = false;
       if (claimed) permit('release').catch(() => {});
     }
@@ -493,6 +500,10 @@ var GZ_WRITER_SUBMIT = globalThis.GZ_WRITER_SUBMIT || (() => {
     }
     if (!assignment(box)) return;
     if (m.type === 'submit:arm') armed.set(box, ok);
+    else if (m.type === 'submit:verified' && armed.has(box)) {
+      const check = verifying.get(box);
+      if (check && m.request === check.request && !check.reply) check.reply = { ok: m.ok === true };
+    }
     else if (m.type === 'submit:saved') m.request === box.saveRequest && box.saved?.(m.ok === true);
     else if (m.type === 'submit:go' && armed.has(box)) go(box, m, ok);
     else if (m.type === 'submit:held' && armed.has(box)) say(box, { type: 'submit:held', text: heldOf(box).slice(0, 1e6) });
