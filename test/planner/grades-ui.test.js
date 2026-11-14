@@ -161,7 +161,10 @@ const gradesPage = ({ store = shared(), list = [row()], search = '', groups = BI
 };
 const ready = async (p) => { p.UI.render(); await settle(); if (p.state.fetches.length) p.state.fetches.shift().ok(); await settle(); if (!p.box().open) await open(p); if (p.state.fetches.length) p.state.fetches.shift().ok(); await settle(); };
 const open = async (p) => { const b = p.box(); b.open = true; b.fire('toggle'); await settle(); };
-const totals = (p) => p.box().all((e) => e.tagName === 'DD').map((d) => d.textContent);
+// Each figure as shown, without the change beside "With your changes".
+const totals = (p) => p.box().all((e) => e.tagName === 'DD').map((d) => (d.children.find((c) => c.tagName === 'B') || d).textContent);
+const delta = (p) => find(p.box(), (e) => e.className === 'gz-calc-delta')?.textContent ?? null;
+const scoreOf = (p, id) => find(p.box(), (e) => e.dataset.f === `s:${id}`);
 
 test('nothing is drawn by work that finishes after Glaze was switched off', async () => {
   const p = gradesPage({ store: shared({ [KEY]: { [BIO.course.id]: { s: {}, h: [], p: [], c: 70 } } }) });
@@ -1827,4 +1830,166 @@ test("Ultra syllabus import: a continuous course (Ultra's answer) leaves week 1 
   assert.ok(seen.length && seen.every((x) => x === undefined), 'no course start');
   assert.equal(p.week1().input.value, '2026-08-31');
   assert.equal(find(p.week1().box, (e) => /\bgz-syl-check\b/.test(e.className))?.textContent, 'Check this');
+});
+
+// ---- the calculator's tools: fill what's left, undo, the change, only work not graded yet, Enter, the closed figure ----
+// test/fixtures/ultra-grades.json: Lab Report 2 (_602_1, waiting for a grade) and 3 (_603_1) are the work left, both in
+// Assignment (40%, 90 of 100 so far); Blackboard says 88%.
+test('Ultra what-if: Fill what\'s left puts full marks or your average so far in the blanks only, and Undo takes them out', async () => {
+  const p = ultraPage();
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  await settle(10);
+  // A typed score stays as typed.
+  const lab2 = scoreOf(p, '_602_1');
+  lab2.value = '50';
+  lab2.fire('input');
+  await settle(10);
+  assert.equal(byText(p.box(), 'Undo').hidden, true, 'nothing to undo yet');
+  byText(p.box(), 'Full marks').fire('click');
+  await settle(10);
+  assert.deepEqual([scoreOf(p, '_602_1').value, scoreOf(p, '_603_1').value], [50, 100]);
+  assert.deepEqual(p.store.data[UKEY]._101_1.s._603_1.slice(0, 2), [100, null], 'kept like a typed score');
+  // Assignment (50 + 90 + 100) / 300: 80%; overall (80 x 40 + 80 x 40 + 100 x 20) / 100.
+  assert.equal(totals(p)[1], '84%');
+  assert.equal(delta(p), '−4');
+  assert.ok(scoreOf(p, '_603_1').dataset.set != null, 'a what-if score is marked');
+  assert.equal(scoreOf(p, '_601_1').dataset.set, undefined, 'a real one is not');
+  byText(p.box(), 'Undo').fire('click');
+  await settle(10);
+  assert.deepEqual([scoreOf(p, '_602_1').value, scoreOf(p, '_603_1').value], [50, '']);
+  assert.equal(p.store.data[UKEY]._101_1.s._603_1, undefined);
+  assert.equal(byText(p.box(), 'Undo').hidden, true);
+  // Your average so far: Lab Report 3 at Assignment's share without the typed 50 is (90 + 50) / 200 = 70%.
+  byText(p.box(), 'Your average so far').fire('click');
+  await settle(10);
+  assert.equal(scoreOf(p, '_603_1').value, 70);
+  // Typing after a fill: Undo goes, so it can't take the typing with it.
+  const lab3 = scoreOf(p, '_603_1');
+  lab3.value = '95';
+  lab3.fire('input');
+  await settle(10);
+  assert.equal(byText(p.box(), 'Undo').hidden, true);
+});
+
+test('Ultra what-if: the target sits under the figures, and What you need fills the blanks with it', async () => {
+  const p = ultraPage();
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  await settle(10);
+  const kids = p.box().children.map((e) => e.className || e.tagName);
+  assert.ok(kids.indexOf('gz-calc-tools') > kids.indexOf('gz-calc-totals') && kids.indexOf('gz-calc-tools') < kids.indexOf('gz-calc-group'), kids.join(' '));
+  assert.equal(byText(p.box(), 'What you need').hidden, true, 'no target yet');
+  const target = find(p.box(), (e) => e.dataset.f === 'target');
+  target.value = '90';
+  target.fire('input');
+  await settle(10);
+  assert.match(p.box().textContent, /You'd need about 95% on each of the 2 items left\./);
+  byText(p.box(), 'What you need').fire('click');
+  await settle(10);
+  assert.deepEqual([scoreOf(p, '_602_1').value, scoreOf(p, '_603_1').value], [95, 95]);
+  assert.equal(totals(p)[1], '90%');
+  assert.equal(find(p.box(), (e) => e.dataset.f === 'target').value, '90', 'the target stays');
+  // Out of reach: nothing to fill with.
+  const far = find(p.box(), (e) => e.dataset.f === 'target');
+  byText(p.box(), 'Undo').fire('click');
+  await settle(10);
+  far.value = '99';
+  far.fire('input');
+  await settle(10);
+  assert.equal(byText(p.box(), 'What you need').hidden, true);
+});
+
+test('Ultra what-if: Only work not graded yet leaves the graded rows out; Enter moves to the next score', async () => {
+  const p = ultraPage();
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  await settle(10);
+  const only = find(p.box(), (e) => e.dataset.f === 'todo');
+  only.checked = true;
+  only.fire('change');
+  await settle(10);
+  const shown = p.box().all((e) => e.tagName === 'INPUT' && /^s:/.test(e.dataset.f || '')).map((e) => e.dataset.f);
+  assert.deepEqual(shown, ['s:_602_1', 's:_603_1']);
+  assert.match(p.box().textContent, /Test · 40%/, 'a category with nothing left still shows its figure');
+  const [lab2, lab3] = shown.map((f) => find(p.box(), (e) => e.dataset.f === f));
+  let stopped = false;
+  for (const f of lab2.on.keydown) f({ key: 'Enter', shiftKey: false, preventDefault() { stopped = true; } });
+  assert.equal(p.doc.activeElement, lab3);
+  assert.ok(stopped);
+  for (const f of lab3.on.keydown) f({ key: 'Enter', shiftKey: true, preventDefault() {} });
+  assert.equal(p.doc.activeElement, lab2);
+});
+
+test("Ultra what-if: the closed calculator shows the figure once the page's gradebook comes in after it was drawn", async () => {
+  const books = {};
+  const p = ultraPage({ books });
+  p.UI.render();
+  await settle(10);
+  assert.equal(find(p.box(), (e) => e.tagName === 'SUMMARY').textContent, 'What-if calculator', 'nothing to show yet');
+  books._101_1 = ufix('grades').results;
+  p.UI.render();
+  await settle(10);
+  assert.equal(p.box().open, false);
+  assert.equal(find(p.box(), (e) => e.tagName === 'SUMMARY').textContent, 'What-if calculator88%');
+  assert.deepEqual(p.state.asked, [], 'from the page\'s own gradebook');
+});
+
+test("Ultra what-if: a teacher's own overall column, by its name; single items as their own groups; a dot named by its column", async () => {
+  const p = ultraPage({ path: '/ultra/courses/_103_1/grades', books: { _103_1: ufix('grades-teacher').results } });
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  await settle(10);
+  const text = p.box().textContent;
+  assert.match(text, /Overall Grade now75%/);
+  assert.doesNotMatch(text, /Estimate|no overall grade/);
+  assert.match(text, /Publisher Homework Current Grade · 45%/);
+  assert.match(text, /Publisher Lesson Tests · 20%/);
+  assert.match(text, /Module 2: Individual Video/, 'the column renamed "." reads by its own name');
+  // A group of one takes no pretend assignment; a category does.
+  const adds = p.box().all((e) => e.tagName === 'BUTTON' && e.textContent === 'Add a pretend assignment').map((b) => b.dataset.f);
+  assert.deepEqual(adds, ['add:_499_1', 'add:_496_1']);
+  // The lesson tests at full marks: (0 x 15 + 100 x 20 + 100 x 45) / 80.
+  const tests = scoreOf(p, '_626_1');
+  tests.value = '100';
+  tests.fire('input');
+  await settle(10);
+  assert.equal(totals(p)[1], '81.25%');
+  // Not reproduced: the estimate, beside the teacher's figure under its name.
+  const off = ufix('grades-teacher').results;
+  off.find((r) => r.column.effectiveColumnName === 'Overall Grade').displayGrade.score = 80;
+  const q = ultraPage({ path: '/ultra/courses/_103_1/grades', books: { _103_1: off } });
+  q.UI.render();
+  await settle(10);
+  await open(q);
+  await settle(10);
+  assert.match(q.box().textContent, /Overall Grade now80%Estimate now55%/);
+});
+
+test('Ultra what-if: work with no category is headed as such', async () => {
+  const rows = ufix('grades-status').results.filter((r) => !r.column.externalGrade).map((r) => ({ ...r, column: { ...r.column, gradebookCategoryId: undefined, gradebookCategory: undefined } }));
+  const p = ultraPage({ path: '/ultra/courses/_102_1/grades', books: { _102_1: rows } });
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  await settle(10);
+  assert.deepEqual(p.box().all((e) => e.tagName === 'LEGEND').map((l) => l.children[0].textContent), ['No category']);
+});
+
+test('Canvas what-if: the same tools, filling by the course\'s own rules', async () => {
+  const p = gradesPage();
+  await ready(p);
+  const before = totals(p)[1];
+  byText(p.box(), 'Full marks').fire('click');
+  await settle(10);
+  const filled = p.box().all((e) => e.tagName === 'INPUT' && /^s:/.test(e.dataset.f || '') && e.value !== '');
+  assert.ok(filled.length > 0);
+  assert.equal(Object.keys(p.store.data[KEY][String(BIO.course.id)].s).length, filled.length);
+  byText(p.box(), 'Undo').fire('click');
+  await settle(10);
+  assert.equal(totals(p)[1], before);
 });
