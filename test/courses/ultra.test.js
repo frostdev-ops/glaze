@@ -342,6 +342,19 @@ test("grades: B0's calibration (weighted categories, discrepancy 0), and the est
   assert.equal(U.grade(book()).letter, null);
 });
 
+test("grades: the teacher's own overall column (no externalGrade) is the course's recipe where it comes out at its figure", () => {
+  const rows = clone(load('grades-teacher').results);
+  const g = U.grade(rows);
+  assert.deepEqual([g.kind, g.estimate, g.overall, g.column], ['weighted', false, 75, 'Overall Grade']);
+  assert.ok(Math.abs(g.percent() - 75) < 1e-9);
+  // One that doesn't: the share of points in graded work (110 of 200), beside the teacher's figure, under its name.
+  rows.find((r) => r.column.effectiveColumnName === 'Overall Grade').displayGrade.score = 80;
+  const e = U.grade(rows);
+  assert.deepEqual([e.kind, e.estimate, e.overall, e.column], ['points', true, 80, 'Overall Grade']);
+  assert.equal(e.percent(), 55);
+  assert.equal(e.why, "its recipe doesn't come out at Blackboard's own figure");
+});
+
 // ACA-5: what an overall column writes is a letter only when its schema is a letter scale (or the text is a letter with grade
 // points). A Percent or Score column writes its figure, and the GPA must compute the letter from that.
 test('the overall column\'s text is the course letter only for a letter scale or a letter with points', () => {

@@ -245,3 +245,68 @@ test('review: category localizableTitle keys work with an already readable title
   assert.deepEqual([groups[0].name, groups[0].sys], ['Discussion', true]);
   assert.deepEqual([groups[1].name, groups[1].sys], ['My discussion', false]);
 });
+
+// Spanish 1110's shape (Nov 2026): no overall column for the student, but the teacher's own "Overall Grade" (a CUSTOM
+// column marked isTotalCalculation, not externalGrade) weights two categories and three single items, one of them a
+// calculated average column. Blackboard shows it as 75 (C): (0 x 15 + 100 x 45) / 60 with the rest not graded yet.
+const recipe = (parts, extra = {}) => ({
+  isTotalCalculation: true,
+  formula: `<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>@X@BBCalColElem(wgt:${JSON.stringify({ weights: parts.map(([type, alias, weight, more]) => ({ element: { type, alias, mode: 'proportional', ...more }, weight })), running: true, ...extra })})@X@</mi></math>`,
+  aliases: Object.fromEntries(parts.map(([, alias]) => [alias, `_${alias.slice(2)}_1`])),
+});
+const calcCol = (id, name, possible, score, formula, extra = {}) => ({ columnId: `_${id}_1`, displayGrade: score == null ? null : { isOverride: false, score, ...extra.shown }, column: { calculationType: 'CUSTOM', scorable: true, possible, effectiveColumnName: name, columnName: name, calculatedFormula: formula, ...extra.column } });
+const spanish1110 = (shown = 75, teacher = {}) => {
+  const avg = { formula: '<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>@X@BBCalColElem(avg:{"running":true,"selected":{"average":true,"elements":[{"type":"item","alias":"i_525"}]}})@X@</mi></math>X_Running_Total=true', aliases: { i_525: '_525_1' } };
+  return [
+    g('_771_1', 100, 100), g('_771_1', 0, 10), // the teacher's extra credit, weighted 0
+    g('_499_1', 100, 0), // Discussion 15%
+    g('_496_1', 50, null), // Assignment 10%
+    { ...g('_498_1', 100, null), columnId: '_526_1' }, { ...g('_498_1', 100, null), columnId: '_527_1' }, // Test, left out as a category
+    calcCol(528, 'VHL Homework Current Grade', 100, 100, avg),
+    calcCol(508, 'Overall Grade', 96.66666, shown, recipe([['cat', 'c_771', 0], ['cat', 'c_499', 15], ['cat', 'c_496', 10], ['item', 'i_527', 10], ['item', 'i_526', 20],
+      ['cat', 'c_498', 0, { exclude_list: [{ exclude_alias: 'c_498' }] }], ['item', 'i_528', 45]]), { shown: { grade: 'C' }, ...teacher }),
+  ];
+};
+
+test("single weighted items and the teacher's own overall column: Blackboard's 75%, by its recipe", () => {
+  const m = C.model(spanish1110());
+  assert.equal(m.kind, 'weighted');
+  assert.equal(m.column, 'Overall Grade');
+  assert.equal(m.overall, 75);
+  assert.ok(Math.abs(m.percent() - 75) < 1e-9);
+  // Each single item is a group of its own, at its weight; the average column is an item with the score it shows.
+  const one = m.course.groups.find((x) => x.id === 'i_528_1');
+  assert.deepEqual([one.name, one.weight, one.single, one.items.map((i) => [i.id, i.score, i.possible])], ['VHL Homework Current Grade', 45, true, [['_528_1', 100, 100]]]);
+  assert.deepEqual(m.course.groups.map((x) => x.id), ['_499_1', '_496_1', 'i_527_1', 'i_526_1', 'i_528_1']);
+  // The lesson tests (20%) at full marks join the running total: (0 x 15 + 100 x 20 + 100 x 45) / 80.
+  assert.ok(Math.abs(m.percent(new Map([['_526_1', 100]])) - 81.25) < 1e-9);
+  assert.equal(new Set(m.items.map((i) => i.id)).size, m.items.length, 'each item once');
+  assert.ok(m.items.some((i) => i.id === '_528_1'), 'the average column takes a what-if like any item');
+  assert.equal(m.need(90).left, 3);
+});
+
+test("a teacher's overall column that doesn't come out at its own figure isn't trusted, and says so", () => {
+  const m = C.model(spanish1110(80));
+  assert.equal(m.kind, 'unsupported');
+  assert.equal(m.why, "its recipe doesn't come out at Blackboard's own figure");
+  assert.deepEqual([m.overall, m.column], [80, 'Overall Grade']);
+  // An average column, or a weighted one that is neither marked nor named as the overall grade, is no course grade.
+  const plain = spanish1110(75, { column: { effectiveColumnName: 'Lab average', columnName: 'Lab average' } });
+  plain[plain.length - 1].column.calculatedFormula.isTotalCalculation = false;
+  assert.equal(C.model(plain).kind, 'points');
+  const named = spanish1110(75, { column: { effectiveColumnName: 'Course Grade', columnName: 'Course Grade' } });
+  named[named.length - 1].column.calculatedFormula.isTotalCalculation = false;
+  assert.deepEqual([C.model(named).kind, C.model(named).column], ['weighted', 'Course Grade']);
+  // Two that both qualify equally: no guess.
+  const two = spanish1110();
+  two.push({ ...two[two.length - 1], columnId: '_509_1' });
+  assert.equal(C.model(two).kind, 'points');
+});
+
+test("an item whose name Ultra keeps only as punctuation reads by its column's own name", () => {
+  const row = g('_1_1', 50, 48);
+  Object.assign(row.column, { effectiveColumnName: '.', columnName: 'Module 6: Assignment 1' });
+  const blank = g('_1_1', 50, 40);
+  Object.assign(blank.column, { effectiveColumnName: ' ', columnName: '' });
+  assert.deepEqual(C.model([row, blank]).items.map((i) => i.name), ['Module 6: Assignment 1', 'Untitled']);
+});
