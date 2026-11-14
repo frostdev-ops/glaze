@@ -527,12 +527,24 @@ function world() {
       try {
         for (const f of list) {
           const r = await fetch(cfg.upload, { method: 'POST', headers: { 'content-type': f.type || 'application/octet-stream', 'x-file-name': encodeURIComponent(f.name) }, body: await f.arrayBuffer() }).then((x) => { if (!x.ok) throw Error('Practice upload failed'); return x.json(); });
+          // Live Ultra turns its editor off while it saves the attempt's files (4001.4, 2026-11-14).
+          q.disable();
           await new Promise((resolve) => setTimeout(resolve, 400));
           row(r); await log();
+          setTimeout(() => q.enable(), 300);
         }
       } finally { uploading--; state(); }
     };
-    q.on('text-change', state);
+    // Live Ultra saves the text a moment after each edit: its footer's status a spinner, then "Last saved" drawn anew.
+    const saved = $('footer [class*="makeStylesstatus-"]');
+    let saving = null;
+    q.on('text-change', (delta, old, source) => {
+      state();
+      if (source !== 'user' || !saved) return;
+      clearTimeout(saving);
+      saved.innerHTML = '<div role="status" aria-label="Saving"><div></div></div>';
+      saving = setTimeout(() => { saved.innerHTML = ''; const d = make('<div role="status" aria-live="polite"></div>'); d.textContent = `Last saved ${new Date().toLocaleTimeString()}`; saved.append(d); }, 600);
+    });
     tools($('.bb-editor-root', area), q);
     state();
     panel.addEventListener('change', (e) => { if (e.target === input) { take([...input.files]); input.value = ''; } });
@@ -540,9 +552,9 @@ function world() {
     panel.addEventListener('drop', (e) => { if (e.target.closest('[class*="makeStylesinputContainer-"]')) { e.preventDefault(); take([...e.dataTransfer.files]); } });
     $$('[class*="makeStylesbuttonContainer-"] button', preview).forEach((b) => b.addEventListener('click', () => { if (/Upload/.test(b.textContent)) input.click(); else toast('Cloud storage isn’t part of the practice'); }));
     const body = (draft) => ({ draft, studentSubmission: blank(q) ? '' : q.root.innerHTML, files: files.map((f) => f.id) });
-    // Stand-in for Ultra's confirmation (its wording wasn't probed).
+    // Ultra's confirmation, its wording and buttons as live Ultra 4001.4 draws them (2026-11-14).
     const confirm = () => {
-      const d = make(`<div class="practice-confirm" role="dialog" aria-modal="true" aria-labelledby="practice-confirm-title"><div><h2 id="practice-confirm-title">Submit assignment?</h2><p>You can’t change your submission after you submit it.</p><div class="row"><button type="button">Cancel</button><button type="button" class="primary">Submit</button></div></div></div>`);
+      const d = make(`<div class="practice-confirm" role="dialog" aria-modal="true" aria-labelledby="practice-confirm-title"><div><h2 id="practice-confirm-title">Submit Assignment?</h2><p>After you submit, you can't edit this assignment. Do you want to continue?</p><div class="row"><button type="button" data-analytics-id="assignment.attempt.submit.confirmation.dialog.cancel.button">Cancel</button><button type="button" class="primary" data-analytics-id="course.content.assessment.test.modal.confirmSubmitAttemptAlert.submit">Submit</button></div></div></div>`);
       const [no, yes] = $$('button', d);
       no.addEventListener('click', () => d.remove());
       yes.addEventListener('click', async () => { if (yes.disabled) return; yes.disabled = true; window.__confirmations++; const r = await post(cfg.attempt, body(false)); d.remove(); receipt(r); });
