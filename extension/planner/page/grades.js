@@ -103,7 +103,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     if ((v === 'percent') === unitPct) return;
     for (const st of W.values()) {
       if (st.status !== 'ready' || st.course.weighted || st.row.restrict_quantitative_data || /[%/]/.test(st.target)) continue;
-      const total = Object.values(C.calc(st.course, {}, { period: st.period, anon: st.anon }).groups).reduce((n, x) => n + x.final.possible, 0);
+      const total = Object.values(C.calc(st.course, st.what, { period: st.period, anon: st.anon }).groups).reduce((n, x) => n + x.final.possible, 0);
       const goal = C.readTarget(st.target, { total: unitPct ? 0 : total });
       if (total > 0 && goal != null) st.target = numIn(v === 'percent' ? goal : (goal / 100) * total);
     }
@@ -429,7 +429,8 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     // Fill what's left, and undo it (st.undo: the scores before the fill), until a score is typed.
     // The target: a percent, a fraction, a letter where the course's letters are known, or in Points on a course graded by
     // points, points of its whole total (work not graded yet included).
-    const totalPts = byPoints && !unitPct ? Object.values(base.groups).reduce((n, x) => n + x.final.possible, 0) : 0;
+    const pointsOf = (r) => byPoints && !unitPct ? Object.values(r.groups).reduce((n, x) => n + x.final.possible, 0) : 0;
+    let totalPts = pointsOf(C.calc(course, st.what, opts));
     const goalOf = () => C.readTarget(st.target, { scheme: rqd ? st.scheme : letters, total: totalPts }) ?? NaN;
     const byId = new Map(course.groups.flatMap((g) => g.items.map((i) => [i.id, i])));
     const fillWith = (how) => {
@@ -474,7 +475,14 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     target.dataset.f = 'target';
     const need = make('p', { className: 'gz-calc-out' });
     need.setAttribute('aria-live', 'polite');
-    updates.push(() => {
+    const targetBefore = make('span'), targetAfter = make('span');
+    updates.push((result) => {
+      totalPts = pointsOf(result);
+      const [before, after] = (totalPts ? t('Aim for {target} of {total} points', { total: numIn(totalPts) }) : t('Aim for {target}% overall')).split('{target}');
+      targetBefore.textContent = before;
+      targetAfter.textContent = rqd ? after.replace(/^\s*%/, '') : after;
+      label(target, t(rqd ? 'Target overall grade' : totalPts ? 'Target overall grade, in points' : 'Target overall grade, in percent'));
+      target.placeholder = rqd ? st.scheme[0][0] : totalPts ? numIn(Math.round(totalPts * 0.9)) : '90';
       const goal = goalOf();
       fillNeed.hidden = true;
       if (!Number.isFinite(goal)) { need.textContent = ''; return; }
@@ -487,7 +495,6 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
             : t("You'd need about {pct} on each of the {n} items left.", { n: r.left, pct: rqd ? C.letter(r.share * 100, st.scheme) : GZ_I18N.pct(r.pct, locale()) });
     });
     target.addEventListener('input', () => { st.target = target.value; update(); });
-    const [before, after] = (totalPts ? t('Aim for {target} of {total} points', { total: numIn(totalPts) }) : t('Aim for {target}% overall')).split('{target}');
     // Only work not graded yet: the rows of graded work left out of the list (they still count).
     const todo = make('input', { type: 'checkbox', checked: !!st.todo });
     todo.dataset.f = 'todo';
@@ -505,7 +512,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     };
     const units = label(make('div', { className: 'gz-calc-units', role: 'group' }, unitButton('points', 'Points'), unitButton('percent', 'Percent')), t('Show scores as'));
     box.append(make('div', { className: 'gz-calc-tools' },
-      make('label', { className: 'gz-calc-target' }, before, target, rqd ? after.replace(/^\s*%/, '') : after), need, fills,
+      make('label', { className: 'gz-calc-target' }, targetBefore, target, targetAfter), need, fills,
       make('div', { className: 'gz-calc-view' }, ...(rqd ? [] : [units]), make('label', { className: 'gz-calc-only' }, todo, ` ${t('Only work not graded yet')}`))));
     // Enter goes to the next score (Shift+Enter the one before), as in a spreadsheet.
     const step = (input) => input.addEventListener('keydown', (e) => {

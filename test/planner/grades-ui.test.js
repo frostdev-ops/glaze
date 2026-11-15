@@ -2363,7 +2363,7 @@ test('Ultra what-if: point targets use the total with pretend and excluded assig
   target().value = '255';
   target().fire('input');
   assert.match(p.box().textContent, /Aim for  of 300 points/);
-  assert.match(p.box().textContent, /You'd need about 85% on each of the 1 items left\./);
+  assert.match(p.box().textContent, /You'd need about 85% on the item left\./);
   find(p.box(), (e) => e.dataset.f === 'unit:percent').fire('click');
   await settle(10);
   assert.equal(target().value, '85');
