@@ -2232,6 +2232,34 @@ test('Ultra what-if: Points or Percent, kept on this device, with scores typed a
   assert.match(scoreOf(q, '_604_1').parentNode.textContent, /%$/);
 });
 
+test('Ultra what-if: a target keeps its meaning when either tab switches units', async () => {
+  const store = shared();
+  const a = ultraPage({ store, path: '/ultra/courses/_102_1/grades', books: { _102_1: ufix('grades-status').results } });
+  const b = ultraPage({ store });
+  for (const p of [a, b]) { p.UI.render(); await settle(10); await open(p); }
+  const target = () => find(a.box(), (e) => e.dataset.f === 'target');
+  target().value = '255';
+  target().fire('input');
+  const need = () => find(a.box(), (e) => e.className === 'gz-calc-out').textContent;
+  const was = need();
+  assert.match(was, /85%/);
+  find(b.box(), (e) => e.dataset.f === 'unit:percent').fire('click');
+  await settle(10);
+  assert.equal(target().value, '85');
+  assert.equal(need(), was, 'a switch from another tab keeps the same target');
+  find(a.box(), (e) => e.dataset.f === 'unit:points').fire('click');
+  await settle(10);
+  assert.equal(target().value, '255');
+  assert.equal(need(), was);
+  target().value = '90%';
+  target().fire('input');
+  const explicit = need();
+  find(b.box(), (e) => e.dataset.f === 'unit:percent').fire('click');
+  await settle(10);
+  assert.equal(target().value, '90%', 'an explicit unit needs no conversion');
+  assert.equal(need(), explicit);
+});
+
 test('Ultra what-if: a course graded by points shows the points beside the percents, takes a target in points, and marks missing work', async () => {
   const p = ultraPage({ path: '/ultra/courses/_102_1/grades', books: { _102_1: ufix('grades-status').results } });
   p.UI.render();
