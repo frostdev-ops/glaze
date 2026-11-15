@@ -556,7 +556,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
         if (i.scale === 'complete' && i.possible > 0) {
           // Complete or Incomplete: full points or none, as the course grades it. A share some fill gave it stays listed.
           const was = i.excused ? t('Excused') : real == null ? '–' : real >= i.possible ? t('Complete') : real > 0 ? numIn(real) : t('Incomplete');
-          const odd = saved && saved[0] > 0 && saved[0] < i.possible;
+          const odd = saved && saved[0] !== 0 && saved[0] !== i.possible;
           field = make('select', {}, make('option', { value: '', textContent: was }), make('option', { value: '1', textContent: t('Complete') }),
             make('option', { value: '0', textContent: t('Incomplete') }), ...(odd ? [make('option', { value: 'x', textContent: `${numIn(saved[0])} / ${numIn(i.possible)}` })] : []));
           field.value = !saved ? '' : odd ? 'x' : saved[0] >= i.possible ? '1' : '0';
