@@ -2260,6 +2260,25 @@ test('Ultra what-if: a target keeps its meaning when either tab switches units',
   assert.equal(need(), explicit);
 });
 
+test('Ultra what-if: a late initial unit read cannot undo a newer change from another tab', async () => {
+  const store = shared({ calcUnit: 'points' });
+  const held = { on: true, queue: [] };
+  const p = ultraPage({ store, held });
+  const other = ultraPage({ store });
+  other.UI.render();
+  await settle(10);
+  await open(other);
+  find(other.box(), (e) => e.dataset.f === 'unit:percent').fire('click');
+  await settle(10);
+  p.release();
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  assert.equal(store.data.calcUnit, 'percent');
+  assert.equal(find(p.box(), (e) => e.dataset.f === 'unit:percent').getAttribute('aria-pressed'), 'true');
+  assert.equal(scoreOf(p, '_604_1').placeholder, '80');
+});
+
 test('Ultra what-if: a course graded by points shows the points beside the percents, takes a target in points, and marks missing work', async () => {
   const p = ultraPage({ path: '/ultra/courses/_102_1/grades', books: { _102_1: ufix('grades-status').results } });
   p.UI.render();
