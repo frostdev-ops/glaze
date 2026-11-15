@@ -289,10 +289,10 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     if (!s) return undefined;
     const p = item.possible;
     const letter = (item.letters || []).find(([n]) => n.toLowerCase() === s.toLowerCase());
-    if (item.scale === 'letter' && letter && p > 0) return within((letter[1] / 100) * p);
     let m;
     if ((m = s.match(FRAC))) { const of = toNum(m[2]); return of > 0 ? within(p > 0 ? (toNum(m[1]) / of) * p : toNum(m[1])) : null; }
     if ((m = s.match(PCT))) return p > 0 ? within((toNum(m[1]) / 100) * p) : null;
+    if (item.scale === 'letter' && letter && p > 0) return within((letter[1] / 100) * p);
     if ((m = s.match(PLAIN))) return within(percent && p > 0 ? (toNum(m[1]) / 100) * p : toNum(m[1]));
     return letter && p > 0 ? within((letter[1] / 100) * p) : null;
   };
@@ -310,7 +310,7 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
   };
   // A Canvas letter's score (GradingStandard#grade_to_score): the top letter is 100%; any other is one point under the
   // next letter's cut-off, or a tenth where that cut-off is less than a point above its own. scheme: [[letter, lowest
-  // %]], highest first. → [[letter, %]].
+  // %]], highest first. Points-based standards step down a tenth of a scheme point. → [[letter, %]].
   const canvasLetters = (scheme, standard = {}) => (scheme || []).map(([n, min], i) => {
     if (!i) return [n, 100];
     const up = scheme[i - 1][1];
