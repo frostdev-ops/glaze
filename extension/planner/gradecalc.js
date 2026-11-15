@@ -508,7 +508,8 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
       }
       return null;
     };
-    const exact = (row, r) => (r.m ? r.m : ![MISMATCH, UNCHECKED].includes(r.why) && !/BBCalColElem\(wgt:/.test(String(row.column.calculatedFormula?.formula || '')) && total(row));
+    const exact = (row, r) => (r.m ? r.m : row.column.calculatedFormula?.isTotalCalculation === true && ![MISMATCH, UNCHECKED].includes(r.why)
+      && !/BBCalColElem\(wgt:/.test(String(row.column.calculatedFormula?.formula || '')) && total(row));
     const no = (why, row = overallRow, column) => ({ kind: 'unsupported', note: `Glaze can't work out this course's overall grade: ${why}.`, why, items, overall: figureOf(row), columnId: row?.columnId, ...(column ? { column } : {}) });
     if (overallRow) {
       const r = check(overallRow);
