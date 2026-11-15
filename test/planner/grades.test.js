@@ -380,3 +380,11 @@ test('a trusted points overall is reported as a percent, including a teacher tot
     assert.ok(Math.abs(m.percent() - m.overall) < 1e-9);
   }
 });
+
+test('an unsupported average is never trusted as a points total just because its current figure matches', () => {
+  // Both items are at 50% today. Giving the first full marks would make an equal average 75%, but a points total 54.55%.
+  for (const formula of ['@X@BBCalColElem(avg:{"elements":[]})@X@', 'unreadable']) {
+    const m = C.model([g('_1_1', 10, 5), g('_1_1', 100, 50), overall({ isTotalCalculation: false, formula }, 50)]);
+    assert.equal(m.kind, 'unsupported', formula);
+  }
+});
