@@ -288,11 +288,12 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     const s = dashes(text);
     if (!s) return undefined;
     const p = item.possible;
+    const letter = (item.letters || []).find(([n]) => n.toLowerCase() === s.toLowerCase());
+    if (item.scale === 'letter' && letter && p > 0) return within((letter[1] / 100) * p);
     let m;
     if ((m = s.match(FRAC))) { const of = toNum(m[2]); return of > 0 ? within(p > 0 ? (toNum(m[1]) / of) * p : toNum(m[1])) : null; }
     if ((m = s.match(PCT))) return p > 0 ? within((toNum(m[1]) / 100) * p) : null;
     if ((m = s.match(PLAIN))) return within(percent && p > 0 ? (toNum(m[1]) / 100) * p : toNum(m[1]));
-    const letter = (item.letters || []).find(([n]) => n.toLowerCase() === s.toLowerCase());
     return letter && p > 0 ? within((letter[1] / 100) * p) : null;
   };
   // Points shown back as typed: in points, or as a percent of the item's points; to two places.
