@@ -198,6 +198,7 @@ test('numeric grade symbols on a GPA scale are read before plain points, with ex
   }
   assert.equal(G.readScore('3', { ...item, possible: 0 }), 3, 'zero-point extra credit still takes points');
   assert.equal(G.readScore('3', { possible: 10 }), 3);
+  assert.equal(G.readScore('30%', { ...item, letters: [...item.letters, ['30%', 90]] }), 3, 'an explicit percent always names its unit');
 });
 
 test('a target typed as a percent, a fraction, points of the course total or a letter', () => {
