@@ -316,6 +316,34 @@ test('a pretend assignment added while a grading period is shown belongs to that
   assert.ok(find(p.box(), (e) => e.dataset.f === `n:${saved[0].id}`), 'and is shown in it');
 });
 
+test('Canvas weighted grading periods use percentage targets for the whole course', async () => {
+  const periods = [
+    { id: '1', start_date: '2026-08-01T00:00:00Z', end_date: '2026-10-10T00:00:00Z', weight: 25 },
+    { id: '2', start_date: '2026-10-10T00:00:00Z', end_date: '2026-12-31T00:00:00Z', weight: 75 },
+  ];
+  const groups = [{ id: '1', name: 'All', assignments: [
+    { id: 'a', name: 'Done', points_possible: 100, due_at: '2026-09-01T00:00:00Z', submission: { score: 80 } },
+    { id: 'b', name: 'Final', points_possible: 100, due_at: '2026-11-01T00:00:00Z', submission: {} },
+  ] }];
+  const list = [row({ apply_assignment_group_weights: false, has_grading_periods: true, has_weighted_grading_periods: true,
+    enrollments: [{ type: 'student', user_id: '3', computed_current_score: 80, computed_final_score: 20 }] })];
+  const capi = () => Promise.resolve({ grading_periods: periods });
+  const p = gradesPage({ groups, list, search: '?grading_period_id=0', capi });
+  await ready(p);
+  assert.equal(find(p.box(), (e) => e.className === 'gz-calc-pts'), undefined, 'a plain points total does not express the weighted grade');
+  const target = find(p.box(), (e) => e.dataset.f === 'target');
+  assert.equal(target.getAttribute('aria-label'), 'Target overall grade, in percent');
+  target.value = '80';
+  target.fire('input');
+  assert.match(p.box().textContent, /You'd need about 80% on the item left\./);
+  find(p.box(), (e) => e.dataset.f === 'unit:percent').fire('click');
+  await settle();
+  assert.equal(find(p.box(), (e) => e.dataset.f === 'target').value, '80');
+  const one = gradesPage({ groups, list, search: '?grading_period_id=2', capi });
+  await ready(one);
+  assert.equal(find(one.box(), (e) => e.dataset.f === 'target').getAttribute('aria-label'), 'Target overall grade, in points', 'one unweighted period still takes a points target');
+});
+
 test('Aim for a whole percent: "You\'d need about" shows that percent, not a tenth more', async () => {
   const groups = [{ id: '1', name: 'All', group_weight: 0, assignments: [{ id: 'a', name: 'Final', points_possible: 100, submission: {} }] }];
   const p = gradesPage({ groups, list: [row({ apply_assignment_group_weights: false })] });
