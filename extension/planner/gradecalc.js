@@ -503,7 +503,8 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
       for (const running of [true, false]) {
         const m = build({ cats: null, running });
         const mine = m.percent();
-        if (mine != null && want.some((w) => Math.abs(mine - w) <= 0.01)) return { ...m, points: true };
+        const matched = mine == null ? null : want.find((w) => Math.abs(mine - w) <= 0.01);
+        if (matched != null) return { ...m, points: true, overall: matched };
       }
       return null;
     };
@@ -512,7 +513,7 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
     if (overallRow) {
       const r = check(overallRow);
       const m = exact(overallRow, r);
-      return m ? { ...m, kind: 'weighted', note: '', overall: figureOf(overallRow), columnId: overallRow.columnId } : no(r.why);
+      return m ? { ...m, kind: 'weighted', note: '', overall: m.overall ?? figureOf(overallRow), columnId: overallRow.columnId } : no(r.why);
     }
     // No overall grade for the student: a teacher's own column for it, where there is just one that is marked or named so.
     // One only named so counts when its recipe is a weighting Glaze reads; one marked as a total is reported either way.
@@ -523,7 +524,7 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
       const r = check(own[0]);
       const column = columnName(own[0].column);
       const m = exact(own[0], r);
-      return m ? { ...m, kind: 'weighted', note: '', overall: figureOf(own[0]), column, columnId: own[0].columnId } : no(r.why, own[0], column);
+      return m ? { ...m, kind: 'weighted', note: '', overall: m.overall ?? figureOf(own[0]), column, columnId: own[0].columnId } : no(r.why, own[0], column);
     }
     return { ...build({ cats: null, running: true }), overall: null, kind: 'points', note: 'This course has no overall grade in Blackboard. These figures are your share of the points in graded work, which may not be how the course is graded.' };
   };

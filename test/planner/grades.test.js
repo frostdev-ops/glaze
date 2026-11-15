@@ -376,7 +376,7 @@ test('a trusted points overall is reported as a percent, including a teacher tot
     Object.assign(total.column, { externalGrade: external, columnName: 'Overall Grade', possible: 40 });
     const m = C.model([g('_1_1', 10, 8), g('_2_1', 30, 15), total]);
     assert.equal(m.kind, 'weighted');
-    assert.equal(m.overall, 57.5, 'overall is consumed as a percentage by the calculator and GPA');
-    assert.equal(m.percent(), m.overall);
+    assert.ok(Math.abs(m.overall - 57.5) < 1e-9, 'overall is consumed as a percentage by the calculator and GPA');
+    assert.ok(Math.abs(m.percent() - m.overall) < 1e-9);
   }
 });
