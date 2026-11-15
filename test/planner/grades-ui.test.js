@@ -2294,7 +2294,7 @@ test('Ultra what-if: a target keeps its meaning when either tab switches units',
   assert.ok(Math.abs(Number(target().value) - 100 / 300) < 1e-12, 'converting targets keeps more than two decimal places');
   find(a.box(), (e) => e.dataset.f === 'unit:points').fire('click');
   await settle(10);
-  assert.equal(target().value, '1', 'a target survives the round trip');
+  assert.ok(Math.abs(Number(target().value) - 1) < 1e-12, 'a target survives the round trip');
 });
 
 test('Ultra what-if: a late initial unit read cannot undo a newer change from another tab', async () => {

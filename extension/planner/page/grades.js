@@ -105,7 +105,8 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       if (st.status !== 'ready' || st.course.weighted || (st.course.weightedPeriods && !st.period) || st.row.restrict_quantitative_data || /[%/]/.test(st.target)) continue;
       const total = Object.values(C.calc(st.course, st.what, { period: st.period, anon: st.anon }).groups).reduce((n, x) => n + x.final.possible, 0);
       const goal = C.readTarget(st.target, { total: unitPct ? 0 : total });
-      if (total > 0 && goal != null) st.target = numIn(v === 'percent' ? goal : (goal / 100) * total);
+      if (total > 0 && goal != null) st.target = new Intl.NumberFormat(GZ_I18N.locale(locale()), { useGrouping: false, maximumSignificantDigits: 15 })
+        .format(v === 'percent' ? goal : (goal / 100) * total);
     }
     unitPct = v === 'percent';
     for (const st of W.values()) st.v++;
