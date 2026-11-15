@@ -96,7 +96,10 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
   // Points or Percent: how scores show and are typed, for every course on this device (storage.local calcUnit). Any
   // form is read either way ("8", "8/10", "80%").
   let unitPct = false;
-  function unitIs(v) {
+  let unitChanged = false;
+  function unitIs(v, initial = false) {
+    if (initial && unitChanged) return;
+    if (!initial) unitChanged = true;
     if ((v === 'percent') === unitPct) return;
     for (const st of W.values()) {
       if (st.status !== 'ready' || st.course.weighted || st.row.restrict_quantitative_data || /[%/]/.test(st.target)) continue;
@@ -108,7 +111,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
     for (const st of W.values()) st.v++;
     whatIf();
   }
-  getArea('local', 'calcUnit').then(unitIs);
+  getArea('local', 'calcUnit').then((v) => unitIs(v, true));
   const GRADES = ultra ? /^\/ultra\/courses\/_\d+_\d+\/grades/ : /^\/courses\/\d+\/grades\/?$/;
   const courseHere = () => (ultra ? X.courseId() : canvasCourseId());
 
