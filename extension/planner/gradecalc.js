@@ -68,6 +68,7 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
             pending: s.workflow_state === 'pending_review',
             // How the course grades it (Canvas's grading_type), whether Canvas marks it missing, and the grade it writes.
             scale: CANVAS_SCALES[a.grading_type] || 'points',
+            standard: a.grading_standard_id == null ? null : String(a.grading_standard_id),
             missing: s.missing === true,
             shown: typeof s.grade === 'string' ? s.grade.slice(0, 20) : '',
             counts: !a.omit_from_final_grade && a.grading_type !== 'not_graded' && !(types.length === 1 && types[0] === 'not_graded') && a.workflow_state !== 'unpublished' && a.published !== false,
@@ -309,10 +310,11 @@ var GZ_GRADECALC = globalThis.GZ_GRADECALC || (() => {
   // A Canvas letter's score (GradingStandard#grade_to_score): the top letter is 100%; any other is one point under the
   // next letter's cut-off, or a tenth where that cut-off is less than a point above its own. scheme: [[letter, lowest
   // %]], highest first. → [[letter, %]].
-  const canvasLetters = (scheme) => (scheme || []).map(([n, min], i) => {
+  const canvasLetters = (scheme, standard = {}) => (scheme || []).map(([n, min], i) => {
     if (!i) return [n, 100];
     const up = scheme[i - 1][1];
-    return [n, round2(up - (Math.abs(up - min) >= 1 ? 1 : 0.1))];
+    const step = standard.points_based && standard.scaling_factor > 0 ? 10 / standard.scaling_factor : Math.abs(up - min) >= 1 ? 1 : 0.1;
+    return [n, round2(up - step)];
   });
 
   // ---- what-if scores kept on this device ---------------------------------------------------------------------

@@ -242,12 +242,20 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       st.course = C.fromApi(groups, { weighted: row.apply_assignment_group_weights, periods, weightedPeriods: row.has_weighted_grading_periods });
       // Work graded by letter needs the course's letters too; with none, Canvas's default scheme is the one it uses.
       const lettered = st.course.groups.some((g) => g.items.some((i) => i.scale === 'letter'));
-      return scheme == null && lettered ? capi(`/courses/${cid}?include[]=grading_scheme`).then((j) => j?.grading_scheme, () => null) : scheme;
-    }).then((scheme) => {
+      const ids = [...new Set(st.course.groups.flatMap((g) => g.items.filter((i) => i.scale === 'letter' && i.standard).map((i) => i.standard)))];
+      return Promise.all([
+        scheme == null && lettered ? capi(`/courses/${cid}?include[]=grading_scheme`).then((j) => j?.grading_scheme, () => null) : scheme,
+        Promise.all(ids.map((id) => capi(`/courses/${cid}/grading_standards/${encodeURIComponent(id)}`).then((j) => {
+          const own = C.schemeOf(Array.isArray(j?.grading_scheme) ? j.grading_scheme.map((e) => [e.name, e.value]) : null);
+          return [id, own ? C.canvasLetters(own, j) : []];
+        }, () => [id, []]))),
+      ]);
+    }).then(([scheme, standards]) => {
       st.scheme = C.schemeOf(scheme) || C.SCHEME;
       st.lettered = !!row.restrict_quantitative_data || st.me.computed_current_grade != null;
       const letters = C.canvasLetters(st.scheme);
-      for (const g of st.course.groups) for (const i of g.items) if (i.scale === 'letter') i.letters = letters;
+      const own = new Map(standards);
+      for (const g of st.course.groups) for (const i of g.items) if (i.scale === 'letter') i.letters = i.standard ? own.get(i.standard) || [] : letters;
       // The page's grading period: the one picked, or Canvas's current one; 0 is all of them.
       const picked = st.whole ? null : new URLSearchParams(location.search).get('grading_period_id') ?? (row.has_grading_periods ? st.me.current_grading_period_id : null);
       st.period = picked && picked !== '0' ? String(picked) : null;
