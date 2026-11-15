@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.8 (Portuguese (Brazil))
+# Chrome Web Store listing — Glaze 4.0.9 (Portuguese (Brazil))
 
 ## Short summary (132 character maximum)
 
@@ -72,6 +72,14 @@ Código aberto (MIT): https://github.com/frostdev-ops/glaze
 Canvas é uma marca da Instructure, Inc. Blackboard é uma marca da Anthology Inc. Moodle é uma marca registrada da Moodle Pty Ltd. O Glaze é um projeto independente e não tem afiliação com nenhuma dessas empresas nem com nenhuma escola, e não é endossado por elas.
 
 ## Release notes
+
+NOVO NA 4.0.9
+
+• Simulador de notas: preencha o que falta com a nota máxima, sua média até agora ou o que você precisa para sua meta, e desfaça.
+• Simulador de notas: alterne entre pontos e porcentagem, e digite uma nota como 45/50, 90% ou uma letra.
+• No Blackboard, o simulador de notas lê a coluna de nota geral do próprio professor e os itens com peso próprio, e marca os trabalhos que faltam.
+• O Writer no Blackboard entrega com mais confiabilidade e pode substituir um arquivo que o Blackboard já tem.
+• Documentos volta a importar arquivos do Word.
 
 NOVO NA 4.0.8
 

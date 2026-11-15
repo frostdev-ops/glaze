@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.8
+# Chrome Web Store listing — Glaze 4.0.9
 
 ## Name
 
@@ -80,6 +80,14 @@ Open source (MIT): https://github.com/frostdev-ops/glaze
 Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Anthology Inc. Moodle is a registered trademark of Moodle Pty Ltd. Glaze is an independent project and is not affiliated with or endorsed by any of these companies or any school.
 
 ## Release notes
+
+NEW IN 4.0.9
+
+• What-if calculator: Fill what's left with full marks, your average so far or what you need for a target, and Undo it.
+• What-if calculator: switch between points and percent, and type a score as 45/50, 90% or a letter.
+• What-if calculator on Blackboard reads a teacher's own Overall Grade column and items weighted on their own, and tags missing work.
+• Writer on Blackboard submits more reliably, and can replace a file Blackboard already has.
+• Documents imports Word files again.
 
 NEW IN 4.0.8
 

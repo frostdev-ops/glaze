@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.8 (Spanish)
+# Chrome Web Store listing — Glaze 4.0.9 (Spanish)
 
 ## Short summary (132 character maximum)
 
@@ -72,6 +72,14 @@ Código abierto (MIT): https://github.com/frostdev-ops/glaze
 Canvas es una marca comercial de Instructure, Inc. Blackboard es una marca comercial de Anthology Inc. Moodle es una marca registrada de Moodle Pty Ltd. Glaze es un proyecto independiente y no está afiliado ni respaldado por ninguna de estas empresas ni por ninguna escuela.
 
 ## Release notes
+
+NOVEDADES DE 4.0.9
+
+• Calculadora de hipótesis: rellena lo que falta con la nota máxima, tu promedio hasta ahora o lo que necesitas para tu objetivo, y deshazlo.
+• Calculadora de hipótesis: cambia entre puntos y porcentaje, y escribe una nota como 45/50, 90 % o una letra.
+• La calculadora de hipótesis en Blackboard lee la columna de nota global propia del docente y los elementos ponderados por separado, y marca los trabajos que faltan.
+• Writer en Blackboard entrega de forma más fiable y puede reemplazar un archivo que Blackboard ya tiene.
+• Documentos vuelve a importar archivos de Word.
 
 NOVEDADES DE 4.0.8
 

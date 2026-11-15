@@ -6,6 +6,28 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [4.0.9] — 2026-11-14
+
+### Added
+
+- What-if calculator: Fill what's left puts full marks, your average so far, or what you need for your target into the work not graded yet. Undo takes it back.
+- What-if calculator: a Points or Percent switch. Type a score as points, a fraction (45/50), a percent (90%) or a letter on the item's own scale; work graded complete or incomplete is a menu.
+- What-if calculator: a course graded by points shows its points beside the percent and takes a target in points ("255 of 300 points"). Categories show their points too.
+- What-if calculator: work Blackboard scored zero for being missing, or Canvas marks missing, is tagged Missing.
+- Writer on Blackboard: when Blackboard already has a file with the same name, the submit sheet offers to replace it.
+
+### Changed
+
+- What-if calculator on Blackboard reads a teacher's own Overall Grade column and items weighted on their own, so it matches Blackboard's figure in more courses. Letters show where the course's scale is known: Canvas's, or the scale you gave the course in the GPA.
+- What-if calculator: the target and Fill sit under the figures, the closed calculator shows your grade, each score sits on one line, Enter goes to the next score, "Only work not graded yet" hides graded rows, and the change your what-ifs make shows beside them.
+
+### Fixed
+
+- Writer on Blackboard submits when Blackboard saves the attempt slowly, when its confirmation is cancelled and Submit is pressed again, when the attempt was opened from the course, and in Firefox with attached files.
+- Writer on Blackboard keeps its box after Blackboard re-saves centered text or links, and writes links Blackboard keeps.
+- Documents imports a Word file again.
+- What-if calculator: an item renamed "." reads by its own name, and work with no category is headed so.
+
 ## [4.0.8] — 2026-11-12
 
 ### Added

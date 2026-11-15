@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.8 (Dutch)
+# Chrome Web Store listing — Glaze 4.0.9 (Dutch)
 
 ## Short summary (132 character maximum)
 
@@ -72,6 +72,14 @@ Open source (MIT): https://github.com/frostdev-ops/glaze
 Canvas is een handelsmerk van Instructure, Inc. Blackboard is een handelsmerk van Anthology Inc. Moodle is een geregistreerd handelsmerk van Moodle Pty Ltd. Glaze is een onafhankelijk project en is niet verbonden aan, noch goedgekeurd door, een van deze bedrijven of een school.
 
 ## Release notes
+
+NIEUW IN 4.0.9
+
+• Wat-als-calculator: vul de rest in met volle punten, je gemiddelde tot nu toe of wat je voor je doel nodig hebt, en maak het ongedaan.
+• Wat-als-calculator: wissel tussen punten en procenten, en typ een score als 45/50, 90% of een letter.
+• De wat-als-calculator op Blackboard leest de eigen kolom met het eindcijfer van de docent en los gewogen onderdelen, en markeert ontbrekend werk.
+• Writer op Blackboard levert betrouwbaarder in en kan een bestand vervangen dat Blackboard al heeft.
+• Documenten importeert Word-bestanden weer.
 
 NIEUW IN 4.0.8
 

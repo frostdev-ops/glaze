@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.8 (German)
+# Chrome Web Store listing — Glaze 4.0.9 (German)
 
 ## Short summary (132 character maximum)
 
@@ -72,6 +72,14 @@ Open Source (MIT): https://github.com/frostdev-ops/glaze
 Canvas ist eine Marke von Instructure, Inc. Blackboard ist eine Marke von Anthology Inc. Moodle ist eine eingetragene Marke von Moodle Pty Ltd. Glaze ist ein unabhängiges Projekt und steht in keiner Verbindung zu diesen Unternehmen oder einer Schule und wird weder von ihnen noch von einer Schule unterstützt.
 
 ## Release notes
+
+NEU IN 4.0.9
+
+• Was-wäre-wenn-Rechner: Den Rest mit voller Punktzahl, deinem bisherigen Schnitt oder dem, was du für dein Ziel brauchst, ausfüllen und rückgängig machen.
+• Was-wäre-wenn-Rechner: zwischen Punkten und Prozent wechseln und eine Note als 45/50, 90 % oder Buchstabe eingeben.
+• Der Was-wäre-wenn-Rechner auf Blackboard liest die eigene Gesamtnoten-Spalte der Lehrkraft und einzeln gewichtete Elemente und markiert fehlende Arbeiten.
+• Writer auf Blackboard gibt zuverlässiger ab und kann eine Datei ersetzen, die Blackboard schon hat.
+• Dokumente importiert Word-Dateien wieder.
 
 NEU IN 4.0.8
 
