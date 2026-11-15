@@ -2279,6 +2279,30 @@ test('Ultra what-if: a late initial unit read cannot undo a newer change from an
   assert.equal(scoreOf(p, '_604_1').placeholder, '80');
 });
 
+test('Ultra what-if: late complete schemas preserve an extra-credit score exactly in the select', async () => {
+  let answer;
+  const p = ultraPage({ books: { _101_1: scaled() }, answers: { '/gradebook/schemas': () => new Promise((resolve) => { answer = resolve; }) } });
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  const cells = scoreOf(p, '_605_1');
+  assert.equal(cells.tagName, 'INPUT');
+  cells.value = '12';
+  cells.fire('input');
+  await settle(10);
+  const was = totals(p)[1];
+  answer({ ok: true, text: async () => JSON.stringify(schemaAnswer) });
+  await settle(10);
+  const complete = scoreOf(p, '_605_1');
+  assert.equal(complete.tagName, 'SELECT');
+  assert.equal(complete.children.find((o) => o.value === complete.value).textContent, '12 / 10');
+  assert.equal(totals(p)[1], was);
+  find(p.box(), (e) => e.dataset.f === 'unit:percent').fire('click');
+  await settle(10);
+  assert.equal(scoreOf(p, '_605_1').value, 'x');
+  assert.deepEqual(p.store.data[UKEY]._101_1.s._605_1.slice(0, 2), [12, 10]);
+});
+
 test('Ultra what-if: a course graded by points shows the points beside the percents, takes a target in points, and marks missing work', async () => {
   const p = ultraPage({ path: '/ultra/courses/_102_1/grades', books: { _102_1: ufix('grades-status').results } });
   p.UI.render();
