@@ -108,12 +108,12 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
     return excepted.then((exc) => new Set(waiting.filter((g) => !exc(g.columnId) && GZ_GRADES.late(g.lastAttempt?.attemptDate, g.column.dueDate)).map((g) => g.columnId)));
   };
   // Per-course gradebook cache. Due chips ask for lateness; changed answers re-tag the page. The last visit's
-  // copy draws (saved) until the first answer.
+  // copy draws (saved) until the first answer, which redraws even if the same (live: the what-if's closed figure).
   const books = new Map();
-  const take = (b, rows, lateCols) => {
+  const take = (b, rows, lateCols, live) => {
     const key = JSON.stringify([rows.map((g) => [g.columnId, g.status, g.isExempt, g.displayGrade, g.submissionStatus?.status, g.lastAttempt?.status, g.lastAttempt?.attemptDate, GZ_PAGE.submitted(g)]), [...(lateCols || [])], rows.complete !== false]);
     b.results = rows;
-    if (key === b.key) return;
+    if (key === b.key && !live) return;
     Object.assign(b, { grades: GZ_PAGE.gradesByContent(rows), overall: GZ_PAGE.overall(rows, locale()), key });
     onBook();
   };
@@ -129,9 +129,10 @@ var GZ_SITE_ULTRA = globalThis.GZ_SITE_ULTRA || ((I) => {
         .then((rows) => (late || b.late ? lateIn(cid, rows) : Promise.resolve(undefined)).then((lateCols) => {
           if (books.get(cid) !== b) return;
           b.pending = false;
+          const live = !!b.saved;
           b.saved = false;
           b.late = lateCols;
-          take(b, rows, lateCols);
+          take(b, rows, lateCols, live);
         }))
         .catch((e) => { b.pending = false; b.fail = failed(e, b.route); });
     }
