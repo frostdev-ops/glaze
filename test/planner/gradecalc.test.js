@@ -168,6 +168,11 @@ test("letters by Canvas's own rule: the top letter is 100%, any other one point 
   assert.deepEqual(G.canvasLetters(null), []);
 });
 
+test('Canvas letters on a points-based standard step down a tenth of a scheme point', () => {
+  assert.deepEqual(G.canvasLetters([['A', 90], ['B', 75], ['F', 0]], { points_based: true, scaling_factor: 4 }),
+    [['A', 100], ['B', 87.5], ['F', 72.5]]);
+});
+
 test('a score typed in any form: points, a fraction, a percent, a letter of its own scale, a decimal comma', () => {
   const item = { possible: 50, letters: [['A', 96.5], ['B+', 88.5]] };
   const r = (text, percent) => G.readScore(text, item, percent);

@@ -2420,6 +2420,39 @@ test("Canvas what-if: a letter typed for a letter-graded item scores as Canvas w
   assert.equal(totals(p)[1], '55.33% · F');
 });
 
+test('Canvas letter items use their own grading standards, fetched once per standard', async () => {
+  const groups = [{ id: '9001', name: 'Work', assignments: [
+    { id: '9101', name: 'Essay', points_possible: 10, grading_type: 'letter_grade', grading_standard_id: 55, submission: {} },
+    { id: '9102', name: 'Report', points_possible: 10, grading_type: 'letter_grade', grading_standard_id: 55, submission: {} },
+    { id: '9103', name: 'Lab', points_possible: 10, grading_type: 'letter_grade', grading_standard_id: 56, submission: {} },
+    { id: '9104', name: 'Unknown', points_possible: 10, grading_type: 'letter_grade', grading_standard_id: 57, submission: {} },
+  ] }];
+  const asked = [];
+  const capi = (q) => {
+    asked.push(q);
+    if (q.endsWith('/grading_standards/55')) return Promise.resolve({ grading_scheme: [{ name: 'A', value: 0.88 }, { name: 'B', value: 0.7 }, { name: 'F', value: 0 }] });
+    if (q.endsWith('/grading_standards/56')) return Promise.resolve({ points_based: true, scaling_factor: 4, grading_scheme: [{ name: 'A', value: 0.9 }, { name: 'B', value: 0.75 }, { name: 'F', value: 0 }] });
+    if (q.endsWith('/grading_standards/57')) return Promise.reject(new Error('unavailable'));
+    return Promise.resolve({ grading_scheme: [['A', 0.94], ['B', 0.84], ['F', 0]] });
+  };
+  const p = gradesPage({ groups, list: [row({ apply_assignment_group_weights: false })], capi });
+  await ready(p);
+  for (const [id, expected] of [['9101', 8.7], ['9102', 8.7], ['9103', 8.75]]) {
+    const score = scoreOf(p, id);
+    score.value = 'B';
+    score.fire('input');
+    await settle();
+    assert.ok(Math.abs(p.store.data[KEY][BIO.course.id].s[id][0] - expected) < 1e-9, id);
+  }
+  assert.equal(asked.filter((q) => q.endsWith('/grading_standards/55')).length, 1);
+  const unknown = scoreOf(p, '9104');
+  unknown.value = 'B';
+  unknown.fire('input');
+  await settle();
+  assert.equal(unknown.getAttribute('aria-invalid'), 'true', 'an unavailable item scale is not replaced with a different one');
+  assert.equal(p.store.data[KEY][BIO.course.id].s['9104'], undefined);
+});
+
 test("Ultra what-if: with the scale the student gave the course for the GPA, the figures carry its letter and the target takes one", async () => {
   const p = ultraPage({ sync: { gpaCourses: { [`ultra:${UO}/_101_1`]: { s: 'A 90, B 80, C 70' } } } });
   p.UI.render();
