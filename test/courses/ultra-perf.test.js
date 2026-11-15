@@ -165,3 +165,21 @@ test('draft cleanup reads only listed drafts; without a key listing it reads eve
     assert.deepEqual(read, ['draftsSwept'], `${mode}: once a day`);
   }
 });
+
+test("a gradebook copy kept from the last visit that turns out unchanged still tells the page it's live (the calculator's closed figure waits on it)", async () => {
+  const start = source.indexOf('  const take = '), end = source.indexOf('  // undefined until', start);
+  let changed = 0, answer;
+  const rows = [{ columnId: '_601_1', status: 'GRADED', displayGrade: { score: 90 } }];
+  const bookFor = vm.runInNewContext(`${gate}${source.slice(start, end)} bookFor`, {
+    books: new Map(), covered, Date: { now: () => 100000 }, me: async () => '_900_1', location: { pathname: '/ultra/courses/_101_1/grades' },
+    // Last visit's copy is in at once; Ultra's answer, the same rows, comes after it.
+    keptRows: async () => ({ rows: covered(rows, true) }), rowsOf: () => new Promise((res) => { answer = () => res(covered(rows, true)); }),
+    GZ_PAGE: { gradesByContent: () => new Map(), overall: () => null, submitted: () => false }, locale: () => 'en', onBook: () => changed++,
+  });
+  bookFor('_101_1'); await settle(); await settle();
+  assert.equal(bookFor('_101_1').saved, true);
+  assert.equal(changed, 1, 'the kept copy draws');
+  answer(); await settle(); await settle();
+  assert.equal(bookFor('_101_1').saved, false);
+  assert.equal(changed, 2, 'and the live answer, though unchanged, tells the page once');
+});
