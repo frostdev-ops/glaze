@@ -2339,6 +2339,36 @@ test('Ultra what-if: a course graded by points shows the points beside the perce
   assert.ok(scoreOf(t, '_619_1'), 'missing work stays in view');
 });
 
+test('Ultra what-if: point targets use the total with pretend and excluded assignments', async () => {
+  const p = ultraPage({ path: '/ultra/courses/_102_1/grades', books: { _102_1: ufix('grades-status').results } });
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  byText(p.box(), 'Add a pretend assignment').fire('click');
+  await settle(10);
+  const possible = find(p.box(), (e) => /^pp:p/.test(e.dataset.f || ''));
+  possible.value = '100';
+  possible.fire('input');
+  const score = scoreOf(p, possible.dataset.f.slice(3));
+  score.value = '85';
+  score.fire('input');
+  const target = () => find(p.box(), (e) => e.dataset.f === 'target');
+  target().value = '340';
+  target().fire('input');
+  assert.match(p.box().textContent, /Aim for  of 400 points/);
+  assert.match(p.box().textContent, /You'd need about 85% on each of the 2 items left\./);
+  const count = find(p.box(), (e) => e.dataset.f === 'c:_613_1');
+  count.checked = false;
+  count.fire('change');
+  target().value = '255';
+  target().fire('input');
+  assert.match(p.box().textContent, /Aim for  of 300 points/);
+  assert.match(p.box().textContent, /You'd need about 85% on each of the 1 items left\./);
+  find(p.box(), (e) => e.dataset.f === 'unit:percent').fire('click');
+  await settle(10);
+  assert.equal(target().value, '85');
+});
+
 test("Canvas what-if: a letter typed for a letter-graded item scores as Canvas would, pass/fail is Complete or Incomplete, and the figures carry the course's letter", async () => {
   const groups = [{ id: '9001', name: 'Work', group_weight: 0, rules: {}, assignments: [
     { id: '9101', name: 'Essay', points_possible: 10, grading_type: 'letter_grade', submission_types: ['online_text_entry'], published: true, submission: { score: null, workflow_state: 'unsubmitted' } },
