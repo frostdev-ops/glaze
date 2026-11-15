@@ -710,8 +710,11 @@ html:not([data-gz-dark-theme]) :is(#gz-todo, .gz-ct, .gz-stream-status) .gz-todo
 :is(#application, #site-wrap) #gz-calc li:has(input[type="checkbox"]:not(:checked)) .gz-calc-name { color: var(--gz-ink-muted); text-decoration: line-through; }
 :is(#application, #site-wrap) #gz-calc .gz-calc-pname { width: 100%; }
 :is(#application, #site-wrap) #gz-calc .gz-calc-score { display: inline-flex; align-items: center; gap: 0.35em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* "/ 100", "/ 5" and "%" take one width, so the boxes line up. */
+:is(#application, #site-wrap) #gz-calc .gz-calc-of { min-width: 3.2em; }
+:is(#application, #site-wrap) #gz-calc .gz-calc-singles { margin-top: 0.8rem; }
+:is(#application, #site-wrap) #gz-calc .gz-calc-weight { color: var(--gz-ink); }
 :is(#application, #site-wrap) #gz-calc .gz-calc-tags { display: inline-flex; gap: 0.3rem; }
-:is(#application, #site-wrap) #gz-calc .gz-calc-tags:not(:has(.gz-calc-tag:not([hidden]))) { display: none; }
 :is(#application, #site-wrap) #gz-calc .gz-calc-missing { color: var(--gz-err); }
 :is(#application, #site-wrap) #gz-calc .gz-calc-tag { padding: 0 0.5em; border-radius: 999px; font-size: 0.75rem; font-weight: 600; color: var(--gz-ink-muted); background: var(--gz-accent-soft); }
 :is(#application, #site-wrap) #gz-calc .gz-calc-tag[hidden] { display: none; }

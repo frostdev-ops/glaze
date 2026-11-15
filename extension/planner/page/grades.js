@@ -508,6 +508,7 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       next?.select?.();
     });
     const unit = (i) => rqd && i.possible > 0;
+    let singles = null;
     for (const g of course.groups) {
       const items = g.items.filter((i) => i.counts && i.possible >= 0 && !(st.anon && i.anon) && (!st.period || i.period === st.period));
       const pretend = rec.p.filter((p) => p.g === g.id && (!st.period || (p.pd ?? course.last) === st.period));
@@ -572,10 +573,11 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
         const tag = make('span', { className: 'gz-calc-tag', textContent: t('Dropped'), hidden: true });
         updates.push((r) => { tag.hidden = !r.groups[g.id]?.current.dropped.includes(i.id); });
         // The grade the course wrote (a letter), and work it marks missing.
-        const tags = [...(i.scale === 'letter' && i.shown && real != null ? [make('span', { className: 'gz-calc-tag', textContent: i.shown })] : []),
+        const tags = [...(g.single ? [make('span', { className: 'gz-calc-tag gz-calc-weight', textContent: GZ_I18N.pct(g.weight, locale()) })] : []),
+          ...(i.scale === 'letter' && i.shown && real != null ? [make('span', { className: 'gz-calc-tag', textContent: i.shown })] : []),
           ...(i.missing ? [make('span', { className: 'gz-calc-tag gz-calc-missing', textContent: t('Missing') })] : []), tag];
         list.append(make('li', {}, count(i.id, i.name), make('span', { className: 'gz-calc-name', textContent: i.name, title: i.name }), make('span', { className: 'gz-calc-tags' }, ...tags),
-          make('span', { className: 'gz-calc-score' }, field, i.scale === 'complete' && i.possible > 0 ? '' : asPct ? ' %' : ` / ${numIn(i.possible)}`)));
+          make('span', { className: 'gz-calc-score' }, field, make('span', { className: 'gz-calc-of', textContent: i.scale === 'complete' && i.possible > 0 ? '' : asPct ? '%' : `/ ${numIn(i.possible)}` }))));
       }
       for (const p of pretend) {
         const name = label(make('input', { type: 'text', className: 'gz-calc-pname', value: p.n, maxLength: 100 }), t('Name of the pretend assignment'));
@@ -614,7 +616,14 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
         redraw();
       });
       // A group of one item (one the recipe weights on its own) takes no pretend assignment.
-      box.append(make('fieldset', { className: 'gz-calc-group' }, legend, list, ...(g.single ? [] : [add])));
+      // Items the recipe weights on their own read as one list of rows, each with its weight, rather than a heading each.
+      if (g.single) {
+        if (!singles) box.append(singles = make('fieldset', { className: 'gz-calc-group gz-calc-singles' }, make('ul')));
+        singles.children[0].append(...list.children);
+      } else {
+        singles = null;
+        box.append(make('fieldset', { className: 'gz-calc-group' }, legend, list, add));
+      }
     }
 
     const clear = make('button', { type: 'button', className: 'gz-calc-btn', textContent: t('Clear this course') });

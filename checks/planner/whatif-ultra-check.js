@@ -17,6 +17,20 @@ const grades = JSON.parse(fixture('ultra-grades.json'));
 for (const r of grades.results) if (r.column.gradebookCategory?.title === 'Discussion') r.column.gradebookCategory.title = 'DISCUSSION.NAME';
 // A course whose overall grade is the teacher's own column, weighting single items too (measured 2026-11-14).
 const teacher = fixture('ultra-grades-teacher.json');
+// The course's scales (public v1 schemas): Lab Report 3 on letters, the discussion complete or incomplete.
+const schemas = { results: [...JSON.parse(fixture('ultra-schemas.json')).results, { id: '_404_1', scaleType: 'CompleteIncomplete', symbols: [] }] };
+for (const r of grades.results) {
+  if (r.columnId === '_603_1') r.column.gradingSchemaId = '_403_1';
+  if (r.columnId === '_605_1') { r.column.gradingSchemaId = '_404_1'; r.displayGrade = { ...r.displayGrade, grade: 'Complete' }; }
+}
+// SHOT=<dir> keeps pictures of the calculator, to look at.
+// The fixture's course panel lies over the page, so it steps aside for the picture.
+const shot = async (where, name) => {
+  if (!process.env.SHOT) return;
+  await where.evaluate(() => document.querySelectorAll('.panel-wrap').forEach((e) => { e.dataset.gzShot = e.style.display; e.style.display = 'none'; }));
+  await where.locator('#gz-calc').screenshot({ path: path.join(process.env.SHOT, `${name}.png`) });
+  await where.evaluate(() => document.querySelectorAll('.panel-wrap').forEach((e) => { e.style.display = e.dataset.gzShot; delete e.dataset.gzShot; }));
+};
 const id = [...crypto.createHash('sha256').update(ext).digest('hex').slice(0, 32)].map((c) => String.fromCharCode(97 + parseInt(c, 16))).join('');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'glaze-whatif-ultra-'));
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -61,6 +75,7 @@ const calc = async (where) => {
         bookReads++;
         return failBooks ? route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }) : json(u.pathname.includes('_103_1') ? teacher : grades);
       }
+      if (u.origin === site && /^\/learn\/api\/public\/v1\/courses\/_10\d_1\/gradebook\/schemas$/.test(u.pathname)) return json(schemas);
       if (u.origin === site && u.pathname.startsWith('/learn/api/')) return json({ results: [] });
       if (u.origin === 'https://cdn.school.test' && u.pathname.endsWith('.css')) return route.fulfill({ contentType: 'text/css', body: '' });
       return route.abort();
@@ -120,6 +135,19 @@ const calc = async (where) => {
     await tools.locator('#gz-calc [data-f="s:_602_1"]').focus();
     await tools.keyboard.press('Enter');
     check(await tools.evaluate(() => document.activeElement?.dataset.f) === 's:_603_1', 'Enter moves to the next score');
+    // Each item on its own scale once the course's schemas are in: a letter, Complete or Incomplete.
+    await until(() => tools.locator('#gz-calc select[data-f="s:_605_1"]').count().then((n) => n === 1));
+    const lab3 = tools.locator('#gz-calc [data-f="s:_603_1"]');
+    await lab3.fill('B');
+    await until(() => said().then((t) => t[0] === '87%'));
+    check(true, 'a letter typed for a letter-graded item counts as what it stands for (B: 85%)');
+    await shot(tools, 'points');
+    await tools.getByRole('button', { name: 'Percent', exact: true }).evaluate((e) => e.click());
+    await until(() => tools.locator('#gz-calc [data-f="s:_604_1"]').getAttribute('placeholder').then((v) => v === '80'));
+    check(await tools.locator('#gz-calc [data-f="s:_604_1"]').evaluate((e) => e.parentNode.textContent.trim().endsWith('%')), 'Percent shows scores out of 100%');
+    await shot(tools, 'percent');
+    await tools.getByRole('button', { name: 'Points', exact: true }).evaluate((e) => e.click());
+    await lab3.fill('');
     await tools.getByLabel('Only work not graded yet').evaluate((e) => e.click());
     await until(() => tools.locator('#gz-calc [data-f="s:_601_1"]').count().then((n) => n === 0));
     check(await tools.locator('#gz-calc [data-f="s:_603_1"]').count() === 1, 'Only work not graded yet keeps the rows left to grade');
@@ -132,7 +160,13 @@ const calc = async (where) => {
     const theirs = await calc(own);
     const names = await own.evaluate(() => [...document.querySelectorAll('#gz-calc dt')].map((e) => e.textContent));
     check(names[0] === 'Overall Grade now' && theirs.totals[0] === '75%' && !/Estimate/.test(theirs.text), `the teacher's Overall Grade column is the figure (${names[0]} ${theirs.totals[0]})`);
-    check(theirs.groups.includes('Publisher Homework Current Grade · 45%'), `single weighted items are groups of their own (${theirs.groups.join(', ')})`);
+    const weight = await own.locator('#gz-calc li:has([data-f="s:_628_1"]) .gz-calc-weight').textContent();
+    check(weight === '45%' && !theirs.groups.some((x) => /Publisher/.test(x)), `items weighted on their own are rows with their weight (${weight}; ${theirs.groups.join(', ')})`);
+    check(await own.locator('#gz-calc .gz-calc-missing').count() === 1, 'work Ultra scored zero on its own is marked missing');
+    // Every box in line, with a tag before it or not.
+    const edges = await own.evaluate(() => [...document.querySelectorAll('#gz-calc .gz-calc-score > :first-child')].map((e) => Math.round(e.getBoundingClientRect().right)));
+    check(new Set(edges).size === 1, `the score boxes line up (${[...new Set(edges)].join(', ')})`);
+    await shot(own, 'teacher');
     check(errors.length === 0, `no page errors with the tools (${errors.join(' | ')})`);
     failBooks = true;
     const retryPage = await ctx.newPage();

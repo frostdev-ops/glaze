@@ -769,7 +769,7 @@ class FixedDate extends Date { constructor(...a) { super(...(a.length ? a : [U_N
 // the page's nth storage.local read (of keys) fails, as Chrome's do (runtime.lastError, no answer). loc: the page's
 // address, which the test may change (Ultra moves between pages in one document).
 const bookIds = new WeakMap();
-const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', books = { _101_1: ufix('grades').results }, enhance = { calc: true }, answers = {}, held = { on: false, queue: [] }, failGet = () => false, lazy = false, failAsk = () => false, lang = 'en' } = {}) => {
+const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', books = { _101_1: ufix('grades').results }, enhance = { calc: true }, answers = {}, held = { on: false, queue: [] }, failGet = () => false, lazy = false, failAsk = () => false, lang = 'en', sync = {} } = {}) => {
   const doc = page();
   doc.createElementNS = (ns, tag) => new El(tag, doc);
   doc.body.append(/\/outline/.test(path) ? el(doc, 'aside', { className: 'outline-actions' }, el(doc, 'div', { className: 'js-details-and-actions outline-action-block' }), el(doc, 'div', { className: 'conditional-block' }))
@@ -801,7 +801,7 @@ const ultraPage = ({ store = shared(), path = '/ultra/courses/_101_1/grades', bo
     const run = () => { chrome.runtime.lastError = { message: 'read failed' }; try { cb(undefined); } finally { delete chrome.runtime.lastError; } };
     if (held.on) held.queue.push(run); else Promise.resolve().then(run);
   } };
-  const chrome = { runtime: { sendMessage }, storage: { local, sync: shared().tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
+  const chrome = { runtime: { sendMessage }, storage: { local, sync: shared(sync).tab({}), onChanged: { addListener: (f) => store.listeners.push(f) } } };
   const loc = { pathname: path, search: '', hash: '', origin: UO };
   const bookKey = (a) => { if (!bookIds.has(a)) bookIds.set(a, bookIds.n = (bookIds.n || 0) + 1); return bookIds.get(a); };
   ctx = vm.createContext({
@@ -2015,8 +2015,10 @@ test("Ultra what-if: a teacher's own overall column, by its name; single items a
   const text = p.box().textContent;
   assert.match(text, /Overall Grade now75%/);
   assert.doesNotMatch(text, /Estimate|no overall grade/);
-  assert.match(text, /Publisher Homework Current Grade · 45%/);
-  assert.match(text, /Publisher Lesson Tests · 20%/);
+  // Items weighted on their own: rows with their weight, not a heading each.
+  const weightOf = (id) => scoreOf(p, id).closest('li').all((e) => /gz-calc-weight/.test(e.className))[0]?.textContent;
+  assert.deepEqual([weightOf('_628_1'), weightOf('_626_1'), weightOf('_627_1')], ['45%', '20%', '10%']);
+  assert.doesNotMatch(p.box().all((e) => e.tagName === 'LEGEND').map((l) => l.textContent).join(' '), /Publisher/);
   assert.match(text, /Module 2: Individual Video/, 'the column renamed "." reads by its own name');
   // A group of one takes no pretend assignment; a category does.
   const adds = p.box().all((e) => e.tagName === 'BUTTON' && e.textContent === 'Add a pretend assignment').map((b) => b.dataset.f);
@@ -2273,4 +2275,26 @@ test("Canvas what-if: a letter typed for a letter-graded item scores as Canvas w
   check.fire('change');
   await settle(10);
   assert.equal(totals(p)[1], '55.33% · F');
+});
+
+test("Ultra what-if: with the scale the student gave the course for the GPA, the figures carry its letter and the target takes one", async () => {
+  const p = ultraPage({ sync: { gpaCourses: { [`ultra:${UO}/_101_1`]: { s: 'A 90, B 80, C 70' } } } });
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  await settle(10);
+  assert.deepEqual(totals(p).slice(0, 2), ['88% · B', '88% · B']);
+  const target = find(p.box(), (e) => e.dataset.f === 'target');
+  target.value = 'a';
+  target.fire('input');
+  await settle(10);
+  // A (90%): Assignment at 95% on the two labs left, as for "90".
+  assert.match(p.box().textContent, /You'd need about 97\.5% on each of the 2 items left\./);
+  // No scale of the student's own: no letters, Blackboard sends a student none to go by.
+  const q = ultraPage();
+  q.UI.render();
+  await settle(10);
+  await open(q);
+  await settle(10);
+  assert.equal(totals(q)[0], '88%');
 });
