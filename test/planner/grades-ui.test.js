@@ -2435,6 +2435,7 @@ test('Canvas letter items use their own grading standards, fetched once per stan
     { id: '9102', name: 'Report', points_possible: 10, grading_type: 'letter_grade', grading_standard_id: 55, submission: {} },
     { id: '9103', name: 'Lab', points_possible: 10, grading_type: 'letter_grade', grading_standard_id: 56, submission: {} },
     { id: '9104', name: 'Unknown', points_possible: 10, grading_type: 'letter_grade', grading_standard_id: 57, submission: {} },
+    { id: '9105', name: 'Inherited', points_possible: 10, grading_type: 'letter_grade', submission: {} },
   ] }];
   const asked = [];
   const capi = (q) => {
@@ -2442,11 +2443,11 @@ test('Canvas letter items use their own grading standards, fetched once per stan
     if (q.endsWith('/grading_standards/55')) return Promise.resolve({ grading_scheme: [{ name: 'A', value: 0.88 }, { name: 'B', value: 0.7 }, { name: 'F', value: 0 }] });
     if (q.endsWith('/grading_standards/56')) return Promise.resolve({ points_based: true, scaling_factor: 4, grading_scheme: [{ name: 'A', value: 0.9 }, { name: 'B', value: 0.75 }, { name: 'F', value: 0 }] });
     if (q.endsWith('/grading_standards/57')) return Promise.reject(new Error('unavailable'));
-    return Promise.resolve({ grading_scheme: [['A', 0.94], ['B', 0.84], ['F', 0]] });
+    return Promise.resolve({ grading_scheme: [['A', 0.9], ['B', 0.75], ['F', 0]] });
   };
-  const p = gradesPage({ groups, list: [row({ apply_assignment_group_weights: false })], capi });
+  const p = gradesPage({ groups, list: [row({ apply_assignment_group_weights: false, grading_standard_id: 56 })], capi });
   await ready(p);
-  for (const [id, expected] of [['9101', 8.7], ['9102', 8.7], ['9103', 8.75]]) {
+  for (const [id, expected] of [['9101', 8.7], ['9102', 8.7], ['9103', 8.75], ['9105', 8.75]]) {
     const score = scoreOf(p, id);
     score.value = 'B';
     score.fire('input');
@@ -2454,12 +2455,29 @@ test('Canvas letter items use their own grading standards, fetched once per stan
     assert.ok(Math.abs(p.store.data[KEY][BIO.course.id].s[id][0] - expected) < 1e-9, id);
   }
   assert.equal(asked.filter((q) => q.endsWith('/grading_standards/55')).length, 1);
+  assert.equal(asked.filter((q) => q.endsWith('/grading_standards/56')).length, 1);
   const unknown = scoreOf(p, '9104');
   unknown.value = 'B';
   unknown.fire('input');
   await settle();
   assert.equal(unknown.getAttribute('aria-invalid'), 'true', 'an unavailable item scale is not replaced with a different one');
   assert.equal(p.store.data[KEY][BIO.course.id].s['9104'], undefined);
+});
+
+test('Canvas accepts a course letter target before its first grade arrives', async () => {
+  const groups = [{ id: '9001', name: 'Work', assignments: [{ id: '9101', name: 'Essay', points_possible: 50, grading_type: 'points', submission: {} }] }];
+  const list = [row({ apply_assignment_group_weights: false, grading_standard_id: 55,
+    enrollments: [{ type: 'student', user_id: '3', computed_current_score: null, computed_current_grade: null }] })];
+  const capi = () => Promise.resolve({ grading_scheme: [['A', 0.9], ['B', 0.8], ['F', 0]] });
+  const p = gradesPage({ groups, list, capi });
+  await ready(p);
+  const target = find(p.box(), (e) => e.dataset.f === 'target');
+  target.value = 'B';
+  target.fire('input');
+  assert.match(p.box().textContent, /You'd need about 80% on the item left\./);
+  byText(p.box(), 'What you need').fire('click');
+  await settle();
+  assert.equal(p.store.data[KEY][BIO.course.id].s['9101'][0], 40);
 });
 
 test("Ultra what-if: with the scale the student gave the course for the GPA, the figures carry its letter and the target takes one", async () => {
