@@ -2150,6 +2150,20 @@ const scaled = () => {
 };
 const legendOf = (p, start) => find(p.box(), (e) => e.tagName === 'LEGEND' && e.children[0].textContent.startsWith(start));
 
+test('Ultra what-if: a trusted overall written as points is displayed as its percent', async () => {
+  const rows = ufix('grades-status').results;
+  const total = structuredClone(ufix('grades').results.find((r) => r.column.externalGrade));
+  total.column.possible = 200;
+  total.column.calculatedFormula = { isTotalCalculation: true, formula: '@X@BBCalColElem(tot:{"running":true})@X@' };
+  total.displayGrade.score = 170;
+  rows.push(total);
+  const p = ultraPage({ path: '/ultra/courses/_102_1/grades', books: { _102_1: rows } });
+  p.UI.render();
+  await settle(10);
+  await open(p);
+  assert.deepEqual(totals(p).slice(0, 2), ['85%', '85%']);
+});
+
 test('Ultra what-if: each item on its own scale: a letter for a letter item, Complete or Incomplete for one graded so, asked once on opening', async () => {
   const p = ultraPage({ books: { _101_1: scaled() }, answers: { '/gradebook/schemas': schemaAnswer } });
   p.UI.render();

@@ -369,3 +369,14 @@ test("a points total Glaze can't read is exact where the plain share of points c
   assert.deepEqual([w.kind, w.why], ['unsupported', "its recipe doesn't come out at Blackboard's own figure"]);
   assert.equal(C.model([g('_1_1', 10, 5), overall(weights([['c_1', 100, { drop_lowest: 1 }]]), 50)]).kind, 'unsupported');
 });
+
+test('a trusted points overall is reported as a percent, including a teacher total', () => {
+  for (const external of [true, false]) {
+    const total = overall({ isTotalCalculation: true, formula: '@X@BBCalColElem(tot:{"running":true})@X@' }, 23);
+    Object.assign(total.column, { externalGrade: external, columnName: 'Overall Grade', possible: 40 });
+    const m = C.model([g('_1_1', 10, 8), g('_2_1', 30, 15), total]);
+    assert.equal(m.kind, 'weighted');
+    assert.equal(m.overall, 57.5, 'overall is consumed as a percentage by the calculator and GPA');
+    assert.equal(m.percent(), m.overall);
+  }
+});
