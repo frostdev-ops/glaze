@@ -188,6 +188,18 @@ test('a score typed in any form: points, a fraction, a percent, a letter of its 
   assert.deepEqual([G.scoreText(22.5, item), G.scoreText(22.5, item, true), G.scoreText(50 / 3, item), G.scoreText(5, extra, true)], ['22.5', '45', '16.67', '5']);
 });
 
+test('numeric grade symbols on a GPA scale are read before plain points, with explicit points still available', () => {
+  const item = { possible: 10, scale: 'letter', letters: [['4', 100], ['3', 93], ['2', 83], ['1', 73], ['0', 60]] };
+  for (const percent of [false, true]) {
+    assert.ok(Math.abs(G.readScore('3', item, percent) - 9.3) < 1e-9);
+    assert.equal(G.readScore('0', item, percent), 6);
+    assert.equal(G.readScore('3/10', item, percent), 3);
+    assert.equal(G.readScore('30%', item, percent), 3);
+  }
+  assert.equal(G.readScore('3', { ...item, possible: 0 }), 3, 'zero-point extra credit still takes points');
+  assert.equal(G.readScore('3', { possible: 10 }), 3);
+});
+
 test('a target typed as a percent, a fraction, points of the course total or a letter', () => {
   const t = (text, o) => G.readTarget(text, o);
   assert.deepEqual([t('90'), t('90%'), t('450/500'), t('89,5')], [90, 90, 90, 89.5]);
