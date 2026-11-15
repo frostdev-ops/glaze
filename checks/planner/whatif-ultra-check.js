@@ -57,6 +57,7 @@ const calc = async (where) => {
 };
 (async () => {
   let ctx, failBooks = false, bookReads = 0;
+  const readAt = []; // when each gradebook read came in
   try {
     await require('../../tools/dev/wait-for-browser.js')();
     ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile'), {
@@ -73,7 +74,10 @@ const calc = async (where) => {
       if (u.origin === site && u.pathname === `/learn/api/v1/users/${user}/memberships`) return json(fixture('ultra-memberships.json'));
       if (u.origin === site && /^\/learn\/api\/v1\/courses\/_10\d_1\/gradebook\/grades$/.test(u.pathname)) {
         bookReads++;
-        return failBooks ? route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }) : json(u.pathname.includes('_103_1') ? teacher : grades);
+        readAt.push(Date.now());
+        // A failing server that asks for a second's pause (Retry-After): the site's queue (courses/lmsq.js) holds for
+        // that, not its own doubling, so the reads follow the calculator's own retries.
+        return failBooks ? route.fulfill({ status: 503, contentType: 'application/json', headers: { 'retry-after': '1' }, body: '{}' }) : json(u.pathname.includes('_103_1') ? teacher : grades);
       }
       if (u.origin === site && /^\/learn\/api\/public\/v1\/courses\/_10\d_1\/gradebook\/schemas$/.test(u.pathname)) return json(schemas);
       if (u.origin === site && u.pathname.startsWith('/learn/api/')) return json({ results: [] });
@@ -177,9 +181,12 @@ const calc = async (where) => {
     await pause(1500);
     const before = bookReads;
     await retryPage.locator('#gz-calc summary').evaluate((e) => e.click());
-    await pause(400);
-    check(bookReads - before === 1, `native details redraw does not retry immediately (${bookReads - before} reads)`);
-    await retryPage.getByRole('button', { name: 'Try again', exact: true }).waitFor({ timeout: 25000 });
+    // Opening asks once; the next try is the calculator's own, a second after that one fails, never at once.
+    await until(() => Promise.resolve(bookReads - before >= 2));
+    const gap = readAt[before + 1] - readAt[before];
+    check(gap >= 900, `opening asks once, and the next try waits its second (${gap} ms later)`);
+    // Its last try is 15 s after the third (planner/page/grades.js AGAIN), so Try again comes within about 25 s.
+    await retryPage.getByRole('button', { name: 'Try again', exact: true }).waitFor({ timeout: 45000 });
     check(bookReads - before === 4, `automatic retries stop after four attempts (${bookReads - before} reads)`);
     failBooks = false;
     await retryPage.getByRole('button', { name: 'Try again', exact: true }).evaluate((e) => e.click());
