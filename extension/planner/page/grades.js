@@ -237,13 +237,14 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       getAll(`/courses/${cid}/assignment_groups?include[]=assignments&include[]=submission&exclude_response_fields[]=description&exclude_response_fields[]=rubric&per_page=100`),
       row.has_grading_periods ? capi(`/courses/${cid}/grading_periods`).then((j) => j.grading_periods) : null,
       // The course's letters: where it shows letters only, or gives one for the course (computed_current_grade).
-      row.restrict_quantitative_data || st.me.computed_current_grade != null ? capi(`/courses/${cid}?include[]=grading_scheme`).then((j) => j?.grading_scheme, () => null) : null,
+      row.restrict_quantitative_data || row.grading_standard_id != null || st.me.computed_current_grade != null ? capi(`/courses/${cid}?include[]=grading_scheme`).then((j) => j?.grading_scheme, () => null) : null,
       calcIn(),
     ]).then(([groups, periods, scheme]) => {
       st.course = C.fromApi(groups, { weighted: row.apply_assignment_group_weights, periods, weightedPeriods: row.has_weighted_grading_periods });
       // Work graded by letter needs the course's letters too; with none, Canvas's default scheme is the one it uses.
       const lettered = st.course.groups.some((g) => g.items.some((i) => i.scale === 'letter'));
       const ids = [...new Set(st.course.groups.flatMap((g) => g.items.filter((i) => i.scale === 'letter' && i.standard).map((i) => i.standard)))];
+      if (lettered && row.grading_standard_id != null && !ids.includes(String(row.grading_standard_id))) ids.push(String(row.grading_standard_id));
       return Promise.all([
         scheme == null && lettered ? capi(`/courses/${cid}?include[]=grading_scheme`).then((j) => j?.grading_scheme, () => null) : scheme,
         Promise.all(ids.map((id) => capi(`/courses/${cid}/grading_standards/${encodeURIComponent(id)}`).then((j) => {
@@ -253,9 +254,9 @@ var GZ_GRADES_UI = globalThis.GZ_GRADES_UI || (() => {
       ]);
     }).then(([scheme, standards]) => {
       st.scheme = C.schemeOf(scheme) || C.SCHEME;
-      st.lettered = !!row.restrict_quantitative_data || st.me.computed_current_grade != null;
-      const letters = C.canvasLetters(st.scheme);
+      st.lettered = !!row.restrict_quantitative_data || row.grading_standard_id != null || st.me.computed_current_grade != null || C.schemeOf(scheme) != null;
       const own = new Map(standards);
+      const letters = own.get(String(row.grading_standard_id)) || C.canvasLetters(st.scheme);
       for (const g of st.course.groups) for (const i of g.items) if (i.scale === 'letter') i.letters = i.standard ? own.get(i.standard) || [] : letters;
       // The page's grading period: the one picked, or Canvas's current one; 0 is all of them.
       const picked = st.whole ? null : new URLSearchParams(location.search).get('grading_period_id') ?? (row.has_grading_periods ? st.me.current_grading_period_id : null);
