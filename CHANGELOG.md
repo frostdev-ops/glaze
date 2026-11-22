@@ -6,6 +6,12 @@ All notable changes to Glaze are documented here. The format follows
 
 ## [Unreleased]
 
+## [4.0.10] — 2026-11-22
+
+### Fixed
+
+- Safari: Glaze's background runs as an event page, so it starts again after Safari has been open for days. Before, Writer could stop saving and Blackboard's Submit could stop responding until Safari was restarted.
+
 ## [4.0.9] — 2026-11-14
 
 ### Added

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Package Glaze for Firefox (addons.mozilla.org) from the Chrome package: dist/glaze-v<version>-firefox.zip.
 # Firefox has no extension service worker: the background runs as an event page from every script the worker
-# imports, listed in order, and importScripts becomes a no-op (tools/build/event-page.js). Google Calendar sync needs Chrome's identity API,
+# imports, listed in order, and importScripts becomes a no-op. Google Calendar sync needs Chrome's identity API,
 # so its oauth2 key goes, as in Safari; identity stays only for Drive's web sign-in, once its client is real
 # (tools/build/oauth-manifest.js). DIST: the folder the zips go in (default dist).
 # A release package needs a clean dev/firefox checkout, untracked files included (tools/release/clean-source.sh);
@@ -41,6 +41,10 @@ DIST=$dist tools/build/package.sh $allow >/dev/null
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 unzip -q "$dist/glaze-v$version.zip" -d "$stage"
+cat > "$stage/background/firefox-background.js" <<'JS'
+// Firefox runs the background as an event page: the manifest already loads every script the worker would import.
+globalThis.importScripts = () => {};
+JS
 cat > "$stage/planner/gcal-auth.js" <<'JS'
 // Firefox has no Chrome Google sign-in API; calendar-file export remains available.
 var GZ_GCAL_AUTH = {
@@ -56,7 +60,10 @@ const [file, background, popup, development, branch, commit, dirty] = process.ar
 const m = JSON.parse(fs.readFileSync(file, 'utf8'));
 if (development === 'true') m.name = `${m.short_name} (Firefox development)`;
 fs.writeFileSync(path.join(path.dirname(file), 'glaze-build.json'), JSON.stringify({ target: 'firefox', development: development === 'true', branch, commit, dirty: dirty === 'true' }, null, 2) + '\n');
-m.background = require(path.join(process.cwd(), 'tools/build/event-page.js')).background(fs.readFileSync(background, 'utf8'));
+// Every importScripts call in the worker, in order, as paths from the package root.
+const imports = [...fs.readFileSync(background, 'utf8').matchAll(/importScripts\(([^)]*)\)/g)]
+  .flatMap(([, args]) => [...args.matchAll(/'([^']+)'/g)].map(([, f]) => path.posix.join('background', f)));
+m.background = { scripts: ['background/firefox-background.js', ...new Set(imports), 'background/background.js'] };
 delete m.minimum_chrome_version;
 // Google (tools/build/oauth-manifest.js): no oauth2 key, which is getAuthToken's; identity only for Drive, switched on (background/google.js ON)
 // with its Web client real, and held from install (Firefox has no optional identity).

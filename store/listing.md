@@ -1,4 +1,4 @@
-# Chrome Web Store listing — Glaze 4.0.9
+# Chrome Web Store listing — Glaze 4.0.10
 
 ## Name
 
@@ -80,6 +80,10 @@ Open source (MIT): https://github.com/frostdev-ops/glaze
 Canvas is a trademark of Instructure, Inc. Blackboard is a trademark of Anthology Inc. Moodle is a registered trademark of Moodle Pty Ltd. Glaze is an independent project and is not affiliated with or endorsed by any of these companies or any school.
 
 ## Release notes
+
+NEW IN 4.0.10
+
+• Writer saves and Blackboard's Submit button responds however long the browser has been open.
 
 NEW IN 4.0.9
 

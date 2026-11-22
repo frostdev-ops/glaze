@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // The background as an event page: every script background/background.js imports by name, in order and once, between
-// background/event-page.js (importScripts as a no-op) and the worker itself. Firefox has no extension service worker.
-// Safari's can't start again late in a long session: restarted in a web process without its page, its importScripts go to
-// the network process, which can't load the extension's files (-1002), until Safari quits (WebKit main a4740a5a,
-// WebLoaderStrategy::tryLoadingUsingURLSchemeHandler); a background page loads its scripts through its own view.
+// background/event-page.js (importScripts as a no-op) and the worker itself, for Safari (Firefox's build makes the same
+// list in tools/build/package-firefox.sh). Safari's service worker can't start again late in a long session: restarted
+// in a web process without its page, its importScripts go to the network process, which can't load the extension's
+// files (-1002), until Safari quits (WebKit main a4740a5a, WebLoaderStrategy::tryLoadingUsingURLSchemeHandler); a
+// background page loads its scripts through its own view.
 // A script an import imports in turn must be imported by background.js too (test/firefox/background-imports.test.js).
 //   node tools/build/event-page.js <manifest.json> <background.js> [--non-persistent]   rewrites the manifest in place
 const fs = require('fs');
