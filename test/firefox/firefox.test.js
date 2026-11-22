@@ -20,7 +20,7 @@ test('package-firefox.sh builds a Firefox manifest whose background scripts all 
     assert.equal(m.default_locale, 'en');
     for (const lang of ['en', 'de', 'es', 'fr', 'nl', 'pt_BR']) assert.ok(files.has(`_locales/${lang}/messages.json`));
     assert.equal(m.background.service_worker, undefined);
-    assert.deepEqual(m.background.scripts.slice(0, 1), ['background/firefox-background.js']);
+    assert.deepEqual(m.background.scripts.slice(0, 1), ['background/event-page.js']);
     assert.equal(m.background.scripts.at(-1), 'background/background.js');
     for (const f of m.background.scripts) assert.ok(files.has(f), `${f} is a background script but isn't packaged`);
     for (const f of ['sharing/relay.js', 'sharing/sessions.js', 'content/defaults.js', 'navigation/sidebar.js', 'planner/gcal-auth.js']) assert.ok(m.background.scripts.includes(f), f);

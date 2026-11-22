@@ -148,6 +148,8 @@ test('Safari manifest rewriting adds native messaging once and preserves unrelat
   expected.host_permissions = ['<all_urls>'];
   delete expected.optional_host_permissions;
   expected.content_scripts = safari(m).content_scripts;
+  // An event page, never a service worker (tools/build/event-page.js).
+  expected.background = require('../../tools/build/event-page.js').background(fs.readFileSync(path.join(__dirname, '../../extension/background/background.js'), 'utf8'), { persistent: false });
   try {
     const rewrite = () => execFileSync('sh', [path.join(__dirname, '../../tools/build/safari-manifest.sh'), file]);
     rewrite();

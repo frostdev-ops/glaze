@@ -9,6 +9,7 @@
 # staged copy, never the checkout: tools/build/safari-drop.txt lists them (code mods', and Glaze's own model's engine and host).
 # Safari's From Google Drive comes back from the picker pages to documents/picked.html in a tab (background/google.js pick),
 # so that page is web-accessible to those two origins only.
+# The background is a non-persistent event page of the staged worker's imports, never a service worker (tools/build/event-page.js).
 set -eu
 dir=$(CDPATH= cd -- "$(dirname "$1")" && pwd)
 here=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
@@ -56,3 +57,6 @@ if not any(entry['js'] == ['content/detect.js'] for entry in scripts):
     scripts.insert(at, {'matches': ['https://*/*'], 'exclude_matches': ['https://*/ultra', 'https://*/ultra/*', 'https://*.instructure.com/*', 'https://*.moodlecloud.com/*'], 'js': ['content/detect.js'], 'run_at': 'document_start'})
 open(path, 'w').write(json.dumps(manifest, indent=2) + '\n')
 PY
+worker="$dir/background/background.js"
+[ -f "$worker" ] || worker="$here/../../extension/background/background.js"
+node "$here/event-page.js" "$1" "$worker" --non-persistent
