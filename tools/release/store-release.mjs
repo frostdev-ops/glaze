@@ -34,6 +34,8 @@ const usage = `Usage: node tools/release/store-release.mjs [release|doctor|plan|
 
   --config FILE        Credentials file (default ~/.config/glaze/stores.env).
   --stores LIST        chrome,firefox,apple (default all three).
+  --submit LIST        The stores of --stores to submit to (default all of them); release still builds and publishes
+                       every --stores package. A Safari-only release: release --submit apple.
   --apple-platforms LIST  MAC_OS,IOS (default both).
   --source-ref REF     Committed release source (default HEAD).
   --firefox-ref REF    Compatibility source (default dev/firefox).
@@ -61,12 +63,15 @@ export function options(args) {
     else if (arg === '--source-ref') result.sourceRef = value;
     else if (arg === '--notes') result.notes = path.resolve(expand(value));
     else if (arg === '--stores') result.stores = [...new Set(value.split(','))];
+    else if (arg === '--submit') result.submit = [...new Set(value.split(','))];
     else if (arg === '--apple-platforms') result.applePlatforms = [...new Set(value.split(','))];
     else throw new Error(`Unknown option ${arg}`);
   }
   if (!['release', 'doctor', 'plan', 'build', 'submit', 'publish', 'listings'].includes(result.command)) throw new Error(`Unknown command ${result.command}`);
   if (result.stores.some(s => !['chrome', 'firefox', 'apple'].includes(s))) throw new Error('Stores must be chrome,firefox,apple.');
   if (result.applePlatforms.some(s => !['MAC_OS', 'IOS'].includes(s))) throw new Error('Apple platforms must be MAC_OS,IOS.');
+  result.submit ??= [...result.stores];
+  if (result.submit.some(s => !result.stores.includes(s))) throw new Error('Each --submit store must be one --stores builds.');
   return result;
 }
 // Values never printed or logged: everything in the credentials file, and credentials however they were given.
@@ -109,22 +114,24 @@ function executable(name) {
 }
 async function doctor(opt, env, remote = true) {
   let failures = 0;
-  for (const store of opt.stores) {
+  // Access to each store submitted to; Apple's signing for its packages, submitted or not.
+  for (const store of [...new Set([...opt.submit, ...opt.stores.filter(s => s === 'apple')])]) {
+    const online = remote && opt.submit.includes(store);
     try {
       if (store === 'chrome') {
         if (!executable('gcloud')) throw new Error('Install Google Cloud CLI (gcloud).');
-        if (remote) await chromeStatus(env);
+        if (online) await chromeStatus(env);
       } else if (store === 'firefox') {
         requireValue(env.AMO_JWT_ISSUER, 'AMO_JWT_ISSUER'); requireValue(env.AMO_JWT_SECRET, 'AMO_JWT_SECRET');
-        if (remote) await amo(env, '/versions/?filter=all_without_unlisted&page_size=1');
+        if (online) await amo(env, '/versions/?filter=all_without_unlisted&page_size=1');
       } else {
         for (const key of ['ASC_KEY_PATH', 'ASC_KEY_ID', 'ASC_ISSUER_ID']) requireValue(env[key], key);
         if (!fs.existsSync(env.ASC_KEY_PATH)) throw new Error('ASC_KEY_PATH does not exist.');
         if (!executable('xcodebuild') || !executable('xcrun')) throw new Error('Install full Xcode and select it with xcode-select.');
         try { execFileSync('xcodebuild', ['-version'], { stdio: 'ignore', timeout: 30000 }); } catch { throw new Error('Select a full Xcode installation with xcode-select.'); }
-        if (remote) await appleApp(env);
+        if (online) await appleApp(env);
       }
-      console.log(`${store}: ${remote ? 'credential/access check passed' : 'local prerequisites present'}`);
+      console.log(`${store}: ${online ? 'credential/access check passed' : 'local prerequisites present'}`);
     } catch (error) { failures++; console.log(`${store}: ${redact(error.message)}`); }
   }
   return failures === 0;
@@ -330,14 +337,14 @@ export async function main(args = process.argv.slice(2)) {
   const saved = path.join(out, 'release.json');
   const building = ['release', 'build'].includes(opt.command) && !(fs.existsSync(saved) && json(saved).ready);
   const firefoxBase = opt.stores.includes('firefox') ? resolveFirefoxBase(opt.firefoxRef, { fetch: building }) : null;
-  console.log(`Glaze ${version}, committed source ${commit}\nStores: ${opt.stores.join(', ')}\nApple platforms: ${opt.applePlatforms.join(', ')}\nFirefox compatibility base: ${firefoxBase || '(not selected)'}\nOutput: ${out}`);
+  console.log(`Glaze ${version}, committed source ${commit}\nStores: ${opt.stores.join(', ')}\nSubmitting to: ${opt.submit.join(', ')}\nApple platforms: ${opt.applePlatforms.join(', ')}\nFirefox compatibility base: ${firefoxBase || '(not selected)'}\nOutput: ${out}`);
   if (opt.command === 'plan') {
     console.log(`Full release: verify prerequisites; build/store checks; Claude Desktop bundle; universal notarized DMG; signed feed; store submissions; push main and immutable v${version}; wait Package CI; publish verified GitHub assets; prepare/test/push frostdev.io; wait Website CI; deploy and verify live pages/feed.\nWebsite checkout: ${redact(env.FROSTDEV_SITE_DIR)}\nNo builds, network calls, uploads, or branch changes performed.`); return;
   }
   if (['release', 'publish', 'doctor'].includes(opt.command)) publicPreflight(opt, env, root, { version, sourceCommit: commit });
   if (opt.command === 'doctor') { if (!await doctor(opt, env)) process.exitCode = 1; return; }
   if (['release', 'submit'].includes(opt.command) && !await doctor(opt, env)) throw new Error('Credential preflight failed; no packages were uploaded.');
-  if (opt.command === 'build' && opt.stores.includes('apple') && !await doctor({ ...opt, stores: ['apple'] }, env, false)) throw new Error('Apple signing prerequisites are missing.');
+  if (opt.command === 'build' && opt.stores.includes('apple') && !await doctor({ ...opt, stores: ['apple'], submit: ['apple'] }, env, false)) throw new Error('Apple signing prerequisites are missing.');
   fs.mkdirSync(path.join(out, 'logs'), { recursive: true });
   const lock = path.join(out, '.lock');
   let lockFd;
@@ -364,12 +371,12 @@ export async function main(args = process.argv.slice(2)) {
     if (opt.command === 'publish') { await publishPublic(publicContext); return; }
     // Resolve paths only in the upload view; the persisted manifest remains relocatable.
     const upload = { ...manifest, listings, files: Object.fromEntries(Object.entries(manifest.files).map(([k, f]) => [k, { ...f, path: path.join(out, f.path) }])) };
-    if (opt.stores.includes('chrome')) {
+    if (opt.submit.includes('chrome')) {
       writeChromeKit(chromeKitDir(version), listings);
       console.log(`Chrome listing: paste release/${version}/chrome-web-store/listing-<language>.txt into the dashboard, one per language.`);
     }
     let failures = 0;
-    for (const store of opt.stores) {
+    for (const store of opt.submit) {
       const receipt = manifest.receipts[store] ||= {};
       if (receipt.submitted) { console.log(`${store}: submission already recorded; skipped.`); continue; }
       try {
